@@ -31,6 +31,7 @@ class BudgetStore(
     private val clock: HlcClock,
     private val nowMillis: () -> Long,
     private val ledger: LedgerStore,
+    private val recurring: RecurringStore,
 ) {
     private val q get() = db.schemaQueries
 
@@ -79,7 +80,7 @@ class BudgetStore(
 
     /**
      * Where every limit in [currency] stands for the period containing [today] in [zone]. Spending is your net share (refunds taken
-     * off). Safe to spend comes from the overall limit and ignores upcoming bills, which are not tracked yet.
+     * off). Safe to spend comes from the overall limit, less the repeating expenses still waiting in the period (those without a fixed amount cannot be counted).
      */
     fun status(today: LocalDate, zone: TimeZone, currency: Currency): BudgetStatus {
         val period = period().containing(today)
@@ -89,7 +90,10 @@ class BudgetStore(
         val children = q.liveCategories().executeAsList().filter { it.parent_id != null }.groupBy({ it.parent_id!! }, { it.id })
         val progress = BudgetMath.progress(limits, spent, children)
         val overall = progress.firstOrNull { it.categoryId == null }
-        return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period) })
+        // Repeating expenses still waiting in this period (past-due ones are included: they will post dated inside it).
+        val upcoming = recurring.unhandled(period.start, period.endExclusive).mapNotNull { it.item.amount }.filter { it.currency == currency }
+            .fold(Money.zero(currency)) { a, m -> a + m }
+        return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period, upcoming) })
     }
 
     private fun liveScope(categoryId: String): String {

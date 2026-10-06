@@ -74,6 +74,7 @@ import app.expenses.RowUi
 import app.expenses.TemplateUi
 import app.expenses.UiState
 import app.expenses.core.domain.Currency
+import app.expenses.DueUi
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.parseAmount
 
@@ -92,7 +93,12 @@ fun EntryListScreen(
     onDelete: (RowUi) -> Unit,
     onManageCategories: () -> Unit,
     onOpenBudget: () -> Unit,
+    onOpenRecurring: () -> Unit,
+    onPostDue: (DueUi, Money?) -> Unit,
+    onSkipDue: (DueUi) -> Unit,
 ) {
+    var askingFor by remember { mutableStateOf<DueUi?>(null) }
+    askingFor?.let { d -> AmountDialog("Amount for ${d.name}", onConfirm = { onPostDue(d, it); askingFor = null }, onDismiss = { askingFor = null }) }
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
@@ -126,11 +132,13 @@ fun EntryListScreen(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
                     TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }
             BudgetSummary(state.budget, onOpenBudget)
+            DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
             Spacer(Modifier.height(8.dp))
             if (state.templates.isNotEmpty()) {
                 LazyRow(

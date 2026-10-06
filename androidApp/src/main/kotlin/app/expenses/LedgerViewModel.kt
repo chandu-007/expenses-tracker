@@ -7,6 +7,10 @@ import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RepeatUnit
+import app.expenses.core.domain.Schedule
+import app.expenses.core.domain.ScheduleEnd
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
@@ -63,14 +67,35 @@ data class BudgetUi(
     val overall: BudgetLineUi,
     val categories: List<BudgetLineUi>,
     val perDay: String?,
+    /** Bills still to come this period, or null when there are none (or no limit). */
+    val upcoming: String?,
+    /** True when the bills still to come use up everything left under the limit. */
+    val billsUseItAll: Boolean,
     val daysLeft: Int,
     /** How many category limits are near or over. */
     val categoriesNeedingAttention: Int,
 )
 
+/** A repeating expense waiting to be posted or skipped. [amount] is null when the amount differs each time and must be asked for. */
+data class DueUi(val itemId: String, val epochDay: Long, val name: String, val amount: String?, val whenText: String, val overdue: Boolean)
+
+/** A repeating expense as the editor needs it. [amountPlain] is empty when the amount is asked each time. */
+data class RecurringUi(
+    val id: String,
+    val name: String,
+    val amountPlain: String,
+    val categoryId: String,
+    val accountId: String,
+    val merchant: String,
+    val schedule: Schedule,
+    val auto: Boolean,
+    /** "₹15,000.00 · every month · next 1 Nov". */
+    val summary: String,
+)
+
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
-data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false)
+data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
 
 sealed interface UiState {
     data object Opening : UiState
@@ -83,6 +108,8 @@ sealed interface UiState {
         /** Spending in the current budget period (the calendar month unless the user chose otherwise). */
         val periodSpend: String,
         val budget: BudgetUi,
+        val due: List<DueUi>,
+        val recurring: List<RecurringUi>,
         val accounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val categories: List<CategoryUi>,
@@ -167,7 +194,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Takes back an entry that was just added. */
     fun undo(u: UndoUi) = withStore { ok ->
-        if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
+        if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
+        else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
         refresh(ok)
     }
 
@@ -240,6 +268,43 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCategory(id: String) = withStore { ok ->
         ok.categories.delete(id)
         refresh(ok)
+    }
+
+    // ---- repeating expenses ----
+
+    /** Posts a due occurrence. [amount] is required only for items whose amount differs each time. */
+    fun postDue(itemId: String, epochDay: Long, amount: Money?) = withStore { ok ->
+        val day = kotlinx.datetime.LocalDate.fromEpochDays(epochDay)
+        val item = ok.recurring.list().firstOrNull { it.id == itemId }
+        val entryId = ok.recurring.post(itemId, day, kotlinx.datetime.TimeZone.currentSystemDefault(), amount)
+        refresh(ok, undo = entryId?.let { UndoUi(it, "Posted ${item?.name.orEmpty()} ${(amount ?: item?.amount)?.formatted().orEmpty()}".trim(), recurringId = itemId, recurringDay = epochDay) })
+    }
+
+    fun skipDue(itemId: String, epochDay: Long) = withStore { ok ->
+        val item = ok.recurring.list().firstOrNull { it.id == itemId }
+        ok.recurring.skip(itemId, kotlinx.datetime.LocalDate.fromEpochDays(epochDay))
+        refresh(ok, undo = UndoUi("", "Skipped ${item?.name.orEmpty()}", recurringId = itemId, recurringDay = epochDay))
+    }
+
+    /** Creates ([id] null) or changes a repeating expense. Changes apply to occurrences not yet posted; posted ones stay as they are. */
+    fun saveRecurring(id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean) = withStore { ok ->
+        ok.recurring.save(RecurringItem(id ?: UUID.randomUUID().toString(), name.trim(), amount, CategoryId(category), AccountId(account), merchant.trim().ifEmpty { null }, schedule, auto && amount != null))
+        refresh(ok)
+    }
+
+    fun deleteRecurring(id: String) = withStore { ok ->
+        ok.recurring.delete(id)
+        refresh(ok)
+    }
+
+    /** Posts occurrences of items set to post by themselves. Called when the app comes to the front. */
+    fun postAutomatic() = withStore { ok ->
+        val today = LocalDate.now()
+        val done = ok.recurring.autoPost(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth), kotlinx.datetime.TimeZone.currentSystemDefault())
+        if (done.isNotEmpty()) {
+            refresh(ok)
+            _state.update { (it as? UiState.Ready)?.copy(message = if (done.size == 1) "Posted ${done[0].first.item.name}" else "Posted ${done.size} repeating expenses") ?: it }
+        }
     }
 
     // ---- budgets ----
@@ -324,6 +389,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             rows = loaded.map(::toRow),
             periodSpend = spent.formatted(),
             budget = budgetUi(ok, status, cats),
+            due = dueUi(ok, today),
+            recurring = recurringUi(ok, today),
             accounts = accounts.map { AccountUi(it.id, it.name) },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
@@ -362,10 +429,39 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             },
             overall = line(null, "Everything"),
             categories = lines,
-            perDay = status.safeToSpend?.perDay?.formatted(),
+            perDay = status.safeToSpend?.takeIf { byScope[null]?.state != BudgetState.OVER }?.perDay?.formatted(),
+            upcoming = status.safeToSpend?.upcoming?.takeIf { it.minorUnits > 0 }?.formatted(),
+            billsUseItAll = status.safeToSpend?.let { it.available.minorUnits <= 0 && it.remaining.minorUnits > 0 } ?: false,
             daysLeft = status.safeToSpend?.daysLeft ?: 0,
             categoriesNeedingAttention = status.progress.count { it.categoryId != null && it.state != BudgetState.OK },
         )
+    }
+
+    private fun dueUi(ok: AppContainer.Opened.Ok, today: LocalDate): List<DueUi> {
+        val now = kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)
+        val fmt = DateTimeFormatter.ofPattern("d MMM")
+        return ok.recurring.due(now).map { d ->
+            val late = (now.toEpochDays() - d.date.toEpochDays()).toInt()
+            DueUi(
+                d.item.id, d.date.toEpochDays(), d.item.name, d.item.amount?.formatted(),
+                when { late <= 0 -> "Due today"; late == 1 -> "Due yesterday"; else -> "Due ${fmt.format(LocalDate.ofEpochDay(d.date.toEpochDays()))} · $late days ago" },
+                overdue = late > 0,
+            )
+        }
+    }
+
+    private fun recurringUi(ok: AppContainer.Opened.Ok, today: LocalDate): List<RecurringUi> {
+        val now = kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)
+        val fmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+        return ok.recurring.list().map { i ->
+            val s = i.schedule
+            val cadence = if (s.every == 1) "every ${s.unit.name.lowercase()}" else "every ${s.every} ${s.unit.name.lowercase()}s"
+            val next = s.nextOnOrAfter(now)?.let { "next ${fmt.format(LocalDate.ofEpochDay(it.date.toEpochDays()))}" } ?: "ended"
+            RecurringUi(
+                i.id, i.name, i.amount?.toPlainString().orEmpty(), i.category.value, i.account.value, i.merchant.orEmpty(), s, i.auto,
+                listOfNotNull(i.amount?.formatted() ?: "amount each time", cadence, next, if (i.auto) "posts by itself" else null).joinToString(" · "),
+            )
+        }
     }
 
     /** entry id -> id of its main category, for the given entries. */

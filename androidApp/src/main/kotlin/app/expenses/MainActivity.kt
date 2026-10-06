@@ -27,6 +27,7 @@ import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.OpeningScreen
+import app.expenses.ui.RecurringScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
+                    var repeating by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -99,6 +101,19 @@ class MainActivity : ComponentActivity() {
                                     onDelete = viewModel::deleteCategory,
                                 )
                             }
+                            repeating -> {
+                                BackHandler { repeating = false }
+                                val now = java.time.LocalDate.now()
+                                RecurringScreen(
+                                    due = s.due, items = s.recurring, categories = s.categories, accounts = s.accounts,
+                                    today = kotlinx.datetime.LocalDate(now.year, now.monthValue, now.dayOfMonth),
+                                    onBack = { repeating = false },
+                                    onPost = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
+                                    onSkip = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
+                                    onSave = viewModel::saveRecurring,
+                                    onDelete = viewModel::deleteRecurring,
+                                )
+                            }
                             budgeting -> {
                                 BackHandler { budgeting = false }
                                 BudgetScreen(
@@ -141,12 +156,20 @@ class MainActivity : ComponentActivity() {
                                 onDelete = viewModel::deleteEntry,
                                 onManageCategories = { managingCategories = true },
                                 onOpenBudget = { budgeting = true },
+                                onOpenRecurring = { repeating = true },
+                                onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
+                                onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.postAutomatic()
     }
 
     /** When the screen leaves the foreground the user is not waiting on anything: a good moment to tidy the search index. */

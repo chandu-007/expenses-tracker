@@ -96,6 +96,7 @@ class CategoryStore(
             q.remapSpendLines(intoId, fromId)
             q.remapIncome(intoId, fromId)
             q.remapTemplates(intoId, fromId)
+            q.remapRecurring(intoId, fromId)
             // A limit moves with the category unless the target already has its own, which then wins.
             q.budgetByScope(fromId).executeAsOneOrNull()?.let { src ->
                 val keep = q.budgetByScope(intoId).executeAsOneOrNull() == null

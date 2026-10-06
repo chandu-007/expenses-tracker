@@ -57,6 +57,34 @@ CREATE TABLE budget_period (
     start_value INTEGER NOT NULL
 );
 
+-- Repeating expenses. A null amount means "ask me each time". start_day is days since 1970-01-01. end_kind is 'never', 'date'
+-- (end_value = last day) or 'count' (end_value = number of occurrences). auto = 1 posts without asking.
+CREATE TABLE recurring (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    amount_minor INTEGER,
+    currency TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    merchant TEXT,
+    unit TEXT NOT NULL,
+    every INTEGER NOT NULL,
+    start_day INTEGER NOT NULL,
+    end_kind TEXT NOT NULL,
+    end_value INTEGER,
+    auto INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+-- Occurrences that were dealt with, by due date (days since 1970-01-01), so editing a schedule never re-posts or forgets one.
+CREATE TABLE recurring_done (
+    recurring_id TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    entry_id TEXT,
+    PRIMARY KEY (recurring_id, day)
+);
+
 -- Small device-local preferences, such as the last category and account used. Never synced.
 CREATE TABLE setting (
     key TEXT NOT NULL PRIMARY KEY,
@@ -369,7 +397,8 @@ SELECT COALESCE(MAX(position), -1) FROM category WHERE deleted = 0 AND parent_id
 categoryUsage:
 SELECT (SELECT COUNT(*) FROM entry_split WHERE category_id = :id)
      + (SELECT COUNT(*) FROM entry WHERE category_id = :id)
-     + (SELECT COUNT(*) FROM template WHERE category_id = :id AND deleted = 0);
+     + (SELECT COUNT(*) FROM template WHERE category_id = :id AND deleted = 0)
+     + (SELECT COUNT(*) FROM recurring WHERE category_id = :id AND deleted = 0);
 
 remapSplits:
 UPDATE entry_split SET category_id = :into WHERE category_id = :from;
@@ -417,3 +446,34 @@ SELECT * FROM budget_period WHERE id = 1;
 putBudgetPeriod:
 INSERT INTO budget_period(id, kind, start_value) VALUES (1, ?, ?)
 ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, start_value = excluded.start_value;
+
+liveRecurring:
+SELECT * FROM recurring WHERE deleted = 0 ORDER BY name COLLATE NOCASE, id;
+
+recurringById:
+SELECT * FROM recurring WHERE id = :id;
+
+upsertRecurring:
+INSERT INTO recurring(id, name, amount_minor, currency, category_id, account_id, merchant, unit, every, start_day, end_kind, end_value, auto)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, amount_minor = excluded.amount_minor, currency = excluded.currency,
+    category_id = excluded.category_id, account_id = excluded.account_id, merchant = excluded.merchant, unit = excluded.unit,
+    every = excluded.every, start_day = excluded.start_day, end_kind = excluded.end_kind, end_value = excluded.end_value, auto = excluded.auto;
+
+softDeleteRecurring:
+UPDATE recurring SET deleted = 1 WHERE id = :id;
+
+remapRecurring:
+UPDATE recurring SET category_id = :into WHERE category_id = :from;
+
+doneDays:
+SELECT day FROM recurring_done WHERE recurring_id = :id AND day >= :fromDay;
+
+doneRow:
+SELECT * FROM recurring_done WHERE recurring_id = :id AND day = :day;
+
+putDone:
+INSERT INTO recurring_done(recurring_id, day, outcome, entry_id) VALUES (?, ?, ?, ?);
+
+deleteDone:
+DELETE FROM recurring_done WHERE recurring_id = :id AND day = :day;

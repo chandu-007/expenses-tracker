@@ -86,8 +86,10 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit) {
                     color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f).testTag("budget_overall_note"),
                 )
-                if (budget.perDay != null && overall.state != BudgetState.OVER) {
+                if (budget.perDay != null && !budget.billsUseItAll) {
                     Text("about ${budget.perDay} a day", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day"))
+                } else if (budget.billsUseItAll) {
+                    Text("bills use it all", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
                 }
             }
             if (budget.categoriesNeedingAttention > 0) {
@@ -166,9 +168,14 @@ fun BudgetScreen(
             }
             item {
                 BudgetRow(budget.overall, headline = true, onClick = { editingOverall = true })
-                if (budget.perDay != null && budget.overall.state != BudgetState.OVER) {
+                if (budget.perDay != null) {
+                    val days = "${budget.daysLeft} ${if (budget.daysLeft == 1) "day" else "days"}"
                     Text(
-                        "You can spend about ${budget.perDay} a day for the ${budget.daysLeft} ${if (budget.daysLeft == 1) "day" else "days"} left. Upcoming bills are not counted yet.",
+                        when {
+                            budget.billsUseItAll -> "Bills still to come (${budget.upcoming}) use up what is left of your limit."
+                            budget.upcoming != null -> "After ${budget.upcoming} of repeating bills still to come, you can spend about ${budget.perDay} a day for the $days left."
+                            else -> "You can spend about ${budget.perDay} a day for the $days left. Repeating expenses without a fixed amount are not counted."
+                        },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp).testTag("safe_to_spend"),
                     )

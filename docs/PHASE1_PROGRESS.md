@@ -132,3 +132,29 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 - The period is global, not per budget.
 
 **Totals:** 212 host/JVM tests (both targets counted), 59 device tests (1 skipped: widget binding, Android 10+); full chain from deleted result files, gradle exit 0.
+
+## Slice 6: repeating expenses (FR-REC-01, and the bills part of safe-to-spend)
+**Built:**
+- **Schedules:** every N days, weeks, months or years from a start date, ending never, on a date, or after a number of times. Each date is worked out from the start and its position, never from the previous date, so a monthly item that starts on the 31st falls on 31 Jan, 28 Feb (29 in a leap year), 31 Mar, 30 Apr and back to 31 May without drifting; a yearly 29 Feb falls on 28 Feb in other years.
+- **Due items on the list:** under the budget summary, each waiting occurrence shows "Rent · ₹15,000.00 · Due today" (or "Due 1 Oct · 5 days ago", in the error colour) with **Skip** and **Post**. Up to three show; more says "N more waiting" and opens the **Repeating** screen (button in the list header), which lists waiting items and every repeating expense, with a full-screen editor (name, amount, category, account, repeat interval and unit, start, end, "post by itself") with Save pinned above the keyboard.
+- **Post** creates a normal expense dated on the due day, with a fixed id per occurrence, so the same occurrence can never be posted twice (a second try does nothing). **Skip** records that it was dealt with without spending. Both show an **Undo** snackbar; undoing a post deletes the expense and makes the occurrence due again, and posting it again restores the same entry instead of failing.
+- **No fixed amount** (electricity): leave the amount empty; Post asks for it in a short dialog. Such an item cannot be set to post by itself.
+- **Post by itself:** items with a fixed amount and that switch on are posted when the app comes to the front, with a snackbar ("Posted Netflix"), and can be undone like any other. Everything else waits for your Post or Skip.
+- **Edits affect future occurrences only.** Posted expenses are ordinary entries and stay as they are; an occurrence already posted or skipped is remembered by its date, so changing the amount, the schedule or even the start date never re-posts or forgets one.
+- **Window:** only the last 60 days are offered. An occurrence nobody dealt with for longer than that is no longer shown; it is not auto-posted either. (60 is my choice, not tested with users.)
+- **Safe to spend now sets bills aside:** the repeating expenses still waiting in the current budget period (including ones overdue and unposted, which will post inside it) are subtracted before spreading what is left over the days left, e.g. "After ₹3,000.00 of repeating bills still to come, you can spend about ₹X a day". If the bills use up everything left, it says "bills use it all". Bills in the next period, already posted, skipped, or without a fixed amount are not counted (the text says the last).
+- **Categories:** a repeating expense counts as a use of its category (so it blocks deleting the category), follows merges, and a late edit with a merged id is redirected. Changes are written to the sync log field by field; posts and skips are logged as per-occurrence entries.
+
+**Verified:** 8 schedule tests on both targets (including a property test that the fast skip-ahead agrees with walking from the start for every unit), 13 store tests, 2 more safe-to-spend maths tests and 1 store test for bills, 9 device tests on Android 8 driving the real screens (create, post, skip+undo, undo of a post, ask for an amount, auto-post on open and not twice, bills set aside, "bills use it all", edit rules, delete keeping posted entries). **Mutation checks:** 4 on the schedule, 8 on the store, 3 on safe-to-spend and 4 on the UI behaviour; two survived at first and were real gaps in my tests (a past-due unposted bill was never exercised; the undo mutation did not compile), fixed and re-run. The device suite for this slice also passed 3 times in a row. I looked at the editor with the keyboard confirmed up (Save above it) and at the list with a due card.
+
+**One real bug found by a test:** posting an occurrence that was posted, undone and posted again failed ("Entry ... is deleted"), because undo only marks the entry deleted and the re-post reused its id. It now restores the entry first.
+
+**Not done / caveats:**
+- **No reminders or notifications** (FR-REC-03 "bill due reminders" needs notifications, which are not built). Due items are only seen when the app is open. A bill's statement balance, minimum due and card due dates are not modelled.
+- **Auto-post happens only when the app is opened**, not in the background, so an item can post a day or more late (it is dated on its due day). Background posting needs a scheduled job, which I have not built.
+- **No "this vs. future" edit choice** beyond "edits apply to occurrences not yet posted"; no editing of a single occurrence's amount except when it has none; no recurring income or transfers (FR-REC-01 lists them) and no detection of recurring patterns (FR-REC-02), subscriptions, EMIs or IOUs.
+- **Safe to spend still ignores income and planned savings.**
+- **The three header buttons are cramped** on a narrow screen; large fonts, dark theme and TalkBack are unchecked. Android 8 emulator only.
+- **Time zones:** a due day is a calendar date; travelling across time zones could shift when "today" begins. Not tested.
+
+**Totals:** 243 host/JVM tests (both targets counted), 68 device tests (1 skipped: widget binding, Android 10+); full chain from deleted result files, gradle exit 0.

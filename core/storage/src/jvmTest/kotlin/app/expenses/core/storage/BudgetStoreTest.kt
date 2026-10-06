@@ -38,7 +38,8 @@ class BudgetStoreTest {
     private val clock = HlcClock("n1")
     private val categories = CategoryStore(db, clock, { 1_000L })
     private val ledger = LedgerStore(db, clock, { 1_000L })
-    private val budgets = BudgetStore(db, clock, { 1_000L }, ledger)
+    private val recurring = RecurringStore(db, clock, { 1_000L }, ledger)
+    private val budgets = BudgetStore(db, clock, { 1_000L }, ledger, recurring)
     private val bank = Account(AccountId("bank"), "Bank", AccountType.BANK, inr)
 
     init { ledger.saveAccount(bank) }
@@ -135,7 +136,7 @@ class BudgetStoreTest {
         assertEquals(BudgetPeriod.Monthly(1), budgets.period(), "calendar month by default")
         for (p in listOf(BudgetPeriod.Monthly(25), BudgetPeriod.Weekly(DayOfWeek.SUNDAY), BudgetPeriod.Weekly(DayOfWeek.MONDAY))) {
             budgets.setPeriod(p)
-            assertEquals(p, BudgetStore(db, clock, { 2_000L }, ledger).period())
+            assertEquals(p, BudgetStore(db, clock, { 2_000L }, ledger, recurring).period())
         }
     }
 
@@ -200,5 +201,27 @@ class BudgetStoreTest {
         assertEquals(1, budgets.limits().size)
         assertTrue(status(2026, 10, 6).progress.isEmpty())
         assertNotNull(budgets.status(LocalDate(2026, 10, 6), zone, Currency.USD).safeToSpend)
+    }
+
+    @Test
+    fun billsStillWaitingInThePeriodAreSetAsideFromSafeToSpend() {
+        fun bill(id: String, amount: Long?, day: LocalDate, end: app.expenses.core.domain.ScheduleEnd = app.expenses.core.domain.ScheduleEnd.AfterCount(1)) =
+            recurring.save(app.expenses.core.domain.RecurringItem(id, id, amount?.let { m(it) }, CategoryId("Bills"), bank.id, null, app.expenses.core.domain.Schedule(app.expenses.core.domain.RepeatUnit.MONTH, 1, day, end)))
+        budgets.setLimit(null, m(31_000))
+        bill("rent", 6_000, LocalDate(2026, 10, 28)) // later this period: counts
+        bill("wifi", 500, LocalDate(2026, 10, 3)) // past due and not posted: will post inside this period, counts
+        bill("power", null, LocalDate(2026, 10, 20)) // no fixed amount: cannot be counted
+        bill("tuition", 9_000, LocalDate(2026, 11, 2)) // next period: does not count
+        bill("old", 7_000, LocalDate(2026, 9, 28)) // last period: does not count
+        recurring.post("wifi", LocalDate(2026, 10, 3), zone).also { assertNotNull(it) } // posted: spent now, no longer upcoming
+        bill("gym", 1_000, LocalDate(2026, 10, 15))
+        bill("water", 300, LocalDate(2026, 10, 5)) // overdue and unposted: counts, the user still has to deal with it
+        val s = status(2026, 10, 11).safeToSpend!!
+        assertEquals(m(7_300), s.upcoming, "rent 6,000 + gym 1,000 + overdue water 300")
+        assertEquals(m(500), status(2026, 10, 11).progress.single().spent)
+        assertEquals(m(30_500 - 7_300), s.available)
+        assertEquals(m((30_500 - 7_300) / 21), s.perDay)
+        recurring.skip("gym", LocalDate(2026, 10, 15))
+        assertEquals(m(6_300), status(2026, 10, 11).safeToSpend!!.upcoming, "a skipped bill is no longer coming")
     }
 }

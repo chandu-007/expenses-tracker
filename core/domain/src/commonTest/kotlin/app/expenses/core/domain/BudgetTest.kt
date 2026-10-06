@@ -170,4 +170,24 @@ class BudgetTest {
         val period = DatePeriod(LocalDate(2026, 10, 1), LocalDate(2026, 11, 1))
         assertEquals(31, BudgetMath.safeToSpend(overall(3_100, 0), LocalDate(2026, 9, 20), period).daysLeft)
     }
+
+    @Test
+    fun upcomingBillsAreSetAsideBeforeSpreadingWhatIsLeft() {
+        val period = DatePeriod(LocalDate(2026, 10, 1), LocalDate(2026, 11, 1))
+        val s = BudgetMath.safeToSpend(overall(31_000, 10_000), LocalDate(2026, 10, 11), period, upcoming = m(6_300))
+        assertEquals(m(21_000), s.remaining)
+        assertEquals(m(14_700), s.available)
+        assertEquals(m(700), s.perDay, "14,700 over 21 days")
+        assertEquals(m(6_300), s.upcoming)
+    }
+
+    @Test
+    fun billsLargerThanWhatIsLeftLeaveNothingToSpendAndShowTheShortfall() {
+        val period = DatePeriod(LocalDate(2026, 10, 1), LocalDate(2026, 11, 1))
+        val s = BudgetMath.safeToSpend(overall(10_000, 8_000), LocalDate(2026, 10, 11), period, upcoming = m(5_000))
+        assertEquals(m(0), s.perDay)
+        assertEquals(m(-3_000), s.available)
+        assertFailsWith<IllegalArgumentException> { BudgetMath.safeToSpend(overall(10_000, 0), LocalDate(2026, 10, 11), period, upcoming = m(-1)) }
+        assertFailsWith<IllegalArgumentException> { BudgetMath.safeToSpend(overall(10_000, 0), LocalDate(2026, 10, 11), period, upcoming = Money(1, Currency.USD)) }
+    }
 }

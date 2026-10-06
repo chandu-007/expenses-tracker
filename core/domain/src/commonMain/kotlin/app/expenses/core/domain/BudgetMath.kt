@@ -23,8 +23,12 @@ data class BudgetProgress(
     val state: BudgetState,
 )
 
-/** What is left to spend freely until the period ends. */
-data class SafeToSpend(val remaining: Money, val daysLeft: Int, val perDay: Money)
+/**
+ * What is left to spend freely until the period ends. [remaining] is what is left under the cap, [upcoming] is the repeating
+ * expenses still waiting in the period, [available] is the difference (negative when the bills alone exceed what is left), and
+ * [perDay] spreads a positive [available] over [daysLeft].
+ */
+data class SafeToSpend(val remaining: Money, val upcoming: Money, val available: Money, val daysLeft: Int, val perDay: Money)
 
 object BudgetMath {
     /** At or above this share of the limit the budget is flagged as near its limit. */
@@ -71,14 +75,16 @@ object BudgetMath {
      * What can be spent per day for the rest of [period], from the overall limit's remaining amount. Today counts as a day left,
      * so on the last day the whole remainder is available. Nothing is left once the limit is reached.
      *
-     * This does not yet subtract upcoming bills or planned savings; recurring items are not built, so it is simply "remaining
-     * cap spread over the days left".
+     * [upcoming] is the total of repeating expenses still to be posted in the period; it is taken off first, so a bill due on the 28th
+     * is already set aside on the 5th. Planned savings are not tracked and are not subtracted.
      */
-    fun safeToSpend(overall: BudgetProgress, today: LocalDate, period: DatePeriod): SafeToSpend {
+    fun safeToSpend(overall: BudgetProgress, today: LocalDate, period: DatePeriod, upcoming: Money = Money.zero(overall.remaining.currency)): SafeToSpend {
         require(overall.categoryId == null) { "Safe to spend comes from the overall limit" }
         val daysLeft = if (today < period.start) period.days else maxOf(1, today.daysUntil(period.endExclusive))
+        require(upcoming.currency == overall.remaining.currency && upcoming.minorUnits >= 0) { "upcoming must be a non-negative amount in the limit's currency" }
         val remaining = overall.remaining
-        val perDay = if (remaining.minorUnits <= 0) Money.zero(remaining.currency) else Money(remaining.minorUnits / daysLeft, remaining.currency)
-        return SafeToSpend(remaining, daysLeft, perDay)
+        val available = remaining - upcoming
+        val perDay = if (available.minorUnits <= 0) Money.zero(remaining.currency) else Money(available.minorUnits / daysLeft, remaining.currency)
+        return SafeToSpend(remaining, upcoming, available, daysLeft, perDay)
     }
 }
