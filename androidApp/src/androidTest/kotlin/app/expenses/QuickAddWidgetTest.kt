@@ -128,6 +128,15 @@ class QuickAddWidgetTest {
     }
 
     @Test
+    fun widgetTapsLeaveTheSearchIndexMergedSoSegmentsNeverPileUp() {
+        saveChai()
+        repeat(6) { runBlocking { QuickAddAction().onAction(context, glanceId, actionParametersOf(TEMPLATE_ID to "chai")) } }
+        assertEquals(6, recentEntries().size)
+        val moreToMerge = runBlocking { container.write { ok -> app.expenses.core.storage.FtsTuning.mergeStep(ok.driver) } }
+        assertEquals(false, moreToMerge, "after widget taps the index should already be merged")
+    }
+
+    @Test
     fun anUndoThatIsTooOldIsRefusedAndTheEntryStays() {
         saveChai()
         val oldId = runBlocking {

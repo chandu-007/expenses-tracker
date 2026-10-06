@@ -150,8 +150,15 @@ class QuickAddAction : ActionCallback {
         }
         QuickAddWidget().updateAll(context)
         toast(context, added?.text ?: "Could not add this entry. Open the app.")
+        // Someone who only uses the widget never opens the app, so tidy the search index here, after the confirmation is
+        // already on screen. Without this, unmerged index segments pile up until SQLite forces a 50-100 ms merge in the
+        // middle of a save (measured at about 1,000 unmerged saves). Bounded, and does nothing if there is nothing to merge.
+        if (added != null) container.maintain(budgetMillis = WIDGET_MAINTENANCE_MILLIS)
     }
 }
+
+/** How long the widget may spend merging the search index after a tap. */
+const val WIDGET_MAINTENANCE_MILLIS = 300L
 
 /** Tap on Undo: takes back the last widget entry, but only within [UNDO_WINDOW_MILLIS]. */
 class UndoAction : ActionCallback {
