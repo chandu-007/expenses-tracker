@@ -69,7 +69,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.expenses.AccountUi
-import app.expenses.DEFAULT_CATEGORIES
+import app.expenses.CategoryUi
 import app.expenses.RowUi
 import app.expenses.TemplateUi
 import app.expenses.UiState
@@ -90,6 +90,7 @@ fun EntryListScreen(
     onUndoDismissed: () -> Unit,
     onOpen: (RowUi) -> Unit,
     onDelete: (RowUi) -> Unit,
+    onManageCategories: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
@@ -122,7 +123,10 @@ fun EntryListScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
-                Text("Spent this month", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Spent this month", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
+                }
                 Text(state.monthSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }
             if (state.templates.isNotEmpty()) {
@@ -195,6 +199,8 @@ fun ExpenseFormScreen(
     title: String,
     start: FormStart,
     accounts: List<AccountUi>,
+    categories: List<CategoryUi>,
+    onCreateCategory: (name: String, parentId: String?, onCreated: (String) -> Unit) -> Unit,
     showTemplateOption: Boolean,
     onSave: (amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean, occurredAt: Long) -> Unit,
     onBack: () -> Unit,
@@ -206,11 +212,20 @@ fun ExpenseFormScreen(
     var occurredAt by rememberSaveable { mutableStateOf(start.occurredAt) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     var pickingDate by rememberSaveable { mutableStateOf(false) }
+    var creatingCategory by rememberSaveable { mutableStateOf(false) }
     val amount = parseAmount(amountText, Currency.INR)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
     val zone = ZoneId.systemDefault()
     val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM yyyy").withZone(zone).format(Instant.ofEpochMilli(occurredAt))
+
+    if (creatingCategory) {
+        CategoryNameDialog(
+            title = "New category", categories = categories, allowParent = false,
+            onConfirm = { name, parent -> onCreateCategory(name, parent) { id -> category = id }; creatingCategory = false },
+            onDismiss = { creatingCategory = false },
+        )
+    }
 
     if (pickingDate) {
         val picker = rememberDatePickerState(initialSelectedDateMillis = Instant.ofEpochMilli(occurredAt).atZone(zone).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
@@ -257,7 +272,16 @@ fun ExpenseFormScreen(
             )
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DEFAULT_CATEGORIES.forEach { c -> FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c) }) }
+                // Hidden categories are not offered, except one already chosen (an entry being edited keeps its category).
+                categories.filter { !it.hidden || it.id == category }.forEach { c ->
+                    FilterChip(
+                        selected = c.id == category, onClick = { category = c.id },
+                        label = { Text(displayName(categories, c)) },
+                        leadingIcon = c.colorArgb?.let { col -> { ColorDot(col) } },
+                        modifier = Modifier.testTag("category_chip_${c.id}"),
+                    )
+                }
+                AssistChip(onClick = { creatingCategory = true }, label = { Text("+ New") }, modifier = Modifier.testTag("new_category_chip"))
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 accounts.forEach { a -> FilterChip(selected = a.id == accountId, onClick = { accountId = a.id }, label = { Text(a.name) }) }

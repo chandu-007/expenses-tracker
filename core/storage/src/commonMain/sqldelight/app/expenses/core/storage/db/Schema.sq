@@ -14,6 +14,18 @@ CREATE TABLE currency (
     digits INTEGER NOT NULL
 );
 
+-- Categories form a tree one level deep. The id never changes, so renaming does not touch any entry; entries refer to
+-- categories by id (entry_split.category_id, spend_line.category_id, entry.category_id for income, template.category_id).
+CREATE TABLE category (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    parent_id TEXT,
+    color INTEGER,
+    position INTEGER NOT NULL,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
 -- One-tap entries ("Chai 20, Cash"). A null amount means the template fills category, account and note and asks for the amount.
 -- uses only orders the list on this device; it is not logged for sync.
 CREATE TABLE template (
@@ -74,6 +86,10 @@ CREATE TABLE entry_split (
     amount_minor INTEGER NOT NULL,
     PRIMARY KEY (entry_id, position)
 );
+
+CREATE INDEX entry_split_category ON entry_split(category_id);
+-- Income entries carry a category directly; this keeps "how many things use this category" fast on a large ledger.
+CREATE INDEX entry_income_category ON entry(category_id) WHERE category_id IS NOT NULL;
 
 CREATE TABLE entry_share (
     entry_id TEXT NOT NULL,
@@ -252,6 +268,10 @@ SELECT * FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND del
 hasLiveRefunds:
 SELECT EXISTS(SELECT 1 FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0);
 
+-- The first (main) category of each of the given entries, for showing a category on list rows.
+firstSplits:
+SELECT entry_id, category_id FROM entry_split WHERE position = 0 AND entry_id IN :ids;
+
 insertSplit:
 INSERT INTO entry_split(entry_id, position, category_id, amount_minor) VALUES (?, ?, ?, ?);
 
@@ -299,6 +319,45 @@ SELECT value FROM setting WHERE key = :key;
 
 putSetting:
 INSERT INTO setting(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+liveCategories:
+SELECT * FROM category WHERE deleted = 0 ORDER BY position, name COLLATE NOCASE, id;
+
+categoryById:
+SELECT * FROM category WHERE id = :id;
+
+insertCategory:
+INSERT INTO category(id, name, parent_id, color, position, hidden, deleted) VALUES (?, ?, ?, ?, ?, 0, 0);
+
+updateCategory:
+UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden WHERE id = :id;
+
+softDeleteCategory:
+UPDATE category SET deleted = 1 WHERE id = :id;
+
+categoryCount:
+SELECT COUNT(*) FROM category;
+
+maxCategoryPosition:
+SELECT COALESCE(MAX(position), -1) FROM category WHERE deleted = 0 AND parent_id IS :parentId;
+
+-- Everything that refers to a category, live or not, so a category is never deleted while a deleted entry could come back.
+categoryUsage:
+SELECT (SELECT COUNT(*) FROM entry_split WHERE category_id = :id)
+     + (SELECT COUNT(*) FROM entry WHERE category_id = :id)
+     + (SELECT COUNT(*) FROM template WHERE category_id = :id AND deleted = 0);
+
+remapSplits:
+UPDATE entry_split SET category_id = :into WHERE category_id = :from;
+
+remapSpendLines:
+UPDATE spend_line SET category_id = :into WHERE category_id = :from;
+
+remapIncome:
+UPDATE entry SET category_id = :into WHERE category_id = :from;
+
+remapTemplates:
+UPDATE template SET category_id = :into WHERE category_id = :from;
 
 insertCurrency:
 INSERT OR IGNORE INTO currency(code, digits) VALUES (?, ?);

@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.ExpenseFormScreen
 import app.expenses.ui.FormStart
 import app.expenses.ui.ReadOnlyEntryScreen
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
+                    var managingCategories by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -71,6 +73,8 @@ class MainActivity : ComponentActivity() {
                                     title = "Edit expense",
                                     start = FormStart(e.amountText, e.category, e.accountId.ifEmpty { s.lastAccountId }, e.note, e.occurredAt),
                                     accounts = s.accounts,
+                                    categories = s.categories,
+                                    onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = false,
                                     onSave = { amount, category, note, account, _, at -> viewModel.saveEdit(e.id, amount, category, note, account, at) },
                                     onBack = viewModel::closeEditor,
@@ -81,12 +85,26 @@ class MainActivity : ComponentActivity() {
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
                             }
+                            managingCategories -> {
+                                BackHandler { managingCategories = false }
+                                CategoriesScreen(
+                                    categories = s.categories,
+                                    onBack = { managingCategories = false },
+                                    onCreate = { name, parent, color -> viewModel.createCategory(name, parent, color) },
+                                    onUpdate = viewModel::updateCategory,
+                                    onMove = viewModel::moveCategory,
+                                    onMerge = viewModel::mergeCategory,
+                                    onDelete = viewModel::deleteCategory,
+                                )
+                            }
                             adding -> {
                                 BackHandler { adding = false }
                                 ExpenseFormScreen(
                                     title = "Add expense",
                                     start = FormStart("", prefillCategory ?: s.lastCategory, prefillAccount ?: s.lastAccountId, prefillNote, System.currentTimeMillis()),
                                     accounts = s.accounts,
+                                    categories = s.categories,
+                                    onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = true,
                                     onSave = { amount, category, note, account, asTemplate, at ->
                                         viewModel.addExpense(amount, category, note, account, asTemplate, at)
@@ -109,6 +127,7 @@ class MainActivity : ComponentActivity() {
                                 onUndoDismissed = viewModel::dismissUndo,
                                 onOpen = { viewModel.openEditor(it.id) },
                                 onDelete = viewModel::deleteEntry,
+                                onManageCategories = { managingCategories = true },
                             )
                         }
                     }

@@ -9,6 +9,7 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
+import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.Entry
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,9 @@ import java.util.UUID
 
 data class RowUi(val seq: Long, val id: String, val title: String, val subtitle: String, val amount: String, val outflow: Boolean)
 data class AccountUi(val id: String, val name: String)
+
+/** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
+data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long)
 
 /** A saved quick entry as the UI needs it. [amountText] is null when the template asks for the amount. */
 data class TemplateUi(val id: String, val name: String, val amountText: String?, val category: String, val accountId: String, val note: String)
@@ -43,6 +47,7 @@ sealed interface UiState {
         val monthSpend: String,
         val accounts: List<AccountUi>,
         val templates: List<TemplateUi>,
+        val categories: List<CategoryUi>,
         /** What the add screen starts with: the category and account used last. */
         val lastCategory: String,
         val lastAccountId: String,
@@ -52,7 +57,8 @@ sealed interface UiState {
     ) : UiState
 }
 
-val DEFAULT_CATEGORIES = listOf("Food", "Groceries", "Transport", "Bills", "Shopping", "Health", "Fun", "Other")
+/** The ids of the default categories, used only to give seeded test data realistic categories. */
+val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
 private const val LAST_CATEGORY = "last_category"
@@ -75,6 +81,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
+    private var categoryNames = emptyMap<String, String>()
+    private var loadedCategory = emptyMap<String, String>()
     private var loaded = mutableListOf<Entry>()
     private var endReached = false
 
@@ -156,8 +164,44 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             if (page.size < PAGE) endReached = true
             if (page.isEmpty()) return@launch
             loaded.addAll(page)
+            loadedCategory = loadedCategory + firstCategories(ok, page)
             _state.update { s -> (s as? UiState.Ready)?.copy(rows = s.rows + page.map(::toRow), endReached = endReached) ?: current }
         }
+    }
+
+    // ---- categories ----
+
+    /** Creates a category and, once saved, tells the caller its id (used to select it in the add form). */
+    fun createCategory(name: String, parentId: String?, colorArgb: Long?, onCreated: (String) -> Unit = {}) = withStore { ok ->
+        val created = ok.categories.create(name, parentId, colorArgb)
+        refresh(ok)
+        viewModelScope.launch(Dispatchers.Main) { onCreated(created.id) }
+    }
+
+    /** Applies all the edits of the category dialog as one change: either every part is saved or none. */
+    fun updateCategory(id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) = withStore { ok ->
+        ok.db.transaction {
+            ok.categories.rename(id, name)
+            ok.categories.setColor(id, colorArgb)
+            ok.categories.setHidden(id, hidden)
+            ok.categories.setParent(id, parentId)
+        }
+        refresh(ok)
+    }
+
+    fun moveCategory(id: String, direction: Int) = withStore { ok ->
+        ok.categories.move(id, direction)
+        refresh(ok)
+    }
+
+    fun mergeCategory(fromId: String, intoId: String) = withStore { ok ->
+        ok.categories.merge(fromId, intoId)
+        refresh(ok)
+    }
+
+    fun deleteCategory(id: String) = withStore { ok ->
+        ok.categories.delete(id)
+        refresh(ok)
     }
 
     fun dismissMessage() {
@@ -212,12 +256,17 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val zone = ZoneId.systemDefault()
         val monthStart = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val spent = ok.store.spendByCategory(inr, from = monthStart).values.fold(Money.zero(inr)) { a, m -> a + m }
-        val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { it.isNotEmpty() } ?: DEFAULT_CATEGORIES.first()
+        val cats = ok.categories.list()
+        categoryNames = cats.associate { it.id to it.name }
+        loadedCategory = firstCategories(ok, loaded)
+        val visible = cats.filter { !it.hidden }
+        val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id ?: "cash"
         _state.value = UiState.Ready(
             rows = loaded.map(::toRow),
             monthSpend = spent.formatted(),
             accounts = accounts.map { AccountUi(it.id, it.name) },
+            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
             lastAccountId = lastAccount,
@@ -226,13 +275,20 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /** entry id -> id of its main category, for the given entries. */
+    private fun firstCategories(ok: AppContainer.Opened.Ok, entries: List<Entry>): Map<String, String> =
+        if (entries.isEmpty()) emptyMap()
+        else ok.db.schemaQueries.firstSplits(entries.map { it.id }).executeAsList().associate { it.entry_id to it.category_id }
+
     private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
 
     private fun toRow(e: Entry): RowUi = RowUi(
         seq = e.seq,
         id = e.id,
         title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
-        subtitle = dateFormat.format(Instant.ofEpochMilli(e.occurred_at)) + (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: ""),
+        subtitle = dateFormat.format(Instant.ofEpochMilli(e.occurred_at)) +
+            (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
+            ((loadedCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
         outflow = e.kind == "EXPENSE" || e.kind == "FRIEND_PAID",
     )
