@@ -155,16 +155,23 @@ class QuickAddWidgetTest {
         val host = AppWidgetHost(context, 4243)
         val id = host.allocateAppWidgetId()
         try {
-            // Binding a widget needs BIND_APPWIDGET, which apps do not hold but the shell does; borrowing it needs Android 9+.
-            assumeTrue("borrowing the shell's permission needs Android 9 or newer", android.os.Build.VERSION.SDK_INT >= 28)
+            // Binding a widget needs BIND_APPWIDGET, which apps do not hold but the shell does. From Android 10 the test can
+            // borrow that permission; on older versions it asks the shell to grant this package the right to bind.
             val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-            automation.adoptShellPermissionIdentity(android.Manifest.permission.BIND_APPWIDGET)
-            val bound = try {
+            val bound = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                automation.adoptShellPermissionIdentity(android.Manifest.permission.BIND_APPWIDGET)
+                try {
+                    manager.bindAppWidgetIdIfAllowed(id, ComponentName(context, QuickAddReceiver::class.java))
+                } finally {
+                    automation.dropShellPermissionIdentity()
+                }
+            } else {
+                val fd = automation.executeShellCommand("cmd appwidget grantbind --package ${context.packageName} --user 0")
+                java.io.FileInputStream(fd.fileDescriptor).use { it.readBytes() } // wait for the command to finish
+                fd.close()
                 manager.bindAppWidgetIdIfAllowed(id, ComponentName(context, QuickAddReceiver::class.java))
-            } finally {
-                automation.dropShellPermissionIdentity()
             }
-            assumeTrue("this device did not allow binding even with the shell identity; place the widget by hand", bound)
+            assumeTrue("binding was not allowed on this device even after asking the shell; verified on newer Android only", bound)
             saveChai()
             runBlocking {
                 val gid = GlanceAppWidgetManager(context).getGlanceIdBy(id)
