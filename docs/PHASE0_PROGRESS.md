@@ -235,3 +235,16 @@ The earlier emulator runs used `-gpu swiftshader_indirect`, i.e. software render
 - Opening a 100,000-row database costs about 38 ms more than an empty one; the earlier "110 ms extra" was software-rendering noise and is withdrawn, as is the "slower first frame" that suggested a main-thread wait.
 - Against the 1.0 s budget this leaves about 7x headroom on this emulator, so the budget holds if a phone is up to about 7x slower. **Still unmeasured on a real phone.**
 - The raw-key change is covered by the device tests: every reopen test goes through the raw-key path, and a wrong key is rejected.
+
+### Method check (2026-10-06)
+On this API 26 image `adb logcat -c` always fails ("failed to clear the 'main' log"), so each read can include lines from earlier runs. The `Startup` marks were already filtered by the new process id; the system's "Fully drawn" line was not, so it is now tied to its own run by timestamp (within 300 ms after that run's "ready composed" mark) and each run is checked for consistency. Re-run: 23 launches per database, **23 distinct processes each, 0 misaligned runs**. Medians (first 3 dropped, 20 runs, ms since process start, [min-max]):
+
+| | Empty database | 100,000 rows |
+|---|---|---|
+| First composition | 59 [53-77] | 58 [54-77] |
+| Database opened | 44 [34-64] | 88 [71-108] |
+| Data composed | 104 [91-135] | 130 [105-154] |
+| **Fully drawn** | **130 [105-150]** | **146 [120-169]** |
+| First frame | 126 [103-148] | 92 [82-120] |
+
+These agree with the earlier 132 and 142 ms within noise, so no earlier figure changes. Still an emulator on a fast Mac with host GPU; real-phone numbers remain unmeasured.
