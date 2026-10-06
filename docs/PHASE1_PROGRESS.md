@@ -20,3 +20,5 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 - No template edit screen; templates are created from the add screen and can only be removed.
 - The one-time prompt that offers to add the tile (`requestAddTileService`, Android 13 and up) is not built; today users must add the tile by hand.
 - No measurement yet of taps or seconds per entry. By count: add screen is FAB, amount, Save (2 taps plus typing); a quick entry is 1 tap.
+
+**Verification record.** Commit `1bbdf9c` was made while `check` was red (Android lint rejected the pre-API-34 tile call); commit `1e53438` fixes that. After it, the whole chain was re-run from deleted result files (`check`, release build, device tests): **125 host/JVM tests (both targets counted) and 23 device tests on Android 8.0, all passing, build successful.** The counts above are from that run. From now on, verification and commit are chained so a failing step blocks the commit.
