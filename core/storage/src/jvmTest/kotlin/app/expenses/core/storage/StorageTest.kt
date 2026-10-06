@@ -35,7 +35,7 @@ class StorageTest {
         db.entry("a", 1, 100, ref = "UPI123", source = "sms")
         assertFailsWith<Exception> { db.entry("b", 2, 999, ref = "UPI123", source = "sms") }
         assertEquals(1L, db.schemaQueries.entryCount().executeAsOne())
-        val row = db.schemaQueries.recentEntries(10, 0).executeAsOne()
+        val row = db.schemaQueries.recentEntries(10).executeAsOne()
         assertEquals("a", row.id)
         assertEquals(100L, row.amount_minor)
         db.entry("c", 3, 100, ref = "UPI123", source = "email") // another source is allowed; the dedup engine decides
@@ -47,7 +47,7 @@ class StorageTest {
         val (_, db) = newDb()
         db.entry("a", 1, 100, cat = "food")
         db.entry("a", 1, 150, cat = "travel")
-        val row = db.schemaQueries.recentEntries(10, 0).executeAsOne()
+        val row = db.schemaQueries.recentEntries(10).executeAsOne()
         assertEquals(1L, db.schemaQueries.entryCount().executeAsOne())
         assertEquals(150L, row.amount_minor)
         assertEquals("travel", row.category_id)
@@ -61,18 +61,34 @@ class StorageTest {
         db.entry("a", 1, 250, cat = "food", merchant = "Cafe") // an edit replayed from the op log
         assertEquals(0L, db.schemaQueries.entryCount().executeAsOne())
         db.schemaQueries.restoreEntry("a")
-        val row = db.schemaQueries.recentEntries(10, 0).executeAsOne()
+        val row = db.schemaQueries.recentEntries(10).executeAsOne()
         assertEquals(250L, row.amount_minor)
         assertEquals("Cafe", row.merchant)
     }
 
     @Test
-    fun searchFindsMerchantAndRecentIsNewestFirstWithPaging() {
+    fun searchFindsMerchantAndRecentIsNewestFirst() {
         val (_, db) = newDb()
         for (i in 1..25) db.entry("e$i", i.toLong(), 100, merchant = if (i % 5 == 0) "Swiggy $i" else "Shop $i")
         assertEquals(5, db.schemaQueries.searchEntries("swiggy", 50).executeAsList().size)
-        val page = db.schemaQueries.recentEntries(10, 10).executeAsList()
-        assertEquals(List(10) { "e${15 - it}" }, page.map { it.id })
+        assertEquals(List(3) { "e${25 - it}" }, db.schemaQueries.recentEntries(3).executeAsList().map { it.id })
+    }
+
+    @Test
+    fun keysetPagingVisitsEveryRowExactlyOnceEvenWhenTimestampsTie() {
+        val (_, db) = newDb()
+        // 40 rows over only 5 distinct timestamps, so most rows tie
+        for (i in 1..40) db.entry("e$i", (i % 5).toLong(), 100)
+        val seen = mutableListOf<String>()
+        var page = db.schemaQueries.recentEntries(7).executeAsList()
+        while (page.isNotEmpty()) {
+            seen += page.map { it.id }
+            val last = page.last()
+            page = db.schemaQueries.entriesBefore(last.occurred_at, last.seq, 7).executeAsList()
+        }
+        assertEquals(40, seen.size)
+        assertEquals(40, seen.toSet().size)
+        assertEquals(seen, db.schemaQueries.recentEntries(100).executeAsList().map { it.id })
     }
 
     @Test

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The database is encrypted with a key that lives only in this device's Android Keystore, so a copy of the
+  database on another device (cloud restore or phone-to-phone transfer) could never be opened. Exclude it
+  everywhere so users are never left with an unreadable file. Moving to a new phone needs sync (phase 3)
+  or an export until then.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>

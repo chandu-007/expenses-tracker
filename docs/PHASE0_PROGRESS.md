@@ -108,3 +108,27 @@ Last updated: 2026-10-06.
 - No permanent performance gate in the build; numbers came from a probe that was removed. The harness should use counted data windows and run on a pinned AVD, with budgets set for a mid-range phone (emulator timings are a best case).
 - Importers must sort by date (about 10x faster); nothing enforces it yet.
 - Ledger-to-storage mapping and the sync log writer are not written. iOS still needs full Xcode.
+
+## Update: performance gate and paging (2026-10-06)
+- **Permanent gate** (`androidApp/src/androidTest/.../PerformanceBudgetTest.kt`, 8 tests): 100k rows, 10 years in ascending date order, 500 merchants with skewed frequency (top merchant about 11%), 40 categories, SQLCipher. Budgets are the section 6.1 numbers divided by `PHONE_SLOWDOWN = 4.0`. **That factor is an unverified assumption**; measure on a real mid-range phone and replace it. Run on one pinned AVD in CI. It runs under `connectedDebugAndroidTest` (needs an emulator), not `check`.
+- Results on the API 26 emulator (limit = phone budget / 4):
+
+| Check | Measured | Limit |
+|---|---|---|
+| Search, most common merchant (11% of rows) | 2.0 ms | 25 ms |
+| Search, rare merchant (22 rows) / no match | 0.24 / 0.10 ms | 25 ms |
+| Category totals, one year (10,000 rows, window verified) | 1.9 ms | 75 ms |
+| Category totals, 10 years (100k rows) | 51 ms | 250 ms |
+| First 50 rows of the list | 0.65 ms | 25 ms |
+| Deep scroll, last page, keyset paging | 0.24 ms | 25 ms |
+| Save one transaction, p95 of 60 autocommit inserts | 3.8 ms | 12.5 ms |
+
+- **Gate found two real problems before the dataset was fixed:** (1) OFFSET paging cost 24 ms at the last page of 100k rows; replaced with keyset paging (`entriesBefore`, row-value comparison on `(occurred_at, seq)`), now 0.24 ms. `entry_time` is now `(occurred_at DESC, seq DESC)` so list order is total and pages never repeat or skip rows with equal timestamps (tested with heavy ties). (2) A search phrase made of substrings that nearly every row contains ("order 1" in data where every row said "... order N") took 26 ms against a 25 ms limit, because many large trigram lists must be intersected. That is a known slow shape, not a realistic search; it is not gated. Real merchant text rarely looks like that.
+- Two failures during development were bugs in the test data and cursor, not the app, and were fixed.
+- **Backup rules:** explicit `dataExtractionRules` and `fullBackupContent` exclude the database, preferences and files from cloud backup and phone-to-phone transfer, so a database can never land on a phone without its key. Until sync (Phase 3), moving to a new phone needs an export. This is a known user-facing gap against the research's "history lost on phone change" pain point; do not ship publicly without the export or sync.
+- Totals: 74 host/JVM tests, 17 device tests.
+
+### Still open
+- Ledger-to-storage mapping and the sync log writer.
+- Real mid-range phone measurements to replace `PHONE_SLOWDOWN`.
+- iOS still needs full Xcode.
