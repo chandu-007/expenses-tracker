@@ -48,7 +48,7 @@ object EncryptedDriver {
     fun create(context: Context, name: String = DEFAULT_NAME): SqlDriver {
         loadNative()
         val passphrase = loadOrCreatePassphrase(context, name)
-        return AndroidSqliteDriver(ExpensesDb.Schema, context, name, SupportOpenHelperFactory(passphrase))
+        return AndroidSqliteDriver(ExpensesDb.Schema, context, name, SupportOpenHelperFactory(rawKey(passphrase)))
     }
 
     /** Deletes the database, its wrapped key and the Keystore key. Irreversible: only after user consent. */
@@ -57,6 +57,16 @@ object EncryptedDriver {
         File(context.noBackupFilesDir, WRAPPED_FILE).delete()
         File(context.noBackupFilesDir, "$WRAPPED_FILE.tmp").delete()
         runCatching { KeyStore.getInstance(KEYSTORE).apply { load(null) }.deleteEntry(KEY_ALIAS) }
+    }
+
+    /**
+     * SQLCipher's raw-key form, `x'<64 hex digits>'`. The key is already 256 random bits, so the default password
+     * stretching (256,000 PBKDF2 rounds on every open) adds cost and no security. The salt still lives in the file.
+     */
+    private fun rawKey(key: ByteArray): ByteArray {
+        require(key.size == 32) { "The database key must be 32 bytes" }
+        val hex = key.joinToString("") { "%02x".format(it) }
+        return "x'$hex'".toByteArray(Charsets.US_ASCII)
     }
 
     private fun loadNative() {

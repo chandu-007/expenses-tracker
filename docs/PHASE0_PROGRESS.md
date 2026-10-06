@@ -184,3 +184,32 @@ Totals: 85 host/JVM tests across modules plus 11 parser tests on two targets.
 - **Confidently wrong vs unrecognised, now reported separately:** 129 recognised, of which 2 have a wrong direction (`hdfc/account_rtgs_deposited`, `slice/cc_bill_paid`) and 0 a wrong amount; 15 unrecognised (these only go to the review inbox). The test caps wrong results at 2 and wrong amounts at 0.
 - **Variants per issuer (variants / fully right / recognised), generic rules only:** axis 5/5/5, bob 4/4/4, canara 3/1/3, equitas 3/2/3, hdfc 31/19/28, hsbc 4/4/4, icici 19/7/19, idfc 22/15/20, indian_bank 4/3/4, indusind 9/6/8, jupiter 3/0/1, kotak 8/6/8, onecard 7/6/6, revolut 2/2/2, sbi 6/3/4, slice 10/5/9, union 4/1/1. Where the generic layer falls short is mostly reference formats (alphanumeric NEFT/RTGS/IMPS ids, `RRN`, `UTR`) and account or card masks; the remaining unrecognised messages use no debit or credit word at all.
 - **Real data option (not done):** the public samples cannot say how many real formats a bank sends today. If you want a real measurement, your own bank alerts can be exported from your phone with USB debugging (`adb shell content query --uri content://sms/inbox`), then redacted and kept out of git. That is your decision and your data; nothing has been read from your phone.
+
+## Update: first app shell and the last Phase 0 measurements (2026-10-06)
+**Built:** a transaction list (keyset paging, newest first), an add-expense screen (amount with up to 2 decimals, category, account, note; focus and numeric keyboard on open), a "spent this month" header, and a recovery screen for a lost database key that deletes nothing without an explicit second confirmation. The encrypted database opens on a background thread behind a spinner. Amounts use Indian grouping (`Money.formatted()`, `parseAmount()`, with property tests). A non-debuggable `benchmark` build type (R8, signed with the debug key) exists for honest measurement; a seeding hook (`--ei seed_rows N`) compiles in only for `debug` and `benchmark`, never `release`.
+
+**Verified:** 2 UI tests drive the real screens on Android 8.0 (add an expense, see it in the list and month total as `₹12,34,567.50`; an amount with 3 decimals cannot be saved). Device tests now total 20, host tests 118 (both targets counted), all passing.
+
+**Bugs found by measuring, fixed:**
+1. **Cold start spent about 270 ms on password stretching.** SQLCipher stretches a passphrase with 256,000 PBKDF2 rounds on every open. Our key is already 256 random bits, so it now uses SQLCipher's raw-key form (`x'<64 hex>'`), which skips that step; the salt still lives in the file. Empty-database cold start to data on screen fell from about **405 ms to about 132 ms** (median of 10). Databases created before this change cannot be opened; none were shipped.
+2. **Seeding raced the database opening** and silently did nothing (the screenshot showed an empty app). Seeding and "start fresh" now wait for the open to finish.
+
+**Cold start, API 26 emulator on an Apple-silicon Mac, `benchmark` build, `am start -W` and `reportFullyDrawn` (first screen with data):**
+
+| Database | Median | Range | Runs |
+|---|---|---|---|
+| Empty | 132 ms | 108-192 | 10 |
+| 100,000 rows | 240 ms, 244 ms | 173-370 | 2 x 20 (a first run right after seeding was noisier: 261 ms, 171-580) |
+
+The budget is 1.0 s on a mid-range phone, so this meets it **only if a phone is no more than about 4x slower than this emulator. That ratio is unmeasured.** The extra 110 ms with 100k rows over an empty database is not yet explained.
+
+**List with 100,000 rows:** 40 flings scrolled far down the list and loaded further pages with no crash, and the screenshot shows correct rows and a correct month total. **Frame statistics are not usable here:** 98.7% "janky" frames, but 1,157 of 1,176 were slow GPU draw commands against 387 slow UI-thread frames, which points at this emulator's software rendering, not the app. Real scroll smoothness is **unmeasured** until a phone is tested.
+
+**Phase 0 exit criteria status:**
+- Ledger property tests: met.
+- Save latency (p95 3.8-4.3 ms, limit 12.5 ms at the assumed 4x) and all query budgets: met on the emulator at the assumed factor.
+- Cold start: met on the emulator at the assumed factor; **not verified on a reference phone.**
+- Spike outcomes recorded (SMS parser, Compose list): done, apart from real-phone scroll smoothness.
+- iOS spikes (SQLCipher driver, Compose Multiplatform startup): **not run**, need full Xcode.
+
+**Known gaps in the shell, deliberately not built yet:** list rows show no category; no edit or delete; no accessibility pass (TalkBack labels, font scaling) and dark theme not checked on screen; quick-entry widget and tile (Phase 1); no navigation library (two screens only).
