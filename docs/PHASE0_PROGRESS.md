@@ -110,7 +110,7 @@ Last updated: 2026-10-06.
 - Ledger-to-storage mapping and the sync log writer are not written. iOS still needs full Xcode.
 
 ## Update: performance gate and paging (2026-10-06)
-- **Permanent gate** (`androidApp/src/androidTest/.../PerformanceBudgetTest.kt`, 8 tests): 100k rows, 10 years in ascending date order, 500 merchants with skewed frequency (top merchant about 11%), 40 categories, SQLCipher. Budgets are the section 6.1 numbers divided by `PHONE_SLOWDOWN = 4.0`. **That factor is an unverified assumption**; measure on a real mid-range phone and replace it. Run on one pinned AVD in CI. It runs under `connectedDebugAndroidTest` (needs an emulator), not `check`.
+- **Permanent gate** (`androidApp/src/androidTest/.../PerformanceBudgetTest.kt`, 7 tests): 100k rows, 10 years in ascending date order, 500 merchants with skewed frequency (top merchant about 11%), 40 categories, SQLCipher. Budgets are the section 6.1 numbers divided by `PHONE_SLOWDOWN = 4.0`. **That factor is an unverified assumption**; measure on a real mid-range phone and replace it. Run on one pinned AVD in CI. It runs under `connectedDebugAndroidTest` (needs an emulator), not `check`.
 - Results on the API 26 emulator (limit = phone budget / 4):
 
 | Check | Measured | Limit |
@@ -126,7 +126,7 @@ Last updated: 2026-10-06.
 - **Gate found two real problems before the dataset was fixed:** (1) OFFSET paging cost 24 ms at the last page of 100k rows; replaced with keyset paging (`entriesBefore`, row-value comparison on `(occurred_at, seq)`), now 0.24 ms. `entry_time` is now `(occurred_at DESC, seq DESC)` so list order is total and pages never repeat or skip rows with equal timestamps (tested with heavy ties). (2) A search phrase made of substrings that nearly every row contains ("order 1" in data where every row said "... order N") took 26 ms against a 25 ms limit, because many large trigram lists must be intersected. That is a known slow shape, not a realistic search; it is not gated. Real merchant text rarely looks like that.
 - Two failures during development were bugs in the test data and cursor, not the app, and were fixed.
 - **Backup rules:** explicit `dataExtractionRules` and `fullBackupContent` exclude the database, preferences and files from cloud backup and phone-to-phone transfer, so a database can never land on a phone without its key. Until sync (Phase 3), moving to a new phone needs an export. This is a known user-facing gap against the research's "history lost on phone change" pain point; do not ship publicly without the export or sync.
-- Totals: 74 host/JVM tests, 17 device tests.
+- Totals: 74 host/JVM tests, 16 device tests (7 gate + 9 encrypted-storage).
 
 ### Still open
 - Ledger-to-storage mapping and the sync log writer.
