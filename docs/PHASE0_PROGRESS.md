@@ -145,3 +145,34 @@ Last updated: 2026-10-06.
 - Not yet written: the thin layer the UI will call (use cases, flows for live updates); categories and people as named entities (only their ids are stored); the importer ordering rule is documented but not enforced.
 - Real mid-range phone measurements to replace `PHONE_SLOWDOWN`; iOS needs full Xcode.
 - Phase 0 exit criteria still to confirm: cold start on a reference device, and the spike list (SMS parser on 10 banks, Compose list with 100k rows).
+
+## Update: SMS parser spike (2026-10-06)
+**Question:** how much per-bank work does Phase 2 need, and what goes wrong without it?
+**Method.** A new module `:core:parsers` holds a bank-independent extractor (`GenericAlertParser`, pure common Kotlin, body text only, refuses OTP messages first). I measured it against 152 public sample messages from 17 issuers (the MIT-licensed `akhilnarang/bank-sms-parser` fixtures: 144 transactions and 8 non-transactions). Its own parser, run in Python 3.14, served as the answer key. The corpus lives in `/tmp`, not in this repository; the measurement is an opt-in test (`CorpusReportTest`, set `SMS_CORPUS_DIR`). The permanent tests (11) use synthetic messages written for this project.
+
+**Results, generic rules only, no per-bank rules:**
+
+| Stage | Fully right (all five fields) | Recognised as a transaction |
+|---|---|---|
+| First version | 62/144 (43%) | 118/144 |
+| After a round of cheap generic fixes | 77/144 (53%) | 128/144 |
+| After a second round | 89/144 (62%) | 129/144 |
+
+Final per-field agreement: direction 127, amount 129 (all recognised), date 128, reference 103, account 117 of 144; 7 of 8 non-transactions rejected. Remaining misses are mostly reference and account formats (alphanumeric NEFT/RTGS references, card payments) plus a few layouts with no direction word at all.
+
+**Caveats, which make these numbers optimistic:** I tuned the rules on this same corpus; the fixtures are sanitised samples written by one contributor, not live traffic; the answer key is one library's output, not ground truth; sender-ID handling and OTP-adjacent messages were not tested.
+
+**Findings that change the design:**
+1. **Silent sign errors exist.** Of 129 recognised messages, 2 had the wrong direction: an outgoing RTGS worded "Money Deposited ... To NAME" read as a credit, and a credit-card bill payment ("bill ... has been paid") read as a debit. Guessing a sign corrupts the books without any visible failure, so the parser leaves a message with no direction word unrecognised instead of guessing (tested), and FR-CAP-12 stands: captured items go to a review inbox with a confidence level, never auto-confirmed for layouts the bank rules do not cover.
+2. **Foreign-currency alerts carry two amounts** ("USD 12.00 | Rs. 1,000.00 spent ..."). A first version took the first one, 1,200 instead of 100,000 paise, and it was caught only because the answer key disagreed. The parser now returns the rupees charged plus the original currency and amount, which matches the ledger's `original` field.
+3. **Card bill payments are not income or spending.** "Your credit card bill ... has been paid" is a transfer to the card; generic wording cannot tell, so the parser needs a message kind and the ledger's auto-pairing (FR-LED-03) must handle it.
+4. **"Credited to the beneficiary account" means an outgoing payment** seen from the sender's bank. Handled generically for "beneficiary"; other outgoing phrasings need per-bank rules.
+5. **Non-transaction notices are valuable, not just noise:** due-date and statement messages carry the data for FR-REC-03 (bill reminders), so they should be classified, not thrown away.
+
+**Sizing for Phase 2 [INFERENCE from one public corpus]:** that corpus needed about 150 sample messages for 17 issuers, with HDFC at 31, IDFC at 22 and ICICI at 19. A launch target of the top 25 issuers therefore implies on the order of 200 to 300 message variants to write rules and fixtures for, after the generic layer. Rules should be data (patterns shipped over the air, per FR-CAP-13), with each rule carrying fixtures. A consented corpus from closed testers is needed because public samples are not live traffic.
+
+Totals: 85 host/JVM tests across modules plus 11 parser tests on two targets.
+
+### Still open for Phase 0 exit
+- Cold start on a reference device and a Compose list with 100k rows (both need the real UI shell).
+- iOS: full Xcode (spike a and d).

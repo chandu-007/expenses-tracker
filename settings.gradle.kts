@@ -29,6 +29,7 @@ dependencyResolutionManagement {
 rootProject.name = "expenses-tracker"
 
 include(":core:domain")
+include(":core:parsers")
 include(":core:storage")
 include(":androidApp")
 include(":backend")

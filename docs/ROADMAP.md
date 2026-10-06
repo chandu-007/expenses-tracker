@@ -43,7 +43,7 @@ Phase 6 (iOS) depends only on Phase 3, so it can run in parallel with Phases 4�
 | Design system | Compose components, light/dark themes, density setting, colour-blind-safe palette, TalkBack and font-scaling baseline (§6.4), lakh/crore formatter (FR-SET-01 groundwork) |
 | Privacy baseline | No third-party ad or tracking SDKs (dependency allowlist in CI); opt-in privacy-preserving crash reporting |
 | Admin / compliance | Company entity; Play developer account registered to the company; finalize the minimum Android version (proposed API 26) from Play distribution data for India; draft privacy policy. **Start the company Apple developer account (D-U-N-S number) in parallel** so it is ready by Phase 6. |
-| Spikes | (a) iOS SQLCipher driver for SQLDelight (validates D2). (b) SMS parser prototype on 10 top Indian banks to size the parser work. (c) Compose list performance with 100k rows. (d) Compose Multiplatform iOS cold start on the simulator, plus a device check once the Apple account exists. Fallback if it misses ≤ 0.6 s: SwiftUI screens over the shared core in Phase 6. |
+| Spikes | (a) iOS SQLCipher driver for SQLDelight (validates D2). (b) SMS parser prototype to size the parser work (done: see PHASE0_PROGRESS.md; about 200-300 message variants for 25 issuers, rules as data, review inbox for anything uncertain). (c) Compose list performance with 100k rows. (d) Compose Multiplatform iOS cold start on the simulator, plus a device check once the Apple account exists. Fallback if it misses ≤ 0.6 s: SwiftUI screens over the shared core in Phase 6. |
 
 **Exit criteria:**
 - Ledger property tests green.
