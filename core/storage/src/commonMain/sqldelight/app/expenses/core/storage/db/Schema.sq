@@ -42,7 +42,7 @@ CREATE INDEX op_log_row ON op_log(entity, row_id, field, hlc DESC);
 
 insertAccount:
 INSERT INTO account(id, name, type, currency, deleted) VALUES (?, ?, ?, ?, 0)
-ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, currency = excluded.currency, deleted = 0;
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, currency = excluded.currency;
 
 selectAccounts:
 SELECT * FROM account WHERE deleted = 0 ORDER BY name;
@@ -56,7 +56,14 @@ ON CONFLICT(id) DO UPDATE SET
     kind = excluded.kind, occurred_at = excluded.occurred_at, account_id = excluded.account_id,
     counter_account_id = excluded.counter_account_id, amount_minor = excluded.amount_minor,
     currency = excluded.currency, category_id = excluded.category_id, merchant = excluded.merchant,
-    note = excluded.note, source = excluded.source, source_ref = excluded.source_ref, deleted = 0;
+    note = excluded.note, source = excluded.source, source_ref = excluded.source_ref;
+
+-- Deletion is explicit. Upserts never change the deleted flag, so replaying an edit cannot bring back a deleted row.
+softDeleteEntry:
+UPDATE entry SET deleted = 1 WHERE id = ?;
+
+restoreEntry:
+UPDATE entry SET deleted = 0 WHERE id = ?;
 
 entryCount:
 SELECT COUNT(*) FROM entry WHERE deleted = 0;

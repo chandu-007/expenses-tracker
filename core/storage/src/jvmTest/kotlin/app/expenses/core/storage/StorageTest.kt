@@ -54,6 +54,19 @@ class StorageTest {
     }
 
     @Test
+    fun replayingAnEditDoesNotResurrectADeletedEntryAndKeepsOtherColumns() {
+        val (_, db) = newDb()
+        db.entry("a", 1, 100, cat = "food", merchant = "Cafe")
+        db.schemaQueries.softDeleteEntry("a")
+        db.entry("a", 1, 250, cat = "food", merchant = "Cafe") // an edit replayed from the op log
+        assertEquals(0L, db.schemaQueries.entryCount().executeAsOne())
+        db.schemaQueries.restoreEntry("a")
+        val row = db.schemaQueries.recentEntries(10, 0).executeAsOne()
+        assertEquals(250L, row.amount_minor)
+        assertEquals("Cafe", row.merchant)
+    }
+
+    @Test
     fun searchFindsMerchantAndRecentIsNewestFirstWithPaging() {
         val (_, db) = newDb()
         for (i in 1..25) db.entry("e$i", i.toLong(), 100, merchant = if (i % 5 == 0) "Swiggy $i" else "Shop $i")

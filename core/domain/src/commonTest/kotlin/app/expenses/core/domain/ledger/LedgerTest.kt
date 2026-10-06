@@ -152,6 +152,21 @@ class LedgerTest {
 
 
     @Test
+    fun monthlyReportsSumToTheYearlyReportForARefundChainAcrossMonths() {
+        val month = 30L * 24 * 3_600_000
+        val a = CategoryId("a")
+        val b = CategoryId("b")
+        val exp = Expense(EntryId("o"), 0, bank.id, m(1_001), listOf(CategorySplit(a, m(334)), CategorySplit(b, m(667))))
+        var l = base().add(exp)
+        for (i in 1..7) l = l.add(Refund(EntryId("r$i"), i * month / 2, bank.id, m(100L + i), exp.id))
+        val monthly = (0 until 5).map { l.spendByCategory(inr, from = it * month, until = (it + 1) * month) }
+        val yearly = l.spendByCategory(inr, from = 0, until = 5 * month)
+        for (c in listOf<CategoryId?>(a, b)) {
+            assertEquals(yearly[c]?.minorUnits ?: 0L, monthly.sumOf { it[c]?.minorUnits ?: 0L })
+        }
+    }
+
+    @Test
     fun chainedSmallRefundsNeverOverRefundASingleCategory() {
         // Regression: splitting each 1-paisa refund independently by 1:2 refunded the second category 3 against 2.
         val a = CategoryId("a")
