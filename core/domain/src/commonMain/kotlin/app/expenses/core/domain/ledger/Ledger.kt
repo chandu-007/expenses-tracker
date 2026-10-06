@@ -105,7 +105,7 @@ class Ledger private constructor(
 
     /**
      * Net spending per category in [currency] for entries with `from <= occurredAt < until`.
-     * Refunds reduce the categories of the original expense in proportion to its splits.
+     * Refunds reduce the categories of the original expense (see [SpendLines.ofRefunds]).
      * Transfers, income and settlements never count. A null key is "uncategorized".
      */
     fun spendByCategory(
@@ -115,32 +115,22 @@ class Ledger private constructor(
         until: Long = Long.MAX_VALUE,
     ): Map<CategoryId?, Money> {
         val totals = LinkedHashMap<CategoryId?, Long>()
-        fun addTo(splits: List<CategorySplit>, amount: Long, sign: Long) {
-            if (amount == 0L) return
-            val keys: List<CategoryId?> = if (splits.isEmpty()) listOf(null) else splits.map { it.category }
-            val weights = if (splits.isEmpty()) listOf(1L) else splits.map { it.amount.minorUnits }
-            val parts = allocate(amount, weights)
-            for (i in keys.indices) totals[keys[i]] = (totals[keys[i]] ?: 0L) + sign * parts[i]
+        fun add(lines: List<SpendLine>) {
+            for (l in lines) {
+                val v = if (basis == SpendBasis.MY_SHARE) l.mine else l.cashOut
+                totals[l.category] = (totals[l.category] ?: 0L) + v
+            }
         }
-        val allocations = refundAllocations()
+        val refundLines = refundLines()
         for (e in entries) {
             if (e.occurredAt < from || e.occurredAt >= until) continue
             when (e) {
-                is Expense -> if (e.amount.currency == currency) {
-                    val amount = if (basis == SpendBasis.MY_SHARE) e.myShare.minorUnits else e.amount.minorUnits
-                    addTo(e.splits, amount, 1L)
-                }
+                is Expense -> if (e.amount.currency == currency) add(SpendLines.of(e))
                 is Refund -> {
                     val original = byId.getValue(e.refundsEntry) as Expense
-                    if (original.amount.currency == currency) {
-                        for ((category, amount) in allocations.getValue(e.id)) {
-                            totals[category] = (totals[category] ?: 0L) - amount
-                        }
-                    }
+                    if (original.amount.currency == currency) add(refundLines.getValue(e.id))
                 }
-                is FriendPaid -> if (basis == SpendBasis.MY_SHARE && e.myShare.currency == currency) {
-                    addTo(e.splits, e.myShare.minorUnits, 1L)
-                }
+                is FriendPaid -> if (e.myShare.currency == currency) add(SpendLines.of(e))
                 else -> Unit
             }
         }
@@ -154,32 +144,10 @@ class Ledger private constructor(
         until: Long = Long.MAX_VALUE,
     ): Money = spendByCategory(currency, basis, from, until).values.fold(Money.zero(currency)) { acc, m -> acc + m }
 
-    /**
-     * How each refund reduces the categories of its expense. Refunds are applied in (time, id) order,
-     * each one spread over the amounts still unrefunded in every category, so no category can ever be
-     * refunded for more than it was charged and the result does not depend on insertion order.
-     */
-    private fun refundAllocations(): Map<EntryId, List<Pair<CategoryId?, Long>>> {
-        val result = HashMap<EntryId, List<Pair<CategoryId?, Long>>>()
-        val refundsByExpense = entries.filterIsInstance<Refund>().groupBy { it.refundsEntry }
-        for ((expenseId, refunds) in refundsByExpense) {
-            val original = byId.getValue(expenseId) as Expense
-            val keys: List<CategoryId?> = if (original.splits.isEmpty()) listOf(null) else original.splits.map { it.category }
-            val remaining = if (original.splits.isEmpty()) {
-                longArrayOf(original.amount.minorUnits)
-            } else {
-                LongArray(original.splits.size) { original.splits[it].amount.minorUnits }
-            }
-            for (refund in refunds.sortedWith(compareBy<Refund> { it.occurredAt }.thenBy { it.id.value })) {
-                val open = remaining.indices.filter { remaining[it] > 0 }
-                val parts = allocate(refund.amount.minorUnits, open.map { remaining[it] })
-                val applied = ArrayList<Pair<CategoryId?, Long>>()
-                for ((slot, i) in open.withIndex()) {
-                    remaining[i] -= parts[slot]
-                    applied.add(keys[i] to parts[slot])
-                }
-                result[refund.id] = applied
-            }
+    private fun refundLines(): Map<EntryId, List<SpendLine>> {
+        val result = HashMap<EntryId, List<SpendLine>>()
+        for ((expenseId, refunds) in entries.filterIsInstance<Refund>().groupBy { it.refundsEntry }) {
+            result.putAll(SpendLines.ofRefunds(byId.getValue(expenseId) as Expense, refunds))
         }
         return result
     }

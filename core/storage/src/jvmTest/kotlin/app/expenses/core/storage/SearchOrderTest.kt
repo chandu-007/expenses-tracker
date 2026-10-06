@@ -79,12 +79,12 @@ class SearchOrderTest {
 
     @Test
     fun categoryTotalsAreAnsweredFromTheCoveringIndexWithoutTouchingRows() {
-        add("a", 1, "x")
+        db.schemaQueries.insertSpendLine("a", 0, 1, "INR", "food", 100, 100)
         val rs = driver.getConnection().createStatement().executeQuery(
-            "EXPLAIN QUERY PLAN SELECT category_id, SUM(amount_minor) FROM entry WHERE deleted = 0 AND kind = 'EXPENSE' " +
-                "AND currency = 'INR' AND occurred_at >= 0 AND occurred_at < 99 GROUP BY category_id",
+            "EXPLAIN QUERY PLAN SELECT category_id, SUM(mine_minor), SUM(cash_out_minor) FROM spend_line " +
+                "WHERE currency = 'INR' AND occurred_at >= 0 AND occurred_at < 99 GROUP BY category_id",
         )
         val plan = buildString { while (rs.next()) append(rs.getString("detail")).append('\n') }
-        assertTrue("COVERING INDEX entry_spend" in plan, "plan was: $plan")
+        assertTrue("COVERING INDEX spend_line_report" in plan, "plan was: $plan")
     }
 }

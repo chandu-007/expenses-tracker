@@ -19,14 +19,19 @@ class StorageTest {
         schemaQueries.insertEntry(id, "EXPENSE", at, "bank", null, amount, "INR", cat, merchant, null, source, ref)
 
     @Test
-    fun spendByCategorySumsOnlyMatchingNonDeletedExpensesInRange() {
+    fun categoryTotalsSumTheStoredSpendLinesInRangeAndCurrency() {
         val (_, db) = newDb()
-        db.entry("a", 100, 500, "food")
-        db.entry("b", 200, 700, "food")
-        db.entry("c", 300, 900, "travel")
-        db.entry("d", 999, 111, "food") // outside range
-        val rows = db.schemaQueries.spendByCategory("INR", 0, 500).executeAsList().associate { it.category_id to it.total }
-        assertEquals(mapOf<String?, Long?>("food" to 1200L, "travel" to 900L), rows)
+        fun line(entry: String, at: Long, currency: String, cat: String?, mine: Long, cash: Long) =
+            db.schemaQueries.insertSpendLine(entry, 0, at, currency, cat, mine, cash)
+        line("a", 100, "INR", "food", 500, 500)
+        line("b", 200, "INR", "food", 700, 700)
+        line("c", 300, "INR", "travel", 900, 1_200) // shared: I consumed 900, 1,200 left my accounts
+        line("d", 999, "INR", "food", 111, 111) // outside range
+        line("e", 150, "USD", "food", 5, 5) // other currency
+        line("f", 160, "INR", null, -40, -40) // an uncategorized refund
+        val rows = db.schemaQueries.spendByCategory("INR", 0, 500).executeAsList()
+            .associate { it.category_id to (it.mine to it.cash_out) }
+        assertEquals(mapOf<String?, Pair<Long?, Long?>>("food" to (1_200L to 1_200L), "travel" to (900L to 1_200L), null to (-40L to -40L)), rows)
     }
 
     @Test

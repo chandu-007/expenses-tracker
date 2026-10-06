@@ -132,3 +132,16 @@ Last updated: 2026-10-06.
 - Ledger-to-storage mapping and the sync log writer.
 - Real mid-range phone measurements to replace `PHONE_SLOWDOWN`.
 - iOS still needs full Xcode.
+
+## Update: ledger-to-storage mapping and sync log (2026-10-06)
+- **Spend lines.** SQL category totals used to sum one `category_id` per entry, which was wrong for split, shared and refunded entries. Spending is now defined once, in `SpendLines` (domain), used by both `Ledger` and the database. The store persists signed per-category lines (`spend_line`, covered by one index), refunds as negative lines. `spendByCategory` reads them. The old covering index on `entry` is gone.
+- **`LedgerStore`** saves accounts and every entry kind (expense with splits and shares, income, transfer, refund, friend-paid, settlement) in one transaction each, validated through the same `Ledger` rules, so the database cannot hold an entry the ledger would reject. It rebuilds a full `Ledger` with `loadLedger()`, keeps spend lines in step (all refunds of an expense are re-allocated together when an expense or refund changes, is deleted or restored), and appends a sync-log operation only for fields that changed, in strictly increasing HLC order. Deleting an expense that has refunds is refused; restoring a refund that no longer fits is refused. Currency decimal places are recorded on first use in a `currency` table, so no hard-coded list.
+- **Tests:** 40 random histories (back-dated refunds, deletes, shares, splits, friend-paid, settlements) check that the SQL reports, the reloaded ledger and an in-memory reference ledger agree over several date windows and both bases. **Mutation checks:** I broke the code twice on purpose (no refund re-allocation on delete; none on expense edit). The first survived the original tests, which exposed a weak test; I added a deterministic case and made the random test delete any refund. Both mutations are now caught. Known gap: the random test does not edit expenses; that path is covered by one deterministic test.
+- **Device:** a new instrumented test runs the store on the encrypted database on Android 8.0: balances, person balance, both spend bases, search and rollback after a rejected refund all match the in-memory reference.
+- **Gate** updated for spend lines (the one-year window is now verified by counting spend lines: about 10,000). All limits still pass with the same margins (category totals 10 years: 49 ms vs 250 ms).
+- Totals: 83 host/JVM tests, 18 device tests.
+
+### Still open
+- Not yet written: the thin layer the UI will call (use cases, flows for live updates); categories and people as named entities (only their ids are stored); the importer ordering rule is documented but not enforced.
+- Real mid-range phone measurements to replace `PHONE_SLOWDOWN`; iOS needs full Xcode.
+- Phase 0 exit criteria still to confirm: cold start on a reference device, and the spike list (SMS parser on 10 banks, Compose list with 100k rows).

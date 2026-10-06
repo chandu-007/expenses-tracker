@@ -7,6 +7,13 @@ CREATE TABLE account (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 
+-- Decimal places per currency code (INR 2, JPY 0, KWD 3), recorded the first time a currency is saved so any
+-- currency works without a hard-coded list.
+CREATE TABLE currency (
+    code TEXT NOT NULL PRIMARY KEY,
+    digits INTEGER NOT NULL
+);
+
 -- seq is a stable integer key (survives VACUUM) so the full-text index can point at rows safely.
 CREATE TABLE entry (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,6 +25,14 @@ CREATE TABLE entry (
     amount_minor INTEGER NOT NULL,
     currency TEXT NOT NULL,
     category_id TEXT,
+    -- Columns below are used only by some kinds; see EntryMapping.kt for which.
+    person_id TEXT,
+    to_amount_minor INTEGER,
+    to_currency TEXT,
+    direction TEXT,
+    refunds_entry TEXT,
+    original_amount_minor INTEGER,
+    original_currency TEXT,
     merchant TEXT,
     note TEXT,
     source TEXT NOT NULL DEFAULT 'manual',
@@ -28,11 +43,42 @@ CREATE TABLE entry (
 -- (occurred_at, seq) is a total order, so lists and pages never repeat or skip rows that share a timestamp.
 CREATE INDEX entry_time ON entry(occurred_at DESC, seq DESC) WHERE deleted = 0;
 CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE deleted = 0;
-CREATE INDEX entry_category_time ON entry(category_id, occurred_at) WHERE deleted = 0;
+CREATE INDEX entry_refunds ON entry(refunds_entry) WHERE refunds_entry IS NOT NULL;
 CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
--- Covers spendByCategory completely, so totals never touch the table rows. Measured on 100k rows with
--- scattered dates on an emulator with SQLCipher: 3.4 s without this index, 52 ms with it.
-CREATE INDEX entry_spend ON entry(currency, kind, occurred_at, category_id, amount_minor) WHERE deleted = 0;
+
+-- Category splits and shared-expense shares of an entry, in their original order.
+CREATE TABLE entry_split (
+    entry_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    category_id TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    PRIMARY KEY (entry_id, position)
+);
+
+CREATE TABLE entry_share (
+    entry_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    person_id TEXT, -- null is the user
+    amount_minor INTEGER NOT NULL,
+    PRIMARY KEY (entry_id, position)
+);
+
+-- Signed spending per category for every live entry, written by the repository from the same domain code the
+-- in-memory ledger uses (SpendLines), so SQL reports and the ledger cannot disagree. Refunds are negative lines.
+-- Covered by spend_line_report, so totals never touch other tables. The earlier design summed entry rows
+-- directly; that was wrong for split, shared and refunded entries.
+CREATE TABLE spend_line (
+    entry_id TEXT NOT NULL,
+    line INTEGER NOT NULL,
+    occurred_at INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    category_id TEXT,
+    mine_minor INTEGER NOT NULL,
+    cash_out_minor INTEGER NOT NULL,
+    PRIMARY KEY (entry_id, line)
+);
+
+CREATE INDEX spend_line_report ON spend_line(currency, occurred_at, category_id, mine_minor, cash_out_minor);
 
 -- Full-text index over merchant and note. The trigram tokenizer gives case-insensitive substring
 -- matching for queries of 3+ characters; shorter queries use searchShort. Kept in sync by triggers.
@@ -83,6 +129,9 @@ CREATE INDEX op_log_row ON op_log(entity, row_id, field, hlc DESC);
 insertAccount:
 INSERT INTO account(id, name, type, currency, deleted) VALUES (?, ?, ?, ?, 0)
 ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, currency = excluded.currency;
+
+accountById:
+SELECT * FROM account WHERE id = :id;
 
 selectAccounts:
 SELECT * FROM account WHERE deleted = 0 ORDER BY name;
@@ -145,10 +194,73 @@ WHERE deleted = 0 AND (merchant LIKE '%' || :q || '%' OR note LIKE '%' || :q || 
 ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 
 spendByCategory:
-SELECT category_id, SUM(amount_minor) AS total
-FROM entry
-WHERE deleted = 0 AND kind = 'EXPENSE' AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+SELECT category_id, SUM(mine_minor) AS mine, SUM(cash_out_minor) AS cash_out
+FROM spend_line
+WHERE currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 GROUP BY category_id;
+
+insertSpendLine:
+INSERT INTO spend_line(entry_id, line, occurred_at, currency, category_id, mine_minor, cash_out_minor) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteSpendLines:
+DELETE FROM spend_line WHERE entry_id = ?;
+
+-- Full entry upsert used by the repository. Like insertEntry it never touches the deleted flag.
+upsertEntryFull:
+INSERT INTO entry(id, kind, occurred_at, account_id, counter_account_id, amount_minor, currency, category_id,
+                  person_id, to_amount_minor, to_currency, direction, refunds_entry, original_amount_minor, original_currency,
+                  merchant, note, source, source_ref, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+ON CONFLICT(id) DO UPDATE SET
+    kind = excluded.kind, occurred_at = excluded.occurred_at, account_id = excluded.account_id,
+    counter_account_id = excluded.counter_account_id, amount_minor = excluded.amount_minor,
+    currency = excluded.currency, category_id = excluded.category_id, person_id = excluded.person_id,
+    to_amount_minor = excluded.to_amount_minor, to_currency = excluded.to_currency, direction = excluded.direction,
+    refunds_entry = excluded.refunds_entry, original_amount_minor = excluded.original_amount_minor,
+    original_currency = excluded.original_currency, merchant = excluded.merchant, note = excluded.note,
+    source = excluded.source, source_ref = excluded.source_ref;
+
+entryById:
+SELECT * FROM entry WHERE id = :id;
+
+liveEntriesInInsertionOrder:
+SELECT * FROM entry WHERE deleted = 0 ORDER BY seq;
+
+refundsOf:
+SELECT * FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0 ORDER BY seq;
+
+hasLiveRefunds:
+SELECT EXISTS(SELECT 1 FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0);
+
+insertSplit:
+INSERT INTO entry_split(entry_id, position, category_id, amount_minor) VALUES (?, ?, ?, ?);
+
+deleteSplits:
+DELETE FROM entry_split WHERE entry_id = ?;
+
+splitsOf:
+SELECT * FROM entry_split WHERE entry_id = :entryId ORDER BY position;
+
+allSplits:
+SELECT * FROM entry_split ORDER BY entry_id, position;
+
+insertShare:
+INSERT INTO entry_share(entry_id, position, person_id, amount_minor) VALUES (?, ?, ?, ?);
+
+deleteShares:
+DELETE FROM entry_share WHERE entry_id = ?;
+
+sharesOf:
+SELECT * FROM entry_share WHERE entry_id = :entryId ORDER BY position;
+
+allShares:
+SELECT * FROM entry_share ORDER BY entry_id, position;
+
+insertCurrency:
+INSERT OR IGNORE INTO currency(code, digits) VALUES (?, ?);
+
+selectCurrencies:
+SELECT * FROM currency;
 
 insertOp:
 INSERT INTO op_log(hlc, entity, row_id, field, value) VALUES (?, ?, ?, ?, ?);

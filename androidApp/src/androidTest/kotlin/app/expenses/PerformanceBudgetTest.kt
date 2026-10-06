@@ -41,6 +41,7 @@ class PerformanceBudgetTest {
         private lateinit var driver: SqlDriver
         private lateinit var db: ExpensesDb
         private val matchCount = IntArray(MERCHANTS)
+        private val banks = listOf("hdfc", "icici", "sbi", "axis", "kotak", "yesbank", "pnb", "idfc")
 
         /** Pronounceable-looking unique names with no shared substrings, so frequency is controlled by [merchantFor]. */
         private fun merchantName(index: Int): String =
@@ -57,7 +58,9 @@ class PerformanceBudgetTest {
                     val m = (MERCHANTS.toDouble().pow(rnd.nextDouble())).toInt() - 1
                     matchCount[m]++
                     val at = START + i * (TEN_YEARS_MS / ROWS)
-                    db.schemaQueries.insertEntry("e$i", "EXPENSE", at, "bank", null, 100L + i % 900, "INR", "cat${i % 40}", merchantName(m), null, "manual", null)
+                    db.schemaQueries.insertEntry("e$i", "EXPENSE", at, "bank", null, 100L + i % 900, "INR", "cat${i % 40}", merchantName(m), "UPI ${banks[i % banks.size]} Ref ${100_000_000L + i * 7919L} txn", "manual", null)
+                    // what LedgerStore writes for an unsplit, unshared expense
+                    db.schemaQueries.insertSpendLine("e$i", 0, at, "INR", "cat${i % 40}", 100L + i % 900, 100L + i % 900)
                 }
             }
         }
@@ -82,6 +85,12 @@ class PerformanceBudgetTest {
         assertTrue(measured <= limit, "$label took $measured ms, over the $limit ms limit ($phoneBudgetMs ms phone budget)")
     }
 
+    /** Counts stored spend lines in a window, to prove the window really holds about a tenth of the data. */
+    private fun rowsInWindowCount(from: Long, until: Long): Long =
+        driver.executeQuery(null, "SELECT COUNT(*) FROM spend_line WHERE occurred_at >= $from AND occurred_at < $until", { c ->
+            c.next(); app.cash.sqldelight.db.QueryResult.Value(c.getLong(0)!!)
+        }, 0).value
+
     @Test fun datasetIsAsDescribed() {
         assertEquals(ROWS.toLong(), db.schemaQueries.entryCount().executeAsOne())
         val share = matchCount[0] / ROWS.toDouble()
@@ -91,6 +100,14 @@ class PerformanceBudgetTest {
     @Test fun searchForTheMostCommonMerchantStaysUnder100msPhoneBudget() {
         assertEquals(50, db.search(merchantName(0)).size)
         check("search, most common merchant (~11% of rows)", 100.0, median { db.search(merchantName(0)) })
+    }
+
+    @Test fun searchForTextThatAlmostEveryNoteSharesStaysUnder100msPhoneBudget() {
+        // SMS and UPI notes nearly all say "UPI ... Ref ... txn" and name a bank, so these match most of the ledger.
+        for (term in listOf("upi", "txn", "ref", "upi hdfc", "hdfc")) {
+            assertEquals(50, db.search(term).size, term)
+            check("search, shared note text '$term'", 100.0, median { db.search(term) })
+        }
     }
 
     @Test fun searchForRareAndMissingTermsStaysUnder100msPhoneBudget() {
@@ -105,8 +122,8 @@ class PerformanceBudgetTest {
         val until = START + 365 * DAY_MS
         val inWindow = db.schemaQueries.spendByCategory("INR", START, until).executeAsList()
         assertEquals(40, inWindow.size)
-        val rowsInWindow = (until - START) / (TEN_YEARS_MS / ROWS)
-        assertTrue(rowsInWindow in 9_900..10_100, "window holds $rowsInWindow rows")
+        val counted = rowsInWindowCount(START, until)
+        assertTrue(counted in 9_900L..10_100L, "the one-year window holds $counted spend lines, expected about 10,000")
         check("category totals, one year (~10k rows)", 300.0, median { db.schemaQueries.spendByCategory("INR", START, until).executeAsList() })
     }
 
