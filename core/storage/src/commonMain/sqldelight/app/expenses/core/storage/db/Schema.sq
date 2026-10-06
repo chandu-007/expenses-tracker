@@ -1,0 +1,85 @@
+-- Current state: one row per entity, with indexed columns for fast reports and search.
+CREATE TABLE account (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    occurred_at INTEGER NOT NULL,
+    account_id TEXT,
+    counter_account_id TEXT,
+    amount_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    category_id TEXT,
+    merchant TEXT,
+    note TEXT,
+    source TEXT NOT NULL DEFAULT 'manual',
+    source_ref TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX entry_time ON entry(occurred_at DESC) WHERE deleted = 0;
+CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE deleted = 0;
+CREATE INDEX entry_category_time ON entry(category_id, occurred_at) WHERE deleted = 0;
+CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
+
+-- Append-only log of field-level changes, ordered by hybrid logical clock. Sync (phase 3) ships this log.
+-- Last write wins per (entity, row_id, field) by the highest hlc.
+CREATE TABLE op_log (
+    hlc TEXT NOT NULL PRIMARY KEY,
+    entity TEXT NOT NULL,
+    row_id TEXT NOT NULL,
+    field TEXT NOT NULL,
+    value TEXT
+);
+
+CREATE INDEX op_log_row ON op_log(entity, row_id, field, hlc DESC);
+
+insertAccount:
+INSERT INTO account(id, name, type, currency, deleted) VALUES (?, ?, ?, ?, 0)
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, currency = excluded.currency, deleted = 0;
+
+selectAccounts:
+SELECT * FROM account WHERE deleted = 0 ORDER BY name;
+
+-- Upsert by id only. A clash on (source, source_ref) from a different id fails loudly instead of
+-- deleting the existing row, so a re-sent SMS can never wipe an entry the user has edited.
+insertEntry:
+INSERT INTO entry(id, kind, occurred_at, account_id, counter_account_id, amount_minor, currency, category_id, merchant, note, source, source_ref, deleted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+ON CONFLICT(id) DO UPDATE SET
+    kind = excluded.kind, occurred_at = excluded.occurred_at, account_id = excluded.account_id,
+    counter_account_id = excluded.counter_account_id, amount_minor = excluded.amount_minor,
+    currency = excluded.currency, category_id = excluded.category_id, merchant = excluded.merchant,
+    note = excluded.note, source = excluded.source, source_ref = excluded.source_ref, deleted = 0;
+
+entryCount:
+SELECT COUNT(*) FROM entry WHERE deleted = 0;
+
+recentEntries:
+SELECT * FROM entry WHERE deleted = 0 ORDER BY occurred_at DESC LIMIT :limit OFFSET :offset;
+
+searchEntries:
+SELECT * FROM entry
+WHERE deleted = 0 AND (merchant LIKE '%' || :q || '%' OR note LIKE '%' || :q || '%')
+ORDER BY occurred_at DESC LIMIT :limit;
+
+spendByCategory:
+SELECT category_id, SUM(amount_minor) AS total
+FROM entry
+WHERE deleted = 0 AND kind = 'EXPENSE' AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+GROUP BY category_id;
+
+insertOp:
+INSERT INTO op_log(hlc, entity, row_id, field, value) VALUES (?, ?, ?, ?, ?);
+
+opsSince:
+SELECT * FROM op_log WHERE hlc > :hlc ORDER BY hlc LIMIT :limit;
+
+latestOp:
+SELECT * FROM op_log WHERE entity = :entity AND row_id = :rowId AND field = :field ORDER BY hlc DESC LIMIT 1;
