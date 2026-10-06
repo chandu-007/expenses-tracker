@@ -25,17 +25,23 @@ import org.junit.runner.RunWith
 class AddExpenseFlowTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    /** The database is shared by the whole app process, so close it before deleting its files. */
+    private fun resetApp() {
+        kotlinx.coroutines.runBlocking { (context.applicationContext as ExpensesApp).container.close() }
+        EncryptedDriver.reset(context)
+    }
     private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before fun freshInstall() {
-        EncryptedDriver.reset(context)
+        resetApp()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("add")).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @After fun cleanUp() {
         scenario?.close()
-        EncryptedDriver.reset(context)
+        resetApp()
     }
 
     @Test

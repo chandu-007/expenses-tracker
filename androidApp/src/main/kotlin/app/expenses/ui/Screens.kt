@@ -1,6 +1,8 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -15,7 +17,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -47,21 +57,48 @@ import androidx.compose.ui.unit.dp
 import app.expenses.AccountUi
 import app.expenses.DEFAULT_CATEGORIES
 import app.expenses.RowUi
+import app.expenses.TemplateUi
 import app.expenses.UiState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.parseAmount
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun EntryListScreen(state: UiState.Ready, onAdd: () -> Unit, onLoadMore: () -> Unit, onMessageShown: () -> Unit) {
+fun EntryListScreen(
+    state: UiState.Ready,
+    onAdd: () -> Unit,
+    onLoadMore: () -> Unit,
+    onMessageShown: () -> Unit,
+    onTemplate: (TemplateUi) -> Unit,
+    onDeleteTemplate: (String) -> Unit,
+    onUndo: (String) -> Unit,
+    onUndoDismissed: () -> Unit,
+) {
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
+    var removing by remember { mutableStateOf<TemplateUi?>(null) }
     LaunchedEffect(listState, state.rows.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .collect { last -> if (last >= state.rows.size - 10) onLoadMore() }
     }
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); onMessageShown() }
+    }
+    LaunchedEffect(state.undo) {
+        val undo = state.undo ?: return@LaunchedEffect
+        val result = snackbar.showSnackbar(undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
+        if (result == SnackbarResult.ActionPerformed) onUndo(undo.entryId)
+        onUndoDismissed()
+    }
+    removing?.let { t ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Remove \"${t.name}\"?") },
+            text = { Text("The quick entry is removed. Expenses already recorded with it stay.") },
+            confirmButton = { TextButton(onClick = { onDeleteTemplate(t.id); removing = null }) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
+        )
     }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -71,6 +108,22 @@ fun EntryListScreen(state: UiState.Ready, onAdd: () -> Unit, onLoadMore: () -> U
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
                 Text("Spent this month", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(state.monthSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
+            }
+            if (state.templates.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.testTag("templates"),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.templates, key = { it.id }) { t ->
+                        AssistChip(
+                            onClick = { onTemplate(t) },
+                            label = { Text(if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …") },
+                            modifier = Modifier.testTag("template_${t.name}").combinedClickable(onClick = { onTemplate(t) }, onLongClick = { removing = t }),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
             }
             HorizontalDivider()
             if (state.rows.isEmpty()) {
@@ -99,17 +152,38 @@ private fun Row(row: RowUi) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddExpenseScreen(accounts: List<AccountUi>, onSave: (Money, String, String, String) -> Unit, onBack: () -> Unit) {
+fun AddExpenseScreen(
+    accounts: List<AccountUi>,
+    initialCategory: String,
+    initialAccountId: String,
+    initialNote: String,
+    onSave: (amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
     var amountText by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf(DEFAULT_CATEGORIES.first()) }
-    var note by rememberSaveable { mutableStateOf("") }
-    var accountId by rememberSaveable { mutableStateOf(accounts.firstOrNull()?.id ?: "cash") }
+    var category by rememberSaveable { mutableStateOf(initialCategory) }
+    var note by rememberSaveable { mutableStateOf(initialNote) }
+    var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
+    var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     val amount = parseAmount(amountText, Currency.INR)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Add expense") }, navigationIcon = { TextButton(onClick = onBack) { Text("Cancel") } }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Add expense") }, navigationIcon = { TextButton(onClick = onBack) { Text("Cancel") } }) },
+        // Pinned above the keyboard so Save is always reachable, however small the screen.
+        bottomBar = {
+            Button(
+                onClick = { amount?.let { onSave(it, category, note, accountId, saveAsTemplate) } },
+                enabled = amount != null && amount.minorUnits > 0,
+                modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("save"),
+            ) { Text("Save") }
+        },
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amountText = v },
@@ -127,12 +201,10 @@ fun AddExpenseScreen(accounts: List<AccountUi>, onSave: (Money, String, String, 
                 accounts.forEach { a -> FilterChip(selected = a.id == accountId, onClick = { accountId = a.id }, label = { Text(a.name) }) }
             }
             OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note or merchant") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"))
-            Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = { amount?.let { onSave(it, category, note, accountId) } },
-                enabled = amount != null && amount.minorUnits > 0,
-                modifier = Modifier.fillMaxWidth().testTag("save"),
-            ) { Text("Save") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = saveAsTemplate, onCheckedChange = { saveAsTemplate = it }, modifier = Modifier.testTag("save_template"))
+                Text("Save as a quick entry")
+            }
         }
     }
 }
