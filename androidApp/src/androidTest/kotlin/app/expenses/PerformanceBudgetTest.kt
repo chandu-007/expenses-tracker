@@ -122,6 +122,9 @@ class PerformanceBudgetTest {
         val until = START + 365 * DAY_MS
         val inWindow = db.schemaQueries.spendByCategory("INR", START, until).executeAsList()
         assertEquals(40, inWindow.size)
+        val step = TEN_YEARS_MS / ROWS
+        val seeded = (0 until ROWS).filter { START + it * step < until }.sumOf { 100L + it % 900 }
+        assertEquals(seeded, inWindow.sumOf { it.mine ?: 0L }, "the timed query must return exactly what was seeded in the window")
         val counted = rowsInWindowCount(START, until)
         assertTrue(counted in 9_900L..10_100L, "the one-year window holds $counted spend lines, expected about 10,000")
         check("category totals, one year (~10k rows)", 300.0, median { db.schemaQueries.spendByCategory("INR", START, until).executeAsList() })

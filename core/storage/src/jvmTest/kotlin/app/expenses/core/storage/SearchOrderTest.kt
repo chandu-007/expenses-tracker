@@ -71,6 +71,26 @@ class SearchOrderTest {
     }
 
     @Test
+    fun everyWordMustMatchInAnyOrderAcrossMerchantAndNote() {
+        db.schemaQueries.insertEntry("a", "EXPENSE", 1, "bank", null, 100, "INR", "food", "Swiggy", "dinner with team UPI HDFC", "manual", null)
+        db.schemaQueries.insertEntry("b", "EXPENSE", 2, "bank", null, 100, "INR", "food", "Swiggy", "lunch", "manual", null)
+        db.schemaQueries.insertEntry("c", "EXPENSE", 3, "bank", null, 100, "INR", "food", "Zomato", "dinner", "manual", null)
+        assertEquals(listOf("a"), db.search("swiggy dinner").map { it.id }) // one word in each field
+        assertEquals(listOf("a"), db.search("dinner swiggy").map { it.id }) // order does not matter
+        assertEquals(listOf("a"), db.search("hdfc upi").map { it.id }) // reversed within the note
+        assertEquals(listOf("c", "a"), db.search("dinner").map { it.id })
+        assertTrue(db.search("swiggy dinner zzzzz").isEmpty())
+    }
+
+    @Test
+    fun shortWordsAreIgnoredWhenALongerWordExistsAndWholeQueryFallsBackOtherwise() {
+        db.schemaQueries.insertEntry("a", "EXPENSE", 1, "bank", null, 100, "INR", "food", "Swiggy", "dinner", "manual", null)
+        assertEquals(listOf("a"), db.search("swiggy of").map { it.id }) // "of" is too short to index and is dropped
+        assertEquals(null, ftsQuery("of a"))
+        assertEquals("\"swiggy\" \"dinner\"", ftsQuery("  swiggy   dinner "))
+    }
+
+    @Test
     fun shortAndBlankQueriesDoNotUseTheTrigramIndex() {
         add("a", 1, "Ola cabs")
         assertEquals(listOf("a"), db.search("ol").map { it.id })
