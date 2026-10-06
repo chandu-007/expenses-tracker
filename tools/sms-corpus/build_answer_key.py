@@ -4,12 +4,17 @@
 Needs Python 3.14 (the upstream library uses deferred annotations):
     python3.14 -m venv /tmp/venv
     /tmp/venv/bin/pip install "git+https://github.com/akhilnarang/bank-sms-parser@add4c0278fc219f60390204b02abf20f5c5a2a00"
-    /tmp/venv/bin/python tools/sms-corpus/build_answer_key.py
+    /tmp/venv/bin/python tools/sms-corpus/build_answer_key.py [output-path]
+
+With no argument it rewrites the committed expected.tsv. To check the committed file, write elsewhere and diff:
+    /tmp/venv/bin/python tools/sms-corpus/build_answer_key.py /tmp/check.tsv
+    diff /tmp/check.tsv core/parsers/src/jvmTest/resources/corpus/expected.tsv
 
 The key is that library's own output for each fixture, not ground truth.
 """
 import glob
 import os
+import sys
 
 from bank_sms_parser import parse_sms
 
@@ -35,7 +40,8 @@ for path in sorted(glob.glob(os.path.join(ROOT, "**", "*.txt"), recursive=True))
     date = str(tx["transaction_date"]) if tx.get("transaction_date") else ""
     rows.append([rel, "1", tx["direction"], minor, date, tx.get("reference_number") or "", last4, tx.get("channel") or ""])
 
-with open(os.path.join(ROOT, "expected.tsv"), "w") as f:
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "expected.tsv")
+with open(out, "w") as f:
     for r in rows:
         f.write("\t".join(r) + "\n")
-print(f"wrote {len(rows)} rows")
+print(f"wrote {len(rows)} rows to {out}")
