@@ -39,3 +39,24 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 - **No way to delete or edit an entry in the app yet.** The undo window (2 minutes on the widget; about 10 seconds in the app) is the only way to take back a mistaken one-tap entry. Entry edit and delete come next.
 - Quick entries without a fixed amount do not appear on the widget.
 - Widget redraws only on a tap or when the app changes templates; there is no periodic refresh (not needed today).
+
+## Slice 3: edit, delete, dates (completes the entry-correction gap)
+**Built:**
+- **Tap a row to edit** amount, category, account, note and date, on the same form as Add (one form, two uses; the "save as quick entry" option appears only when adding). The field starts with the stored amount as plain digits (`1234567.50`), and saving reopens the list at the same scroll depth (the list no longer jumps back to the top after a change).
+- **Swipe a row left to delete**, with an **Undo** that restores it (its totals come back too). The earlier Undo behaviour for new entries is unchanged.
+- **A date button on the form** (date picker), so past expenses can be added and any entry moved to another day. The time of day is kept. Moving an entry to another month takes it out of this month's total.
+- **Only simple expenses are editable.** Entries that are shared with others, split across categories, have a foreign-currency amount, have refunds, are not rupees, or are not expenses open a read-only screen that says why, so an edit can never silently drop information.
+- **Editing keeps where an entry came from.** Source and source reference (the SMS or bank reference) are preserved, so editing a captured expense cannot make it be captured again as a duplicate. Tested with an SMS-sourced entry.
+
+**Verified (Android 8.0 emulator):** 7 new screen and action tests (edit and save changes the total and category; cancel changes nothing; swipe-delete then Undo; an expense with refunds is read-only with the reason; moving to another month; SMS source kept; deleted entries are not editable and restore works), plus `toPlainString`/date helper tests (property test that plain amounts round-trip; a daylight-saving gap).
+
+**Found and fixed along the way:**
+1. **The database was in the default rollback-journal mode.** Measured on the emulator with SQLCipher: a save took a median of 1.9 ms (p95 2.9 ms) on an empty database, versus **0.32 ms (p95 0.50 ms) in write-ahead-log mode**. WAL is now on, with a test that pins the mode and shows a reader is not blocked by an open write. This also lets the screen read while the widget (or later an SMS receiver) writes. After enabling it, the gate's save p95 on the 100k-row database is **4.7-8.5 ms over 4 runs (limit 12.5 ms)**, median 0.36-0.41 ms.
+2. **The performance gate's cleanup ran only if the speed assertion passed**, so one failure made a second test (dataset size) fail too. It now cleans up in a `finally`. That second failure was a consequence, not a separate bug.
+3. An older quick-entry test broke because the new date button pushed its checkbox below the keyboard; the test now scrolls to it (the form scrolls for real users).
+
+**Open and unexplained:** on the 100k-row gate database, **one save in 60 takes about 100 ms (98-116 ms in 6 runs), and it is always the same one, save number 11.** It is not the first save and it was not fixed by checkpointing after a bulk load (tried and reverted). The budget (p95) passes, saves run off the main thread, and the spike is below perceptual annoyance, so I am not blocking on it, but the cause is unknown. Candidate causes not yet tested: an SQLite page-cache spill, a log merge triggered by the connection pool, or emulator I/O.
+
+**Not done:** editing of split/shared/foreign/refunded entries; editing income or transfers (there is no screen to create them yet either); a bulk-select mode; the date picker is not covered by a screen test (only the date logic is).
+
+**Totals:** 133 host/JVM tests (both targets counted), 40 device tests on Android 8.0 (1 skipped: widget binding, Android 10+), full chain run from deleted result files, build green.
