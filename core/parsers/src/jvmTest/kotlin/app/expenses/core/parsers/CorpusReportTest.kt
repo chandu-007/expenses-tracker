@@ -1,55 +1,76 @@
 package app.expenses.core.parsers
 
-import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
- * Opt-in measurement, not a unit test: set SMS_CORPUS_DIR to a folder holding `expected.tsv` and the message
- * files it names (columns: file, is-transaction, direction, amount in paise, date, reference, last4, channel).
- * The corpus is not stored in this repository. Prints agreement per field and the first mismatches.
+ * Scores the generic parser against the public sample corpus in `src/jvmTest/resources/corpus` (see its SOURCE.md).
+ * Those samples are sanitised, may not match what banks send today, and the answer key is another library's output,
+ * so every figure here is "synthetic, unvalidated". The assertions are regression floors for the generic layer, not
+ * an accuracy claim. Per-bank rules, when they exist, get their own fixtures and tests.
  */
 class CorpusReportTest {
     private class Row(val file: String, val isTx: Boolean, val direction: String, val amount: String, val date: String, val ref: String, val last4: String)
 
+    private fun resource(path: String): String =
+        checkNotNull(javaClass.classLoader.getResourceAsStream("corpus/$path")) { "missing corpus/$path" }.readBytes().decodeToString()
+
+    private val rows = resource("expected.tsv").lines().filter { it.isNotBlank() }.map {
+        val c = it.split("\t")
+        Row(c[0], c[1] == "1", c[2], c[3], c[4], c[5], c[6])
+    }
+
     @Test
-    fun report() {
-        val dir = System.getenv("SMS_CORPUS_DIR")?.let(::File)?.takeIf { it.isDirectory } ?: return println("CORPUS skipped: SMS_CORPUS_DIR not set")
-        val rows = File(dir, "expected.tsv").readLines().filter { it.isNotBlank() }.map {
-            val c = it.split("\t")
-            Row(c[0], c[1] == "1", c[2], c[3], c[4], c[5], c[6])
-        }
+    fun genericParserOnTheSampleCorpus() {
         val positives = rows.filter { it.isTx }
         val negatives = rows.filter { !it.isTx }
-        val fields = listOf("recognised", "direction", "amount", "date", "reference", "account")
-        val hit = fields.associateWith { 0 }.toMutableMap()
-        val perBank = sortedMapOf<String, IntArray>() // [messages, all five fields right]
-        val misses = mutableListOf<String>()
+        val perBank = sortedMapOf<String, IntArray>() // issuer -> [messages, all five fields right, recognised]
+        var recognised = 0
+        var fullyRight = 0
+        val confidentlyWrong = mutableListOf<String>() // recognised, but wrong direction or wrong amount
+        var wrongAmounts = 0
+        val unrecognised = mutableListOf<String>()
+        val fieldMisses = mutableListOf<String>()
+        val fieldHits = linkedMapOf("reference" to 0, "account" to 0, "date" to 0)
+
         for (r in positives) {
-            val bank = r.file.substringBefore('/')
-            val stat = perBank.getOrPut(bank) { IntArray(2) }
+            val stat = perBank.getOrPut(r.file.substringBefore('/')) { IntArray(3) }
             stat[0]++
-            val res = GenericAlertParser.parse(File(dir, r.file).readText())
-            if (res !is ParseResult.Parsed) { misses += "${r.file}: not recognised (${(res as ParseResult.NotATransaction).reason})"; continue }
+            val res = GenericAlertParser.parse(resource(r.file))
+            if (res !is ParseResult.Parsed) { unrecognised += "${r.file} (${(res as ParseResult.NotATransaction).reason})"; continue }
             val a = res.alert
-            hit["recognised"] = hit.getValue("recognised") + 1
-            val ok = linkedMapOf(
-                "direction" to (a.direction.name.lowercase() == r.direction),
-                "amount" to (a.amountMinor.toString() == r.amount),
-                "date" to (r.date.isEmpty() || a.date?.toString() == r.date),
-                "reference" to (r.ref.isEmpty() || a.reference == r.ref),
-                "account" to (r.last4.isEmpty() || a.accountLast4 == r.last4),
-            )
-            ok.forEach { (k, v) -> if (v) hit[k] = hit.getValue(k) + 1 }
-            if (ok.values.all { it }) stat[1]++
-            else misses += "${r.file}: wrong ${ok.filterValues { !it }.keys} got dir=${a.direction} amt=${a.amountMinor} date=${a.date} ref=${a.reference} acct=${a.accountLast4} | want ${r.direction} ${r.amount} ${r.date} ${r.ref} ${r.last4}"
+            assertEquals(Confidence.GENERIC, a.confidence, "generic parses must never claim a bank-rule level of trust")
+            recognised++; stat[2]++
+            val directionOk = a.direction.name.lowercase() == r.direction
+            val amountOk = a.amountMinor.toString() == r.amount
+            if (!amountOk) wrongAmounts++
+            if (!directionOk || !amountOk) confidentlyWrong += "${r.file}: got ${a.direction} ${a.amountMinor}, want ${r.direction} ${r.amount}"
+            val dateOk = r.date.isEmpty() || a.date?.toString() == r.date
+            val refOk = r.ref.isEmpty() || a.reference == r.ref
+            val acctOk = r.last4.isEmpty() || a.accountLast4 == r.last4
+            if (dateOk) fieldHits["date"] = fieldHits.getValue("date") + 1
+            if (refOk) fieldHits["reference"] = fieldHits.getValue("reference") + 1
+            if (acctOk) fieldHits["account"] = fieldHits.getValue("account") + 1
+            if (directionOk && amountOk && dateOk && refOk && acctOk) { fullyRight++; stat[1]++ }
+            else fieldMisses += "${r.file}: " + listOfNotNull("direction".takeIf { !directionOk }, "amount".takeIf { !amountOk }, "date".takeIf { !dateOk }, "reference".takeIf { !refOk }, "account".takeIf { !acctOk }).joinToString()
         }
-        val rejected = negatives.count { GenericAlertParser.parse(File(dir, it.file).readText()) is ParseResult.NotATransaction }
-        println("CORPUS messages: ${rows.size} (${positives.size} transactions, ${negatives.size} not transactions)")
-        for (f in fields) println("CORPUS field $f: ${hit.getValue(f)}/${positives.size}")
-        println("CORPUS non-transactions rejected: $rejected/${negatives.size}")
-        println("CORPUS fully right: ${perBank.values.sumOf { it[1] }}/${positives.size}")
-        perBank.forEach { (b, s) -> println("CORPUS bank $b: ${s[1]}/${s[0]} fully right") }
-        misses.take(200).forEach { println("CORPUS miss $it") }
-        println("CORPUS total misses: ${misses.size}")
+        val rejected = negatives.count { GenericAlertParser.parse(resource(it.file)) is ParseResult.NotATransaction }
+
+        println("CORPUS (synthetic, unvalidated) ${rows.size} messages: ${positives.size} transactions, ${negatives.size} not")
+        println("CORPUS recognised $recognised/${positives.size}; fully right $fullyRight/${positives.size}; fields right of recognised: $fieldHits")
+        println("CORPUS confidently wrong (direction or amount, of recognised): ${confidentlyWrong.size}")
+        confidentlyWrong.forEach { println("CORPUS   wrong: $it") }
+        println("CORPUS unrecognised ${unrecognised.size}; non-transactions rejected $rejected/${negatives.size}")
+        println("CORPUS per issuer (variants, fully right, recognised): " + perBank.entries.joinToString { "${it.key}=${it.value[0]}/${it.value[1]}/${it.value[2]}" })
+        fieldMisses.forEach { println("CORPUS   field miss: $it") }
+
+        // Regression floors for the generic layer (not accuracy claims) ...
+        assertTrue(recognised >= 125, "recognised fell to $recognised")
+        assertTrue(fullyRight >= 85, "fully right fell to $fullyRight")
+        assertEquals(negatives.size - 1, rejected, "non-transaction rejection changed")
+        // ... and a ceiling on silent errors: at most the two sign errors found so far, none on amount.
+        assertTrue(confidentlyWrong.size <= 2, "confidently wrong results grew to ${confidentlyWrong.size}: $confidentlyWrong")
+        assertEquals(0, wrongAmounts, "a recognised message produced a wrong amount: $confidentlyWrong")
     }
 }

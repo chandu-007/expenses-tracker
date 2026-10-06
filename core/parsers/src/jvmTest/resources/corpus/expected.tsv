@@ -1,0 +1,152 @@
+axis/account_upi_credit.txt	1	credit	150000	2026-08-30	000000000000	1234	upi
+axis/account_upi_debit.txt	1	debit	72600	2026-09-05	000000000000	1234	upi
+axis/cc_payment_received.txt	1	credit	1500000	2026-05-02		0000	
+axis/cc_reversal.txt	1	credit	249900	2026-05-02		0000	card
+axis/cc_spend.txt	1	debit	12345	2026-05-02		0000	card
+bob/account_upi_credit.txt	1	credit	1517900	2026-08-19	000000000000		upi
+bob/account_upi_credit_with_balance.txt	1	credit	5000000	2026-09-03	000000000000		upi
+bob/account_upi_debit.txt	1	debit	23000	2026-09-06	000000000000	1234	upi
+bob/cc_spend.txt	1	debit	100000	2026-09-30		0000	card
+canara/account_txn_declined.txt	1	declined	63770	2026-08-18		1234	
+canara/account_upi_credit.txt	1	credit	125000	2026-09-13	000000000000	0000	upi
+canara/account_upi_debit.txt	1	debit	700	2026-09-13	000000000000	0000	upi
+equitas/cc_payment_received.txt	1	credit	1234500	2026-05-05		9999	card
+equitas/cc_payment_received_thank_you.txt	1	credit	1234500	2026-06-07		0000	card
+equitas/cc_spend.txt	1	debit	3000	2026-05-01		0000	card
+equitas/negative/mobile_login_failed.txt	0						
+equitas/negative/payment_due.txt	0						
+equitas/negative/statement_generated.txt	0						
+hdfc/account_credit_alert.txt	1	credit	10000	2026-05-16		0000	imps
+hdfc/account_imps_credit.txt	1	credit	1234500	2026-05-03	000000000000	0000	imps
+hdfc/account_imps_outward_174.txt	1	debit	10000000	2026-05-26	000000000001	0000	imps
+hdfc/account_imps_outward_199.txt	1	debit	12345600	2026-05-28	000000000002	0000	imps
+hdfc/account_imps_sent.txt	1	debit	12345678	2026-05-12	000000000000	0000	imps
+hdfc/account_neft_credit.txt	1	credit	10000	2026-06-29	SAMPLEH00000000000	0000	neft
+hdfc/account_neft_credit_hyphenated.txt	1	credit	10000	2026-06-29	SAMPLEH00000000000	0000	neft
+hdfc/account_neft_debit.txt	1	debit	1234567			0000	neft
+hdfc/account_neft_debit_transaction_wording.txt	1	debit	9999999			0000	neft
+hdfc/account_online_transfer_debit.txt	1	debit	1234567			0000	online
+hdfc/account_rtgs_debit.txt	1	debit	12345600			0000	rtgs
+hdfc/account_rtgs_debit_transaction.txt	1	debit	12345678			0000	rtgs
+hdfc/account_rtgs_deposited.txt	1	debit	20000000	2026-08-21	HDFCR00000000000000000		rtgs
+hdfc/account_transfer_ppf.txt	1	debit	10000000				online
+hdfc/account_upi_credit.txt	1	credit	100	2026-05-09	000000000000	0000	upi
+hdfc/account_upi_debit.txt	1	debit	10000	2026-05-17	000000000000	0000	upi
+hdfc/account_upi_transfer_debit.txt	1	debit	100	2026-09-07	000000000000	1234	upi
+hdfc/cc_merchant_refund.txt	1	credit	26256	2026-05-17		0000	card
+hdfc/cc_payment_received.txt	1	credit	100000	2026-05-08	000XXXXXXXXXXXX	0000	
+hdfc/cc_payment_received_220.txt	1	credit	10000	2026-05-28		0000	
+hdfc/cc_payment_received_spaced.txt	1	credit	100000	2026-05-08	000XXXXXXXXXXXX	0000	
+hdfc/cc_payment_received_uppercase.txt	1	credit	10000	2026-05-17		0000	
+hdfc/cc_refund.txt	1	credit	25400	2026-05-01	000000000000	0000	upi
+hdfc/cc_reversal.txt	1	credit	200	2026-07-06		0000	card
+hdfc/cc_smartpay_bbps.txt	1	debit	10000		00000	0000	card
+hdfc/cc_spend.txt	1	debit	1029000	2026-05-02		0000	card
+hdfc/cc_spend_amount_first.txt	1	debit	56900	2026-07-12		0000	card
+hdfc/cc_spend_multiword_merchant.txt	1	debit	10000	2026-05-16		0000	card
+hdfc/cc_upi_spend.txt	1	debit	10000		000000000000	0000	upi
+hdfc/dc_reversal.txt	1	credit	200	2026-06-01		0000	card
+hdfc/dc_spend.txt	1	debit	300000	2026-05-02		0000	card
+hsbc/cc_payment_received.txt	1	credit	1500000	2026-07-02		0000	card
+hsbc/cc_spend.txt	1	debit	10000	2026-07-01		0000	card
+hsbc/cc_spend_foreign.txt	1	debit	10000	2026-09-01		0000	card
+hsbc/cc_spend_variant2.txt	1	debit	10000	2026-08-01		0000	card
+icici/account_credit_from_payer.txt	1	credit	700000	2026-08-19	000000000000	1234	
+icici/account_credit_info_bil_inft.txt	1	credit	5432100	2026-06-11	FFF0000000	000	imps
+icici/account_credit_info_neft.txt	1	credit	1234567	2026-07-27	HDFCH00000000000	000	neft
+icici/account_credit_info_rtgs.txt	1	credit	2345600	2026-06-11	HDFCR00000000000000000	000	rtgs
+icici/account_debit_info_neft_truncated.txt	1	debit	200000	2026-08-21		000	neft
+icici/account_debit_info_rtgs.txt	1	debit	1234500	2026-06-11	ICICR000	000	rtgs
+icici/account_debit_info_trf_fd.txt	1	debit	2345600	2026-06-11		000	
+icici/account_imps_credit.txt	1	credit	1500000	2026-06-01	000000000000	000	imps
+icici/account_imps_debit.txt	1	debit	1000000	2026-05-02	000000000000	000	imps
+icici/account_mandate_debit.txt	1	debit	123456	2026-07-18	000000000000		emandate
+icici/account_neft_completion.txt	1	debit	250000	2026-08-21	IN00000000000000		neft
+icici/account_upi_credit_201.txt	1	credit	100000	2026-05-28	000000000000	000	upi
+icici/account_upi_debit.txt	1	debit	1400	2026-05-09	000000000000	000	upi
+icici/account_upi_debit_dotted_payee.txt	1	debit	25000	2026-05-09	000000000001	000	upi
+icici/cc_payment_received.txt	1	credit	1234500	2026-05-21		0000	
+icici/cc_payment_received_1507.txt	1	credit	123400	2026-09-06		0000	
+icici/cc_refund.txt	1	credit	200	2026-09-06		0000	card
+icici/cc_spend.txt	1	debit	160400	2026-05-01		0000	card
+icici/cc_spend_variant2.txt	1	debit	10000	2026-05-16		0000	card
+idfc/account_balance_credit_165.txt	1	credit	5000000	2026-05-25		0001	
+idfc/account_balance_credit_182.txt	1	credit	2000000	2026-05-26		0001	
+idfc/account_balance_debit_166.txt	1	debit	5000000	2026-05-25		0002	
+idfc/account_credit_with_balance.txt	1	credit	123400	2026-05-16		000	
+idfc/account_debit_with_balance.txt	1	debit	123400	2026-05-16		000	
+idfc/account_imps_credit.txt	1	credit	5000000	2026-05-02	000000000000	000	imps
+idfc/account_imps_credit_175.txt	1	credit	10000000	2026-05-26	000000000001	000	imps
+idfc/account_imps_credit_200.txt	1	credit	12345600	2026-05-28	000000000002	000	imps
+idfc/account_imps_outward.txt	1	debit	1500000	2026-06-01	000000000000	000	imps
+idfc/account_interest_credit.txt	1	credit	100000	2026-08-31		0000	interest
+idfc/account_merchant_debit.txt	1	debit	1234500	2026-08-05		0000	
+idfc/account_neft_beneficiary_credit.txt	1	debit	1234500		IDFB0000X0000000		neft
+idfc/account_neft_credit.txt	1	credit	250000	2026-08-21	IN00000000000000	0000	neft
+idfc/account_neft_debit.txt	1	debit	1234500	2026-06-05	IDFB0000X0000000	0000	neft
+idfc/account_rtgs_credit.txt	1	credit	20000000	2026-08-21	HDFCR00000000000000000	0000	rtgs
+idfc/account_rtgs_debit.txt	1	debit	20000000	2026-06-05	IDFBR60000000000000000	0000	rtgs
+idfc/account_spend.txt	1	debit	244800	2026-05-04		0000	card
+idfc/account_upi_debit.txt	1	debit	2000000	2026-05-09	000000000000	0000	upi
+idfc/account_upi_debit_dotted_payee.txt	1	debit	75000	2026-05-09	000000000001	0000	upi
+idfc/cc_payment_received.txt	1	credit	300000	2026-05-02		0000	
+idfc/cc_spend.txt	1	debit	37080	2026-07-05		0000	card
+idfc/cc_spend_foreign.txt	1	debit	10000	2026-09-01		0000	card
+idfc/negative/asba_blocked.txt	0						
+idfc/negative/asba_unblocked.txt	0						
+indian_bank/account_credit.txt	1	credit	200000	2026-09-13	000000000000	1234	
+indian_bank/account_debit.txt	1	debit	100000	2026-09-14	000000000000	0000	
+indian_bank/account_imps_credit.txt	1	credit	20000	2026-09-06	000000000000	0000	imps
+indian_bank/account_upi_credit.txt	1	credit	10900	2026-09-14	000000000000	1234	upi
+indusind/account_credit.txt	1	credit	123456			0000	
+indusind/account_dc_purchase.txt	1	debit	234500			0000	card
+indusind/account_dc_purchase_170.txt	1	debit	100000			0000	card
+indusind/account_imps_debit.txt	1	debit	1234500	2026-05-03	000000000000	0000	imps
+indusind/account_upi_credit.txt	1	credit	1234500		000000000000	0000	upi
+indusind/account_upi_debit.txt	1	debit	4650000		000000000000	0000	upi
+indusind/cc_payment_received.txt	1	credit	123456	2026-07-18			card
+indusind/cc_refund.txt	1	credit	123400	2026-07-27		0000	card
+indusind/cc_spend.txt	1	debit	123400	2026-05-22		0000	card
+jupiter/cc_payment_received_963.txt	1	credit	12345				card
+jupiter/cc_payment_received_964.txt	1	credit	67890				card
+jupiter/cc_spend_227.txt	1	debit	10000	2026-05-29			card
+kotak/account_imps_credit.txt	1	credit	300100	2026-09-14	000000000000	1234	imps
+kotak/account_transaction_processed.txt	0						
+kotak/account_upi_credit.txt	1	credit	5000	2026-08-19	000000000000	1234	upi
+kotak/account_upi_credit_variant.txt	1	credit	10000	2026-09-03	000000000000	1234	upi
+kotak/account_upi_debit.txt	1	debit	50000	2026-09-10	000000000000	0000	upi
+kotak/account_upi_debit_short.txt	1	debit	900	2026-09-08	000000000001	0000	upi
+kotak/account_upi_debit_variant.txt	1	debit	10000	2026-09-03	000000000000	1234	upi
+kotak/dc_spend_990.txt	1	debit	123456	2026-07-16		0000	card
+kotak/dc_spend_991.txt	1	debit	250000	2026-07-27		0000	card
+onecard/cc_charge_bill_cleared.txt	1	debit	4900			0000	card
+onecard/cc_charge_paid_usd.txt	1	debit	4250			0000	card
+onecard/cc_charge_paid_usd_bare_mask.txt	1	debit	4250			0000	card
+onecard/cc_charge_spent.txt	1	debit	123400			0000	card
+onecard/cc_payment_received_10000.txt	1	credit	1000000	2026-04-29			
+onecard/cc_payment_received_1050.txt	1	credit	105000	2026-04-28			
+onecard/cc_payment_received_1799.txt	1	credit	179994	2026-04-25			
+onecard/negative/limit_update.txt	0						
+onecard/negative/statement_ready.txt	0						
+revolut/debit.txt	1	debit	250000	2026-08-24			
+revolut/upi_credit.txt	1	credit	123450	2026-05-15			upi
+sbi/account_credit.txt	1	credit	1234500	2026-07-28	123456789012	0000	
+sbi/account_imps_credit.txt	1	credit	10000	2026-01-01	000000000000	0000	imps
+sbi/cc_payment_received.txt	1	credit	1234500		ABC00DE0FG0HIJ		card
+sbi/cc_spend_889.txt	1	debit	12345	2026-07-19		0000	card
+sbi/cc_spend_890.txt	1	debit	67890	2026-07-20		0001	card
+sbi/dc_transaction.txt	1	debit	10000	2026-08-19	000000000000	0000	card
+slice/account_imps_credit.txt	1	credit	4500000	2026-06-11	000000000000	0000	imps
+slice/account_imps_debit.txt	1	debit	4000000	2026-05-30	234567890123	1234	imps
+slice/account_rtgs_credit.txt	1	credit	1234500	2026-07-18	SAMPLE00000000000000000	0000	rtgs
+slice/account_upi_credit.txt	1	credit	1200000	2026-05-03	234567890123	1234	upi
+slice/account_upi_debit.txt	1	debit	750000	2026-05-05	123456789012	1234	upi
+slice/cc_bill_paid.txt	1	credit	250000				card
+slice/cc_refund.txt	1	credit	50000			0000	card
+slice/cc_repayment_received.txt	1	credit	375000				card
+slice/cc_spend.txt	1	debit	10000	2026-05-12	000000000000	0000	card
+slice/cc_spend_foreign.txt	1	debit	100000	2026-09-07		0000	card
+union/account_branch_credit.txt	1	credit	150000	2026-09-08		0000	branch
+union/account_imps_credit.txt	1	credit	150000	2026-09-11	000000000000	0000	imps
+union/account_mob_bk_credit.txt	1	credit	6000	2026-08-28	000000000000	0000	
+union/account_mob_bk_debit.txt	1	debit	15100	2026-08-25	000000000000	0000	

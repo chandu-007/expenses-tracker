@@ -4,6 +4,14 @@ import kotlinx.datetime.LocalDate
 
 enum class Direction { DEBIT, CREDIT, DECLINED }
 
+/**
+ * How far a parse can be trusted. Only a rule written and tested for one specific bank layout may reach
+ * [BANK_RULE], which is the only level the review inbox may auto-confirm (FR-CAP-12). Everything the generic
+ * parser produces is [GENERIC]: on 144 public samples it read 2 outgoing payments with the wrong sign, so a
+ * generic result must always be shown to the user before it reaches the books.
+ */
+enum class Confidence { GENERIC, BANK_RULE }
+
 /** What one bank alert says. Amounts are in minor units (paise). Everything is parsed on the device. */
 data class ParsedAlert(
     val direction: Direction,
@@ -16,6 +24,7 @@ data class ParsedAlert(
     /** For foreign-currency spends the alert shows both amounts; [amountMinor] is the rupees charged, this is what was spent abroad. */
     val originalCurrency: String? = null,
     val originalAmountMinor: Long? = null,
+    val confidence: Confidence = Confidence.GENERIC,
 )
 
 sealed interface ParseResult {
