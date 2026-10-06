@@ -78,11 +78,16 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun open() {
         try {
+            StartupTrace.mark("open: begin")
             driver = EncryptedDriver.create(getApplication())
             db = ExpensesDb(driver)
+            if (BuildConfig.SEEDING_ENABLED) db.schemaQueries.entryCount().executeAsOne() // forces the real open so the mark below is honest
+            StartupTrace.mark("open: database opened")
             store = LedgerStore(db, HlcClock(nodeId()), System::currentTimeMillis)
             ensureDefaultAccounts()
+            StartupTrace.mark("open: store ready")
             refresh()
+            StartupTrace.mark("open: first page loaded")
         } catch (e: DatabaseKeyUnavailableException) {
             _state.value = UiState.KeyLost(e.message ?: "The database key is unavailable")
         }

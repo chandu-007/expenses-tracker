@@ -213,3 +213,25 @@ The budget is 1.0 s on a mid-range phone, so this meets it **only if a phone is 
 - iOS spikes (SQLCipher driver, Compose Multiplatform startup): **not run**, need full Xcode.
 
 **Known gaps in the shell, deliberately not built yet:** list rows show no category; no edit or delete; no accessibility pass (TalkBack labels, font scaling) and dark theme not checked on screen; quick-entry widget and tile (Phase 1); no navigation library (two screens only).
+
+## Correction and re-measurement (2026-10-06): GPU, startup timeline
+The earlier emulator runs used `-gpu swiftshader_indirect`, i.e. software rendering. Re-measured on the same API 26 image with `-gpu host` (Apple M4 Pro via Metal), which changes two conclusions:
+
+**Scrolling 100,000 rows (`benchmark` build, 40 flings):** 1,099 frames, **3 janky (0.27%)**; frame time p50 5 ms, p90 7 ms, p99 11 ms; 1 slow UI-thread frame. The earlier "98.7% janky" was software rendering, as suspected, and is withdrawn. This is still an emulator on a fast Mac: a real mid-range phone has a much weaker GPU and CPU, so smoothness there is **unmeasured**. A plain 100k-string list as a floor was attempted but produced no frames and was removed (unvalidated); it is not needed because the real list is smooth.
+
+**Cold start timeline, ms since process start, median [min-max], 20 runs after dropping the first 3, process-id-filtered log marks (`StartupTrace`, measurement builds only):**
+
+| Mark | Empty database | 100,000 rows |
+|---|---|---|
+| `onCreate` begins | 11 [9-21] | 11 [7-18] |
+| First composition (spinner) | 60 [43-76] | 61 [46-77] |
+| Database opened (background thread) | 44 [38-57] | 82 [72-102] |
+| First page loaded | 46 [39-58] | 86 [78-104] |
+| Data composed | 115 [82-139] | 128 [105-138] |
+| **Fully drawn (data on screen)** | **132 [96-153]** | **142 [118-152]** |
+| First frame (`am start -W`) | 128 [74-150] | 90 [74-107] |
+
+- Nothing on the main thread waits for the database: the first composition happens before the database finishes opening.
+- Opening a 100,000-row database costs about 38 ms more than an empty one; the earlier "110 ms extra" was software-rendering noise and is withdrawn, as is the "slower first frame" that suggested a main-thread wait.
+- Against the 1.0 s budget this leaves about 7x headroom on this emulator, so the budget holds if a phone is up to about 7x slower. **Still unmeasured on a real phone.**
+- The raw-key change is covered by the device tests: every reopen test goes through the raw-key path, and a wrong key is rejected.

@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: LedgerViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartupTrace.mark("onCreate: begin")
         super.onCreate(savedInstanceState)
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let(viewModel::seed)
@@ -32,9 +33,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
                 Surface {
                     val state by viewModel.state.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
                     // Lets `am start` and tracing measure cold start up to the first screen with data, not just the spinner.
-                    LaunchedEffect(state is UiState.Ready) { if (state is UiState.Ready) reportFullyDrawn() }
+                    LaunchedEffect(state is UiState.Ready) { if (state is UiState.Ready) { StartupTrace.mark("ready composed"); reportFullyDrawn() } }
                     when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
