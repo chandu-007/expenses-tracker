@@ -82,3 +82,29 @@ Last updated: 2026-10-06.
 - No performance gate in CI yet; the numbers above came from a throwaway probe. Next: a permanent harness with budgets (the emulator is a poor proxy for the reference mid-range phone).
 - Ledger-to-storage mapping layer and sync log writer are not written.
 - iOS still needs full Xcode; nothing about iOS has run.
+
+## Update: older Android verified, key-loss handling, exact search (2026-10-06)
+- **Android 8.0 (API 26) verified.** Installed `cmdline-tools` and the arm64 `google_apis` API 26 image; AVD `API26`. Its system SQLite is 3.18.2 (no upserts), and SQLCipher's bundled SQLite is 3.53.4. All 9 instrumented tests pass there, including a guard that fails if SQLite is older than 3.38. API 37 passed the same tests earlier. Still not covered: API 27-35 and real phones.
+- **Key-loss handling** (`DatabaseKeyUnavailableException`): never creates a key next to an existing database; a missing key file, lost Keystore key or corrupt key file raises a typed exception for the app to handle (restore, or start fresh with consent via `EncryptedDriver.reset`). Tests cover each case, a wrong key being rejected, and `cipher_version`. The `readNBytes` call (API 33+) was replaced. `allowBackup="false"` is set, so the database and the unbacked-up key are never restored separately.
+- **Search is now exact** (the earlier 2,000-match cap is removed). `ExpensesDb.search()` counts matches (up to 2,001, about 2 ms), then picks: sort-all-matches for small sets, or a forced walk of the date index (`INDEXED BY entry_time`) for large ones. A property-style test checks both plans give identical answers on random data, including soft-deleted rows. User text is quoted as an FTS5 phrase (`ftsPhrase`).
+- **Measured on the emulator, 100k rows, scattered dates, SQLCipher** (API 26 / API 37 identical within noise; host is Apple silicon, so a phone will be slower):
+
+| Operation | Time |
+|---|---|
+| Search, 100k matches | 12.6 ms |
+| Search, 8,300 matches | 1.6-1.8 ms |
+| Search, ~11 / 1 / 0 matches | 0.7 / 0.4 / 0.1 ms |
+| Search, 2-character text (scan) | 19 ms |
+| Category totals, 10,220 rows (verified count) | 1.8 ms |
+| Category totals, all 100k rows | 47-53 ms |
+| Last 50 entries | 0.5 ms |
+| Bulk import 100k, scattered dates | 19.3-19.6 s |
+| Bulk import 100k, ascending dates | 2.2 s |
+
+- Earlier doubts resolved: the 20 s import was date order, not the new index (2.2 s ascending with the index in place); the earlier "one year" timing covered about 3,650 rows and was misleading, so it was redone with a counted window.
+- Totals: 73 host/JVM tests and 9 device tests pass.
+
+### Still open
+- No permanent performance gate in the build; numbers came from a probe that was removed. The harness should use counted data windows and run on a pinned AVD, with budgets set for a mid-range phone (emulator timings are a best case).
+- Importers must sort by date (about 10x faster); nothing enforces it yet.
+- Ledger-to-storage mapping and the sync log writer are not written. iOS still needs full Xcode.

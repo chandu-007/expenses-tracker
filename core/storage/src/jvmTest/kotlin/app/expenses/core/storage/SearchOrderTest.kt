@@ -2,6 +2,7 @@ package app.expenses.core.storage
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.storage.db.ExpensesDb
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -18,21 +19,62 @@ class SearchOrderTest {
         add("mid", 500, "Swiggy")
         add("newest", 900, "Swiggy")
         add("oldest", 100, "Swiggy")
-        assertEquals(listOf("newest", "mid", "oldest"), db.schemaQueries.searchEntries("swiggy", 10).executeAsList().map { it.id })
-        assertEquals(listOf("newest", "mid"), db.schemaQueries.searchEntries("swiggy", 2).executeAsList().map { it.id })
+        assertEquals(listOf("newest", "mid", "oldest"), db.search("swiggy", 10).map { it.id })
+        assertEquals(listOf("newest", "mid"), db.search("swiggy", 2).map { it.id })
     }
 
     @Test
-    fun veryCommonTermsConsiderOnlyTheMostRecentlyAdded2000Matches() {
+    fun resultsStayExactWhenMatchesExceedTheSortFirstThreshold() {
         db.transaction {
-            // The first-added entry has the newest date, but it is older than 2000 other matches by insertion.
-            add("first-added-newest-date", 1_000_000, "Swiggy")
-            for (i in 1..2000) add("m$i", i.toLong(), "Swiggy $i")
+            // Added first but newest by date: an approximate "latest added" cap would lose it.
+            add("added-first-newest-date", 1_000_000, "Swiggy")
+            for (i in 1..2500) add("m$i", i.toLong(), "Swiggy $i")
         }
-        val ids = db.schemaQueries.searchEntries("swiggy", 5000).executeAsList().map { it.id }
-        assertEquals(2000, ids.size)
-        assertTrue("first-added-newest-date" !in ids)
-        assertEquals("m2000", ids.first())
+        val ids = db.search("swiggy", 3).map { it.id }
+        assertEquals(listOf("added-first-newest-date", "m2500", "m2499"), ids)
+    }
+
+    @Test
+    fun bothPlansReturnTheSameAnswerOnRandomData() {
+        val rnd = Random(42)
+        val words = listOf("swiggy", "zomato", "amazon", "uber")
+        db.transaction {
+            for (i in 1..3000) {
+                add("e$i", rnd.nextLong(0, 1_000_000), "${words[rnd.nextInt(words.size)]} ${rnd.nextInt(100)}")
+                if (i % 7 == 0) db.schemaQueries.softDeleteEntry("e$i")
+            }
+        }
+        for (term in listOf("swiggy", "zomato 5", "mazon", "uber 99", "nomatch")) {
+            val q = ftsPhrase(term)
+            val small = db.schemaQueries.searchEntries(q, 40).executeAsList().map { it.id }
+            val walk = db.schemaQueries.searchEntriesWalk(q, 40).executeAsList().map { it.id }
+            assertEquals(small, walk, "plans disagree for '$term'")
+        }
+    }
+
+    @Test
+    fun deletedEntriesNeverAppearInEitherPlan() {
+        db.transaction { for (i in 1..2100) add("m$i", i.toLong(), "Swiggy $i") }
+        db.schemaQueries.softDeleteEntry("m2100")
+        assertTrue("m2100" !in db.search("swiggy", 5).map { it.id }) // 2100 matches: walk plan
+        db.transaction { for (i in 1..2100) db.schemaQueries.softDeleteEntry("m$i") }
+        assertTrue(db.search("swiggy", 5).isEmpty())
+    }
+
+    @Test
+    fun userTextWithQuotesAndOperatorsIsSearchedLiterally() {
+        add("a", 1, "Dominos \"Pizza\" - offer")
+        add("b", 2, "Pizza Hut")
+        assertEquals(listOf("a"), db.search("\"Pizza\" - offer").map { it.id })
+        assertEquals(listOf("b", "a"), db.search("pizza").map { it.id })
+        assertTrue(db.search("pizza OR zzzzz AND").isEmpty()) // would be a syntax error if passed raw
+    }
+
+    @Test
+    fun shortAndBlankQueriesDoNotUseTheTrigramIndex() {
+        add("a", 1, "Ola cabs")
+        assertEquals(listOf("a"), db.search("ol").map { it.id })
+        assertTrue(db.search("   ").isEmpty())
     }
 
     @Test

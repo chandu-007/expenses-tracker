@@ -110,15 +110,26 @@ SELECT COUNT(*) FROM entry WHERE deleted = 0;
 recentEntries:
 SELECT * FROM entry WHERE deleted = 0 ORDER BY occurred_at DESC LIMIT :limit OFFSET :offset;
 
+-- Exact full-text search in date order. Two plans, chosen by the caller (see Search.kt) from countMatches:
+--   searchEntries     - fetches every match, then sorts. Fast for up to ~2000 matches.
+--   searchEntriesWalk - walks the date index newest first and stops after :limit hits. Fast when matches are
+--                       common; scans the whole index when they are rare.
+-- On an emulator with SQLCipher and 100k rows with scattered dates: 8300 matches took 70 ms with sort-first
+-- and 1 ms with the walk; 1 match took 1 ms with sort-first and 25 ms with the walk.
 -- :q must be a valid FTS5 expression of 3+ characters; callers quote user input as a phrase.
--- Takes the 2000 most recently added matches, then orders those by date. Fetching and sorting every match
--- of a very common term took about 70 ms for 8000 matches on an emulator; this takes the first page in
--- tens of ms. Queries with up to 2000 matches return exact date order; for more, older matches are skipped.
 searchEntries:
-SELECT entry.* FROM entry
-WHERE entry.seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q ORDER BY rowid DESC LIMIT 2000)
-  AND entry.deleted = 0
-ORDER BY entry.occurred_at DESC LIMIT :limit;
+SELECT * FROM entry
+WHERE deleted = 0 AND seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q)
+ORDER BY occurred_at DESC LIMIT :limit;
+
+searchEntriesWalk:
+SELECT * FROM entry INDEXED BY entry_time
+WHERE deleted = 0 AND seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q)
+ORDER BY occurred_at DESC LIMIT :limit;
+
+-- Counts matches but stops at :cap, so it stays cheap for very common terms (about 2 ms for 2001).
+countMatches:
+SELECT COUNT(*) FROM (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q LIMIT :cap);
 
 -- Fallback for 1-2 character queries, which the trigram index cannot answer.
 searchShort:

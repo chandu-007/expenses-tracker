@@ -44,7 +44,9 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
-
+    androidTestImplementation(libs.kotlin.test)
+    androidTestImplementation(libs.sqlcipher.android)
+    androidTestImplementation(libs.sqldelight.android.driver)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlin.test)
