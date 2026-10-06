@@ -91,6 +91,7 @@ fun EntryListScreen(
     onOpen: (RowUi) -> Unit,
     onDelete: (RowUi) -> Unit,
     onManageCategories: () -> Unit,
+    onOpenBudget: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
@@ -124,11 +125,13 @@ fun EntryListScreen(
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Spent this month", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
                 }
-                Text(state.monthSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
+                Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }
+            BudgetSummary(state.budget, onOpenBudget)
+            Spacer(Modifier.height(8.dp))
             if (state.templates.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier.testTag("templates"),

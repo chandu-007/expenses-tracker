@@ -7,6 +7,7 @@ import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.sync.HlcClock
+import app.expenses.core.storage.BudgetStore
 import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
@@ -28,7 +29,7 @@ import java.util.UUID
  */
 class AppContainer(private val context: Context) {
     sealed interface Opened {
-        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore) : Opened
+        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore) : Opened
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
         class KeyLost(val message: String) : Opened
@@ -97,7 +98,7 @@ class AppContainer(private val context: Context) {
             store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, Currency.INR))
         }
         StartupTrace.mark("open: store ready")
-        Opened.Ok(driver, db, store, TemplateStore(db, clock, System::currentTimeMillis), CategoryStore(db, clock, System::currentTimeMillis))
+        Opened.Ok(driver, db, store, TemplateStore(db, clock, System::currentTimeMillis), CategoryStore(db, clock, System::currentTimeMillis), BudgetStore(db, clock, System::currentTimeMillis, store))
     } catch (e: DatabaseKeyUnavailableException) {
         Opened.KeyLost(e.message ?: "The database key is unavailable")
     }

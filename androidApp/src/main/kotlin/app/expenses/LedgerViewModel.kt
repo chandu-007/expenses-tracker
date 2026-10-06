@@ -3,12 +3,16 @@ package app.expenses
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.expenses.core.domain.BudgetPeriod
+import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
+import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
+import app.expenses.core.storage.BudgetStatus
 import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.Entry
@@ -32,6 +36,38 @@ data class CategoryUi(val id: String, val name: String, val parentId: String?, v
 /** A saved quick entry as the UI needs it. [amountText] is null when the template asks for the amount. */
 data class TemplateUi(val id: String, val name: String, val amountText: String?, val category: String, val accountId: String, val note: String)
 
+/**
+ * One budget as the screens show it. A null [limit] means no limit is set (the line is still listed so one can be added).
+ * [percent] is the share of the limit used, whole percent, and can pass 100.
+ */
+data class BudgetLineUi(
+    val categoryId: String?,
+    val name: String,
+    val limit: String?,
+    /** The limit as plain digits for the edit field, or empty. */
+    val limitPlain: String,
+    val spent: String,
+    /** "₹2,000.00 left" or "₹150.00 over"; empty without a limit. */
+    val note: String,
+    val percent: Int,
+    val state: BudgetState,
+)
+
+/** Budget state for the current period. [perDay] is null without an overall limit. */
+data class BudgetUi(
+    val period: BudgetPeriod,
+    /** "1 Oct – 31 Oct". */
+    val range: String,
+    /** What the period is called in headings: "this month", "this cycle" or "this week". */
+    val periodName: String,
+    val overall: BudgetLineUi,
+    val categories: List<BudgetLineUi>,
+    val perDay: String?,
+    val daysLeft: Int,
+    /** How many category limits are near or over. */
+    val categoriesNeedingAttention: Int,
+)
+
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
 data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false)
@@ -44,7 +80,9 @@ sealed interface UiState {
 
     data class Ready(
         val rows: List<RowUi>,
-        val monthSpend: String,
+        /** Spending in the current budget period (the calendar month unless the user chose otherwise). */
+        val periodSpend: String,
+        val budget: BudgetUi,
         val accounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val categories: List<CategoryUi>,
@@ -204,6 +242,24 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         refresh(ok)
     }
 
+    // ---- budgets ----
+
+    /** Sets a limit for a category, or for everything when [categoryId] is null. */
+    fun setBudget(categoryId: String?, amount: Money) = withStore { ok ->
+        ok.budgets.setLimit(categoryId, amount)
+        refresh(ok)
+    }
+
+    fun clearBudget(categoryId: String?) = withStore { ok ->
+        ok.budgets.clearLimit(categoryId)
+        refresh(ok)
+    }
+
+    fun setBudgetPeriod(period: BudgetPeriod) = withStore { ok ->
+        ok.budgets.setPeriod(period)
+        refresh(ok)
+    }
+
     fun dismissMessage() {
         _state.update { (it as? UiState.Ready)?.copy(message = null) ?: it }
     }
@@ -254,8 +310,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         loaded = q.recentEntries(want).executeAsList().toMutableList()
         endReached = loaded.size < want
         val zone = ZoneId.systemDefault()
-        val monthStart = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val spent = ok.store.spendByCategory(inr, from = monthStart).values.fold(Money.zero(inr)) { a, m -> a + m }
+        val today = LocalDate.now(zone)
+        val status = ok.budgets.status(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth), kotlinx.datetime.TimeZone.currentSystemDefault(), inr)
+        val spent = ok.store.spendByCategory(inr, from = status.period.startMillis(kotlinx.datetime.TimeZone.currentSystemDefault()), until = status.period.endMillis(kotlinx.datetime.TimeZone.currentSystemDefault()))
+            .values.fold(Money.zero(inr)) { a, m -> a + m }
         val cats = ok.categories.list()
         categoryNames = cats.associate { it.id to it.name }
         loadedCategory = firstCategories(ok, loaded)
@@ -264,7 +322,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id ?: "cash"
         _state.value = UiState.Ready(
             rows = loaded.map(::toRow),
-            monthSpend = spent.formatted(),
+            periodSpend = spent.formatted(),
+            budget = budgetUi(ok, status, cats),
             accounts = accounts.map { AccountUi(it.id, it.name) },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
@@ -272,6 +331,40 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             lastAccountId = lastAccount,
             endReached = endReached,
             undo = undo,
+        )
+    }
+
+    private fun budgetUi(ok: AppContainer.Opened.Ok, status: BudgetStatus, cats: List<app.expenses.core.domain.Category>): BudgetUi {
+        val byScope = status.progress.associateBy { it.categoryId }
+        val names = cats.associate { it.id to it.name }
+        fun line(categoryId: String?, name: String): BudgetLineUi {
+            val p = byScope[categoryId]
+            return BudgetLineUi(
+                categoryId, name,
+                limit = p?.limit?.formatted(), limitPlain = p?.limit?.toPlainString().orEmpty(),
+                spent = (p?.spent ?: Money.zero(inr)).formatted(),
+                note = p?.let { if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left" else "${Money(-it.remaining.minorUnits, inr).formatted()} over" }.orEmpty(),
+                percent = p?.usedPercent ?: 0,
+                state = p?.state ?: BudgetState.OK,
+            )
+        }
+        val lines = cats.filter { !it.hidden || byScope.containsKey(it.id) }
+            .map { c -> line(c.id, c.parentId?.let { pid -> names[pid]?.let { "$it › ${c.name}" } } ?: c.name) }
+        val period = ok.budgets.period()
+        val fmt = DateTimeFormatter.ofPattern("d MMM")
+        fun java(d: kotlinx.datetime.LocalDate) = LocalDate.of(d.year, d.month.ordinal + 1, d.day)
+        return BudgetUi(
+            period = period,
+            range = fmt.format(java(status.period.start)) + " – " + fmt.format(java(status.period.endExclusive).minusDays(1)),
+            periodName = when (period) {
+                is BudgetPeriod.Weekly -> "this week"
+                is BudgetPeriod.Monthly -> if (period.startDay == 1) "this month" else "this cycle"
+            },
+            overall = line(null, "Everything"),
+            categories = lines,
+            perDay = status.safeToSpend?.perDay?.formatted(),
+            daysLeft = status.safeToSpend?.daysLeft ?: 0,
+            categoriesNeedingAttention = status.progress.count { it.categoryId != null && it.state != BudgetState.OK },
         )
     }
 

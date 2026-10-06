@@ -43,6 +43,20 @@ CREATE TABLE template (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 
+-- Spending limits. scope is '' for the overall cap, otherwise the id of the category the limit applies to.
+CREATE TABLE budget (
+    scope TEXT NOT NULL PRIMARY KEY,
+    limit_minor INTEGER NOT NULL CHECK (limit_minor > 0),
+    currency TEXT NOT NULL
+);
+
+-- How time is cut into budget periods: one row. kind is 'monthly' (start_value = start day 1..28) or 'weekly' (start_value = ISO weekday, 1 = Monday).
+CREATE TABLE budget_period (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    kind TEXT NOT NULL,
+    start_value INTEGER NOT NULL
+);
+
 -- Small device-local preferences, such as the last category and account used. Never synced.
 CREATE TABLE setting (
     key TEXT NOT NULL PRIMARY KEY,
@@ -383,3 +397,23 @@ SELECT * FROM op_log WHERE hlc > :hlc ORDER BY hlc LIMIT :limit;
 
 latestOp:
 SELECT * FROM op_log WHERE entity = :entity AND row_id = :rowId AND field = :field ORDER BY hlc DESC LIMIT 1;
+
+allBudgets:
+SELECT * FROM budget;
+
+budgetByScope:
+SELECT * FROM budget WHERE scope = :scope;
+
+upsertBudget:
+INSERT INTO budget(scope, limit_minor, currency) VALUES (?, ?, ?)
+ON CONFLICT(scope) DO UPDATE SET limit_minor = excluded.limit_minor, currency = excluded.currency;
+
+deleteBudget:
+DELETE FROM budget WHERE scope = :scope;
+
+budgetPeriod:
+SELECT * FROM budget_period WHERE id = 1;
+
+putBudgetPeriod:
+INSERT INTO budget_period(id, kind, start_value) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, start_value = excluded.start_value;

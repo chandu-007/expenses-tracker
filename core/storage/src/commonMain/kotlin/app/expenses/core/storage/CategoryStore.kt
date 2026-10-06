@@ -2,6 +2,8 @@ package app.expenses.core.storage
 
 import app.expenses.core.domain.Category
 import app.expenses.core.domain.CategoryRules
+import app.expenses.core.domain.Currency
+import app.expenses.core.domain.Money
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
 import kotlin.random.Random
@@ -94,6 +96,12 @@ class CategoryStore(
             q.remapSpendLines(intoId, fromId)
             q.remapIncome(intoId, fromId)
             q.remapTemplates(intoId, fromId)
+            // A limit moves with the category unless the target already has its own, which then wins.
+            q.budgetByScope(fromId).executeAsOneOrNull()?.let { src ->
+                val keep = q.budgetByScope(intoId).executeAsOneOrNull() == null
+                writeBudget(db, clock, nowMillis, fromId, null)
+                if (keep) writeBudget(db, clock, nowMillis, intoId, Money(src.limit_minor, Currency(src.currency, currencyDigits(src.currency))))
+            }
             q.markMerged(intoId, fromId)
             q.insertOp(clock.now(nowMillis()).encode(), "category", fromId, "merged_into", intoId)
             q.insertOp(clock.now(nowMillis()).encode(), "category", fromId, "deleted", "1")
@@ -104,12 +112,15 @@ class CategoryStore(
     fun delete(id: String) {
         db.transaction {
             CategoryRules.checkDelete(list(), id, usage(id))?.let { throw IllegalArgumentException(it) }
+            writeBudget(db, clock, nowMillis, id, null) // a limit on a category that is going away goes with it
             q.softDeleteCategory(id)
             q.insertOp(clock.now(nowMillis()).encode(), "category", id, "deleted", "1")
         }
     }
 
     // ---- internals ----
+
+    private fun currencyDigits(code: String): Int = q.selectCurrencies().executeAsList().firstOrNull { it.code == code }?.digits?.toInt() ?: 2
 
     private fun change(id: String, transform: (List<Category>, Category) -> Category) {
         db.transaction {

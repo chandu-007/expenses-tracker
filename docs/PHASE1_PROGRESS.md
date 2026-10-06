@@ -106,3 +106,29 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 - Android 8 emulator only; a real phone has not been used.
 
 **Totals:** 165 host/JVM tests (both targets counted), 52 device tests (1 skipped: widget binding, Android 10+); full chain from deleted result files, green.
+
+## Slice 5: budgets (FR-BUD-01 modes a and b, FR-BUD-02, FR-BUD-04, safe-to-spend from FR-BUD-05)
+**Built:**
+- **One overall limit and any number of category limits.** A category limit counts that category and its subcategories (a "Food" limit includes "Food › Cafe"); the overall limit counts everything including uncategorised. Spending is your net share: refunds are taken off and only your own part of a shared expense counts.
+- **Periods:** calendar month, a monthly cycle that starts on any day 1-28 (for a salary on the 25th), or weekly from a chosen weekday. Periods tile the calendar with no gap or overlap; the 29th-31st are not allowed as start days because some months lack them. The list heading says "this month", "this cycle" or "this week" to match.
+- **List:** under the spending total, a bar, "₹3,000.00 left of ₹20,000.00", and "about ₹115.38 a day". Over the limit it says "₹100.00 over of ₹800.00" in the error colour and the per-day figure goes away. The bar changes colour at 80% and when over; the text says the same, so colour is never the only signal. A line notes how many category budgets are near or over. Tapping opens the **Budget screen**: period, the overall limit, and every category with its limit, bar and remaining amount. Setting or editing a limit is a short dialog (the current value is pre-selected, so typing replaces it); "Remove limit" is in the same dialog.
+- **Safe to spend** = what is left under the overall limit, divided by the days left in the period including today, rounded **down** so it never promises more than is left. On the last day the whole remainder is available; once the limit is reached it is zero. **It does not subtract upcoming bills or planned savings, because recurring items do not exist yet;** the Budget screen says so in words.
+- **Interaction with categories:** merging moves the source's limit to the target unless the target has its own (then the target's wins); deleting a category removes its limit; setting a limit with a merged id lands on the target. Limits and the period are written to the sync log; the change `merged_into`-style re-mapping for limits is applied by the merge itself, so a future sync must replay it (same contract as entries).
+
+**Verified:**
+- 15 domain tests on both targets: property tests that periods tile the calendar for every start day, leap years and February, a cycle across a year boundary, exact 80%/at-limit/over boundaries, refunds making spending negative, overflow, safe-to-spend rounding never exceeding the remainder, time zone handling. 14 store tests: the period edges to the minute (23:59 on the last day is in, midnight is out), subcategories, shared expenses and refunds (including a refund in a later period reducing that period, not the original), the 25th-cycle boundary, persistence, no log entry when nothing changed, other-currency limits kept but not shown, and the merge/delete interactions. 7 device tests on Android 8 driving the real screens.
+- **Mutation checks:** 5 on the domain math (over-at-limit, the 80% edge, today not counted as a day left, subcategories ignored, the start day landing in the wrong period) and 8 on the store (period start or end off by a minute, subcategories ignored, no redirect for a merged id, currency filter removed, merge overwriting the target's limit, merge leaving a limit behind, delete leaving one behind) plus 1 on the UI (the pre-selected text): all caught.
+- **Looked at on the emulator:** the list with the bar and per-day figure (26 days left on 6 Oct, 3000.00 / 26 = 115.38, checked by hand), the Budget screen with an over-limit category, and the limit dialog with the keyboard confirmed up (`mInputShown=true`): Save at y=1037, above the keyboard.
+
+**Two bugs the tests and screens caught while building it:** (1) editing an existing limit put the cursor at the start of the field, so typing "800" over "1000.00" produced "8001000.00", a valid but wrong amount; fixed by selecting the current value, with a test that fails without the fix. (2) The summary row is one merged node for screen readers (which is right), so my first tests looked in the wrong place; the tests now look at the merged text where that is what a user hears.
+
+**Not done / caveats:**
+- **No alerts yet** (FR-BUD-04's notifications at 80% and 100%): the near/over state is shown on screen but nothing notifies you. That waits for the notification work.
+- **Rollover, envelope and zero-based modes, per-category-per-month overrides, and budgets for tags** are not built; the limit is the same every period.
+- **Safe to spend ignores bills and income.** Treat it as "what is left of the cap, spread evenly", not a forecast.
+- **Single currency in the UI:** limits in other currencies are stored but only the primary currency (INR) is shown.
+- **Amber (80%+) was not checked for contrast** in dark theme or by TalkBack; large-font layout unchecked. Android 8 emulator only.
+- **Deleting a category refuses while used, but a limit alone does not block deletion** (it is removed with it), by design.
+- The period is global, not per budget.
+
+**Totals:** 212 host/JVM tests (both targets counted), 59 device tests (1 skipped: widget binding, Android 10+); full chain from deleted result files, gradle exit 0.

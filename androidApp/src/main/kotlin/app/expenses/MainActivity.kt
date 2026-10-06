@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.expenses.ui.BudgetScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.ExpenseFormScreen
 import app.expenses.ui.FormStart
@@ -48,6 +49,7 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
+                    var budgeting by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -97,6 +99,16 @@ class MainActivity : ComponentActivity() {
                                     onDelete = viewModel::deleteCategory,
                                 )
                             }
+                            budgeting -> {
+                                BackHandler { budgeting = false }
+                                BudgetScreen(
+                                    budget = s.budget,
+                                    onBack = { budgeting = false },
+                                    onSetLimit = viewModel::setBudget,
+                                    onClearLimit = viewModel::clearBudget,
+                                    onSetPeriod = viewModel::setBudgetPeriod,
+                                )
+                            }
                             adding -> {
                                 BackHandler { adding = false }
                                 ExpenseFormScreen(
@@ -128,6 +140,7 @@ class MainActivity : ComponentActivity() {
                                 onOpen = { viewModel.openEditor(it.id) },
                                 onDelete = viewModel::deleteEntry,
                                 onManageCategories = { managingCategories = true },
+                                onOpenBudget = { budgeting = true },
                             )
                         }
                     }
