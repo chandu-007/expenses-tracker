@@ -19,7 +19,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.expenses.ui.AddExpenseScreen
+import app.expenses.ui.ExpenseFormScreen
+import app.expenses.ui.FormStart
+import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.OpeningScreen
@@ -55,38 +57,59 @@ class MainActivity : ComponentActivity() {
                         if (requests > handledRequests) { handledRequests = requests; prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
                     }
 
+                    val editing by viewModel.editor.collectAsStateWithLifecycle()
+
                     when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                        is UiState.Ready ->
-                            if (adding) {
-                                BackHandler { adding = false }
-                                AddExpenseScreen(
+                        is UiState.Ready -> when {
+                            editing is Editable.Simple -> {
+                                val e = editing as Editable.Simple
+                                BackHandler { viewModel.closeEditor() }
+                                ExpenseFormScreen(
+                                    title = "Edit expense",
+                                    start = FormStart(e.amountText, e.category, e.accountId.ifEmpty { s.lastAccountId }, e.note, e.occurredAt),
                                     accounts = s.accounts,
-                                    initialCategory = prefillCategory ?: s.lastCategory,
-                                    initialAccountId = prefillAccount ?: s.lastAccountId,
-                                    initialNote = prefillNote,
-                                    onSave = { amount, category, note, account, asTemplate ->
-                                        viewModel.addExpense(amount, category, note, account, asTemplate)
+                                    showTemplateOption = false,
+                                    onSave = { amount, category, note, account, _, at -> viewModel.saveEdit(e.id, amount, category, note, account, at) },
+                                    onBack = viewModel::closeEditor,
+                                )
+                            }
+                            editing is Editable.ReadOnly -> {
+                                val e = editing as Editable.ReadOnly
+                                BackHandler { viewModel.closeEditor() }
+                                ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            adding -> {
+                                BackHandler { adding = false }
+                                ExpenseFormScreen(
+                                    title = "Add expense",
+                                    start = FormStart("", prefillCategory ?: s.lastCategory, prefillAccount ?: s.lastAccountId, prefillNote, System.currentTimeMillis()),
+                                    accounts = s.accounts,
+                                    showTemplateOption = true,
+                                    onSave = { amount, category, note, account, asTemplate, at ->
+                                        viewModel.addExpense(amount, category, note, account, asTemplate, at)
                                         adding = false
                                     },
                                     onBack = { adding = false },
                                 )
-                            } else {
-                                EntryListScreen(
-                                    state = s,
-                                    onAdd = { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
-                                    onLoadMore = viewModel::loadMore,
-                                    onMessageShown = viewModel::dismissMessage,
-                                    onTemplate = { t ->
-                                        if (t.amountText != null) viewModel.quickAdd(t.id)
-                                        else { prefillCategory = t.category; prefillAccount = t.accountId; prefillNote = t.note.ifEmpty { t.name }; adding = true }
-                                    },
-                                    onDeleteTemplate = viewModel::deleteTemplate,
-                                    onUndo = viewModel::undo,
-                                    onUndoDismissed = viewModel::dismissUndo,
-                                )
                             }
+                            else -> EntryListScreen(
+                                state = s,
+                                onAdd = { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
+                                onLoadMore = viewModel::loadMore,
+                                onMessageShown = viewModel::dismissMessage,
+                                onTemplate = { t ->
+                                    if (t.amountText != null) viewModel.quickAdd(t.id)
+                                    else { prefillCategory = t.category; prefillAccount = t.accountId; prefillNote = t.note.ifEmpty { t.name }; adding = true }
+                                },
+                                onDeleteTemplate = viewModel::deleteTemplate,
+                                onUndo = viewModel::undo,
+                                onUndoDismissed = viewModel::dismissUndo,
+                                onOpen = { viewModel.openEditor(it.id) },
+                                onDelete = viewModel::deleteEntry,
+                            )
+                        }
                     }
                 }
             }

@@ -147,13 +147,19 @@ class PerformanceBudgetTest {
     }
 
     @Test fun savingOneTransactionStaysUnder50msPhoneBudgetAtP95() {
-        val times = DoubleArray(60) { i ->
-            val s = System.nanoTime()
-            db.schemaQueries.insertEntry("save$i", "EXPENSE", 1_900_000_000_000L + i, "bank", null, 500, "INR", "cat1", "fresh$i", null, "manual", null)
-            (System.nanoTime() - s) / 1e6
-        }.sorted()
-        val p95 = times[(times.size * 0.95).toInt()]
-        check("save one transaction (p95 of 60 autocommit inserts)", 50.0, p95)
-        times.indices.forEach { db.schemaQueries.softDeleteEntry("save$it") }
+        val ids = (0 until 60).map { "save$it" }
+        try {
+            val times = DoubleArray(60) { i ->
+                val s = System.nanoTime()
+                db.schemaQueries.insertEntry(ids[i], "EXPENSE", 1_900_000_000_000L + i, "bank", null, 500, "INR", "cat1", "fresh$i", null, "manual", null)
+                (System.nanoTime() - s) / 1e6
+            }.sorted()
+            val p95 = times[(times.size * 0.95).toInt()]
+            Log.w("PERF", "save one transaction: p50 ${"%.2f".format(times[30])} ms, p95 ${"%.2f".format(p95)} ms, max ${"%.2f".format(times.last())} ms")
+            check("save one transaction (p95 of 60 autocommit inserts)", 50.0, p95)
+        } finally {
+            // Always remove the rows, so one failure cannot make the dataset check in another test fail too.
+            ids.forEach { db.schemaQueries.softDeleteEntry(it) }
+        }
     }
 }

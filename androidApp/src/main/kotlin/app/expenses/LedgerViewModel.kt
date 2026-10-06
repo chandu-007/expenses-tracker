@@ -29,7 +29,8 @@ data class AccountUi(val id: String, val name: String)
 data class TemplateUi(val id: String, val name: String, val amountText: String?, val category: String, val accountId: String, val note: String)
 
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
-data class UndoUi(val entryId: String, val text: String)
+/** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
+data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false)
 
 sealed interface UiState {
     data object Opening : UiState
@@ -67,6 +68,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow<UiState>(UiState.Opening)
     val state: StateFlow<UiState> = _state
 
+    private val _editor = MutableStateFlow<Editable?>(null)
+
+    /** The entry being edited, or null. */
+    val editor: StateFlow<Editable?> = _editor
+
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
     private var loaded = mutableListOf<Entry>()
@@ -93,8 +99,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Records an expense from the add screen. Remembers its category and account as the next defaults. */
-    fun addExpense(amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean) = withStore { ok ->
-        val id = EntryActions(ok).recordExpense(amount, category, note.trim().ifEmpty { null }, accountId)
+    fun addExpense(amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean, occurredAt: Long) = withStore { ok ->
+        val id = EntryActions(ok).recordExpense(amount, category, note.trim().ifEmpty { null }, accountId, occurredAt)
         if (saveAsTemplate) {
             val name = note.trim().ifEmpty { category }
             ok.templates.save(Template(UUID.randomUUID().toString(), name, amount, CategoryId(category), AccountId(accountId), note.trim().ifEmpty { null }))
@@ -114,9 +120,30 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Takes back an entry that was just added. */
-    fun undo(entryId: String) = withStore { ok ->
-        EntryActions(ok).undo(entryId)
+    fun undo(u: UndoUi) = withStore { ok ->
+        if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
         refresh(ok)
+    }
+
+    /** Opens the editor for an entry: the simple form, or a read-only explanation. */
+    fun openEditor(entryId: String) = withStore { ok ->
+        _editor.value = EntryActions(ok).editable(entryId)
+    }
+
+    fun closeEditor() {
+        _editor.value = null
+    }
+
+    fun saveEdit(entryId: String, amount: Money, category: String, note: String, accountId: String, occurredAt: Long) = withStore { ok ->
+        EntryActions(ok).edit(entryId, amount, category, note.trim().ifEmpty { null }, accountId, occurredAt)
+        _editor.value = null
+        refresh(ok)
+    }
+
+    /** Deletes an entry and offers to bring it back. */
+    fun deleteEntry(row: RowUi) = withStore { ok ->
+        EntryActions(ok).delete(row.id)
+        refresh(ok, undo = UndoUi(row.id, "Deleted ${row.title} ${row.amount}", restore = true))
     }
 
     fun loadMore() {
@@ -178,8 +205,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val accounts = q.selectAccounts().executeAsList()
         accountNames = accounts.associate { it.id to it.name }
         currencyDigits = q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() }
-        loaded = q.recentEntries(PAGE).executeAsList().toMutableList()
-        endReached = loaded.size < PAGE
+        // Reload as many rows as are already shown, so a change does not throw the user back to the top of a long list.
+        val want = maxOf(loaded.size.toLong(), PAGE)
+        loaded = q.recentEntries(want).executeAsList().toMutableList()
+        endReached = loaded.size < want
         val zone = ZoneId.systemDefault()
         val monthStart = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val spent = ok.store.spendByCategory(inr, from = monthStart).values.fold(Money.zero(inr)) { a, m -> a + m }

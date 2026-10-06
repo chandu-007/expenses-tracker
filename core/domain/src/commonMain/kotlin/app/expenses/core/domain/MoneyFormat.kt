@@ -44,3 +44,16 @@ fun parseAmount(text: String, currency: Currency): Money? {
     val minor = (whole.ifEmpty { "0" } + fraction.padEnd(currency.minorUnitDigits, '0')).toLongOrNull() ?: return null
     return Money(minor, currency)
 }
+
+/**
+ * The amount as plain digits for an edit field: no symbol and no grouping, with exactly the currency's decimal
+ * places ("1234567.50", "1200" for yen). The inverse of [parseAmount].
+ */
+fun Money.toPlainString(): String {
+    val digits = currency.minorUnitDigits
+    val negative = minorUnits < 0
+    val raw = minorUnits.toString().removePrefix("-").padStart(digits + 1, '0')
+    val whole = raw.substring(0, raw.length - digits)
+    val fraction = if (digits == 0) "" else "." + raw.substring(raw.length - digits)
+    return (if (negative) "-" else "") + whole + fraction
+}

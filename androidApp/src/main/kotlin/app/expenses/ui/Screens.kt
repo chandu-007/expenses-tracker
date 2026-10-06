@@ -17,6 +17,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import app.expenses.UndoUi
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyRow
@@ -72,8 +86,10 @@ fun EntryListScreen(
     onMessageShown: () -> Unit,
     onTemplate: (TemplateUi) -> Unit,
     onDeleteTemplate: (String) -> Unit,
-    onUndo: (String) -> Unit,
+    onUndo: (UndoUi) -> Unit,
     onUndoDismissed: () -> Unit,
+    onOpen: (RowUi) -> Unit,
+    onDelete: (RowUi) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
@@ -88,7 +104,7 @@ fun EntryListScreen(
     LaunchedEffect(state.undo) {
         val undo = state.undo ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
-        if (result == SnackbarResult.ActionPerformed) onUndo(undo.entryId)
+        if (result == SnackbarResult.ActionPerformed) onUndo(undo)
         onUndoDismissed()
     }
     removing?.let { t ->
@@ -132,49 +148,94 @@ fun EntryListScreen(
                 }
             } else {
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
-                    items(state.rows, key = { it.seq }, contentType = { "row" }) { Row(it) }
+                    items(state.rows, key = { it.seq }, contentType = { "row" }) { SwipeableRow(it, onOpen, onDelete) }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Row(row: RowUi) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-            Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit) {
+    val dismiss = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
+        },
+    )
+    SwipeToDismissBox(
+        state = dismiss,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp), contentAlignment = Alignment.CenterEnd) {
+                Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        },
+        modifier = Modifier.testTag("row_${row.title}"),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onOpen(row) }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+            Text(row.amount, style = MaterialTheme.typography.bodyLarge)
         }
-        Text(row.amount, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
+/** What the form starts with. For a new expense these are the remembered defaults; for an edit, the stored values. */
+data class FormStart(val amountText: String, val category: String, val accountId: String, val note: String, val occurredAt: Long)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddExpenseScreen(
+fun ExpenseFormScreen(
+    title: String,
+    start: FormStart,
     accounts: List<AccountUi>,
-    initialCategory: String,
-    initialAccountId: String,
-    initialNote: String,
-    onSave: (amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean) -> Unit,
+    showTemplateOption: Boolean,
+    onSave: (amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean, occurredAt: Long) -> Unit,
     onBack: () -> Unit,
 ) {
-    var amountText by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf(initialCategory) }
-    var note by rememberSaveable { mutableStateOf(initialNote) }
-    var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
+    var amountText by rememberSaveable { mutableStateOf(start.amountText) }
+    var category by rememberSaveable { mutableStateOf(start.category) }
+    var note by rememberSaveable { mutableStateOf(start.note) }
+    var accountId by rememberSaveable { mutableStateOf(start.accountId) }
+    var occurredAt by rememberSaveable { mutableStateOf(start.occurredAt) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
+    var pickingDate by rememberSaveable { mutableStateOf(false) }
     val amount = parseAmount(amountText, Currency.INR)
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
+    val zone = ZoneId.systemDefault()
+    val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM yyyy").withZone(zone).format(Instant.ofEpochMilli(occurredAt))
+
+    if (pickingDate) {
+        val picker = rememberDatePickerState(initialSelectedDateMillis = Instant.ofEpochMilli(occurredAt).atZone(zone).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { pickingDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let { utc ->
+                        val picked = Instant.ofEpochMilli(utc).atZone(ZoneOffset.UTC).toLocalDate()
+                        val time = Instant.ofEpochMilli(occurredAt).atZone(zone).toLocalTime()
+                        occurredAt = picked.atTime(time).atZone(zone).toInstant().toEpochMilli()
+                    }
+                    pickingDate = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
+        ) { DatePicker(state = picker) }
+    }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Add expense") }, navigationIcon = { TextButton(onClick = onBack) { Text("Cancel") } }) },
+        topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } }) },
         // Pinned above the keyboard so Save is always reachable, however small the screen.
         bottomBar = {
             Button(
-                onClick = { amount?.let { onSave(it, category, note, accountId, saveAsTemplate) } },
+                onClick = { amount?.let { onSave(it, category, note, accountId, saveAsTemplate, occurredAt) } },
                 enabled = amount != null && amount.minorUnits > 0,
                 modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("save"),
             ) { Text("Save") }
@@ -194,6 +255,7 @@ fun AddExpenseScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("amount"),
             )
+            OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DEFAULT_CATEGORIES.forEach { c -> FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c) }) }
             }
@@ -201,10 +263,24 @@ fun AddExpenseScreen(
                 accounts.forEach { a -> FilterChip(selected = a.id == accountId, onClick = { accountId = a.id }, label = { Text(a.name) }) }
             }
             OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note or merchant") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = saveAsTemplate, onCheckedChange = { saveAsTemplate = it }, modifier = Modifier.testTag("save_template"))
-                Text("Save as a quick entry")
+            if (showTemplateOption) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = saveAsTemplate, onCheckedChange = { saveAsTemplate = it }, modifier = Modifier.testTag("save_template"))
+                    Text("Save as a quick entry")
+                }
             }
+        }
+    }
+}
+
+/** Explains why an entry cannot be edited here yet, instead of offering a form that would lose information. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReadOnlyEntryScreen(title: String, reason: String, onBack: () -> Unit) {
+    Scaffold(topBar = { TopAppBar(title = { Text(title, maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Back") } }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Can't edit this entry here", style = MaterialTheme.typography.titleMedium)
+            Text(reason, modifier = Modifier.testTag("read_only_reason"))
         }
     }
 }

@@ -77,6 +77,23 @@ class EncryptedStorageTest {
     }
 
     @Test
+    fun theDatabaseRunsInWriteAheadLogModeAndAReaderIsNotBlockedByAnOpenWrite() {
+        val db = open()
+        assertEquals("wal", driver!!.string("PRAGMA journal_mode"))
+        db.add("a", "Swiggy")
+        // a long write transaction is open on this thread; another thread must still be able to read the last committed state
+        var seen = -1L
+        db.transaction {
+            db.add("b", "Zomato")
+            val reader = Thread { seen = db.schemaQueries.entryCount().executeAsOne() }
+            reader.start(); reader.join(5_000)
+            assertTrue(!reader.isAlive, "the reader was blocked by the open write")
+        }
+        assertEquals(1L, seen, "the reader should see only what was committed before the write began")
+        assertEquals(2L, db.schemaQueries.entryCount().executeAsOne())
+    }
+
+    @Test
     fun dataSurvivesReopenWithTheStoredKey() {
         open().add("a", "Swiggy")
         closeDriver()

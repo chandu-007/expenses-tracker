@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -53,7 +54,8 @@ class QuickEntryTest {
         compose.onNodeWithText(category).performClick()
         compose.onNodeWithText(account).performClick()
         compose.onNodeWithTag("note").performTextInput(note)
-        if (asTemplate) compose.onNodeWithTag("save_template").performClick()
+        // The form scrolls; with the keyboard open the checkbox can be below the visible area.
+        if (asTemplate) compose.onNodeWithTag("save_template").performScrollTo().performClick()
         compose.onNodeWithTag("save").performClick()
     }
 
