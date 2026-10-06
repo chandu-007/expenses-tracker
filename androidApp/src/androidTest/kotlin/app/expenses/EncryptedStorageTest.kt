@@ -94,6 +94,21 @@ class EncryptedStorageTest {
     }
 
     @Test
+    fun writeAheadLogModeSurvivesAReopenAndResetLeavesNoStaleLogFiles() {
+        open().add("a", "Swiggy")
+        closeDriver()
+        open()
+        assertEquals("wal", driver!!.string("PRAGMA journal_mode"), "WAL is stored in the file and must hold after reopening")
+        val dbFile = context.getDatabasePath(name)
+        // keep a connection open so the log and shared-memory files exist, as they do while the app runs
+        assertTrue(File(dbFile.path + "-wal").exists() || File(dbFile.path + "-shm").exists(), "expected WAL side files while the database is open")
+        closeDriver()
+        EncryptedDriver.reset(context, name)
+        val leftovers = dbFile.parentFile!!.listFiles { f -> f.name.startsWith(name) }.orEmpty().map { it.name }
+        assertTrue(leftovers.isEmpty(), "reset left $leftovers behind; the next database of this name could pick up a stale log")
+    }
+
+    @Test
     fun dataSurvivesReopenWithTheStoredKey() {
         open().add("a", "Swiggy")
         closeDriver()

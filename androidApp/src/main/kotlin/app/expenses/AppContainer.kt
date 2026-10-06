@@ -9,6 +9,7 @@ import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.FtsTuning
 import app.expenses.core.storage.LedgerStore
 import app.expenses.core.storage.TemplateStore
 import app.expenses.core.storage.db.ExpensesDb
@@ -40,6 +41,23 @@ class AppContainer(private val context: Context) {
     private val writeLock = Mutex()
 
     /**
+     * Merges full-text index segments in short steps while the app is idle (called when the screen goes to the
+     * background). Each step takes the write lock for at most about 70 ms, so a widget tap in between is never held up
+     * for long, and the work stops after [budgetMillis] or when nothing is left. Returns the steps performed.
+     */
+    suspend fun maintain(budgetMillis: Long = 2_000): Int {
+        val ok = open() as? Opened.Ok ?: return 0
+        val deadline = System.nanoTime() + budgetMillis * 1_000_000
+        var steps = 0
+        while (System.nanoTime() < deadline) {
+            val more = writeLock.withLock { withContext(Dispatchers.IO) { FtsTuning.mergeStep(ok.driver) } }
+            if (!more) break
+            steps++
+        }
+        return steps
+    }
+
+    /**
      * Runs [block] on the open store, off the main thread, one at a time across the whole process. Everything that
      * writes (screens, the widget, later a background receiver) must go through here, because [LedgerStore] is not
      * thread-safe. Returns null if the database key is lost.
@@ -68,6 +86,7 @@ class AppContainer(private val context: Context) {
         StartupTrace.mark("open: begin")
         val driver = EncryptedDriver.create(context)
         val db = ExpensesDb(driver)
+        FtsTuning.apply(driver)
         if (BuildConfig.SEEDING_ENABLED) db.schemaQueries.entryCount().executeAsOne() // forces the real open so the mark below is honest
         StartupTrace.mark("open: database opened")
         val clock = HlcClock(nodeId())

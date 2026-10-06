@@ -26,6 +26,7 @@ import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.OpeningScreen
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: LedgerViewModel by viewModels()
@@ -114,6 +115,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** When the screen leaves the foreground the user is not waiting on anything: a good moment to tidy the search index. */
+    override fun onStop() {
+        super.onStop()
+        val app = application as ExpensesApp
+        app.appScope.launch { runCatching { app.container.maintain() } }
     }
 
     /** The activity is `singleTop`, so a shortcut or tile tap while the app is open arrives here. */

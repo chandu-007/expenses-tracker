@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.cash.sqldelight.db.SqlDriver
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.FtsTuning
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.ExpensesDb
 import app.expenses.core.storage.search
@@ -51,6 +52,7 @@ class PerformanceBudgetTest {
             EncryptedDriver.reset(context, NAME)
             driver = EncryptedDriver.create(context, NAME)
             db = ExpensesDb(driver)
+            FtsTuning.apply(driver) // the app does this when it opens the database
             val rnd = Random(7)
             db.bulkLoad(driver) { // importers insert in ascending date order
                 for (i in 0 until ROWS) {
@@ -157,6 +159,8 @@ class PerformanceBudgetTest {
             val p95 = times[(times.size * 0.95).toInt()]
             Log.w("PERF", "save one transaction: p50 ${"%.2f".format(times[30])} ms, p95 ${"%.2f".format(p95)} ms, max ${"%.2f".format(times.last())} ms")
             check("save one transaction (p95 of 60 autocommit inserts)", 50.0, p95)
+            // No save may stall: before the index tuning one save in 60 took about 100 ms. The budget for the worst save is 100 ms.
+            check("slowest of 60 saves", 100.0, times.last())
         } finally {
             // Always remove the rows, so one failure cannot make the dataset check in another test fail too.
             ids.forEach { db.schemaQueries.softDeleteEntry(it) }
