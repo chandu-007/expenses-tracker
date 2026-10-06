@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Expenses</string>
     <string name="add_expense">Add expense</string>
+    <string name="widget_quick_add">Quick add</string>
+    <string name="widget_description">Record an expense from a saved quick entry with one tap.</string>
 </resources>

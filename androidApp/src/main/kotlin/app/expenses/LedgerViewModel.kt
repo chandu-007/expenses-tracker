@@ -9,10 +9,6 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
-import app.expenses.core.domain.ledger.CategorySplit
-import app.expenses.core.domain.ledger.EntryId
-import app.expenses.core.domain.ledger.Expense
-import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.Entry
 import kotlinx.coroutines.Dispatchers
@@ -20,8 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -73,7 +67,6 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow<UiState>(UiState.Opening)
     val state: StateFlow<UiState> = _state
 
-    private val writeLock = Mutex()
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
     private var loaded = mutableListOf<Entry>()
@@ -101,7 +94,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Records an expense from the add screen. Remembers its category and account as the next defaults. */
     fun addExpense(amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean) = withStore { ok ->
-        val id = recordExpense(ok, amount, category, note.trim().ifEmpty { null }, accountId)
+        val id = EntryActions(ok).recordExpense(amount, category, note.trim().ifEmpty { null }, accountId)
         if (saveAsTemplate) {
             val name = note.trim().ifEmpty { category }
             ok.templates.save(Template(UUID.randomUUID().toString(), name, amount, CategoryId(category), AccountId(accountId), note.trim().ifEmpty { null }))
@@ -111,11 +104,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** One tap: records the template's expense right away. Templates without an amount are handled by the add screen. */
     fun quickAdd(templateId: String) = withStore { ok ->
-        val t = ok.templates.list().firstOrNull { it.id == templateId } ?: return@withStore
-        val amount = t.amount ?: return@withStore
-        val id = recordExpense(ok, amount, t.category.value, t.merchant ?: t.name, t.account.value)
-        ok.templates.recordUse(templateId)
-        refresh(ok, undo = UndoUi(id, "Added ${t.name} ${amount.formatted()}"))
+        val added = EntryActions(ok).quickAdd(templateId) ?: return@withStore
+        refresh(ok, undo = UndoUi(added.entryId, added.text))
     }
 
     fun deleteTemplate(templateId: String) = withStore { ok ->
@@ -125,7 +115,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Takes back an entry that was just added. */
     fun undo(entryId: String) = withStore { ok ->
-        ok.store.delete(EntryId(entryId))
+        EntryActions(ok).undo(entryId)
         refresh(ok)
     }
 
@@ -172,29 +162,15 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- internals ----
 
-    /** Runs [block] off the main thread, one write at a time, once the database is open. */
+    /** Runs [block] off the main thread through the container's process-wide write lock, once the database is open. */
     private fun withStore(block: (AppContainer.Opened.Ok) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val ok = container.open() as? AppContainer.Opened.Ok ?: return@launch
-            writeLock.withLock {
-                try {
-                    block(ok)
-                } catch (e: IllegalArgumentException) {
-                    _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
-                }
+            try {
+                container.write(block)
+            } catch (e: IllegalArgumentException) {
+                _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
             }
         }
-    }
-
-    private fun recordExpense(ok: AppContainer.Opened.Ok, amount: Money, category: String, note: String?, accountId: String): String {
-        val id = UUID.randomUUID().toString()
-        ok.store.save(
-            Expense(EntryId(id), System.currentTimeMillis(), AccountId(accountId), amount, listOf(CategorySplit(CategoryId(category), amount))),
-            EntryDetails(merchant = note),
-        )
-        ok.templates.putSetting(LAST_CATEGORY, category)
-        ok.templates.putSetting(LAST_ACCOUNT, accountId)
-        return id
     }
 
     private fun refresh(ok: AppContainer.Opened.Ok, undo: UndoUi? = null) {

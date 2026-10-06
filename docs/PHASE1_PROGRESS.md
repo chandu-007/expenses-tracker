@@ -22,3 +22,20 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 - No measurement yet of taps or seconds per entry. By count: add screen is FAB, amount, Save (2 taps plus typing); a quick entry is 1 tap.
 
 **Verification record.** Commit `1bbdf9c` was made while `check` was red (Android lint rejected the pre-API-34 tile call); commit `1e53438` fixes that. After it, the whole chain was re-run from deleted result files (`check`, release build, device tests): **125 host/JVM tests (both targets counted) and 23 device tests on Android 8.0, all passing, build successful.** The counts above are from that run. From now on, verification and commit are chained so a failing step blocks the commit.
+
+## Slice 2: home-screen widget (FR-CAP-02, Android part)
+**Built:** a Glance widget, "Quick add", with one button per saved quick entry that has a fixed amount (up to 4, most used first) and a "+" button that opens the add screen. Tapping a button records the expense with no app launch and shows a toast. A line "Added Chai ₹20.00 · Undo" follows for **2 minutes**; after that the Undo button refuses (the app checks the entry's age, so a stale button can never delete something the user has accepted) and the line disappears at the next redraw. The widget redraws when a tap happens; the app also asks it to redraw so new quick entries appear. If the database key is lost the widget says to open the app.
+
+**Shared logic.** The "record an expense, remember defaults, undo" logic now lives in one class (`EntryActions`) used by the screens and the widget. The write lock moved from the view model into `AppContainer.write`, so every writer in the process is serialised, as the store requires.
+
+**Verified:**
+- 9 widget tests. Widget content (buttons, "+", undo line, empty and locked messages) with Glance's test library; the undo window including a backwards clock; the tap callback against the real encrypted database (expense recorded with the right amount, note, and category total; Undo removes it and its totals); an Undo older than the window is refused and the entry stays; a missing quick entry changes nothing.
+- **System side:** the system lists the provider (`getInstalledProvidersForPackage`). On **Android 17 (API 37)** the widget was bound through `AppWidgetManager` with the shell's permission, rendered with `update()`, and reported by the system; all 9 pass there. On Android 8 (API 26) 8 pass and the binding test is skipped, because borrowing that permission needs Android 9+.
+- Totals on API 26: 32 device tests, 0 failures, 1 skipped.
+
+**Not verified:** the widget has not been placed on a real launcher and looked at or tapped by hand (no launcher automation here); visual layout at different widget sizes and in dark mode is unchecked; only the first 4 quick entries show.
+
+**Gaps this exposes:**
+- **No way to delete or edit an entry in the app yet.** The undo window (2 minutes on the widget; about 10 seconds in the app) is the only way to take back a mistaken one-tap entry. Entry edit and delete come next.
+- Quick entries without a fixed amount do not appear on the widget.
+- Widget redraws only on a tap or when the app changes templates; there is no periodic refresh (not needed today).

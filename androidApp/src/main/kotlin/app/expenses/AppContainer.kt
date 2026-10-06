@@ -37,6 +37,18 @@ class AppContainer(private val context: Context) {
 
     suspend fun open(): Opened = mutex.withLock { opened ?: withContext(Dispatchers.IO) { doOpen() }.also { opened = it } }
 
+    private val writeLock = Mutex()
+
+    /**
+     * Runs [block] on the open store, off the main thread, one at a time across the whole process. Everything that
+     * writes (screens, the widget, later a background receiver) must go through here, because [LedgerStore] is not
+     * thread-safe. Returns null if the database key is lost.
+     */
+    suspend fun <T> write(block: (Opened.Ok) -> T): T? {
+        val ok = open() as? Opened.Ok ?: return null
+        return writeLock.withLock { withContext(Dispatchers.IO) { block(ok) } }
+    }
+
     /** Closes the database and forgets it, so the next [open] opens it again from disk. Used when tearing the app down in tests. */
     suspend fun close() = mutex.withLock {
         withContext(Dispatchers.IO) { (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } } }
