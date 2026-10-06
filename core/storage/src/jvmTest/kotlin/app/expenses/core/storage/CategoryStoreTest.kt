@@ -193,6 +193,43 @@ class CategoryStoreTest {
     }
 
     @Test
+    fun anEditSavedWithAMergedCategoryIdLandsInTheTargetCategory() {
+        categories.merge("Groceries", "Food")
+        // a stale edit, as if from a device that had not seen the merge
+        expense("late", 700, "Groceries")
+        ledger.save(Income(EntryId("inc"), 2, bank.id, m(5_000), CategoryId("Groceries")))
+        templates.save(Template("t", "Veg", m(100), CategoryId("Groceries"), bank.id))
+        assertEquals(mapOf<CategoryId?, Money>(CategoryId("Food") to m(700)), ledger.spendByCategory(inr), "SQL totals")
+        assertEquals(mapOf<CategoryId?, Money>(CategoryId("Food") to m(700)), ledger.loadLedger().spendByCategory(inr), "the reloaded ledger agrees")
+        assertEquals("Food", db.schemaQueries.entryById("inc").executeAsOne().category_id)
+        assertEquals(CategoryId("Food"), templates.list().single().category)
+        assertEquals(0, categories.usage("Groceries"), "nothing may refer to the removed category")
+        // a split expense whose parts both resolve to the same target stays consistent
+        ledger.save(Expense(EntryId("two"), 3, bank.id, m(900), listOf(CategorySplit(CategoryId("Groceries"), m(400)), CategorySplit(CategoryId("Food"), m(500)))))
+        assertEquals(m(1_600), ledger.spendByCategory(inr).getValue(CategoryId("Food")))
+        assertEquals(ledger.spendByCategory(inr), ledger.loadLedger().spendByCategory(inr))
+    }
+
+    @Test
+    fun aMergeChainIsFollowedToItsEnd() {
+        categories.merge("Groceries", "Food")
+        categories.merge("Food", "Other")
+        assertEquals("Other", db.resolveCategory("Groceries"))
+        assertEquals("Other", db.resolveCategory("Food"))
+        assertEquals("Other", db.resolveCategory("Other"))
+        assertEquals("Unknown", db.resolveCategory("Unknown"), "ids that were never merged resolve to themselves")
+        expense("late", 300, "Groceries")
+        assertEquals(mapOf<CategoryId?, Money>(CategoryId("Other") to m(300)), ledger.spendByCategory(inr))
+    }
+
+    @Test
+    fun aCategoryThatWasOnlyDeletedIsNotRedirected() {
+        val pets = categories.create("Pets")
+        categories.delete(pets.id)
+        assertEquals(pets.id, db.resolveCategory(pets.id))
+    }
+
+    @Test
     fun aMergedCategoryDoesNotComeBackAndItsNameIsFreeToReuse() {
         categories.merge("Groceries", "Food")
         assertTrue(categories.list().none { it.name == "Groceries" })

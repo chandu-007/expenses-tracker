@@ -14,6 +14,9 @@ import kotlin.random.Random
  * logged as a single `merged_into` operation on the removed category rather than as one operation per entry, so a device
  * replaying the log must apply that re-mapping itself (sync is not built yet; this is the contract it will need).
  *
+ * The removed category stays as a tombstone pointing at its target ([resolveCategory]), and [LedgerStore] and [TemplateStore] redirect
+ * any entry or quick entry saved with the old id, so a late edit can never leave something in a removed category.
+ *
  * Not thread-safe: call through the process-wide write lock.
  */
 class CategoryStore(
@@ -91,7 +94,7 @@ class CategoryStore(
             q.remapSpendLines(intoId, fromId)
             q.remapIncome(intoId, fromId)
             q.remapTemplates(intoId, fromId)
-            q.softDeleteCategory(fromId)
+            q.markMerged(intoId, fromId)
             q.insertOp(clock.now(nowMillis()).encode(), "category", fromId, "merged_into", intoId)
             q.insertOp(clock.now(nowMillis()).encode(), "category", fromId, "deleted", "1")
         }

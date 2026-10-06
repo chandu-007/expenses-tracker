@@ -23,7 +23,10 @@ CREATE TABLE category (
     color INTEGER,
     position INTEGER NOT NULL,
     hidden INTEGER NOT NULL DEFAULT 0,
-    deleted INTEGER NOT NULL DEFAULT 0
+    deleted INTEGER NOT NULL DEFAULT 0,
+    -- Set when this category was merged into another. The row stays as a tombstone so an edit that arrives later and still
+    -- uses this id (for example from a device that had not yet seen the merge) is redirected to the target.
+    merged_into TEXT
 );
 
 -- One-tap entries ("Chai 20, Cash"). A null amount means the template fills category, account and note and asks for the amount.
@@ -334,6 +337,13 @@ UPDATE category SET name = :name, parent_id = :parentId, color = :color, positio
 
 softDeleteCategory:
 UPDATE category SET deleted = 1 WHERE id = :id;
+
+markMerged:
+UPDATE category SET deleted = 1, merged_into = :into WHERE id = :from;
+
+-- The category this id was merged into, or no row if it was never merged.
+mergedInto:
+SELECT merged_into FROM category WHERE id = :id AND merged_into IS NOT NULL;
 
 categoryCount:
 SELECT COUNT(*) FROM category;

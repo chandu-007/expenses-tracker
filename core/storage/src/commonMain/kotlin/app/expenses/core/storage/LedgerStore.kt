@@ -10,6 +10,7 @@ import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.FriendPaid
+import app.expenses.core.domain.ledger.Income
 import app.expenses.core.domain.ledger.Ledger
 import app.expenses.core.domain.ledger.PersonId
 import app.expenses.core.domain.ledger.Refund
@@ -57,8 +58,9 @@ class LedgerStore(
     // ---- entries ----
 
     /** Adds or edits an entry. Throws [IllegalArgumentException], leaving the database unchanged, if it breaks a ledger rule. */
-    fun save(entry: DomainEntry, details: EntryDetails = EntryDetails()) {
+    fun save(requested: DomainEntry, details: EntryDetails = EntryDetails()) {
         db.transaction {
+            val entry = redirectMergedCategories(requested)
             EntryMapping.currencies(entry).forEach(::ensureCurrency)
             val cols = EntryMapping.columns(entry)
             val before = q.entryById(cols.id).executeAsOneOrNull()
@@ -144,6 +146,18 @@ class LedgerStore(
             .mapValues { Money(it.value, currency) }
 
     // ---- internals ----
+
+    /** Points any category that was merged into another at its target, so nothing is ever stored against a removed category. */
+    private fun redirectMergedCategories(entry: DomainEntry): DomainEntry {
+        fun fix(c: CategoryId) = CategoryId(db.resolveCategory(c.value))
+        fun fix(splits: List<CategorySplit>) = splits.map { CategorySplit(fix(it.category), it.amount) }
+        return when (entry) {
+            is Expense -> entry.copy(splits = fix(entry.splits))
+            is FriendPaid -> entry.copy(splits = fix(entry.splits))
+            is Income -> entry.copy(category = entry.category?.let(::fix))
+            else -> entry
+        }
+    }
 
     private fun ensureCurrency(c: Currency) {
         val known = digits[c.code]

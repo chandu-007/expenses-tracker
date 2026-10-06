@@ -19,8 +19,9 @@ class TemplateStore(
 ) {
     private val q get() = db.schemaQueries
 
-    fun save(template: Template) {
+    fun save(requested: Template) {
         db.transaction {
+            val template = requested.copy(category = CategoryId(db.resolveCategory(requested.category.value)))
             val before = q.templateById(template.id).executeAsOneOrNull()
             require(before == null || before.deleted == 0L) { "Template ${template.id} was deleted" }
             val currency = template.amount?.currency ?: Currency.INR
