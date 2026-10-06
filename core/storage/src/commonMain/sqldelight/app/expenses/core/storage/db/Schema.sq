@@ -7,8 +7,10 @@ CREATE TABLE account (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 
+-- seq is a stable integer key (survives VACUUM) so the full-text index can point at rows safely.
 CREATE TABLE entry (
-    id TEXT NOT NULL PRIMARY KEY,
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
     kind TEXT NOT NULL,
     occurred_at INTEGER NOT NULL,
     account_id TEXT,
@@ -27,6 +29,23 @@ CREATE INDEX entry_time ON entry(occurred_at DESC) WHERE deleted = 0;
 CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE deleted = 0;
 CREATE INDEX entry_category_time ON entry(category_id, occurred_at) WHERE deleted = 0;
 CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
+
+-- Full-text index over merchant and note. The trigram tokenizer gives case-insensitive substring
+-- matching for queries of 3+ characters; shorter queries use searchShort. Kept in sync by triggers.
+CREATE VIRTUAL TABLE entry_fts USING fts5(merchant, note, content='entry', content_rowid='seq', tokenize='trigram');
+
+CREATE TRIGGER entry_fts_insert AFTER INSERT ON entry BEGIN
+    INSERT INTO entry_fts(rowid, merchant, note) VALUES (new.seq, new.merchant, new.note);
+END;
+
+CREATE TRIGGER entry_fts_delete AFTER DELETE ON entry BEGIN
+    INSERT INTO entry_fts(entry_fts, rowid, merchant, note) VALUES ('delete', old.seq, old.merchant, old.note);
+END;
+
+CREATE TRIGGER entry_fts_update AFTER UPDATE OF merchant, note ON entry BEGIN
+    INSERT INTO entry_fts(entry_fts, rowid, merchant, note) VALUES ('delete', old.seq, old.merchant, old.note);
+    INSERT INTO entry_fts(rowid, merchant, note) VALUES (new.seq, new.merchant, new.note);
+END;
 
 -- Append-only log of field-level changes, ordered by hybrid logical clock. Sync (phase 3) ships this log.
 -- Last write wins per (entity, row_id, field) by the highest hlc.
@@ -71,7 +90,15 @@ SELECT COUNT(*) FROM entry WHERE deleted = 0;
 recentEntries:
 SELECT * FROM entry WHERE deleted = 0 ORDER BY occurred_at DESC LIMIT :limit OFFSET :offset;
 
+-- :q must be a valid FTS5 expression of 3+ characters; callers quote user input as a phrase.
 searchEntries:
+SELECT entry.* FROM entry_fts
+JOIN entry ON entry.seq = entry_fts.rowid
+WHERE entry_fts MATCH :q AND entry.deleted = 0
+ORDER BY entry.occurred_at DESC LIMIT :limit;
+
+-- Fallback for 1-2 character queries, which the trigram index cannot answer.
+searchShort:
 SELECT * FROM entry
 WHERE deleted = 0 AND (merchant LIKE '%' || :q || '%' OR note LIKE '%' || :q || '%')
 ORDER BY occurred_at DESC LIMIT :limit;

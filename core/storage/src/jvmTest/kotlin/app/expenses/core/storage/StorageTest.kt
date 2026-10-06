@@ -103,4 +103,34 @@ class StorageTest {
         val acct = plan("SELECT * FROM entry WHERE deleted = 0 AND account_id = 'bank' ORDER BY occurred_at DESC LIMIT 20")
         assertTrue("entry_account_time" in acct, "account list should use entry_account_time, plan was: $acct")
     }
+
+    @Test
+    fun fullTextSearchMatchesSubstringsCaseInsensitivelyAndIgnoresDeletedRows() {
+        val (_, db) = newDb()
+        db.entry("a", 1, 100, merchant = "Swiggy Instamart")
+        db.entry("b", 2, 100, merchant = "Zomato")
+        assertEquals(listOf("a"), db.schemaQueries.searchEntries("wigg", 10).executeAsList().map { it.id })
+        assertEquals(listOf("a"), db.schemaQueries.searchEntries("SWIGGY", 10).executeAsList().map { it.id })
+        db.schemaQueries.softDeleteEntry("a")
+        assertTrue(db.schemaQueries.searchEntries("swiggy", 10).executeAsList().isEmpty())
+        db.schemaQueries.restoreEntry("a")
+        assertEquals(1, db.schemaQueries.searchEntries("swiggy", 10).executeAsList().size)
+    }
+
+    @Test
+    fun fullTextIndexFollowsEditsViaUpsert() {
+        val (_, db) = newDb()
+        db.entry("a", 1, 100, merchant = "Swiggy")
+        db.entry("a", 1, 100, merchant = "Zomato") // edit replayed through the upsert
+        assertTrue(db.schemaQueries.searchEntries("swiggy", 10).executeAsList().isEmpty())
+        assertEquals(listOf("a"), db.schemaQueries.searchEntries("zomato", 10).executeAsList().map { it.id })
+    }
+
+    @Test
+    fun shortQueriesFallBackToLikeBecauseTrigramNeedsThreeCharacters() {
+        val (_, db) = newDb()
+        db.entry("a", 1, 100, merchant = "Ola cabs")
+        assertTrue(db.schemaQueries.searchEntries("ol", 10).executeAsList().isEmpty())
+        assertEquals(listOf("a"), db.schemaQueries.searchShort("ol", 10).executeAsList().map { it.id })
+    }
 }
