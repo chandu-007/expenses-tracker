@@ -34,18 +34,35 @@ CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_r
 -- matching for queries of 3+ characters; shorter queries use searchShort. Kept in sync by triggers.
 CREATE VIRTUAL TABLE entry_fts USING fts5(merchant, note, content='entry', content_rowid='seq', tokenize='trigram');
 
-CREATE TRIGGER entry_fts_insert AFTER INSERT ON entry BEGIN
+-- While a row exists here the triggers below do nothing; bulk loads suspend indexing and rebuild once at the end.
+-- It lives in the database, so a failed bulk load rolls the flag back together with its rows.
+CREATE TABLE fts_suspended (id INTEGER NOT NULL PRIMARY KEY);
+
+CREATE TRIGGER entry_fts_insert AFTER INSERT ON entry
+WHEN NOT EXISTS (SELECT 1 FROM fts_suspended)
+BEGIN
     INSERT INTO entry_fts(rowid, merchant, note) VALUES (new.seq, new.merchant, new.note);
 END;
 
-CREATE TRIGGER entry_fts_delete AFTER DELETE ON entry BEGIN
+CREATE TRIGGER entry_fts_delete AFTER DELETE ON entry
+WHEN NOT EXISTS (SELECT 1 FROM fts_suspended)
+BEGIN
     INSERT INTO entry_fts(entry_fts, rowid, merchant, note) VALUES ('delete', old.seq, old.merchant, old.note);
 END;
 
-CREATE TRIGGER entry_fts_update AFTER UPDATE OF merchant, note ON entry BEGIN
+CREATE TRIGGER entry_fts_update AFTER UPDATE OF merchant, note ON entry
+WHEN NOT EXISTS (SELECT 1 FROM fts_suspended)
+BEGIN
     INSERT INTO entry_fts(entry_fts, rowid, merchant, note) VALUES ('delete', old.seq, old.merchant, old.note);
     INSERT INTO entry_fts(rowid, merchant, note) VALUES (new.seq, new.merchant, new.note);
 END;
+
+suspendFts:
+INSERT OR IGNORE INTO fts_suspended(id) VALUES (1);
+
+resumeFts:
+DELETE FROM fts_suspended;
+
 
 -- Append-only log of field-level changes, ordered by hybrid logical clock. Sync (phase 3) ships this log.
 -- Last write wins per (entity, row_id, field) by the highest hlc.
