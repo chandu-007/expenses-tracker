@@ -56,3 +56,29 @@ Last updated: 2026-10-06.
 - No `.git` repository exists in this folder yet.
 - Refunds of shared expenses are rejected (documented limitation).
 - iOS targets still need full Xcode.
+
+## Update: encrypted storage on a real Android runtime (2026-10-06)
+- **SQLCipher is wired** (`EncryptedDriver`): random 32-byte database key, wrapped with an AES-GCM key in the Android Keystore, stored under `noBackupFilesDir`. The database opens through SQLCipher's own SQLite.
+- **4 instrumented tests pass on the emulator** (Pixel_7 AVD, Android 37, arm64): file on disk is not plain SQLite; data survives reopen; SQLite is 3.38+ with upserts, FTS5 and trigram working; a duplicate source reference fails and keeps the original row.
+- **Limit:** the only emulator image installed is API 37, so the old-system-SQLite problem on Android 8 to 10 (API 26-29) is not reproduced. The code never uses the framework SQLite, but that is unproven on those versions. Needs an API 26-29 image or a real device.
+- **Measured on that emulator** (100k rows, SQLCipher, Apple-silicon host; a mid-range phone will be slower, so treat as best case):
+
+| Query / operation | Before | After |
+|---|---|---|
+| Category totals, all time (scattered dates) | 3,450 ms | 55 ms (covering index `entry_spend`) |
+| Search, very common term (8,000 matches) | 70 ms | 19 ms (newest 2,000 matches, then date order) |
+| Search, rare term / no match | 1.5 ms / 0.06 ms | same |
+| Last 50 entries | 0.5 ms | same |
+| Bulk import 100k, dates ascending | 3.6 s per-row triggers | 2.2 s (`bulkLoad`) |
+| Bulk import 100k, dates in random order | not measured | 20 s |
+
+- **Importer rule:** insert in ascending date order (documented on `bulkLoad`).
+- **Search tradeoff:** queries with more than 2,000 matches skip the oldest-added matches.
+- **Decided:** keep suspending the FTS triggers rather than dropping them (1.6 s vs 2.2 s on Android; not worth DDL in importers).
+- **Wrong hypothesis recorded:** a larger SQLCipher page cache did not help.
+- Totals: 69 host/JVM tests and 4 emulator tests pass.
+
+### Still open
+- No performance gate in CI yet; the numbers above came from a throwaway probe. Next: a permanent harness with budgets (the emulator is a poor proxy for the reference mid-range phone).
+- Ledger-to-storage mapping layer and sync log writer are not written.
+- iOS still needs full Xcode; nothing about iOS has run.

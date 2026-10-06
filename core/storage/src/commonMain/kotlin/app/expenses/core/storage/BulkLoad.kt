@@ -5,14 +5,16 @@ import app.expenses.core.storage.db.ExpensesDb
 
 /**
  * Runs [block] (typically thousands of `insertEntry` calls) as one atomic transaction with full-text
- * indexing suspended, then rebuilds the index once (about 0.12 s for 100k rows on a desktop JVM).
- * If [block] throws, the rows, the suspension flag and the index all roll back together.
+ * indexing suspended, then rebuilds the index once. If [block] throws, the rows, the suspension flag
+ * and the index all roll back together.
  *
- * Measured on a desktop JVM with the JDBC driver: 100k inserts took about 7.5 s with per-row index
- * triggers and about 5.5 s through this helper. Most of the remaining cost is the mere presence of the
- * triggers (1.5 s when they are dropped entirely), probably because that driver recompiles them per
- * statement. Re-measure on Android with SQLCipher before deciding whether importers need to drop the
- * triggers instead of only suspending them.
+ * **Importers must insert in ascending `occurred_at` order.** Measured for 100k rows on an Android
+ * emulator with SQLCipher and every index in place: about 2.2 s in date order, about 20 s in random
+ * date order, because each insert then lands in a random place in several B-trees.
+ *
+ * The same run took about 3.6 s with the per-row index triggers active and about 1.6 s if the triggers
+ * were dropped and recreated inside the transaction, so suspending (no DDL) is the better trade. Desktop
+ * JDBC numbers were different (7.5 s, 5.5 s and 1.5 s) and should not be used for decisions.
  *
  * [driver] must be the driver [ExpensesDb] was created with. The FTS5 'rebuild' command is issued as raw
  * SQL because SQLDelight's compiler cannot type-check inserts into the hidden FTS5 command column.
