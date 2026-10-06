@@ -77,3 +77,26 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 **Write-ahead-log housekeeping (answers to review points):** a test shows `journal_mode` is still `wal` after closing and reopening, and that `EncryptedDriver.reset` leaves no `-wal` or `-shm` file behind. The backup and device-transfer rules exclude the whole database domain, which covers those files. **When the export feature is built, it must checkpoint (`PRAGMA wal_checkpoint(TRUNCATE)`) before copying the database file, because committed changes can still sit in the `-wal` file.** The gate's save test soft-deletes its 60 rows in a `finally`; the dataset check counts only live rows, so that is sufficient, but those rows and their search entries remain in the throwaway test database.
 
 **Totals:** 136 host/JVM tests (both targets counted), 43 device tests on Android 8.0 (1 skipped: widget binding, Android 10+); full chain from deleted result files, build green.
+
+## Slice 4: category management (FR-CAT-05)
+**Built:**
+- **Categories screen** (button "Categories" on the list header): shows every category with its colour dot, "hidden" flag and how many items use it, with ▲/▼ to reorder within a level and a "+" to add one. Tapping a category opens a full-screen editor: name, colour (8 swatches or none), hidden switch, which parent it sits under, **Merge into…**, and **Delete**.
+- **One level of subcategories** ("Food › Cafe"). Names must be unique among siblings (ignoring case and extra spaces); the same name is allowed under different parents. A category with subcategories cannot become one itself.
+- **Add or edit an expense:** categories now come from the database instead of a fixed list. Hidden ones are not offered, except the one an edited entry already has. A **"+ New"** chip creates a category without leaving the form and selects it. List rows now show the main category after the date and account.
+- **Rename never touches entries**, because entries refer to a category by an id that does not change. The eight defaults keep their old names as ids, so nothing already stored needed migrating. A name is checked as the user types, and the keyboard's done key confirms the short "New category" dialog.
+- **Delete** is refused while anything refers to the category, **counting deleted entries** (a deleted entry can be restored and would otherwise point at nothing) and quick entries, and the screen says how many. **Merge** moves splits, spend lines, income and quick entries to the target in one transaction and removes the source; the SQL totals, the reloaded ledger and the sum of the two old totals all agree after a merge (tested).
+- Every change is written to the sync log field by field. A merge is logged as one `merged_into` operation; **the future sync code will have to apply that re-mapping itself** (noted in the code).
+
+**Verified:** 21 new host tests (rules; the store, including merge totals, refusals leaving nothing behind, and reorder) and 8 new device tests on Android 8.0 driving the real screens (create in the form and see it on the saved row, duplicate refused as typed, rename keeps the entry under the same id, hidden hidden but kept on edit, merge, delete refused vs allowed, reorder, nested creation). **Mutation checks:** removing the delete rule fails a test; removing the re-mapping of spend lines, and separately of splits, each fail the merge test.
+
+**A visual check caught a real defect the tests did not.** I first built the editor as a dialog. Tests passed, but looking at it on the emulator with the keyboard open showed Save and Delete at y=1824 behind a keyboard that starts near y=1520: **a dialog does not shrink for the keyboard.** The editor is now a full screen with Save pinned above the keyboard (Save at y=1386), like the expense form, and "New category" is a short name-only dialog (Save at y=1053; parent chosen from a one-line dropdown). I checked both on the emulator with the keyboard open.
+
+**Not done:**
+- **Categories are not synced and there is no import of existing data into the tree**; entries recorded with the old fixed list work because ids equal names.
+- **Tags (FR-CAT-06)** are not started.
+- **Splitting an expense across categories has no screen**, so only one category can be set per entry from the app (the data model and reports already support splits). Such entries are read-only in the editor.
+- No bulk re-categorise, no category on income or transfers in the UI, and the colour is shown only as a dot (reports will use it later).
+- Accessibility: the ▲/▼ buttons and swatches have content descriptions, but there has been **no TalkBack pass** and large-font layout is unchecked.
+- Android 8 emulator only; a real phone has not been used.
+
+**Totals:** 165 host/JVM tests (both targets counted), 52 device tests (1 skipped: widget binding, Android 10+); full chain from deleted result files, green.
