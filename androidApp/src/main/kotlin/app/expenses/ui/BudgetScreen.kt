@@ -115,6 +115,7 @@ fun BudgetScreen(
     onClearLimit: (categoryId: String?) -> Unit,
     onSetPeriod: (BudgetPeriod) -> Unit,
     onShiftStartDay: (Int) -> Unit,
+    onShiftCustomDays: (Int) -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editingOverall by rememberSaveable { mutableStateOf(false) }
@@ -154,6 +155,10 @@ fun BudgetScreen(
                             label = { Text("Twice a month") }, modifier = Modifier.testTag("period_semimonthly"),
                         )
                         FilterChip(
+                            selected = budget.period is BudgetPeriod.EveryDays, onClick = { if (budget.period !is BudgetPeriod.EveryDays) onSetPeriod(BudgetPeriod.EveryDays(10, TODAY())) },
+                            label = { Text("Custom length") }, modifier = Modifier.testTag("period_custom"),
+                        )
+                        FilterChip(
                             selected = budget.period is BudgetPeriod.Yearly, onClick = { if (budget.period !is BudgetPeriod.Yearly) onSetPeriod(BudgetPeriod.Yearly()) },
                             label = { Text("Financial year") }, modifier = Modifier.testTag("period_yearly"),
                         )
@@ -170,6 +175,13 @@ fun BudgetScreen(
                                 onClick = { onShiftStartDay(1) }, enabled = p.startDay < BudgetPeriod.Monthly.MAX_START_DAY,
                                 modifier = Modifier.testTag("start_day_up").semantics { contentDescription = "Start one day later" },
                             ) { Text("+") }
+                        }
+                        is BudgetPeriod.EveryDays -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Every ", style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { onShiftCustomDays(-1) }, enabled = p.days > 1, modifier = Modifier.testTag("custom_days_down").semantics { contentDescription = "One day shorter" }) { Text("−") }
+                            Text(p.days.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("custom_days"))
+                            TextButton(onClick = { onShiftCustomDays(1) }, enabled = p.days < BudgetPeriod.EveryDays.MAX_DAYS, modifier = Modifier.testTag("custom_days_up").semantics { contentDescription = "One day longer" }) { Text("+") }
+                            Text(" days, counted from the day you chose this", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         is BudgetPeriod.BiWeekly -> Text("Two-week periods, counted from the week you chose this.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         BudgetPeriod.SemiMonthly -> Text("The 1st to the 15th, and the 16th to the end of the month.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -268,3 +280,5 @@ private fun FORTNIGHT_FROM_THIS_MONDAY(): kotlinx.datetime.LocalDate {
     val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
     return kotlinx.datetime.LocalDate(monday.year, monday.monthValue, monday.dayOfMonth)
 }
+
+private fun TODAY(): kotlinx.datetime.LocalDate = java.time.LocalDate.now().let { kotlinx.datetime.LocalDate(it.year, it.monthValue, it.dayOfMonth) }

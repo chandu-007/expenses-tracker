@@ -199,6 +199,23 @@ class BudgetUiTest {
     }
 
     @Test
+    fun aCustomLengthPeriodCanBeChosenLengthenedAndShortenedAndEveryQuickTapCounts() {
+        launch(); openBudget()
+        compose.onNodeWithTag("period_custom").performClick()
+        compose.waitUntil(10_000) { period() is BudgetPeriod.EveryDays }
+        assertEquals(10, (period() as BudgetPeriod.EveryDays).days)
+        val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
+        repeat(5) { vm.shiftCustomDays(1) }
+        compose.waitUntil(10_000) { (period() as? BudgetPeriod.EveryDays)?.days == 15 }
+        compose.onNodeWithTag("custom_days_down").performClick()
+        compose.waitUntil(10_000) { (period() as? BudgetPeriod.EveryDays)?.days == 14 }
+        waitForText("custom_days", "14")
+        repeat(20) { vm.shiftCustomDays(-1) }
+        compose.waitUntil(10_000) { (period() as? BudgetPeriod.EveryDays)?.days == 1 }
+        compose.onNodeWithTag("custom_days_down").assertIsNotEnabled()
+    }
+
+    @Test
     fun manyQuickChangesToTheStartDayAreAllCountedNoneLost() {
         launch()
         val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]

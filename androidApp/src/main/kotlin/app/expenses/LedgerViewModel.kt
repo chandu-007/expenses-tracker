@@ -39,6 +39,7 @@ import app.expenses.core.domain.AccountRules
 import app.expenses.core.storage.SavedSearch
 import app.expenses.core.storage.resolveCategory
 import app.expenses.core.domain.HomeLayout
+import app.expenses.core.domain.HomeSection
 import app.expenses.core.storage.DrillLine
 import app.expenses.core.domain.DatePeriod
 import app.expenses.core.domain.compact
@@ -319,6 +320,7 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
 private const val TAG_SUGGESTIONS = 40L
+private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
@@ -528,6 +530,25 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- accounts ----
+
+    // Balances read the whole ledger (about 25 ms on a 100,000-entry ledger even with covering indexes), so they are not part of the
+    // save path: they are worked out only while something shows them, a moment after the last write, and the screen updates when ready.
+    private var accountRowsCache: List<AccountRowUi> = emptyList()
+    private var accountsOpen = false
+    private var balancesJob: kotlinx.coroutines.Job? = null
+
+    fun setAccountsScreenOpen(open: Boolean) { accountsOpen = open; if (open) scheduleAccountRows() }
+
+    private fun scheduleAccountRows() {
+        balancesJob?.cancel()
+        val wait = if (accountsOpen || accountRowsCache.isEmpty()) 0L else BALANCES_DEBOUNCE_MS
+        balancesJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(wait)
+            val rows = container.write { ok -> accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) } ?: return@launch
+            accountRowsCache = rows
+            _state.update { (it as? UiState.Ready)?.copy(accountRows = rows) ?: it }
+        }
+    }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
         val balances = ok.store.balances()
@@ -1049,6 +1070,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         refresh(ok)
     }
 
+    /** Lengthens or shortens a custom period by [delta] days, relative to what is stored (quick taps all count). */
+    fun shiftCustomDays(delta: Int) = withStore { ok ->
+        val current = ok.budgets.period() as? BudgetPeriod.EveryDays ?: return@withStore
+        ok.budgets.setPeriod(BudgetPeriod.EveryDays((current.days + delta).coerceIn(1, BudgetPeriod.EveryDays.MAX_DAYS), current.anchor))
+        refresh(ok)
+    }
+
     fun clearBudget(categoryId: String?) = withStore { ok ->
         ok.budgets.clearLimit(categoryId)
         refresh(ok)
@@ -1135,6 +1163,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""
         val active = accounts.filter { it.archived == 0L }
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } } ?: active.firstOrNull()?.id ?: "cash"
+        val layout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT))
+        if (accountsOpen || HomeSection.BALANCES in layout.visible()) scheduleAccountRows()
         _state.value = UiState.Ready(
             rows = loaded.map(::toRow),
             periodSpend = spent.formatted(),
@@ -1152,7 +1182,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             recurring = recurringUi(ok, today),
             accounts = active.map { AccountUi(it.id, it.name) },
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
-            accountRows = accountRows(ok, accounts),
+            accountRows = accountRowsCache,
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
@@ -1193,6 +1223,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 is BudgetPeriod.Monthly -> if (period.startDay == 1) "this month" else "this cycle"
                 is BudgetPeriod.BiWeekly -> "this fortnight"
                 BudgetPeriod.SemiMonthly -> "this half-month"
+                is BudgetPeriod.EveryDays -> "this period"
                 is BudgetPeriod.Yearly -> if (period.startMonth == 4) "this financial year" else if (period.startMonth == 1) "this year" else "this year of the budget"
             },
             overall = line(null, "Everything"),

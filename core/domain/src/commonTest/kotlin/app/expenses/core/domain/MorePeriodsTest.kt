@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class MorePeriodsTest {
     private fun d(y: Int, m: Int, day: Int) = LocalDate(y, m, day)
     private val anchor = d(2026, 1, 5)
-    private val all = listOf(BudgetPeriod.BiWeekly(anchor), BudgetPeriod.SemiMonthly, BudgetPeriod.Yearly(), BudgetPeriod.Yearly(1), BudgetPeriod.Yearly(10))
+    private val all = listOf(BudgetPeriod.BiWeekly(anchor), BudgetPeriod.SemiMonthly, BudgetPeriod.Yearly(), BudgetPeriod.Yearly(1), BudgetPeriod.Yearly(10), BudgetPeriod.EveryDays(10, anchor), BudgetPeriod.EveryDays(1, anchor), BudgetPeriod.EveryDays(366, anchor), BudgetPeriod.EveryDays(7, d(2030, 3, 3)))
 
     @Test
     fun theIndianFinancialYearRunsAprilToMarch() {
@@ -59,5 +59,16 @@ class MorePeriodsTest {
             assertEquals(cur.start, p.containing(cur.start.minus(1, DateTimeUnit.DAY)).endExclusive, "$p: the one before ends where this starts")
             assertEquals(cur.endExclusive, p.containing(cur.endExclusive).start, "$p: the next starts where this ends")
         }
+    }
+
+    @Test
+    fun aCustomLengthCountsFromTheAnchorAndRefusesLengthsOutsideOneToAYear() {
+        val p = BudgetPeriod.EveryDays(10, d(2026, 10, 1))
+        assertEquals(DatePeriod(d(2026, 10, 11), d(2026, 10, 21)), p.containing(d(2026, 10, 20)))
+        assertEquals(DatePeriod(d(2026, 9, 21), d(2026, 10, 1)), p.containing(d(2026, 9, 30)), "before the anchor it keeps tiling")
+        assertEquals(10, p.containing(d(2031, 1, 1)).days)
+        assertEquals(BudgetPeriod.BiWeekly(anchor).containing(d(2026, 6, 6)), BudgetPeriod.EveryDays(14, anchor).containing(d(2026, 6, 6)), "a fortnight is the 14-day case")
+        assertFailsWith<IllegalArgumentException> { BudgetPeriod.EveryDays(0, anchor) }
+        assertFailsWith<IllegalArgumentException> { BudgetPeriod.EveryDays(367, anchor) }
     }
 }

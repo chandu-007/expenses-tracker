@@ -206,6 +206,22 @@ class PerformanceBudgetTest {
         check("deep scroll, last page (keyset)", 100.0, median { db.schemaQueries.entriesBefore(cursorRow.occurred_at, cursorRow.seq, 50).executeAsList() })
     }
 
+    @Test fun accountBalancesForTheHomeStripStayUnder150msPhoneBudgetInTheBackground() {
+        // Worked out off the save path, only while the Balances block or the accounts screen shows, a moment after the last write. Without the
+        // covering indexes it took about 240 ms on this dataset; with them about 25 ms. The budget is a background one, not the 50 ms save budget.
+        // The generated entries refer to accounts that have no row; give them rows for the measurement, and remove them again.
+        val ids = driver.executeQuery(null, "SELECT DISTINCT account_id FROM entry WHERE account_id IS NOT NULL", { c ->
+            val l = ArrayList<String>(); while (c.next().value) l += c.getString(0)!!; app.cash.sqldelight.db.QueryResult.Value(l)
+        }, 0).value
+        ids.forEach { driver.execute(null, "INSERT OR IGNORE INTO account(id, name, type, currency, deleted) VALUES ('$it', '$it', 'BANK', 'INR', 0)", 0) }
+        try {
+            assertEquals(ids.size, db.schemaQueries.accountBalances().executeAsList().size)
+            val ms = median { db.schemaQueries.accountBalances().executeAsList() }
+            Log.w("PERF", "account balances over $ROWS entries and ${ids.size} accounts: median ${"%.2f".format(ms)} ms")
+            check("account balances over the whole ledger (background)", 150.0, ms)
+        } finally { ids.forEach { driver.execute(null, "DELETE FROM account WHERE id = '$it'", 0) } }
+    }
+
     @Test fun savingOneTransactionStaysUnder50msPhoneBudgetAtP95() {
         val ids = (0 until 60).map { "save$it" }
         try {

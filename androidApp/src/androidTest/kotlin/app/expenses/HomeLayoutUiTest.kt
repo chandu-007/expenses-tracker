@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -62,6 +63,14 @@ class HomeLayoutUiTest {
         waitFor("budget_summary"); waitFor("templates"); waitFor("balances")
         waitFor("balance_chip_Cash"); waitFor("balance_chip_Bank")
         compose.onAllNodes(hasText("Cash  -₹100.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(1, it.size) }
+    }
+
+    @Test
+    fun balancesFollowAWriteAfterAMomentWithoutBeingPartOfTheWriteItself() {
+        launch(); waitFor("balance_chip_Bank")
+        tap("add"); waitFor("amount"); compose.onNodeWithTag("amount").performTextInput("400"); tap("save"); waitFor("add")
+        // the entry is on the list at once; the balances catch up within a couple of seconds
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Bank  -₹400.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

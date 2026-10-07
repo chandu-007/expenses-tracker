@@ -65,7 +65,8 @@ class BudgetStore(
             "biweekly" -> BudgetPeriod.BiWeekly(kotlinx.datetime.LocalDate.fromEpochDays(row.start_value))
             "semimonthly" -> BudgetPeriod.SemiMonthly
             "yearly" -> BudgetPeriod.Yearly(row.start_value.toInt())
-            else -> BudgetPeriod.Monthly(row.start_value.toInt())
+            // "days10": a custom length of 10 days, counted from the day in start_value
+            else -> if (row.kind.startsWith("days")) BudgetPeriod.EveryDays(row.kind.removePrefix("days").toInt(), kotlinx.datetime.LocalDate.fromEpochDays(row.start_value)) else BudgetPeriod.Monthly(row.start_value.toInt())
         }
     }
 
@@ -76,6 +77,7 @@ class BudgetStore(
             is BudgetPeriod.BiWeekly -> "biweekly" to period.anchor.toEpochDays()
             BudgetPeriod.SemiMonthly -> "semimonthly" to 0L
             is BudgetPeriod.Yearly -> "yearly" to period.startMonth.toLong()
+            is BudgetPeriod.EveryDays -> "days${period.days}" to period.anchor.toEpochDays()
         }
         db.transaction {
             val before = q.budgetPeriod().executeAsOneOrNull()

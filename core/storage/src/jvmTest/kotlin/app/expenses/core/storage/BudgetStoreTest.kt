@@ -134,7 +134,7 @@ class BudgetStoreTest {
     @Test
     fun theWeeklyPeriodAndThe25thSurviveAReopen() {
         assertEquals(BudgetPeriod.Monthly(1), budgets.period(), "calendar month by default")
-        for (p in listOf(BudgetPeriod.Monthly(25), BudgetPeriod.Weekly(DayOfWeek.SUNDAY), BudgetPeriod.Weekly(DayOfWeek.MONDAY), BudgetPeriod.BiWeekly(LocalDate(2026, 1, 5)), BudgetPeriod.BiWeekly(LocalDate(1999, 12, 31)), BudgetPeriod.SemiMonthly, BudgetPeriod.Yearly(), BudgetPeriod.Yearly(1))) {
+        for (p in listOf(BudgetPeriod.Monthly(25), BudgetPeriod.Weekly(DayOfWeek.SUNDAY), BudgetPeriod.Weekly(DayOfWeek.MONDAY), BudgetPeriod.BiWeekly(LocalDate(2026, 1, 5)), BudgetPeriod.BiWeekly(LocalDate(1999, 12, 31)), BudgetPeriod.SemiMonthly, BudgetPeriod.Yearly(), BudgetPeriod.Yearly(1), BudgetPeriod.EveryDays(10, LocalDate(2026, 10, 1)), BudgetPeriod.EveryDays(366, LocalDate(2020, 2, 29)))) {
             budgets.setPeriod(p)
             assertEquals(p, BudgetStore(db, clock, { 2_000L }, ledger, recurring).period())
         }

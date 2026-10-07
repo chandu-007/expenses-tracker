@@ -126,6 +126,9 @@ CREATE TABLE entry (
 -- (occurred_at, seq) is a total order, so lists and pages never repeat or skip rows that share a timestamp.
 CREATE INDEX entry_time ON entry(occurred_at DESC, seq DESC) WHERE deleted = 0;
 CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE deleted = 0;
+-- Account balances read only these two indexes (no table rows), so the home screen's balances stay cheap on a big ledger.
+CREATE INDEX entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0;
+CREATE INDEX entry_transfer_in ON entry(counter_account_id, to_amount_minor) WHERE kind = 'TRANSFER' AND deleted = 0;
 CREATE INDEX entry_refunds ON entry(refunds_entry) WHERE refunds_entry IS NOT NULL;
 CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
 

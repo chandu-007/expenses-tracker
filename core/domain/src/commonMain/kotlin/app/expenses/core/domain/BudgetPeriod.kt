@@ -68,6 +68,23 @@ sealed interface BudgetPeriod {
         }
     }
 
+    /** A period of any length from 1 to [MAX_DAYS] days, counted from [anchor] (the first day of any one period). The fortnight is the 14-day case. */
+    data class EveryDays(val days: Int, val anchor: LocalDate) : BudgetPeriod {
+        init {
+            require(days in 1..MAX_DAYS) { "A period is 1 to $MAX_DAYS days long" }
+        }
+
+        override fun containing(date: LocalDate): DatePeriod {
+            val back = ((anchor.daysUntil(date) % days) + days) % days
+            val start = date.minus(back, DateTimeUnit.DAY)
+            return DatePeriod(start, start.plus(days, DateTimeUnit.DAY))
+        }
+
+        companion object {
+            const val MAX_DAYS = 366
+        }
+    }
+
     /** Twice a month: the 1st to the 15th, and the 16th to the end of the month. */
     data object SemiMonthly : BudgetPeriod {
         override fun containing(date: LocalDate): DatePeriod {

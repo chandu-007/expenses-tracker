@@ -64,6 +64,7 @@ class MainActivity : FragmentActivity() {
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
                     var managingAccounts by rememberSaveable { mutableStateOf(false) }
                     var customisingHome by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
@@ -246,6 +247,7 @@ class MainActivity : FragmentActivity() {
                                     onClearLimit = viewModel::clearBudget,
                                     onSetPeriod = viewModel::setBudgetPeriod,
                                     onShiftStartDay = viewModel::shiftBudgetStartDay,
+                                    onShiftCustomDays = viewModel::shiftCustomDays,
                                 )
                             }
                             adding -> {
