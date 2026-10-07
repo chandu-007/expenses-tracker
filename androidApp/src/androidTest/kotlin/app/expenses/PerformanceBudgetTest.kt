@@ -8,7 +8,9 @@ import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.FtsTuning
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.ExpensesDb
+import app.expenses.core.storage.SearchQuery
 import app.expenses.core.storage.search
+import app.expenses.core.storage.searchFiltered
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
@@ -32,6 +34,9 @@ import kotlin.test.assertTrue
 class PerformanceBudgetTest {
     companion object {
         const val PHONE_SLOWDOWN = 4.0
+
+        /** Phone budget for a search that has to read the whole 100,000-row ledger. Over the 100 ms product target on purpose; see its test. */
+        const val WORST_CASE_PHONE_MS = 600.0
         private const val ROWS = 100_000
         private const val MERCHANTS = 500
         private const val DAY_MS = 86_400_000L
@@ -118,6 +123,37 @@ class PerformanceBudgetTest {
         check("search, rare merchant (${matchCount[rare]} rows)", 100.0, median { db.search(merchantName(rare)) })
         assertEquals(0, db.search("zzzzzz").size)
         check("search, no match", 100.0, median { db.search("zzzzzz") })
+    }
+
+    @Test fun filteredSearchesStayUnder100msPhoneBudget() {
+        val lastYear = START + 3_285 * DAY_MS
+        val cases = listOf(
+            "text shared by every row + a narrow amount range (~6% of rows)" to SearchQuery("upi", minMinor = 100, maxMinor = 153, currency = "INR"),
+            "text shared by every row + one category (2.5% of rows)" to SearchQuery("upi", categoryIds = listOf("cat7")),
+            "text shared by every row + the last year" to SearchQuery("upi", fromMillis = lastYear),
+            "text shared by every row + category + amount + last year" to SearchQuery("txn", minMinor = 200, maxMinor = 400, currency = "INR", categoryIds = listOf("cat3", "cat9"), fromMillis = lastYear),
+            "most common merchant + amount range" to SearchQuery(merchantName(0), minMinor = 500, currency = "INR"),
+            "no text, category only" to SearchQuery(categoryIds = listOf("cat11")),
+            "no text, amount range only" to SearchQuery(minMinor = 100, maxMinor = 199, currency = "INR"),
+        )
+        for ((label, q) in cases) {
+            assertEquals(50, db.searchFiltered(q).size, label)
+            check("filtered search, $label", 100.0, median { db.searchFiltered(q) })
+        }
+    }
+
+    /**
+     * The worst case for walking the date index: a filter so selective that nothing matches, so the whole ledger is read.
+     *
+     * KNOWN MISS against the 100 ms product target. Measured on the emulator (best case): about 50 ms with an amount filter alone and
+     * about 117 ms when a category filter is added (any category test roughly doubles the scan; cause not investigated). Ordinary
+     * filtered searches, where matches are found early, take under 10 ms. This case is gated separately at [WORST_CASE_PHONE_MS] so it
+     * cannot quietly get worse; the screen runs searches off the main thread and shows that it is working.
+     */
+    @Test fun aVerySelectiveFilterWithNoTextStaysWithinItsOwnWorstCaseBudget() {
+        val q = SearchQuery(minMinor = 999, maxMinor = 999, currency = "INR", categoryIds = listOf("cat3"))
+        assertEquals(0, db.searchFiltered(q, 1000).size, "this filter matches nothing in the dataset, so it reads every row")
+        check("filtered search, no text, matches nothing (reads the whole ledger)", WORST_CASE_PHONE_MS, median { db.searchFiltered(q) })
     }
 
     @Test fun categoryTotalsForOneYearStayUnder300msPhoneBudget() {

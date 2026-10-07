@@ -47,6 +47,13 @@ class CategoriesTest {
         EncryptedDriver.reset(context)
     }
 
+    /** The less frequent places are in the "More" menu on the list. */
+    private fun openFromMenu(tag: String) {
+        compose.onNodeWithTag("more_menu").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(tag).performClick()
+    }
+
     @Before fun fresh() = resetApp()
 
     @After fun cleanUp() {
@@ -73,7 +80,7 @@ class CategoriesTest {
     }
 
     private fun openManager() {
-        compose.onNodeWithTag("manage_categories").performClick()
+        openFromMenu("manage_categories")
         waitFor("new_category")
     }
 

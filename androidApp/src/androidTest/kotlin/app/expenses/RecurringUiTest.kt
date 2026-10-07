@@ -49,6 +49,13 @@ class RecurringUiTest {
         EncryptedDriver.reset(context)
     }
 
+    /** The less frequent places are in the "More" menu on the list. */
+    private fun openFromMenu(tag: String) {
+        compose.onNodeWithTag("more_menu").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(tag).performClick()
+    }
+
     @Before fun fresh() = resetApp()
 
     @After fun cleanUp() {
@@ -77,7 +84,7 @@ class RecurringUiTest {
     @Test
     fun anItemCreatedOnTheScreenIsDueTodayAndPostingItCountsItOnce() {
         launch()
-        compose.onNodeWithTag("open_recurring").performClick()
+        openFromMenu("open_recurring")
         waitFor("new_recurring")
         compose.onNodeWithTag("recurring_empty", useUnmergedTree = true).assertTextContains("Nothing repeats yet", substring = true)
         compose.onNodeWithTag("new_recurring").performClick()
@@ -169,7 +176,7 @@ class RecurringUiTest {
     fun editingChangesTheSummaryAndTheEditorRefusesWhatCannotBeSaved() {
         seed(item("tv", "Cable", 500))
         launch()
-        compose.onNodeWithTag("open_recurring").performClick()
+        openFromMenu("open_recurring")
         waitFor("rec_row_Cable")
         compose.onNodeWithTag("rec_row_Cable").performClick()
         waitFor("rec_amount")
@@ -194,7 +201,7 @@ class RecurringUiTest {
         launch()
         compose.onNodeWithTag(dueTag("gym", "post")).performClick()
         waitSpend("₹1,000.00")
-        compose.onNodeWithTag("open_recurring").performClick()
+        openFromMenu("open_recurring")
         waitFor("rec_row_Gym")
         compose.onNodeWithTag("rec_row_Gym").performClick()
         waitFor("rec_delete")
@@ -210,7 +217,7 @@ class RecurringUiTest {
     fun olderOccurrencesThatAreNoLongerOfferedAreCountedOnTheScreen() {
         seed(item("old", "Old bill", 100, start = LocalDate.fromEpochDays(today.toEpochDays() - 100)))
         launch()
-        compose.onNodeWithTag("open_recurring").performClick()
+        openFromMenu("open_recurring")
         waitFor("hidden_older")
         compose.onNodeWithTag("hidden_older", useUnmergedTree = true).assertTextContains("older", substring = true)
     }

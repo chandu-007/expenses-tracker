@@ -52,6 +52,13 @@ class NotificationsTest {
         manager.cancelAll()
     }
 
+    /** The less frequent places are in the "More" menu on the list. */
+    private fun openFromMenu(tag: String) {
+        compose.onNodeWithTag("more_menu").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(tag).performClick()
+    }
+
     @Before fun fresh() {
         // Android 13+ asks for this at runtime; older versions have no such permission.
         if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -136,7 +143,7 @@ class NotificationsTest {
     @Test
     fun theTestButtonShowsANotification() {
         launch()
-        compose.onNodeWithTag("open_notifications").performClick()
+        openFromMenu("open_notifications")
         waitFor("notif_test")
         compose.onNodeWithTag("notif_test").performClick()
         compose.waitUntil(10_000) { titles().contains("Test notification") }
@@ -156,7 +163,7 @@ class NotificationsTest {
     @Test
     fun switchesAndQuietHoursAreSavedAndWrapAroundMidnight() {
         launch()
-        compose.onNodeWithTag("open_notifications").performClick()
+        openFromMenu("open_notifications")
         waitFor("notif_bills")
         compose.onNodeWithTag("notif_quiet_start").assertTextEquals("22:00")
         compose.onNodeWithTag("notif_quiet_end").assertTextEquals("07:00")

@@ -12,6 +12,10 @@ import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.ReportMath
+import app.expenses.core.domain.parseAmount
+import app.expenses.core.storage.SearchQuery
+import app.expenses.core.storage.searchFiltered
+import kotlinx.datetime.plus
 import app.expenses.core.storage.DrillTarget
 import kotlinx.datetime.minus
 import app.expenses.core.domain.RecurringItem
@@ -106,6 +110,28 @@ data class RecurringUi(
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
 data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
 
+enum class SearchKind { ANY, EXPENSE, INCOME }
+enum class SearchRange { ANY, LAST_30_DAYS, THIS_PERIOD, THIS_YEAR }
+
+/** What the user has typed and chosen on the search screen. Amounts are rupees as typed ("250", "99.50"); empty means no limit. */
+data class SearchInput(
+    val text: String = "",
+    val minRupees: String = "",
+    val maxRupees: String = "",
+    val categoryId: String? = null,
+    val kind: SearchKind = SearchKind.ANY,
+    val range: SearchRange = SearchRange.ANY,
+)
+
+/** [problem] explains input that cannot be searched; [hasConditions] is false until something is typed or chosen. */
+data class SearchUi(
+    val results: List<RowUi> = emptyList(),
+    val searching: Boolean = false,
+    val hasConditions: Boolean = false,
+    val truncated: Boolean = false,
+    val problem: String? = null,
+)
+
 enum class ReportMode { PERIOD, YEAR }
 
 data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList())
@@ -177,6 +203,8 @@ sealed interface UiState {
 val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
+private const val SEARCH_LIMIT = 100L
+private const val SEARCH_DEBOUNCE_MS = 200L
 private const val LAST_CATEGORY = "last_category"
 private const val LAST_ACCOUNT = "last_account"
 
@@ -200,6 +228,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var openedBytes: ByteArray? = null
     private var openedBackup: BackupData? = null
     private val actions get() = DataActions(getApplication(), container)
+
+    private val _search = MutableStateFlow(SearchUi())
+    val search: StateFlow<SearchUi> = _search
+    private var searchInput: SearchInput? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
 
     private data class ReportRequest(val mode: ReportMode, val offset: Int, val drillTarget: DrillTarget? = null, val drillStart: Long? = null, val drillEnd: Long? = null)
     private var reportRequest: ReportRequest? = null
@@ -367,6 +400,57 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             refresh(ok)
             _state.update { (it as? UiState.Ready)?.copy(message = if (done.size == 1) "Posted ${done[0].first.item.name}" else "Posted ${done.size} repeating expenses") ?: it }
         }
+    }
+
+    // ---- search ----
+
+    /** Searches as the user types: waits a moment for more typing, then looks. Checks the amounts first and says what is wrong. */
+    fun search(input: SearchInput) {
+        searchInput = input
+        searchJob?.cancel()
+        val min = input.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
+        val max = input.maxRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
+        if (min != null && max != null && min.minorUnits > max.minorUnits) return problem("The smallest amount is above the largest")
+        val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY
+        if (!conditions) { _search.value = SearchUi(); return }
+        _search.update { it.copy(searching = true, hasConditions = true, problem = null) }
+        searchJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
+            container.write { ok -> _search.value = runSearch(ok, input, min, max) }
+        }
+    }
+
+    private fun problem(message: String) { _search.value = SearchUi(hasConditions = true, problem = message) }
+
+    fun closeSearch() {
+        searchJob?.cancel()
+        searchInput = null
+        _search.value = SearchUi()
+    }
+
+    private fun runSearch(ok: AppContainer.Opened.Ok, input: SearchInput, min: Money?, max: Money?): SearchUi {
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val t = LocalDate.now()
+        val today = kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth)
+        val period: app.expenses.core.domain.DatePeriod? = when (input.range) {
+            SearchRange.ANY -> null
+            SearchRange.LAST_30_DAYS -> app.expenses.core.domain.DatePeriod(today.minus(29, kotlinx.datetime.DateTimeUnit.DAY), today.plus(1, kotlinx.datetime.DateTimeUnit.DAY))
+            SearchRange.THIS_PERIOD -> ReportMath.periodAt(ok.budgets.period(), today, 0)
+            SearchRange.THIS_YEAR -> ReportMath.yearAt(today, 0)
+        }
+        val cats = ok.categories.list()
+        // A chosen category also covers its subcategories.
+        val categoryIds = input.categoryId?.let { id -> listOf(id) + cats.filter { it.parentId == id }.map { it.id } }
+        val query = SearchQuery(
+            text = input.text, minMinor = min?.minorUnits, maxMinor = max?.minorUnits, currency = if (min != null || max != null) inr.code else null,
+            categoryIds = categoryIds, kind = when (input.kind) { SearchKind.ANY -> null; SearchKind.EXPENSE -> "EXPENSE"; SearchKind.INCOME -> "INCOME" },
+            fromMillis = period?.startMillis(zone) ?: Long.MIN_VALUE, untilMillis = period?.endMillis(zone) ?: Long.MAX_VALUE,
+        )
+        val found = ok.db.searchFiltered(query, SEARCH_LIMIT + 1)
+        val shown = found.take(SEARCH_LIMIT.toInt())
+        accountNames = ok.db.schemaQueries.selectAccounts().executeAsList().associate { it.id to it.name }
+        val firsts = firstCategories(ok, shown)
+        return SearchUi(shown.map { toRow(it, firsts) }, searching = false, hasConditions = true, truncated = found.size > SEARCH_LIMIT)
     }
 
     // ---- reports ----
@@ -624,6 +708,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val cats = ok.categories.list()
         categoryNames = cats.associate { it.id to it.name }
         reportRequest?.let { _report.value = buildReport(ok, it) } // keep an open report in step with edits made from its entry list
+        searchInput?.let { i -> // and an open search, so an entry edited from the results is shown as it now is
+            val min = i.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) }
+            val max = i.maxRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) }
+            if (_search.value.hasConditions && _search.value.problem == null) _search.value = runSearch(ok, i, min, max)
+        }
         loadedCategory = firstCategories(ok, loaded)
         val visible = cats.filter { !it.hidden }
         val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""
@@ -716,13 +805,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
 
-    private fun toRow(e: Entry): RowUi = RowUi(
+    private fun toRow(e: Entry, firstCategory: Map<String, String> = loadedCategory): RowUi = RowUi(
         seq = e.seq,
         id = e.id,
         title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
         subtitle = dateFormat.format(Instant.ofEpochMilli(e.occurred_at)) +
             (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
-            ((loadedCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
+            ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
         outflow = e.kind == "EXPENSE" || e.kind == "FRIEND_PAID",
     )

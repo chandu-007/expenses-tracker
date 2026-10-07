@@ -39,3 +39,59 @@ fun ExpensesDb.search(text: String, limit: Long = 50): List<Entry> {
         q.searchEntriesWalk(fts, limit).executeAsList()
     }
 }
+
+/**
+ * What to look for. Every part is optional and they all have to hold at once. [minMinor] and [maxMinor] are amounts in minor units
+ * of [currency] (required when either is given, since amounts in different currencies cannot be compared). [categoryIds] matches an
+ * expense with a split in one of them, or an income in one of them; a caller wanting "Food and its subcategories" lists all of them.
+ * [kind] is an entry kind such as "EXPENSE" or "INCOME". The period is half-open: [fromMillis] up to but not including [untilMillis].
+ */
+data class SearchQuery(
+    val text: String = "",
+    val minMinor: Long? = null,
+    val maxMinor: Long? = null,
+    val currency: String? = null,
+    val categoryIds: List<String>? = null,
+    val kind: String? = null,
+    val fromMillis: Long = Long.MIN_VALUE,
+    val untilMillis: Long = Long.MAX_VALUE,
+) {
+    init {
+        require((minMinor == null && maxMinor == null) || currency != null) { "An amount range needs a currency" }
+        require(categoryIds == null || categoryIds.isNotEmpty()) { "An empty category list matches nothing; leave it null for any category" }
+    }
+
+    val hasAnyCondition: Boolean get() = text.isNotBlank() || minMinor != null || maxMinor != null || categoryIds != null || kind != null || fromMillis != Long.MIN_VALUE || untilMillis != Long.MAX_VALUE
+}
+
+/**
+ * Searches with filters, newest first, at most [limit] entries. The text part behaves exactly as in [search] (words of 3+ characters
+ * all have to appear; shorter words fall back to a substring scan), and the filters are applied in the same query, so the answer never
+ * depends on the plan chosen. With no text the date index is walked newest first and stops at [limit].
+ */
+fun ExpensesDb.searchFiltered(query: SearchQuery, limit: Long = 50): List<Entry> {
+    val q = schemaQueries
+    val text = query.text.trim()
+    val ids = query.categoryIds ?: listOf("")
+    val filterCats = if (query.categoryIds != null) 1L else 0L
+    if (text.isEmpty()) {
+        return q.searchFilteredNoText(query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+    }
+    val fts = ftsQuery(text) ?: return q.searchFilteredShort(likeEscape(text), query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+    // Words under 3 characters cannot use the index, so they are checked as substrings on the rows the index finds (the first two; more are rare).
+    val shorts = shortWords(text).map(::likeEscape)
+    val short1 = shorts.getOrNull(0)
+    val short2 = shorts.getOrNull(1)
+    val matches = q.countMatches(fts, SORT_FIRST_MAX_MATCHES + 1).executeAsOne()
+    return if (matches <= SORT_FIRST_MAX_MATCHES) {
+        q.searchFilteredText(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+    } else {
+        q.searchFilteredTextWalk(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+    }
+}
+
+/** The words of [text] too short for the trigram index (1 or 2 characters). */
+internal fun shortWords(text: String): List<String> = text.split(Regex("\\s+")).filter { it.isNotEmpty() && it.length < MIN_INDEXED_LENGTH }
+
+/** Makes user text safe inside a LIKE pattern: `%` and `_` are searched literally (the queries declare `\` as the escape character). */
+internal fun likeEscape(text: String): String = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

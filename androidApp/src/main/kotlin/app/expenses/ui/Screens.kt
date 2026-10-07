@@ -42,6 +42,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -98,6 +100,7 @@ fun EntryListScreen(
     onOpenNotifications: () -> Unit,
     onOpenData: () -> Unit,
     onOpenReports: () -> Unit,
+    onOpenSearch: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -135,13 +138,19 @@ fun EntryListScreen(
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Row(Modifier.horizontalScroll(rememberScrollState())) {
-                        TextButton(onClick = onOpenReports, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
-                        TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
-                        TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
-                        TextButton(onClick = onOpenNotifications, modifier = Modifier.testTag("open_notifications")) { Text("Alerts") }
-                        TextButton(onClick = onOpenData, modifier = Modifier.testTag("open_data")) { Text("Data") }
+                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
+                    TextButton(onClick = onOpenSearch, modifier = Modifier.testTag("open_search")) { Text("Search") }
+                    TextButton(onClick = onOpenReports, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
+                    var more by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick = { more = true }, modifier = Modifier.testTag("more_menu")) { Text("More") }
+                        // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
+                        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text("Categories") }, onClick = { more = false; onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
+                            DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { more = false; onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
+                            DropdownMenuItem(text = { Text("Notifications") }, onClick = { more = false; onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
+                            DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { more = false; onOpenData() }, modifier = Modifier.testTag("open_data"))
+                        }
                     }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))

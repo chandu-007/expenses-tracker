@@ -30,6 +30,7 @@ import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.NotificationSettingsScreen
 import app.expenses.ui.OpeningScreen
 import app.expenses.ui.ReportsScreen
+import app.expenses.ui.SearchScreen
 import app.expenses.ui.RecurringScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
                     var alerts by rememberSaveable { mutableStateOf(false) }
                     var yourData by rememberSaveable { mutableStateOf(false) }
                     var reporting by rememberSaveable { mutableStateOf(false) }
+                    var searching by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -105,6 +107,16 @@ class MainActivity : ComponentActivity() {
                                     onMove = viewModel::moveCategory,
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
+                                )
+                            }
+                            searching -> {
+                                val found by viewModel.search.collectAsStateWithLifecycle()
+                                BackHandler { searching = false; viewModel.closeSearch() }
+                                SearchScreen(
+                                    state = found, categories = s.categories,
+                                    onChange = viewModel::search,
+                                    onBack = { searching = false; viewModel.closeSearch() },
+                                    onOpen = { viewModel.openEditor(it.id) },
                                 )
                             }
                             reporting -> {
@@ -194,6 +206,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenNotifications = { alerts = true },
                                 onOpenData = { yourData = true },
                                 onOpenReports = { reporting = true; viewModel.openReports() },
+                                onOpenSearch = { searching = true },
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )

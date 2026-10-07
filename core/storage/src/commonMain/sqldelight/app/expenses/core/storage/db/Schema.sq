@@ -537,3 +537,50 @@ incomeEntries:
 SELECT * FROM entry
 WHERE kind = 'INCOME' AND deleted = 0 AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+-- Search with filters. A null filter means "any". :ids is only read when :filterCats is 1 (pass one dummy id otherwise).
+-- Amounts are compared in minor units, so callers give :currency whenever they give an amount.
+searchFilteredText:
+SELECT * FROM entry
+WHERE deleted = 0 AND seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q)
+  AND (:short1 IS NULL OR merchant LIKE '%' || :short1 || '%' ESCAPE '\' OR note LIKE '%' || :short1 || '%' ESCAPE '\')
+  AND (:short2 IS NULL OR merchant LIKE '%' || :short2 || '%' ESCAPE '\' OR note LIKE '%' || :short2 || '%' ESCAPE '\')
+  AND (:currency IS NULL OR currency = :currency)
+  AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
+  AND (:kind IS NULL OR kind = :kind)
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+  AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+searchFilteredTextWalk:
+SELECT * FROM entry INDEXED BY entry_time
+WHERE deleted = 0 AND seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :q)
+  AND (:short1 IS NULL OR merchant LIKE '%' || :short1 || '%' ESCAPE '\' OR note LIKE '%' || :short1 || '%' ESCAPE '\')
+  AND (:short2 IS NULL OR merchant LIKE '%' || :short2 || '%' ESCAPE '\' OR note LIKE '%' || :short2 || '%' ESCAPE '\')
+  AND (:currency IS NULL OR currency = :currency)
+  AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
+  AND (:kind IS NULL OR kind = :kind)
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+  AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+searchFilteredShort:
+SELECT * FROM entry
+WHERE deleted = 0 AND (merchant LIKE '%' || :q || '%' ESCAPE '\' OR note LIKE '%' || :q || '%' ESCAPE '\')
+  AND (:currency IS NULL OR currency = :currency)
+  AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
+  AND (:kind IS NULL OR kind = :kind)
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+  AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+-- No text: the filters alone, newest first, walking the date index.
+searchFilteredNoText:
+SELECT * FROM entry INDEXED BY entry_time
+WHERE deleted = 0
+  AND (:currency IS NULL OR currency = :currency)
+  AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
+  AND (:kind IS NULL OR kind = :kind)
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+  AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
