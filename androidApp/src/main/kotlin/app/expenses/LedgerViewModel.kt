@@ -33,7 +33,11 @@ import app.expenses.core.domain.ScheduleEnd
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
+import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.toPlainString
+import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
+import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.storage.BackupData
 import app.expenses.core.storage.BackupException
@@ -46,6 +50,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -57,6 +62,17 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val inflow: Boolean,
 )
 data class AccountUi(val id: String, val name: String)
+
+/**
+ * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
+ * positive number. [usage] is how many entries and saved items refer to it (zero means it can be deleted).
+ */
+data class AccountRowUi(
+    val id: String, val name: String, val type: String, val typeLabel: String, val isLiability: Boolean, val archived: Boolean,
+    val balanceText: String, val balanceMinor: Long, val owed: Boolean, val openingText: String, val usage: Long,
+)
+
+val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long)
@@ -231,6 +247,10 @@ sealed interface UiState {
         val notifications: NotificationPrefs,
         val recurring: List<RecurringUi>,
         val accounts: List<AccountUi>,
+        /** Every account for the accounts screen, archived ones included, with balances. */
+        val accountRows: List<AccountRowUi>,
+        /** Everything an old entry might refer to (archived accounts included), for showing and editing it. */
+        val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val categories: List<CategoryUi>,
         /** What the add screen starts with: the category and account used last. */
@@ -407,6 +427,60 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteCategory(id: String) = withStore { ok ->
         ok.categories.delete(id)
+        refresh(ok)
+    }
+
+    // ---- accounts ----
+
+    private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
+        val balances = ok.store.balances()
+        return rows.map { a ->
+            val type = AccountType.valueOf(a.type)
+            val bal = balances[AccountId(a.id)] ?: Money.zero(inr)
+            val shownOpening = if (type.isLiability) -a.opening_minor else a.opening_minor
+            AccountRowUi(
+                a.id, a.name, a.type, ACCOUNT_TYPE_LABELS.getValue(a.type), type.isLiability, a.archived == 1L,
+                bal.formatted(), bal.minorUnits, AccountRules.isOwed(Account(AccountId(a.id), a.name, type, inr), bal.minorUnits),
+                if (shownOpening == 0L) "" else Money(shownOpening, inr).toPlainString(), ok.store.accountUsage(AccountId(a.id)),
+            )
+        }.sortedWith(compareBy({ it.archived }, { it.name.lowercase() }))
+    }
+
+    /**
+     * Creates ([id] null) or edits an account. [openingText] is the amount held, or for a card or loan the amount owed. [onDone] gets null
+     * on success, otherwise the reason it was refused (shown in the form, which stays open).
+     */
+    fun saveAccount(id: String?, name: String, type: String, openingText: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem = try {
+                container.write { ok ->
+                    val all = ok.db.schemaQueries.selectAccounts().executeAsList()
+                    val clean = AccountRules.normalizeName(name)
+                    AccountRules.checkName(all.map { Account(AccountId(it.id), it.name, AccountType.valueOf(it.type), inr) }, clean, id)?.let { return@write it }
+                    val kind = AccountType.valueOf(type)
+                    val typed = openingText.trim()
+                    val opening = if (typed.isEmpty()) 0L else (parseAmount(typed, inr)?.minorUnits ?: return@write "Enter the amount as a number, like 25000 or 1250.50")
+                    if (id != null && all.first { it.id == id }.type.let { AccountType.valueOf(it).isLiability } != kind.isLiability &&
+                        ok.store.accountUsage(AccountId(id)) > 0) return@write "A card or loan cannot become a bank, cash or wallet account once it has entries, or the other way round."
+                    val existing = id?.let { ok.db.schemaQueries.accountById(it).executeAsOneOrNull() }
+                    ok.store.saveAccount(Account(AccountId(id ?: UUID.randomUUID().toString()), clean, kind, inr, if (kind.isLiability) -opening else opening, existing?.archived == 1L))
+                    refresh(ok)
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun setAccountArchived(id: String, archived: Boolean) = withStore { ok ->
+        val row = ok.db.schemaQueries.accountById(id).executeAsOneOrNull() ?: return@withStore
+        require(!archived || ok.db.schemaQueries.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id } > 0) { "Keep at least one active account." }
+        ok.store.saveAccount(Account(AccountId(id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, archived))
+        refresh(ok)
+    }
+
+    fun deleteAccount(id: String) = withStore { ok ->
+        ok.store.deleteAccount(AccountId(id))
         refresh(ok)
     }
 
@@ -854,7 +928,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         loadedCategory = firstCategories(ok, loaded)
         val visible = cats.filter { !it.hidden }
         val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""
-        val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id ?: "cash"
+        val active = accounts.filter { it.archived == 0L }
+        val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } } ?: active.firstOrNull()?.id ?: "cash"
         _state.value = UiState.Ready(
             rows = loaded.map(::toRow),
             periodSpend = spent.formatted(),
@@ -870,7 +945,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             ),
             hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
-            accounts = accounts.map { AccountUi(it.id, it.name) },
+            accounts = active.map { AccountUi(it.id, it.name) },
+            allAccounts = accounts.map { AccountUi(it.id, it.name) },
+            accountRows = accountRows(ok, accounts),
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,

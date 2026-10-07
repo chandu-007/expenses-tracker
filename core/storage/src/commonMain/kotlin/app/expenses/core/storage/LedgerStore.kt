@@ -58,6 +58,18 @@ class LedgerStore(
         }
     }
 
+    /** Removes an account nothing refers to. Throws [IllegalArgumentException] if anything does (use archiving for those), and when it is the last one. */
+    fun deleteAccount(id: AccountId) {
+        db.transaction {
+            val row = q.accountById(id.value).executeAsOneOrNull()
+            require(row != null && row.deleted == 0L) { "That account no longer exists." }
+            require(q.accountUsage(id.value).executeAsOne() == 0L) { "This account has entries, so it can be archived but not deleted." }
+            require(q.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id.value } > 0) { "Keep at least one active account." }
+            q.softDeleteAccount(id.value)
+            q.insertOp(clock.now(nowMillis()).encode(), "account", id.value, "deleted", "1")
+        }
+    }
+
     /** Every account's balance, from SQL. Equal to [Ledger.balances] for the same data. */
     fun balances(): Map<AccountId, Money> {
         val accounts = q.selectAccounts().executeAsList().associateBy { it.id }

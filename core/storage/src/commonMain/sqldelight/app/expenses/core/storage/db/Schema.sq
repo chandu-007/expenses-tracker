@@ -241,6 +241,9 @@ SELECT (SELECT COUNT(*) FROM entry WHERE account_id = :id OR counter_account_id 
 accountById:
 SELECT * FROM account WHERE id = :id;
 
+softDeleteAccount:
+UPDATE account SET deleted = 1 WHERE id = ?;
+
 selectAccounts:
 SELECT * FROM account WHERE deleted = 0 ORDER BY name;
 

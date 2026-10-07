@@ -95,6 +95,7 @@ fun EntryListScreen(
     onOpen: (RowUi) -> Unit,
     onDelete: (RowUi) -> Unit,
     onManageCategories: () -> Unit,
+    onManageAccounts: () -> Unit,
     onOpenBudget: () -> Unit,
     onOpenRecurring: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -149,6 +150,7 @@ fun EntryListScreen(
                         TextButton(onClick = { more = true }, modifier = Modifier.testTag("more_menu")) { Text("More") }
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text("Accounts") }, onClick = { more = false; onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
                             DropdownMenuItem(text = { Text("Categories") }, onClick = { more = false; onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
                             DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { more = false; onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
                             DropdownMenuItem(text = { Text("Notifications") }, onClick = { more = false; onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
@@ -322,7 +324,7 @@ fun ExpenseFormScreen(
                 AssistChip(onClick = { creatingCategory = true }, label = { Text("+ New") }, modifier = Modifier.testTag("new_category_chip"))
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                accounts.forEach { a -> FilterChip(selected = a.id == accountId, onClick = { accountId = a.id }, label = { Text(a.name) }) }
+                accounts.forEach { a -> FilterChip(selected = a.id == accountId, onClick = { accountId = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("account_chip_${a.name}")) }
             }
             OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Note or merchant") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"))
             if (showTemplateOption) {

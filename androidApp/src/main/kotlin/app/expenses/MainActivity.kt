@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
+import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.DataScreen
 import app.expenses.ui.ImportScreen
@@ -57,6 +58,7 @@ class MainActivity : FragmentActivity() {
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
+                    var managingAccounts by rememberSaveable { mutableStateOf(false) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
@@ -96,7 +98,7 @@ class MainActivity : FragmentActivity() {
                                 ExpenseFormScreen(
                                     title = "Edit expense",
                                     start = FormStart(e.amountText, e.category, e.accountId.ifEmpty { s.lastAccountId }, e.note, e.occurredAt),
-                                    accounts = s.accounts,
+                                    accounts = s.allAccounts.filter { a -> a.id == e.accountId || s.accounts.any { it.id == a.id } }, // an archived account stays pickable for an entry that uses it
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = false,
@@ -108,6 +110,13 @@ class MainActivity : FragmentActivity() {
                                 val e = editing as Editable.ReadOnly
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            managingAccounts -> {
+                                BackHandler { managingAccounts = false }
+                                AccountsScreen(
+                                    rows = s.accountRows, onBack = { managingAccounts = false },
+                                    onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
+                                )
                             }
                             managingCategories -> {
                                 BackHandler { managingCategories = false }
@@ -232,6 +241,7 @@ class MainActivity : FragmentActivity() {
                                 onOpen = { viewModel.openEditor(it.id) },
                                 onDelete = viewModel::deleteEntry,
                                 onManageCategories = { managingCategories = true },
+                                onManageAccounts = { managingAccounts = true },
                                 onOpenBudget = { budgeting = true },
                                 onOpenRecurring = { repeating = true },
                                 onOpenNotifications = { alerts = true },

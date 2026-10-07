@@ -78,6 +78,28 @@ class AccountStoreTest {
     }
 
     @Test
+    fun anAccountIsDeletedOnlyWhenNothingRefersToItAndNeverTheLastActiveOne() {
+        ledger.saveAccount(acct("a")); ledger.saveAccount(acct("b")); ledger.saveAccount(acct("c", archived = true))
+        ledger.save(Expense(EntryId("e"), 1, AccountId("a"), m(1)))
+        assertTrue(assertFailsWith<IllegalArgumentException> { ledger.deleteAccount(AccountId("a")) }.message!!.contains("entries"))
+        ledger.delete(EntryId("e"))
+        assertFailsWith<IllegalArgumentException> { ledger.deleteAccount(AccountId("a")) } // a deleted entry could come back
+        ledger.deleteAccount(AccountId("c")) // archived and unused: fine, and it was not 'active' so the rule about the last one is not involved
+        ledger.deleteAccount(AccountId("b"))
+        assertTrue(assertFailsWith<IllegalArgumentException> { ledger.deleteAccount(AccountId("b")) }.message!!.contains("no longer exists"))
+        ledger.saveAccount(acct("d")); ledger.deleteAccount(AccountId("d")) // 'a' is still active, so 'd' may go
+        assertEquals(listOf("a"), db.schemaQueries.selectAccounts().executeAsList().map { it.id })
+        assertTrue(db.schemaQueries.opsSince("", 1000).executeAsList().any { it.entity == "account" && it.row_id == "b" && it.field_ == "deleted" && it.value_ == "1" }, "the deletion is logged for sync")
+    }
+
+    @Test
+    fun theOnlyActiveAccountCannotBeDeletedEvenWhenUnusedAndArchivedOnesDoNotCountAsActive() {
+        ledger.saveAccount(acct("only")); ledger.saveAccount(acct("gone", archived = true))
+        assertTrue(assertFailsWith<IllegalArgumentException> { ledger.deleteAccount(AccountId("only")) }.message!!.contains("at least one"))
+        assertEquals(listOf("gone", "only"), db.schemaQueries.selectAccounts().executeAsList().map { it.id }.sorted())
+    }
+
+    @Test
     fun theCurrencyOfAnAccountStillCannotChange() {
         ledger.saveAccount(acct("a"))
         assertFailsWith<IllegalArgumentException> { ledger.saveAccount(Account(AccountId("a"), "A", AccountType.BANK, Currency.USD)) }
