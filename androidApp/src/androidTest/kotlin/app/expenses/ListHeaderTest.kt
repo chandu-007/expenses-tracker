@@ -53,7 +53,7 @@ class ListHeaderTest {
         assertTrue(title.width > 120.dp, "the title is ${title.width} wide; it was squeezed to a single letter when the header overflowed")
         assertTrue(title.height < 40.dp, "the title wrapped onto ${title.height} of height")
         compose.onNodeWithTag("more_menu").performClick()
-        for (tag in listOf("manage_categories", "open_recurring", "open_notifications", "open_data")) {
+        for (tag in listOf("manage_categories", "open_recurring", "open_notifications", "open_security", "open_data")) {
             compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(tag).assertIsDisplayed()
         }

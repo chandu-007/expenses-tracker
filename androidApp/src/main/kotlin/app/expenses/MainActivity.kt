@@ -2,7 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -28,14 +28,16 @@ import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.NotificationSettingsScreen
+import app.expenses.ui.LockedScreen
 import app.expenses.ui.OpeningScreen
+import app.expenses.ui.SecurityScreen
 import app.expenses.ui.ReportsScreen
 import app.expenses.ui.SearchScreen
 import app.expenses.ui.RecurringScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val viewModel: LedgerViewModel by viewModels()
 
     /** Counts requests to open the add screen from the launcher shortcut or the Quick Settings tile. */
@@ -60,6 +62,15 @@ class MainActivity : ComponentActivity() {
                     var yourData by rememberSaveable { mutableStateOf(false) }
                     var reporting by rememberSaveable { mutableStateOf(false) }
                     var searching by rememberSaveable { mutableStateOf(false) }
+                    var securing by rememberSaveable { mutableStateOf(false) }
+                    val lock = (application as ExpensesApp).lock
+                    val locked by lock.locked.collectAsStateWithLifecycle()
+                    val lockSettings by lock.settings.collectAsStateWithLifecycle()
+                    val lockMessage by lock.message.collectAsStateWithLifecycle()
+                    // While the lock is on, the app is hidden from the recent-apps view and from screenshots.
+                    LaunchedEffect(lockSettings.enabled) {
+                        if (lockSettings.enabled) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                    }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -74,7 +85,7 @@ class MainActivity : ComponentActivity() {
 
                     val editing by viewModel.editor.collectAsStateWithLifecycle()
 
-                    when (val s = state) {
+                    if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
                         is UiState.Ready -> when {
@@ -107,6 +118,15 @@ class MainActivity : ComponentActivity() {
                                     onMove = viewModel::moveCategory,
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
+                                )
+                            }
+                            securing -> {
+                                BackHandler { securing = false; lock.dismissMessage() }
+                                SecurityScreen(
+                                    settings = lockSettings, availability = lock::availability, message = lockMessage,
+                                    onEnable = { lock.enable(this@MainActivity, it) }, onDisable = { lock.disable(this@MainActivity) },
+                                    onTimeout = { lock.setTimeout(this@MainActivity, it) },
+                                    onBack = { securing = false; lock.dismissMessage() },
                                 )
                             }
                             searching -> {
@@ -207,6 +227,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenData = { yourData = true },
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenSearch = { searching = true },
+                                onOpenSecurity = { securing = true },
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )
@@ -219,12 +240,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        (application as ExpensesApp).lock.onStart(this)
         viewModel.postAutomatic()
     }
 
     /** When the screen leaves the foreground the user is not waiting on anything: a good moment to tidy the search index. */
     override fun onStop() {
         super.onStop()
+        (application as ExpensesApp).lock.onStop(this)
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
     }

@@ -101,6 +101,7 @@ fun EntryListScreen(
     onOpenData: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenSecurity: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -149,6 +150,7 @@ fun EntryListScreen(
                             DropdownMenuItem(text = { Text("Categories") }, onClick = { more = false; onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
                             DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { more = false; onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
                             DropdownMenuItem(text = { Text("Notifications") }, onClick = { more = false; onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
+                            DropdownMenuItem(text = { Text("App lock") }, onClick = { more = false; onOpenSecurity() }, modifier = Modifier.testTag("open_security"))
                             DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { more = false; onOpenData() }, modifier = Modifier.testTag("open_data"))
                         }
                     }
