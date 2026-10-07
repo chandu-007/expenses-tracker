@@ -321,6 +321,11 @@ FROM spend_line
 WHERE currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 GROUP BY category_id;
 
+-- What was spent and when, for the calendar: the covering index answers it without touching entries.
+spendPointsBetween:
+SELECT occurred_at, mine_minor FROM spend_line
+WHERE currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
 insertSpendLine:
 INSERT INTO spend_line(entry_id, line, occurred_at, currency, category_id, mine_minor, cash_out_minor) VALUES (?, ?, ?, ?, ?, ?, ?);
 

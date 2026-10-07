@@ -57,3 +57,27 @@ fun Money.toPlainString(): String {
     val fraction = if (digits == 0) "" else "." + raw.substring(raw.length - digits)
     return (if (negative) "-" else "") + whole + fraction
 }
+
+/**
+ * A short amount for tight places (calendar cells, chart labels): ₹950, ₹1.2K, ₹12K, ₹1.2L, ₹3.4Cr. Rupees use lakh and crore; other
+ * currencies use K, M and B with their code. The figure is cut, never rounded up, so ₹99,999 reads ₹99.9K and not ₹100K, and a short
+ * label never overstates. Below ₹10 the paise are kept ("₹9.50"). Integer arithmetic only.
+ */
+fun Money.compact(): String {
+    val digits = currency.minorUnitDigits
+    var scale = 1L
+    repeat(digits) { scale *= 10 }
+    val negative = minorUnits < 0
+    // work on the negative value's digits: abs of Long.MIN_VALUE overflows
+    val units = minorUnits.toString().removePrefix("-").let { s -> if (s.length <= digits) 0L else s.substring(0, s.length - digits).toLong() }
+    val fraction = minorUnits.toString().removePrefix("-").padStart(digits + 1, '0').takeLast(digits)
+    val isRupee = currency.code == "INR"
+    val symbol = if (isRupee) "₹" else currency.code + " "
+    val tiers = if (isRupee) listOf(10_000_000L to "Cr", 100_000L to "L", 1_000L to "K") else listOf(1_000_000_000L to "B", 1_000_000L to "M", 1_000L to "K")
+    val body = tiers.firstOrNull { units >= it.first }?.let { (size, suffix) ->
+        val whole = units / size
+        val tenth = (units % size) * 10 / size
+        (if (tenth == 0L) "$whole" else "$whole.$tenth") + suffix
+    } ?: if (units < 10 && digits > 0 && fraction.any { it != '0' }) "$units.$fraction".trimEnd('0') else "$units"
+    return (if (negative) "-" else "") + symbol + body
+}

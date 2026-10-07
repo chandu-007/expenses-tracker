@@ -49,6 +49,10 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
         Money(q.incomeTotal(currency.code, period.startMillis(zone), period.endMillis(zone)).executeAsOne(), currency)
 
     /** Spending for each period in order, for a trend. */
+    /** Every spend line in [period] (net of refunds, your share), for the calendar to add up by day. */
+    fun spendPoints(period: DatePeriod, zone: TimeZone, currency: Currency): List<app.expenses.core.domain.SpendPoint> =
+        q.spendPointsBetween(currency.code, period.startMillis(zone), period.endMillis(zone)).executeAsList().map { app.expenses.core.domain.SpendPoint(it.occurred_at, it.mine_minor) }
+
     fun trend(periods: List<DatePeriod>, zone: TimeZone, currency: Currency): List<Money> = periods.map { spent(it, zone, currency) }
 
     /** The entries behind a figure, newest first, at most [limit]. Entries touching several chosen categories appear once with the sum. */

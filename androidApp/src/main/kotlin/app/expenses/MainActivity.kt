@@ -23,6 +23,7 @@ import app.expenses.ui.BudgetScreen
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
 import app.expenses.ui.AccountsScreen
+import app.expenses.ui.CalendarScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.DataScreen
 import app.expenses.ui.ImportScreen
@@ -66,6 +67,7 @@ class MainActivity : FragmentActivity() {
                     var alerts by rememberSaveable { mutableStateOf(false) }
                     var yourData by rememberSaveable { mutableStateOf(false) }
                     var reporting by rememberSaveable { mutableStateOf(false) }
+                    var calendaring by rememberSaveable { mutableStateOf(false) }
                     var searching by rememberSaveable { mutableStateOf(false) }
                     var securing by rememberSaveable { mutableStateOf(false) }
                     val lock = (application as ExpensesApp).lock
@@ -169,6 +171,14 @@ class MainActivity : FragmentActivity() {
                                     onUndo = viewModel::undo,
                                 )
                             }
+                            calendaring -> {
+                                val cal by viewModel.calendar.collectAsStateWithLifecycle()
+                                BackHandler { calendaring = false; viewModel.closeCalendar() }
+                                CalendarScreen(
+                                    state = cal, onBack = { calendaring = false; viewModel.closeCalendar() },
+                                    onShift = viewModel::shiftCalendar, onSelect = viewModel::selectCalendarDay, onOpenEntry = viewModel::openEditor,
+                                )
+                            }
                             reporting -> {
                                 val report by viewModel.report.collectAsStateWithLifecycle()
                                 // Back leaves the entry list first, then the report.
@@ -266,6 +276,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenNotifications = { alerts = true },
                                 onOpenData = { yourData = true },
                                 onOpenReports = { reporting = true; viewModel.openReports() },
+                                onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                                 onOpenSearch = { searching = true },
                                 onOpenSecurity = { securing = true },
                                 onDismissWelcome = viewModel::dismissWelcome,

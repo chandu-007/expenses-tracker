@@ -1,5 +1,8 @@
 package app.expenses.core.storage
 
+import app.expenses.core.domain.CalendarMath
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.CategoryRow
@@ -188,5 +191,29 @@ class ReportStoreTest {
         val full = DatePeriod(LocalDate(2026, 1, 1), LocalDate(2027, 1, 1))
         assertEquals(ledger.loadLedger().spendByCategory(inr).values.sumOf { it.minorUnits }, reports.spent(full, zone, inr).minorUnits)
         assertTrue(flatten(reports.breakdown(full, zone, inr)).size > 3)
+    }
+}
+
+class CalendarPointsTest {
+    private val inr = Currency.INR
+    private val db = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
+    private val ledger = LedgerStore(db, HlcClock("n")) { 1L }
+    private val reports = ReportStore(db, ledger)
+    private val ist = TimeZone.of("Asia/Kolkata")
+
+    @Test
+    fun theCalendarsDailyTotalsEqualTheMonthsTotalAndCountRefundsAndYourShareOnly() {
+        ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, inr))
+        fun at(d: Int, h: Int) = LocalDateTime(2026, 10, d, h, 0).toInstant(ist).toEpochMilliseconds()
+        ledger.save(Expense(EntryId("a"), at(3, 10), AccountId("cash"), Money(10_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(10_000, inr)))))
+        ledger.save(Expense(EntryId("b"), at(3, 20), AccountId("cash"), Money(30_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(30_000, inr))), listOf(Share(null, Money(10_000, inr)), Share(PersonId("asha"), Money(20_000, inr)))))
+        ledger.save(Refund(EntryId("r"), at(5, 9), AccountId("cash"), Money(4_000, inr), EntryId("a")))
+        ledger.save(Expense(EntryId("z"), at(31, 23), AccountId("cash"), Money(500, inr)))
+        ledger.save(Expense(EntryId("nov"), LocalDateTime(2026, 11, 1, 0, 1).toInstant(ist).toEpochMilliseconds(), AccountId("cash"), Money(777, inr)))
+        val month = DatePeriod(LocalDate(2026, 10, 1), LocalDate(2026, 11, 1))
+        val cal = CalendarMath.month(2026, 10, ist, reports.spendPoints(month, ist, inr), emptyList(), LocalDate(2026, 10, 1))
+        assertEquals(20_000L, cal.days[2].spentMinor, "your 100 plus your 100 share of the dinner")
+        assertEquals(-4_000L, cal.days[4].spentMinor, "a refund lowers its own day")
+        assertEquals(reports.spent(month, ist, inr).minorUnits, cal.totalSpentMinor, "the calendar and the report always agree")
     }
 }

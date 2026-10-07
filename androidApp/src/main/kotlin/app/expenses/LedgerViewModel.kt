@@ -35,6 +35,11 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.storage.DrillLine
+import app.expenses.core.domain.DatePeriod
+import app.expenses.core.domain.compact
+import app.expenses.core.domain.BillOnDay
+import app.expenses.core.domain.CalendarMath
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
 import app.expenses.core.domain.OwnExport
@@ -200,6 +205,15 @@ data class SearchUi(
     /** What the last bulk change from here did, with a way to take it back. */
     val notice: String? = null,
     val undo: UndoUi? = null,
+)
+
+/** One day cell of the calendar. [spent] is a short label (empty when nothing was spent). */
+data class CalendarCellUi(val day: Int, val epochDay: Long, val spent: String, val spentMinor: Long, val bills: Int, val level: Int, val isToday: Boolean)
+
+/** What the calendar shows: the month grid, its total, and the picked day's entries and bills. */
+data class CalendarUi(
+    val label: String, val offset: Int, val blanks: Int, val cells: List<CalendarCellUi>, val total: String,
+    val selectedEpochDay: Long?, val dayTitle: String, val dayTotal: String, val dayLines: List<DrillLine>, val dayBills: List<String>,
 )
 
 enum class ReportMode { PERIOD, YEAR }
@@ -743,6 +757,47 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         _report.value = null
     }
 
+    // ---- calendar ----
+
+    private data class CalendarRequest(val offset: Int, val selectedEpochDay: Long?)
+    private var calendarRequest: CalendarRequest? = null
+    private val _calendar = MutableStateFlow<CalendarUi?>(null)
+    val calendar: StateFlow<CalendarUi?> get() = _calendar
+
+    private fun calendarAction(next: (CalendarRequest) -> CalendarRequest) {
+        calendarRequest = next(calendarRequest ?: CalendarRequest(0, null))
+        viewModelScope.launch(Dispatchers.IO) { container.write { ok -> calendarRequest?.let { _calendar.value = buildCalendar(ok, it) } } }
+    }
+
+    fun openCalendar() = calendarAction { CalendarRequest(0, null) }
+    fun closeCalendar() { calendarRequest = null; _calendar.value = null }
+    fun shiftCalendar(delta: Int) = calendarAction { CalendarRequest(it.offset + delta, null) }
+    fun selectCalendarDay(epochDay: Long?) = calendarAction { it.copy(selectedEpochDay = if (it.selectedEpochDay == epochDay) null else epochDay) }
+
+    private fun buildCalendar(ok: AppContainer.Opened.Ok, r: CalendarRequest): CalendarUi {
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val t = LocalDate.now()
+        val today = kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth)
+        val (year, month) = CalendarMath.monthAt(today, r.offset)
+        val first = kotlinx.datetime.LocalDate(year, month, 1)
+        val period = DatePeriod(first, first.plus(1, kotlinx.datetime.DateTimeUnit.MONTH))
+        val due = ok.recurring.unhandled(period.start, period.endExclusive).filter { it.item.kind == RecurringKind.EXPENSE }
+        val m = CalendarMath.month(year, month, zone, ok.reports.spendPoints(period, zone, inr), due.map { BillOnDay(it.date, it.item.amount?.minorUnits) }, today)
+        val selected = r.selectedEpochDay?.let { kotlinx.datetime.LocalDate.fromEpochDays(it) }?.takeIf { it in period }
+        val lines = selected?.let { ok.reports.drill(DatePeriod(it, it.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr, DrillTarget.All, 200) }.orEmpty()
+        val dayFmt = DateTimeFormatter.ofPattern("EEEE, d MMM")
+        return CalendarUi(
+            label = DateTimeFormatter.ofPattern("MMMM yyyy").format(LocalDate.of(year, month, 1)), offset = r.offset, blanks = m.leadingBlanks,
+            cells = m.days.map { CalendarCellUi(it.date.dayOfMonth, it.date.toEpochDays(), if (it.spentMinor == 0L) "" else Money(it.spentMinor, inr).compact(), it.spentMinor, it.bills, it.level, it.isToday) },
+            total = Money(m.totalSpentMinor, inr).formatted(),
+            selectedEpochDay = selected?.toEpochDays(),
+            dayTitle = selected?.let { dayFmt.format(LocalDate.ofEpochDay(it.toEpochDays())) }.orEmpty(),
+            dayTotal = selected?.let { Money(m.days[it.dayOfMonth - 1].spentMinor, inr).formatted() }.orEmpty(),
+            dayLines = lines,
+            dayBills = due.filter { it.date == selected }.map { b -> b.item.name + (b.item.amount?.let { " ${it.formatted()}" } ?: " (amount each time)") },
+        )
+    }
+
     private fun reportAction(next: (ReportRequest) -> ReportRequest) {
         val current = reportRequest ?: ReportRequest(ReportMode.PERIOD, 0)
         reportRequest = next(current)
@@ -982,6 +1037,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val cats = ok.categories.list()
         categoryNames = cats.associate { it.id to it.name }
         reportRequest?.let { _report.value = buildReport(ok, it) } // keep an open report in step with edits made from its entry list
+        calendarRequest?.let { _calendar.value = buildCalendar(ok, it) }
         searchInput?.let { i -> // and an open search, so an entry edited from the results is shown as it now is
             val min = i.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) }
             val max = i.maxRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) }
