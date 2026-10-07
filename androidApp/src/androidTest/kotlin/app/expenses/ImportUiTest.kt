@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.expenses.core.storage.CsvExport
 import app.expenses.core.storage.EncryptedDriver
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -190,6 +191,21 @@ class ImportUiTest {
         viewModel().startImport(file("one.csv", "Date,Amount\n"))
         waitText("import_error", "no rows to import")
         assertEquals(0L, entryCount())
+    }
+
+    @Test
+    fun theAppsOwnCsvExportIsRecognisedAndPointsToRestoreInsteadOfImportingNonsense() {
+        openData()
+        val exported = runBlocking {
+            container.write { ok ->
+                ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("x"), 1_000, app.expenses.core.domain.ledger.AccountId("cash"), app.expenses.core.domain.Money(500, app.expenses.core.domain.Currency.INR)), app.expenses.core.storage.EntryDetails(merchant = "Cafe"))
+                CsvExport(ok.db).build(kotlinx.datetime.TimeZone.UTC)
+            }
+        }!!
+        viewModel().startImport(file("own.csv", exported))
+        waitText("import_error", "exported from this app")
+        waitText("import_error", "make a backup")
+        assertEquals(1L, entryCount(), "nothing was imported: only the one entry that was exported is there")
     }
 
     // ---- reading the bytes ----

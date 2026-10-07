@@ -35,7 +35,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** One in-memory device: every store the backup touches. */
-private class Device(node: String) {
+class Device(node: String) {
     val inr = Currency.INR
     val db = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
     val clock = HlcClock(node)
@@ -52,6 +52,7 @@ private class Device(node: String) {
     fun populate() {
         ledger.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, inr))
         ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, inr))
+        ledger.saveAccount(Account(AccountId("oldcard"), "Old card", AccountType.CREDIT_CARD, inr, openingMinor = -50_000, archived = true))
         val pets = categories.create("Pets")
         categories.create("Vet", parentId = pets.id, colorArgb = 0xFF00AA00)
         categories.merge("Groceries", "Food") // leaves a tombstone
@@ -90,6 +91,7 @@ class BackupStoreTest {
         assertEquals(a.ledger.spendByCategory(a.inr), b.ledger.spendByCategory(b.inr), "SQL totals")
         assertEquals(a.ledger.loadLedger().spendByCategory(a.inr), b.ledger.loadLedger().spendByCategory(b.inr), "in-memory ledger")
         assertEquals(b.ledger.spendByCategory(b.inr), b.ledger.loadLedger().spendByCategory(b.inr), "and they agree with each other")
+        assertEquals(a.ledger.balances(), b.ledger.balances(), "every account balance, opening balances included")
         assertEquals(a.notifications.prefs(), b.notifications.prefs())
         assertEquals(a.budgets.period(), b.budgets.period())
         assertEquals(a.recurring.due(LocalDate(2026, 10, 1)), b.recurring.due(LocalDate(2026, 10, 1)), "handled occurrences stay handled")

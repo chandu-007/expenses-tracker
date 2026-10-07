@@ -27,6 +27,7 @@ import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.DataScreen
 import app.expenses.ui.ImportScreen
 import app.expenses.ui.EntryFormScreen
+import app.expenses.ui.HistoryScreen
 import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
@@ -88,11 +89,17 @@ class MainActivity : FragmentActivity() {
                     }
 
                     val editing by viewModel.editor.collectAsStateWithLifecycle()
+                    val history by viewModel.history.collectAsStateWithLifecycle()
 
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
                         is UiState.Ready -> when {
+                            history != null -> {
+                                val h = history!!
+                                BackHandler { viewModel.closeHistory() }
+                                HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
+                            }
                             editing is Editable.Form -> {
                                 val e = editing as Editable.Form
                                 BackHandler { viewModel.closeEditor() }
@@ -109,6 +116,7 @@ class MainActivity : FragmentActivity() {
                                     onSave = { d, _ -> viewModel.saveEntry(d, false) },
                                     onBack = viewModel::closeEditor,
                                     refundOf = e.refundOf,
+                                    onHistory = e.draft.id?.let { id -> { viewModel.openHistory(id) } },
                                     onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
                                 )
                                 }
@@ -154,6 +162,9 @@ class MainActivity : FragmentActivity() {
                                     onChange = viewModel::search,
                                     onBack = { searching = false; viewModel.closeSearch() },
                                     onOpen = { viewModel.openEditor(it.id) },
+                                    accounts = s.accounts,
+                                    onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete,
+                                    onUndo = viewModel::undo,
                                 )
                             }
                             reporting -> {
@@ -258,6 +269,9 @@ class MainActivity : FragmentActivity() {
                                 onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
+                                onBulkCategory = viewModel::bulkSetCategory,
+                                onBulkAccount = viewModel::bulkSetAccount,
+                                onBulkDelete = viewModel::bulkDelete,
                             )
                         }
                     }

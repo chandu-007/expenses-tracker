@@ -36,6 +36,7 @@ import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.OwnExport
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.Account
@@ -138,7 +139,11 @@ data class RecurringUi(
 
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
-data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
+data class UndoUi(
+    val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0,
+    /** For a bulk edit: the earlier versions to put back; for a bulk delete: the ids to bring back, in order. */
+    val bulkDrafts: List<EntryDraft> = emptyList(), val bulkRestore: List<String> = emptyList(),
+)
 
 /** One transaction found in a statement, as shown in the preview. */
 data class ImportRowUi(val text: String, val amount: String, val spending: Boolean)
@@ -188,6 +193,9 @@ data class SearchUi(
     val hasConditions: Boolean = false,
     val truncated: Boolean = false,
     val problem: String? = null,
+    /** What the last bulk change from here did, with a way to take it back. */
+    val notice: String? = null,
+    val undo: UndoUi? = null,
 )
 
 enum class ReportMode { PERIOD, YEAR }
@@ -368,9 +376,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Takes back an entry that was just added. */
     fun undo(u: UndoUi) = withStore { ok ->
-        if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
+        if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it) } }
+        else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
+        else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
         refresh(ok)
+        _search.update { it.copy(notice = null, undo = null) }
     }
 
     /** Opens the editor for an entry: the simple form, or a read-only explanation. */
@@ -380,7 +391,37 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeEditor() {
         _editor.value = null
+        _history.value = null
     }
+
+    /** The history of the entry being edited, or null when not shown. */
+    val history: StateFlow<HistoryUi?> get() = _history
+    private val _history = MutableStateFlow<HistoryUi?>(null)
+
+    fun openHistory(entryId: String) = withStore { ok -> _history.value = EntryActions(ok).history(entryId) }
+    fun closeHistory() { _history.value = null }
+
+    /** Puts back the version before an edit, then returns to the list. */
+    fun restoreVersion(entryId: String, index: Int) = withStore { ok ->
+        EntryActions(ok).restoreVersion(entryId, index)
+        _history.value = null
+        _editor.value = null
+        refresh(ok, undo = null)
+    }
+
+    // ---- bulk edit ----
+
+    /** Applies a bulk change and reports it: a snackbar on the list and a notice on the search screen, both with Undo. */
+    private fun bulk(what: String, run: (EntryActions) -> EntryActions.BulkResult) = withStore { ok ->
+        val r = run(EntryActions(ok))
+        val undo = if (r.undoDrafts.isNotEmpty() || r.undoRestore.isNotEmpty()) UndoUi("", r.text(what), bulkDrafts = r.undoDrafts, bulkRestore = r.undoRestore) else null
+        refresh(ok, undo = undo)
+        _search.update { it.copy(notice = r.text(what), undo = undo) }
+    }
+
+    fun bulkSetCategory(ids: List<String>, category: String) = bulk("Changed the category of") { it.bulkSetCategory(ids, category) }
+    fun bulkSetAccount(ids: List<String>, account: String) = bulk("Moved") { it.bulkSetAccount(ids, account) }
+    fun bulkDelete(ids: List<String>) = bulk("Deleted") { it.bulkDelete(ids) }
 
     /** Deletes an entry and offers to bring it back. */
     fun deleteEntry(row: RowUi) = withStore { ok ->
@@ -555,6 +596,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 val table = Csv.parse(StatementText.decode(bytes))
                 require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
                 require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
+                require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }
                 importTable = table
                 val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList() }.orEmpty()
                 val account = (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()

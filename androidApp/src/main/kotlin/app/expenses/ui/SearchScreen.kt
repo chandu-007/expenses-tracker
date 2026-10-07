@@ -1,6 +1,9 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +50,7 @@ import app.expenses.SearchKind
 import app.expenses.SearchRange
 import app.expenses.SearchUi
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     state: SearchUi,
@@ -55,7 +58,14 @@ fun SearchScreen(
     onChange: (SearchInput) -> Unit,
     onBack: () -> Unit,
     onOpen: (RowUi) -> Unit,
+    accounts: List<app.expenses.AccountUi>,
+    onBulkCategory: (List<String>, String) -> Unit,
+    onBulkAccount: (List<String>, String) -> Unit,
+    onBulkDelete: (List<String>) -> Unit,
+    onUndo: (app.expenses.UndoUi) -> Unit,
 ) {
+    var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    androidx.activity.compose.BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     var text by rememberSaveable { mutableStateOf("") }
     var min by rememberSaveable { mutableStateOf("") }
     var max by rememberSaveable { mutableStateOf("") }
@@ -72,7 +82,17 @@ fun SearchScreen(
     // The screen may be re-created (rotation) with its inputs restored: search again so the results match what is shown.
     LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY) onChange(SearchInput(text, min, max, categoryId, kind, range)) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("search_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(
+        bottomBar = {
+            if (selected.isNotEmpty()) BulkBar(
+                selected.size, categories, accounts,
+                onCategory = { c -> onBulkCategory(selected, c); selected = emptyList() },
+                onAccount = { a -> onBulkAccount(selected, a); selected = emptyList() },
+                onDelete = { onBulkDelete(selected); selected = emptyList() },
+                onCancel = { selected = emptyList() },
+            )
+        },
+        topBar = { TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("search_back")) { Text("Back") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             OutlinedTextField(
                 value = text, onValueChange = { changed(t = it) }, label = { Text("Merchant or note") }, singleLine = true,
@@ -106,6 +126,12 @@ fun SearchScreen(
                 state.searching -> Text("Searching…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_working"))
                 state.results.isEmpty() -> Text("Nothing found.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_none"))
                 else -> {
+                    state.notice?.let { n ->
+                        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(n, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("search_notice"))
+                            state.undo?.let { u -> TextButton(onClick = { onUndo(u) }, modifier = Modifier.testTag("search_undo")) { Text("Undo") } }
+                        }
+                    }
                     Text(
                         "${state.results.size} ${if (state.results.size == 1) "result" else "results"}" + if (state.truncated) ", the most recent. Narrow the search to see others." else "",
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -113,7 +139,14 @@ fun SearchScreen(
                     )
                     LazyColumn(Modifier.fillMaxSize().testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
                         items(state.results, key = { it.seq }) { row ->
-                            Row(Modifier.fillMaxWidth().clickable { onOpen(row) }.padding(horizontal = 16.dp, vertical = 12.dp).testTag("result_${row.id}"), verticalAlignment = Alignment.CenterVertically) {
+                            val isSelected = row.id in selected
+                            Row(
+                                Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                                    .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else onOpen(row) }, onLongClick = { selected = selected.toggled(row.id) })
+                                    .padding(horizontal = 16.dp, vertical = 12.dp).testTag("result_${row.id}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                                     Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

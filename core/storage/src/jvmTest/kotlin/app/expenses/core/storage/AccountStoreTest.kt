@@ -147,3 +147,33 @@ class AccountStoreTest {
         assertEquals(0L, a.openingMinor); assertEquals(false, a.archived)
     }
 }
+
+class AtomicChangeTest {
+    private val inr = Currency.INR
+    private val db = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
+    private val ledger = LedgerStore(db, HlcClock("n")) { 1L }
+    private fun ex(id: String, amount: Long) = Expense(EntryId(id), 1, AccountId("cash"), Money(amount, inr), listOf(CategorySplit(CategoryId("Food"), Money(amount, inr))))
+
+    init { ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, inr)) }
+
+    @Test
+    fun ifAnythingInAChangeFailsNoneOfItIsKept() {
+        ledger.save(ex("a", 100))
+        assertFailsWith<IllegalArgumentException> {
+            ledger.atomically {
+                ledger.save(ex("a", 999))
+                ledger.save(ex("b", 5))
+                ledger.save(Expense(EntryId("c"), 1, AccountId("nowhere"), Money(1, inr))) // unknown account: breaks a rule
+            }
+        }
+        assertEquals(100L, db.schemaQueries.entryById("a").executeAsOne().amount_minor, "the edit made before the failure was rolled back")
+        assertEquals(null, db.schemaQueries.entryById("b").executeAsOneOrNull(), "and so was the new entry")
+        assertEquals(listOf(app.expenses.core.domain.RevisionKind.CREATED), ledger.history(EntryId("a")).map { it.kind }, "and the history shows no edit")
+    }
+
+    @Test
+    fun aChangeThatSucceedsIsKeptAndReturnsItsResult() {
+        val n = ledger.atomically { ledger.save(ex("a", 1)); ledger.save(ex("b", 2)); 2 }
+        assertEquals(2, n); assertEquals(2L, db.schemaQueries.entryCount().executeAsOne())
+    }
+}

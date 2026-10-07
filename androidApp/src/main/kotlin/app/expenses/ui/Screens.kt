@@ -38,7 +38,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Checkbox
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.CircularProgressIndicator
@@ -107,7 +110,12 @@ fun EntryListScreen(
     onSnoozeBackupNudge: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
+    onBulkCategory: (List<String>, String) -> Unit,
+    onBulkAccount: (List<String>, String) -> Unit,
+    onBulkDelete: (List<String>) -> Unit,
 ) {
+    var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     var askingFor by remember { mutableStateOf<DueUi?>(null) }
     askingFor?.let { d -> AmountDialog("Amount for ${d.name}", onConfirm = { onPostDue(d, it); askingFor = null }, onDismiss = { askingFor = null }) }
     val listState = rememberLazyListState()
@@ -137,6 +145,15 @@ fun EntryListScreen(
     }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            if (selected.isNotEmpty()) BulkBar(
+                selected.size, state.categories, state.accounts,
+                onCategory = { c -> onBulkCategory(selected, c); selected = emptyList() },
+                onAccount = { a -> onBulkAccount(selected, a); selected = emptyList() },
+                onDelete = { onBulkDelete(selected); selected = emptyList() },
+                onCancel = { selected = emptyList() },
+            )
+        },
         floatingActionButton = { FloatingActionButton(onClick = onAdd, modifier = Modifier.testTag("add")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -192,16 +209,21 @@ fun EntryListScreen(
                 }
             } else {
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
-                    items(state.rows, key = { it.seq }, contentType = { "row" }) { SwipeableRow(it, onOpen, onDelete) }
+                    items(state.rows, key = { it.seq }, contentType = { "row" }) { row ->
+                        SwipeableRow(
+                            row, onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = row.id in selected,
+                            onLongPress = { selected = selected.toggled(row.id) }, onToggle = { selected = selected.toggled(row.id) },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit) {
+private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit) {
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
@@ -210,6 +232,7 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
     SwipeToDismissBox(
         state = dismiss,
         enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = !selecting,
         backgroundContent = {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp), contentAlignment = Alignment.CenterEnd) {
                 Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
@@ -218,9 +241,12 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
         modifier = Modifier.testTag("row_${row.title}"),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onOpen(row) }.padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                .combinedClickable(onClick = { if (selecting) onToggle() else onOpen(row) }, onLongClick = onLongPress)
+                .padding(horizontal = 16.dp, vertical = 12.dp).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
             Column(Modifier.weight(1f)) {
                 Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                 Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

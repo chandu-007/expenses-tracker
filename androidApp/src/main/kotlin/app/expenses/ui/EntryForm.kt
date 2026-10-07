@@ -89,6 +89,7 @@ fun EntryFormScreen(
     onBack: () -> Unit,
     refundOf: String? = null,
     onRefund: (() -> Unit)? = null,
+    onHistory: (() -> Unit)? = null,
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -217,6 +218,9 @@ fun EntryFormScreen(
                     Checkbox(checked = saveAsTemplate, onCheckedChange = { saveAsTemplate = it }, modifier = Modifier.testTag("save_template"))
                     Text("Save as a quick entry")
                 }
+            }
+            if (onHistory != null) {
+                OutlinedButton(onClick = onHistory, modifier = Modifier.testTag("history_open")) { Text("History of this entry") }
             }
             if (onRefund != null) {
                 OutlinedButton(onClick = onRefund, modifier = Modifier.testTag("refund_start")) { Text("Record a refund for this expense") }

@@ -458,6 +458,9 @@ INSERT INTO op_log(hlc, entity, row_id, field, value) VALUES (?, ?, ?, ?, ?);
 opsSince:
 SELECT * FROM op_log WHERE hlc > :hlc ORDER BY hlc LIMIT :limit;
 
+opsOfRow:
+SELECT * FROM op_log WHERE entity = :entity AND row_id = :rowId ORDER BY hlc;
+
 latestOp:
 SELECT * FROM op_log WHERE entity = :entity AND row_id = :rowId AND field = :field ORDER BY hlc DESC LIMIT 1;
 

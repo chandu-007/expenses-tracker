@@ -4,6 +4,10 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.DraftResult
 import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.HistoryFormat
+import app.expenses.core.domain.HistoryLine
+import app.expenses.core.domain.HistoryRestore
+import app.expenses.core.domain.RevisionKind
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.SplitDraft
@@ -19,6 +23,10 @@ import java.util.UUID
 
 private const val LAST_CATEGORY = "last_category"
 private const val LAST_ACCOUNT = "last_account"
+
+/** An entry's history for the screen. */
+data class HistoryUi(val entryId: String, val title: String, val revisions: List<HistoryRevisionUi>)
+data class HistoryRevisionUi(val index: Int, val whenText: String, val what: String, val lines: List<HistoryLine>, val canRestore: Boolean)
 
 /** What the edit screen may do with an entry. */
 sealed interface Editable {
@@ -151,6 +159,96 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             }
         }
         return id
+    }
+
+    /** What happened to an entry, newest first, worded for a person. Null if it never existed. */
+    fun history(entryId: String): HistoryUi? {
+        val revisions = ok.store.history(EntryId(entryId)).takeIf { it.isNotEmpty() } ?: return null
+        val q = ok.db.schemaQueries
+        val accounts = q.allAccounts().executeAsList().associate { it.id to it.name }
+        val categories = q.allCategories().executeAsList().associate { it.id to it.name }
+        val zone = java.time.ZoneId.systemDefault()
+        val day = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").withZone(zone)
+        val stamp = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(zone)
+        val fmt = HistoryFormat(Currency.INR, { accounts[it] ?: "an account that was removed" }, { categories[it] ?: it }, { day.format(java.time.Instant.ofEpochMilli(it)) })
+        val canRestore = editable(entryId) is Editable.Form
+        val title = (editable(entryId) as? Editable.Form)?.title ?: "Entry"
+        return HistoryUi(
+            entryId, title,
+            revisions.mapIndexed { i, r ->
+                HistoryRevisionUi(
+                    i, stamp.format(java.time.Instant.ofEpochMilli(r.atMillis)),
+                    when (r.kind) { RevisionKind.CREATED -> "Created"; RevisionKind.EDITED -> "Edited"; RevisionKind.DELETED -> "Deleted"; RevisionKind.RESTORED -> "Brought back" },
+                    fmt.lines(r.changes), // for the creation these are all the fields, each with no earlier value,
+                    canRestore = canRestore && r.kind == RevisionKind.EDITED,
+                )
+            }.reversed(),
+        )
+    }
+
+    /** Puts back the version of an entry as it was before revision [index] (an edit). It is saved as a new edit, so nothing is lost either way. */
+    fun restoreVersion(entryId: String, index: Int) {
+        val revisions = ok.store.history(EntryId(entryId))
+        val r = revisions.getOrNull(index)?.takeIf { it.kind == RevisionKind.EDITED } ?: throw IllegalArgumentException("That change can't be undone any more.")
+        val form = editable(entryId) as? Editable.Form ?: throw IllegalArgumentException("This entry can't be edited here.")
+        save(HistoryRestore.apply(form.draft, r.before, Currency.INR))
+    }
+
+    /**
+     * What a bulk change did. [undo] puts everything back; [skipped] counts selected entries the change does not apply to, with [why].
+     * [undoDrafts] are the earlier versions of changed entries, [undoRestore] the ids to bring back after a delete (in the order to restore them).
+     */
+    data class BulkResult(val changed: Int, val skipped: Int, val why: String?, val undoDrafts: List<EntryDraft> = emptyList(), val undoRestore: List<String> = emptyList()) {
+        fun text(what: String): String = when {
+            changed == 0 && skipped == 0 -> "Nothing to change."
+            skipped == 0 -> "$what $changed ${if (changed == 1) "entry" else "entries"}."
+            else -> "$what $changed, skipped $skipped${why?.let { " ($it)" }.orEmpty()}."
+        }
+    }
+
+    /** Sets the category of every selected entry that can take one (a plain expense or an income); split, shared, refund and transfer entries are skipped. All or nothing. */
+    fun bulkSetCategory(ids: List<String>, category: String): BulkResult = bulkEdit(ids, "split, shared, transfers and refunds keep their own categories") { d ->
+        when {
+            d.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(d) || d.kind == DraftKind.INCOME -> if (d.category == category) null else d.copy(category = category)
+            else -> Skip
+        }
+    }
+
+    /** Moves every selected entry to [account] (a transfer's "from" account). A transfer that would then go from an account to itself is skipped. All or nothing. */
+    fun bulkSetAccount(ids: List<String>, account: String): BulkResult = bulkEdit(ids, "a transfer can't start and end in the same account, and shared or foreign-currency entries can't be edited here") { d ->
+        if (d.accountId == account) null else d.copy(accountId = account)
+    }
+
+    private object Skip
+
+    private fun bulkEdit(ids: List<String>, why: String, change: (EntryDraft) -> Any?): BulkResult {
+        val old = ArrayList<EntryDraft>(); val new = ArrayList<EntryDraft>(); var skipped = 0
+        for (id in ids.distinct()) {
+            val form = editable(id) as? Editable.Form
+            if (form == null) { skipped++; continue }
+            when (val r = change(form.draft)) {
+                null -> Unit // already as wanted
+                is EntryDraft -> if (EntryDrafts.build(r, EntryId(id), Currency.INR) is DraftResult.Ok) { old += form.draft; new += r } else skipped++
+                else -> skipped++
+            }
+        }
+        ok.store.atomically { new.forEach { save(it) } }
+        return BulkResult(new.size, skipped, why.takeIf { skipped > 0 }, undoDrafts = old)
+    }
+
+    /** Deletes the selected entries (each can be brought back). An expense with refunds goes only if its refunds are in the selection too. All or nothing. */
+    fun bulkDelete(ids: List<String>): BulkResult {
+        val q = ok.db.schemaQueries
+        val live = ids.distinct().mapNotNull { id -> q.entryById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L } }
+        val (refunds, others) = live.partition { it.kind == "REFUND" }
+        val deleted = ArrayList<String>(); var skipped = ids.distinct().size - live.size
+        ok.store.atomically {
+            for (r in refunds + others) {
+                if (r.kind == "EXPENSE" && q.hasLiveRefunds(r.id).executeAsOne()) { skipped++; continue }
+                ok.store.delete(EntryId(r.id)); deleted += r.id
+            }
+        }
+        return BulkResult(deleted.size, skipped, "an expense with refunds that are not selected can't be deleted".takeIf { skipped > 0 }, undoRestore = deleted.reversed())
     }
 
     /** Deletes an entry (it can be restored). Refused, with a message, while an expense still has refunds. */

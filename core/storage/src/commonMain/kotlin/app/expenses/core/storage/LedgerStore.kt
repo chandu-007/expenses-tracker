@@ -79,6 +79,9 @@ class LedgerStore(
     /** How many entries, quick entries and repeating expenses refer to the account. */
     fun accountUsage(id: AccountId): Long = q.accountUsage(id.value).executeAsOne()
 
+    /** Runs [block] as one all-or-nothing change: if anything in it throws, none of it is kept. */
+    fun <T> atomically(block: () -> T): T = db.transactionWithResult { block() }
+
     // ---- entries ----
 
     /** Adds or edits an entry. Throws [IllegalArgumentException], leaving the database unchanged, if it breaks a ledger rule. */
@@ -268,10 +271,19 @@ class LedgerStore(
     }
 
     /** One sync-log operation per field whose value changed (all non-null fields for a new row). */
+    /** One call is one change: every field it logs shares the same wall-clock time (the counter orders them), so the history can show it as one edit. */
     private fun logChanges(entity: String, rowId: String, before: Map<String, String?>?, after: Map<String, String?>) {
+        val at = nowMillis()
         for ((field, value) in after) {
             val changed = if (before == null) value != null else before[field] != value
-            if (changed) q.insertOp(clock.now(nowMillis()).encode(), entity, rowId, field, value)
+            if (changed) q.insertOp(clock.now(at).encode(), entity, rowId, field, value)
         }
     }
+
+    /** What happened to an entry over time, oldest first: when it was created, edited, deleted and restored, and what each edit changed. */
+    fun history(id: EntryId): List<app.expenses.core.domain.Revision> =
+        app.expenses.core.domain.EntryHistory.revisions(q.opsOfRow("entry", id.value).executeAsList().map {
+            val h = app.expenses.core.domain.sync.Hlc.decode(it.hlc)
+            app.expenses.core.domain.LoggedChange(h.wallMillis, it.field_, it.value_)
+        })
 }

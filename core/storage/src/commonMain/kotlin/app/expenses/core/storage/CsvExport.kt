@@ -2,6 +2,7 @@ package app.expenses.core.storage
 
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.OwnExport
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.Instant
@@ -52,7 +53,7 @@ class CsvExport(private val db: ExpensesDb) {
 
     companion object {
         val BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
-        val HEADER = listOf("Date", "Time", "Type", "Amount", "Currency", "Your share", "Category", "Account", "To account", "Person", "Merchant", "Note", "Source")
+        val HEADER = OwnExport.HEADER
         private val TYPE_NAMES = mapOf("EXPENSE" to "Expense", "INCOME" to "Income", "TRANSFER" to "Transfer", "REFUND" to "Refund", "FRIEND_PAID" to "Paid by friend", "SETTLEMENT" to "Settlement")
 
         /** RFC 4180: cells with a comma, quote or line break are quoted and inner quotes doubled; rows end with CRLF. */
