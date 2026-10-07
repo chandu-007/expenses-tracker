@@ -22,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -166,12 +165,13 @@ fun ReportsScreen(
 
 @Composable
 private fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
+    val hide = LocalHideAmounts.current
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("trend")) {
         Text(if (report.mode == ReportMode.PERIOD) "Last six periods" else "Spending by month", style = MaterialTheme.typography.labelMedium)
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
             report.trend.forEachIndexed { i, bar ->
                 Column(
-                    Modifier.weight(1f).clickable { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = "${bar.label}: ${bar.amount}" },
+                    Modifier.weight(1f).clickable { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(Modifier.height(88.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {

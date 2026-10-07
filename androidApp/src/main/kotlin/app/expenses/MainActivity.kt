@@ -98,7 +98,7 @@ class MainActivity : FragmentActivity() {
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                        is UiState.Ready -> when {
+                        is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) { when {
                             history != null -> {
                                 val h = history!!
                                 BackHandler { viewModel.closeHistory() }
@@ -210,15 +210,15 @@ class MainActivity : FragmentActivity() {
                                         onAccount = viewModel::changeImportAccount, onMapping = viewModel::changeImportMapping,
                                         onImport = viewModel::confirmImport, onClose = viewModel::closeImport,
                                     )
-                                    return@Surface
+                                } else {
+                                    BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
+                                    DataScreen(
+                                        state = dataState,
+                                        onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
+                                        onExportCsv = viewModel::exportCsv, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
+                                        onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
+                                    )
                                 }
-                                BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
-                                DataScreen(
-                                    state = dataState,
-                                    onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
-                                    onExportCsv = viewModel::exportCsv, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
-                                    onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
-                                )
                             }
                             alerts -> {
                                 BackHandler { alerts = false }
@@ -297,7 +297,9 @@ class MainActivity : FragmentActivity() {
                                 onBulkDelete = viewModel::bulkDelete,
                                 onBulkAddTag = viewModel::bulkAddTag,
                                 onBulkRemoveTag = viewModel::bulkRemoveTag,
+                                onToggleHideAmounts = { viewModel.setHideAmounts(!s.hideAmounts) },
                             )
+                        }
                         }
                     }
                 }

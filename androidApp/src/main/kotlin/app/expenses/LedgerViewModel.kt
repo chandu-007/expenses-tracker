@@ -296,6 +296,8 @@ sealed interface UiState {
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val homeLayout: HomeLayout,
+        /** "Hide amounts" is on: every amount on screen is hidden. */
+        val hideAmounts: Boolean,
         val savedSearches: List<SavedSearchUi>,
         val categories: List<CategoryUi>,
         /** Tags in use, most used first, to offer when tagging. */
@@ -316,6 +318,7 @@ private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
 private const val TAG_SUGGESTIONS = 40L
 private const val SETTING_HOME_LAYOUT = "home_layout"
+private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
@@ -593,6 +596,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteSavedSearch(id: String) = withStore { ok -> ok.savedSearches.delete(id); refresh(ok) }
+
+    // ---- privacy ----
+
+    fun setHideAmounts(hide: Boolean) = withStore { ok ->
+        ok.templates.putSetting(SETTING_HIDE_AMOUNTS, if (hide) "1" else "0")
+        refresh(ok)
+    }
 
     // ---- home layout ----
 
@@ -1140,6 +1150,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
             accountRows = accountRows(ok, accounts),
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
+            hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },

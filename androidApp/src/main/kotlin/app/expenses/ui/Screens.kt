@@ -56,7 +56,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -81,6 +80,7 @@ import app.expenses.TemplateUi
 import app.expenses.UiState
 import app.expenses.core.domain.Currency
 import app.expenses.DueUi
+import app.expenses.core.domain.AmountMask
 import app.expenses.core.domain.HomeSection
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.parseAmount
@@ -107,6 +107,7 @@ fun EntryListScreen(
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
     onCustomiseHome: () -> Unit,
+    onToggleHideAmounts: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -131,11 +132,11 @@ fun EntryListScreen(
             .collect { last -> if (last >= state.rows.size - 10) onLoadMore() }
     }
     LaunchedEffect(state.message) {
-        state.message?.let { snackbar.showSnackbar(it); onMessageShown() }
+        state.message?.let { snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(it) else it); onMessageShown() }
     }
     LaunchedEffect(state.undo) {
         val undo = state.undo ?: return@LaunchedEffect
-        val result = snackbar.showSnackbar(undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
+        val result = snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(undo.text) else undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
         if (result == SnackbarResult.ActionPerformed) onUndo(undo)
         onUndoDismissed()
     }
@@ -175,6 +176,7 @@ fun EntryListScreen(
                         TextButton(onClick = { more = true }, modifier = Modifier.testTag("more_menu")) { Text("More") }
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
                             DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
                             DropdownMenuItem(text = { Text("Calendar") }, onClick = { more = false; onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
                             DropdownMenuItem(text = { Text("Accounts") }, onClick = { more = false; onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))

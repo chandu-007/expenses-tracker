@@ -76,6 +76,7 @@ class Device(node: String) {
         recurring.post("rent", LocalDate(2026, 8, 31), TimeZone.UTC)
         recurring.skip("power", LocalDate(2026, 9, 1))
         SavedSearchStore(db, clock) { 5_000L }.save(SavedSearch("ss", "Big food", text = "swiggy", minRupees = "500", categoryId = "Food", kind = "EXPENSE", range = "THIS_YEAR", tag = "Trip"))
+        templates.putSetting("hide_amounts", "1")
         templates.putSetting("home_layout", "QUICK_ENTRIES,BUDGET,BILLS,BALANCES;BILLS")
         notifications.setPrefs(NotificationPrefs(bills = false, quietStartMinute = 23 * 60 + 30, billHour = 18))
     }

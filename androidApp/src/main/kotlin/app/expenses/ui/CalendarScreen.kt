@@ -17,7 +17,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -88,11 +87,12 @@ fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Uni
 @Composable
 private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val shade = MaterialTheme.colorScheme.primary.copy(alpha = c.level * 0.18f)
+    val hide = LocalHideAmounts.current
     val description = "${c.day}, " + (if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
     Column(
         modifier.height(56.dp).padding(1.dp).clip(RoundedCornerShape(6.dp)).background(shade)
             .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)) else Modifier)
-            .clickable(onClick = onClick).padding(2.dp).testTag("cal_day_${c.day}").semantics { contentDescription = description },
+            .clickable(onClick = onClick).padding(2.dp).testTag("cal_day_${c.day}").semantics { contentDescription = privatelyPlain(description, hide) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(c.day.toString(), style = MaterialTheme.typography.labelMedium, color = if (c.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
