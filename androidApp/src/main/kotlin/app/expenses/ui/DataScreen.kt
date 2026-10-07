@@ -44,6 +44,7 @@ fun DataScreen(
     onExportCsv: (Uri) -> Unit,
     onBackup: (Uri, String?) -> Unit,
     onOpenBackup: (Uri) -> Unit,
+    onImportStatement: (Uri) -> Unit,
     onUnlock: (String) -> Unit,
     onRestore: () -> Unit,
     onCancelRestore: () -> Unit,
@@ -62,6 +63,7 @@ fun DataScreen(
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { it?.let(onExportCsv) }
     val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { it?.let { uri -> onBackup(uri, pass.ifEmpty { null }) } }
     val openPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(onOpenBackup) }
+    val statementPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(onImportStatement) }
 
     state.pending?.let { p ->
         AlertDialog(
@@ -104,6 +106,11 @@ fun DataScreen(
             Text("Spreadsheet", style = MaterialTheme.typography.titleMedium)
             Text("Every entry as a CSV file you can open in Excel or Google Sheets. Free, always.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { csvPicker.launch("expenses-$today.csv") }, enabled = !state.busy, modifier = Modifier.testTag("export_csv")) { Text("Export as CSV") }
+            HorizontalDivider()
+
+            Text("Bring in a bank statement", style = MaterialTheme.typography.titleMedium)
+            Text("Import a CSV downloaded from your bank or card. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { statementPicker.launch(arrayOf("*/*")) }, enabled = !state.busy, modifier = Modifier.testTag("import_statement")) { Text("Import a statement (CSV)") }
             HorizontalDivider()
 
             Text("Backup", style = MaterialTheme.typography.titleMedium)

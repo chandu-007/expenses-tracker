@@ -11,7 +11,13 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
+import app.expenses.core.domain.Csv
+import app.expenses.core.domain.Flow
+import app.expenses.core.domain.ParsedStatement
 import app.expenses.core.domain.ReportMath
+import app.expenses.core.domain.StatementDetector
+import app.expenses.core.domain.StatementMapping
+import app.expenses.core.domain.StatementParser
 import app.expenses.core.domain.parseAmount
 import app.expenses.core.storage.SearchQuery
 import app.expenses.core.storage.searchFiltered
@@ -44,7 +50,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-data class RowUi(val seq: Long, val id: String, val title: String, val subtitle: String, val amount: String, val outflow: Boolean)
+data class RowUi(val seq: Long, val id: String, val title: String, val subtitle: String, val amount: String,
+    /** Money coming in (income, a refund): shown with a plus sign so it is not mistaken for spending. */
+    val inflow: Boolean,
+)
 data class AccountUi(val id: String, val name: String)
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
@@ -109,6 +118,34 @@ data class RecurringUi(
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
 data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
+
+/** One transaction found in a statement, as shown in the preview. */
+data class ImportRowUi(val text: String, val amount: String, val spending: Boolean)
+
+/** What an import did, for the screen. */
+data class ImportResultUi(val imported: Int, val alreadyThere: Int, val spending: String, val income: String)
+
+/** State of the statement import. [mapping] is null until a file is chosen. Nothing is saved until the user confirms. */
+data class ImportUi(
+    val active: Boolean = false,
+    val busy: Boolean = false,
+    val error: String? = null,
+    val columnNames: List<String> = emptyList(),
+    val mapping: StatementMapping? = null,
+    val accountId: String = "",
+    val dateAmbiguous: Boolean = false,
+    val damaged: Boolean = false,
+    val rowCount: Int = 0,
+    val preview: List<ImportRowUi> = emptyList(),
+    val txnCount: Int = 0,
+    val spending: String = "",
+    val income: String = "",
+    val problems: List<String> = emptyList(),
+    val problemCount: Int = 0,
+    val ignoredRows: Int = 0,
+    val mappingProblem: String? = null,
+    val result: ImportResultUi? = null,
+)
 
 enum class SearchKind { ANY, EXPENSE, INCOME }
 enum class SearchRange { ANY, LAST_30_DAYS, THIS_PERIOD, THIS_YEAR }
@@ -204,6 +241,10 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
+private const val MAX_STATEMENT_BYTES = 20_000_000
+private const val MAX_STATEMENT_ROWS = 200_000
+private const val PREVIEW_ROWS = 6
+private const val PROBLEMS_SHOWN = 20
 private const val SEARCH_DEBOUNCE_MS = 200L
 private const val LAST_CATEGORY = "last_category"
 private const val LAST_ACCOUNT = "last_account"
@@ -228,6 +269,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var openedBytes: ByteArray? = null
     private var openedBackup: BackupData? = null
     private val actions get() = DataActions(getApplication(), container)
+
+    private val _import = MutableStateFlow(ImportUi())
+    val statement: StateFlow<ImportUi> = _import
+    private var importTable: app.expenses.core.domain.CsvTable? = null
+    private var importParsed: ParsedStatement? = null
 
     private val _search = MutableStateFlow(SearchUi())
     val search: StateFlow<SearchUi> = _search
@@ -391,6 +437,84 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             refresh(ok)
             _state.update { (it as? UiState.Ready)?.copy(message = if (done.size == 1) "Posted ${done[0].first.item.name}" else "Posted ${done.size} repeating expenses") ?: it }
         }
+    }
+
+    // ---- statement import ----
+
+    /** Reads a statement file the user picked and guesses its layout. Nothing is saved. */
+    fun startImport(uri: Uri) {
+        _import.value = ImportUi(active = true, busy = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("That file could not be opened.")
+                require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
+                val table = Csv.parse(StatementText.decode(bytes))
+                require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
+                require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
+                importTable = table
+                val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList() }.orEmpty()
+                val account = (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()
+                recomputeImport(StatementDetector.detect(table.rows), account)
+            } catch (e: IllegalArgumentException) {
+                _import.value = ImportUi(active = true, error = e.message)
+            } catch (e: Exception) {
+                _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.java.simpleName}")
+            }
+        }
+    }
+
+    fun changeImportMapping(change: (StatementMapping) -> StatementMapping) {
+        val m = _import.value.mapping ?: return
+        viewModelScope.launch(Dispatchers.IO) { recomputeImport(change(m), _import.value.accountId) }
+    }
+
+    fun changeImportAccount(id: String) {
+        _import.update { it.copy(accountId = id) }
+    }
+
+    private fun recomputeImport(mapping: StatementMapping, accountId: String) {
+        val table = importTable ?: return
+        val names = StatementDetector.columnNames(table.rows, mapping.headerRows)
+        val missing = mapping.missing()
+        val parsed = if (missing == null) StatementParser.parse(table.rows, mapping, inr.minorUnitDigits) { table.lines[it] } else null
+        importParsed = parsed
+        val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+        fun sum(flow: Flow) = Money(parsed?.txns?.filter { it.flow == flow }?.sumOf { it.minor } ?: 0L, inr)
+        _import.value = ImportUi(
+            active = true, columnNames = names, mapping = mapping, accountId = accountId,
+            dateAmbiguous = StatementDetector.dateIsAmbiguous(table.rows, mapping), damaged = table.damaged, rowCount = table.rows.size - mapping.headerRows,
+            preview = parsed?.txns?.take(PREVIEW_ROWS)?.map {
+                ImportRowUi(dateFmt.format(LocalDate.ofEpochDay(it.date.toEpochDays())) + (if (it.description.isNotEmpty()) " · " + it.description else ""), Money(it.minor, inr).formatted(), it.flow == Flow.SPENDING)
+            }.orEmpty(),
+            txnCount = parsed?.txns?.size ?: 0, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
+            problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
+            ignoredRows = parsed?.ignoredRows ?: 0, mappingProblem = missing,
+        )
+    }
+
+    /** Saves what the preview showed. Already-imported rows are skipped, so doing it twice is harmless. */
+    fun confirmImport() {
+        val parsed = importParsed ?: return
+        val account = _import.value.accountId
+        if (account.isEmpty() || parsed.txns.isEmpty()) return
+        _import.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                container.write { ok ->
+                    val r = ok.statements.import(parsed.txns, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    refresh(ok)
+                    _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted())) }
+                }
+            } catch (e: Exception) {
+                _import.update { it.copy(busy = false, error = "Nothing was imported: ${e.message ?: e::class.java.simpleName}") }
+            }
+        }
+    }
+
+    fun closeImport() {
+        importTable = null
+        importParsed = null
+        _import.value = ImportUi()
     }
 
     // ---- search ----
@@ -804,7 +928,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
             ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
-        outflow = e.kind == "EXPENSE" || e.kind == "FRIEND_PAID",
+        inflow = e.kind == "INCOME" || e.kind == "REFUND",
     )
 
     // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it

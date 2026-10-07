@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.DataScreen
+import app.expenses.ui.ImportScreen
 import app.expenses.ui.ExpenseFormScreen
 import app.expenses.ui.FormStart
 import app.expenses.ui.ReadOnlyEntryScreen
@@ -154,11 +155,21 @@ class MainActivity : FragmentActivity() {
                             }
                             yourData -> {
                                 val dataState by viewModel.data.collectAsStateWithLifecycle()
+                                val statement by viewModel.statement.collectAsStateWithLifecycle()
+                                if (statement.active) {
+                                    BackHandler { viewModel.closeImport() }
+                                    ImportScreen(
+                                        state = statement, accounts = s.accounts,
+                                        onAccount = viewModel::changeImportAccount, onMapping = viewModel::changeImportMapping,
+                                        onImport = viewModel::confirmImport, onClose = viewModel::closeImport,
+                                    )
+                                    return@Surface
+                                }
                                 BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
                                 DataScreen(
                                     state = dataState,
                                     onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
-                                    onExportCsv = viewModel::exportCsv, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup,
+                                    onExportCsv = viewModel::exportCsv, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                     onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                 )
                             }

@@ -216,7 +216,7 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
                 Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                 Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Text(row.amount, style = MaterialTheme.typography.bodyLarge)
+            Text(if (row.inflow) "+${row.amount}" else row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.inflow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
         }
     }
 }
