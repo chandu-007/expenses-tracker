@@ -246,21 +246,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var loaded = mutableListOf<Entry>()
     private var endReached = false
 
-    init {
-        viewModelScope.launch(Dispatchers.IO) {
-            when (val o = container.open()) {
-                is AppContainer.Opened.Ok -> { refresh(o); StartupTrace.mark("open: first page loaded") }
-                is AppContainer.Opened.KeyLost -> _state.value = UiState.KeyLost(o.message)
-            }
-        }
-    }
-
     /** Last resort after key loss, only on the user's explicit choice: deletes all data. */
     fun startFresh() {
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = UiState.Opening
             when (val o = container.startFresh()) {
-                is AppContainer.Opened.Ok -> refresh(o)
+                is AppContainer.Opened.Ok -> container.write { ok -> refresh(ok) }
                 is AppContainer.Opened.KeyLost -> _state.value = UiState.KeyLost(o.message)
             }
         }
@@ -815,4 +806,18 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
         outflow = e.kind == "EXPENSE" || e.kind == "FRIEND_PAID",
     )
+
+    // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it
+    // could run before they were initialised (a date formatter below it was still null on about 3% of starts, and the load died silently,
+    // leaving the opening screen up forever).
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            when (val o = container.open()) {
+                // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
+                // post's own refresh would overwrite the screen with stale totals.
+                is AppContainer.Opened.Ok -> { container.write { ok -> refresh(ok) }; StartupTrace.mark("open: first page loaded") }
+                is AppContainer.Opened.KeyLost -> _state.value = UiState.KeyLost(o.message)
+            }
+        }
+    }
 }
