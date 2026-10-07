@@ -27,6 +27,7 @@ class CsvExport(private val db: ExpensesDb) {
         val accounts = q.allAccounts().executeAsList().associate { it.id to it.name }
         val splits = q.allSplits().executeAsList().groupBy { it.entry_id }
         val shares = q.allShares().executeAsList().groupBy { it.entry_id }
+        val tags = q.allEntryTags().executeAsList().groupBy({ it.entry_id }, { it.tag })
         fun money(minor: Long, code: String) = Money(minor, Currency(code, digits[code] ?: 2)).toPlainString()
         val rows = mutableListOf(HEADER)
         for (e in q.liveEntriesInInsertionOrder().executeAsList().sortedWith(compareBy({ it.occurred_at }, { it.seq }))) {
@@ -45,7 +46,7 @@ class CsvExport(private val db: ExpensesDb) {
                 local.date.toString(), "%02d:%02d".format(local.hour, local.minute), TYPE_NAMES[e.kind] ?: e.kind,
                 money(e.amount_minor, e.currency), e.currency, yourShare,
                 text(category), text(e.account_id?.let { accounts[it] ?: it }.orEmpty()), text(e.counter_account_id?.let { accounts[it] ?: it }.orEmpty()),
-                text(e.person_id.orEmpty()), text(e.merchant.orEmpty()), text(e.note.orEmpty()), text(e.source),
+                text(e.person_id.orEmpty()), text(e.merchant.orEmpty()), text(e.note.orEmpty()), text(tags[e.id].orEmpty().joinToString(", ")), text(e.source),
             )
         }
         return encode(rows)

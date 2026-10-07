@@ -5,6 +5,7 @@ import app.expenses.core.storage.db.ExpensesDb
 
 private const val SORT_FIRST_MAX_MATCHES = 2000L
 private const val MIN_INDEXED_LENGTH = 3
+private const val TAGGED_SCAN_LIMIT = 20_000L
 
 /** Wraps user text as a single FTS5 phrase so operators such as quotes, `-` or `OR` are searched literally. */
 fun ftsPhrase(text: String): String = "\"" + text.replace("\"", "\"\"") + "\""
@@ -55,13 +56,15 @@ data class SearchQuery(
     val kind: String? = null,
     val fromMillis: Long = Long.MIN_VALUE,
     val untilMillis: Long = Long.MAX_VALUE,
+    /** Only entries carrying this tag (ignoring case). */
+    val tag: String? = null,
 ) {
     init {
         require((minMinor == null && maxMinor == null) || currency != null) { "An amount range needs a currency" }
         require(categoryIds == null || categoryIds.isNotEmpty()) { "An empty category list matches nothing; leave it null for any category" }
     }
 
-    val hasAnyCondition: Boolean get() = text.isNotBlank() || minMinor != null || maxMinor != null || categoryIds != null || kind != null || fromMillis != Long.MIN_VALUE || untilMillis != Long.MAX_VALUE
+    val hasAnyCondition: Boolean get() = text.isNotBlank() || minMinor != null || maxMinor != null || categoryIds != null || kind != null || fromMillis != Long.MIN_VALUE || untilMillis != Long.MAX_VALUE || tag != null
 }
 
 /**
@@ -74,6 +77,13 @@ fun ExpensesDb.searchFiltered(query: SearchQuery, limit: Long = 50): List<Entry>
     val text = query.text.trim()
     val ids = query.categoryIds ?: listOf("")
     val filterCats = if (query.categoryIds != null) 1L else 0L
+    if (query.tag != null) {
+        // Entries with a tag are usually few, so take them all through the tag index and apply the text here, with the same rule as the index:
+        // every word has to appear (ignoring case) somewhere in the merchant or note.
+        val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }.map { it.lowercase() }
+        val rows = q.searchTagged(query.tag, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, TAGGED_SCAN_LIMIT).executeAsList()
+        return rows.asSequence().filter { r -> val hay = ((r.merchant ?: "") + " " + (r.note ?: "")).lowercase(); words.all { it in hay } }.take(limit.toInt()).toList()
+    }
     if (text.isEmpty()) {
         return q.searchFilteredNoText(query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
     }

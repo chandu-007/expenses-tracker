@@ -24,6 +24,8 @@ data class EntryDetails(
     val note: String? = null,
     val source: String = "manual",
     val sourceRef: String? = null,
+    /** The entry's tags. Null leaves its tags as they are (an import or restore that knows nothing about tags must not wipe them); empty clears them. */
+    val tags: List<String>? = null,
 )
 
 /** Column values for one entry row, plus its split and share lists. */

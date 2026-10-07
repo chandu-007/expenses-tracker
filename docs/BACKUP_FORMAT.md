@@ -38,10 +38,11 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 `id`, `name`, `parentId`, `color`, `position`, `hidden`, `deleted`, `mergedInto`.
 
 ### `entries`
-`id`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`, `REFUND`, `FRIEND_PAID`, `SETTLEMENT`), `occurredAt`, `accountId`, `counterAccountId` (the account a transfer goes to), `amountMinor`, `currency`, `categoryId` (income), `personId`, `toAmountMinor` and `toCurrency` (a transfer between currencies), `direction` (settlements), `refundsEntry` (the expense a refund is for), `originalAmountMinor` and `originalCurrency` (a foreign-currency amount kept for display), `merchant`, `note`, `source` (`manual`, `sms`, `csv`, ...), `sourceRef` (where it came from, used to avoid duplicates), `splits`, `shares`.
+`id`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`, `REFUND`, `FRIEND_PAID`, `SETTLEMENT`), `occurredAt`, `accountId`, `counterAccountId` (the account a transfer goes to), `amountMinor`, `currency`, `categoryId` (income), `personId`, `toAmountMinor` and `toCurrency` (a transfer between currencies), `direction` (settlements), `refundsEntry` (the expense a refund is for), `originalAmountMinor` and `originalCurrency` (a foreign-currency amount kept for display), `merchant`, `note`, `source` (`manual`, `sms`, `csv`, ...), `sourceRef` (where it came from, used to avoid duplicates), `splits`, `shares`, `tags`.
 
 - `splits`: `categoryId`, `amountMinor`. They add up to the expense amount.
 - `shares`: `personId` (null is you), `amountMinor`.
+- `tags`: text labels, many per entry, compared ignoring case (a restore keeps the first spelling it meets). No commas, at most 30 characters, at most 10 per entry.
 
 ### `templates`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`
 ### `budgets`: `scope`, `limitMinor`, `currency`

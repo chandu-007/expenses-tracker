@@ -17,6 +17,7 @@ import app.expenses.core.storage.ReportStore
 import app.expenses.core.storage.StatementImporter
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.SchemaUpgrade
 import app.expenses.core.storage.FtsTuning
 import app.expenses.core.storage.LedgerStore
 import app.expenses.core.storage.TemplateStore
@@ -93,6 +94,7 @@ class AppContainer(private val context: Context) {
     private fun doOpen(): Opened = try {
         StartupTrace.mark("open: begin")
         val driver = EncryptedDriver.create(context)
+        SchemaUpgrade.ensureLatest(driver) // a database made by an earlier build gets the columns and tables added since
         val db = ExpensesDb(driver)
         FtsTuning.apply(driver)
         if (BuildConfig.SEEDING_ENABLED) db.schemaQueries.entryCount().executeAsOne() // forces the real open so the mark below is honest

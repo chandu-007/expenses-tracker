@@ -36,6 +36,7 @@ data class EntryDraft(
     val occurredAt: Long = 0L,
     val refundsEntry: String? = null,
     val refundableMinor: Long = 0L,
+    val tags: List<String> = emptyList(),
 )
 
 sealed interface DraftResult {

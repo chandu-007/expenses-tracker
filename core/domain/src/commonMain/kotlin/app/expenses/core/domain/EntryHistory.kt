@@ -62,6 +62,7 @@ class HistoryFormat(
             "note" -> f("Note") { it }
             "splits" -> f("Categories") { splitsText(it) }
             "shares" -> f("Shared with") { "others" }
+            "tags" -> f("Tags") { it.split(',').joinToString(", ") }
             else -> null
         }
     }
@@ -94,6 +95,7 @@ object HistoryRestore {
                 else -> draft.category
             },
             splits = if (draft.kind == DraftKind.EXPENSE && splits.size > 1) splits else emptyList(),
+            tags = if ("tags" in state) TagRules.split(state["tags"]) else emptyList(),
         )
     }
 

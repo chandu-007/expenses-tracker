@@ -45,8 +45,14 @@ class CsvExportTest {
     fun headerRowsAndPlainNumbersWithTheLocalDate() {
         ledger.save(Expense(EntryId("a"), at(2026, 10, 7, 23, 30), AccountId("cash"), m(123_456), listOf(CategorySplit(CategoryId("Food"), m(123_456)))), EntryDetails(merchant = "Cafe"))
         val l = lines()
-        assertEquals("Date,Time,Type,Amount,Currency,Your share,Category,Account,To account,Person,Merchant,Note,Source", l[0])
-        assertEquals("2026-10-07,23:30,Expense,1234.56,INR,1234.56,Food,Cash,,,Cafe,,manual", l[1])
+        assertEquals("Date,Time,Type,Amount,Currency,Your share,Category,Account,To account,Person,Merchant,Note,Tags,Source", l[0])
+        assertEquals("2026-10-07,23:30,Expense,1234.56,INR,1234.56,Food,Cash,,,Cafe,,,manual", l[1])
+    }
+
+    @Test
+    fun tagsAreListedInTheirOwnColumnAndQuotedBecauseTheyContainCommas() {
+        ledger.save(Expense(EntryId("a"), at(2026, 10, 7, 9, 0), AccountId("cash"), m(100)), EntryDetails(merchant = "X", tags = listOf("Trip", "80C")))
+        assertEquals("2026-10-07,09:00,Expense,1.00,INR,1.00,,Cash,,,X,,\"80C, Trip\",manual", csv.build(ist).split("\r\n")[1])
     }
 
     @Test
@@ -60,7 +66,7 @@ class CsvExportTest {
     fun commasQuotesAndLineBreaksAreQuotedPerRfc4180() {
         ledger.save(Expense(EntryId("a"), at(2026, 10, 7, 9, 0), AccountId("bank"), m(100), listOf(CategorySplit(CategoryId("Food"), m(100)))), EntryDetails(merchant = "Cafe, \"The\" Best", note = "line1\nline2"))
         assertEquals("""2026-10-07,09:00,Expense,1.00,INR,1.00,Food,"HDFC, Savings",,,"Cafe, ""The"" Best","line1
-line2",manual""", csv.build(ist).substringAfter("\r\n").removeSuffix("\r\n"))
+line2",,manual""", csv.build(ist).substringAfter("\r\n").removeSuffix("\r\n"))
     }
 
     @Test
@@ -78,9 +84,9 @@ line2",manual""", csv.build(ist).substringAfter("\r\n").removeSuffix("\r\n"))
         ledger.save(Expense(EntryId("d"), at(2026, 10, 7, 10, 0), AccountId("cash"), m(300_000), listOf(CategorySplit(CategoryId("Food"), m(300_000))), listOf(Share(null, m(100_000)), Share(PersonId("asha"), m(200_000)))))
         ledger.save(Income(EntryId("i"), at(2026, 10, 7, 11, 0), AccountId("bank"), m(5_000_000), CategoryId("Other")))
         val l = lines()
-        assertEquals("2026-10-07,09:00,Expense,900.00,INR,900.00,Food + Fun,Cash,,,,,manual", l[1])
-        assertEquals("2026-10-07,10:00,Expense,3000.00,INR,1000.00,Food,Cash,,,,,manual", l[2], "Your share excludes what Asha owes")
-        assertEquals("2026-10-07,11:00,Income,50000.00,INR,,Other,\"HDFC, Savings\",,,,,manual", l[3])
+        assertEquals("2026-10-07,09:00,Expense,900.00,INR,900.00,Food + Fun,Cash,,,,,,manual", l[1])
+        assertEquals("2026-10-07,10:00,Expense,3000.00,INR,1000.00,Food,Cash,,,,,,manual", l[2], "Your share excludes what Asha owes")
+        assertEquals("2026-10-07,11:00,Income,50000.00,INR,,Other,\"HDFC, Savings\",,,,,,manual", l[3])
     }
 
     @Test

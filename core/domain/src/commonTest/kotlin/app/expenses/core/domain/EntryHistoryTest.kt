@@ -42,12 +42,12 @@ class EntryHistoryTest {
             FieldChange("amount_minor", "10000", "15050"), FieldChange("occurred_at", "5", "6"), FieldChange("account_id", "bank", "cash"),
             FieldChange("category_id", null, "Food"), FieldChange("merchant", "Cafe", null), FieldChange("source", "manual", "csv"),
             FieldChange("kind", null, "EXPENSE"), FieldChange("source_ref", null, "x"), FieldChange("currency", null, "INR"),
-            FieldChange("splits", "Food:60000", "Food:50000,Home%3A2:10000"),
+            FieldChange("splits", "Food:60000", "Food:50000,Home%3A2:10000"), FieldChange("tags", null, "goa,tax"),
         ))
         assertEquals(listOf(
             HistoryLine("Amount", "₹100.00", "₹150.50"), HistoryLine("Date", "d5", "d6"), HistoryLine("Account", "acct:bank", "acct:cash"),
             HistoryLine("Category", null, "cat:Food"), HistoryLine("Note or merchant", "Cafe", null),
-            HistoryLine("Categories", "cat:Food ₹600.00", "cat:Food ₹500.00, cat:Home:2 ₹100.00"),
+            HistoryLine("Categories", "cat:Food ₹600.00", "cat:Food ₹500.00, cat:Home:2 ₹100.00"), HistoryLine("Tags", null, "goa, tax"),
         ), lines)
     }
 }
@@ -55,6 +55,13 @@ class EntryHistoryTest {
 class HistoryRestoreTest {
     private val inr = Currency.INR
     private val now = EntryDraft("e", DraftKind.EXPENSE, "150.00", "Bills", emptyList(), "bank", "", "Cafe 2", 9L)
+
+    @Test
+    fun anOldVersionsTagsComeBackAndAVersionWithoutTagsClearsThem() {
+        assertEquals(listOf("goa", "tax"), HistoryRestore.apply(now, mapOf("amount_minor" to "1", "tags" to "goa,tax"), inr).tags)
+        assertEquals(emptyList(), HistoryRestore.apply(now.copy(tags = listOf("x")), mapOf("amount_minor" to "1", "tags" to ""), inr).tags)
+        assertEquals(emptyList(), HistoryRestore.apply(now.copy(tags = listOf("x")), mapOf("amount_minor" to "1"), inr).tags, "an older version from before tags existed had none")
+    }
 
     @Test
     fun anOlderExpenseVersionComesBackWithItsAmountDateAccountCategoryAndNote() {

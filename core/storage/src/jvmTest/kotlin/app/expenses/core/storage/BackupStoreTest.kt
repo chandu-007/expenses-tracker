@@ -56,7 +56,7 @@ class Device(node: String) {
         val pets = categories.create("Pets")
         categories.create("Vet", parentId = pets.id, colorArgb = 0xFF00AA00)
         categories.merge("Groceries", "Food") // leaves a tombstone
-        ledger.save(Expense(EntryId("coffee"), 1_000, AccountId("cash"), m(12_000), listOf(CategorySplit(CategoryId("Food"), m(12_000)))), EntryDetails(merchant = "Cafe, \"The\" Best", note = "line1\nline2"))
+        ledger.save(Expense(EntryId("coffee"), 1_000, AccountId("cash"), m(12_000), listOf(CategorySplit(CategoryId("Food"), m(12_000)))), EntryDetails(merchant = "Cafe, \"The\" Best", note = "line1\nline2", tags = listOf("Trip", "80C")))
         ledger.save(Expense(EntryId("dinner"), 2_000, AccountId("bank"), m(300_000), listOf(CategorySplit(CategoryId("Food"), m(300_000))), listOf(Share(null, m(100_000)), Share(PersonId("asha"), m(200_000)))))
         ledger.save(Expense(EntryId("split"), 3_000, AccountId("bank"), m(90_000), listOf(CategorySplit(CategoryId("Food"), m(50_000)), CategorySplit(CategoryId(pets.id), m(40_000)))))
         ledger.save(Expense(EntryId("hotel"), 4_000, AccountId("bank"), m(830_000), listOf(CategorySplit(CategoryId("Fun"), m(830_000))), original = Money(10_000, Currency.USD)))

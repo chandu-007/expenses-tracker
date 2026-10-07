@@ -62,6 +62,9 @@ fun SearchScreen(
     onBulkCategory: (List<String>, String) -> Unit,
     onBulkAccount: (List<String>, String) -> Unit,
     onBulkDelete: (List<String>) -> Unit,
+    tags: List<String>,
+    onBulkAddTag: (List<String>, String) -> Unit,
+    onBulkRemoveTag: (List<String>, String) -> Unit,
     onUndo: (app.expenses.UndoUi) -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -72,15 +75,17 @@ fun SearchScreen(
     var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
     var kind by rememberSaveable { mutableStateOf(SearchKind.ANY) }
     var range by rememberSaveable { mutableStateOf(SearchRange.ANY) }
+    var tag by rememberSaveable { mutableStateOf<String?>(null) }
+    var tagMenu by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range) {
-        text = t; min = lo; max = hi; categoryId = c; kind = k; range = r
-        onChange(SearchInput(t, lo, hi, c, k, r))
+    fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag) {
+        text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g
+        onChange(SearchInput(t, lo, hi, c, k, r, g))
     }
     // The screen may be re-created (rotation) with its inputs restored: search again so the results match what is shown.
-    LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY) onChange(SearchInput(text, min, max, categoryId, kind, range)) }
+    LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null) onChange(SearchInput(text, min, max, categoryId, kind, range, tag)) }
 
     Scaffold(
         bottomBar = {
@@ -88,6 +93,9 @@ fun SearchScreen(
                 selected.size, categories, accounts,
                 onCategory = { c -> onBulkCategory(selected, c); selected = emptyList() },
                 onAccount = { a -> onBulkAccount(selected, a); selected = emptyList() },
+                onAddTag = { t -> onBulkAddTag(selected, t); selected = emptyList() },
+                onRemoveTag = { t -> onBulkRemoveTag(selected, t); selected = emptyList() },
+                tags = tags,
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
             )
@@ -109,6 +117,13 @@ fun SearchScreen(
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Any category") }, onClick = { menu = false; changed(c = null) }, modifier = Modifier.testTag("search_cat_any"))
                         categories.forEach { c -> DropdownMenuItem(text = { Text(displayName(categories, c)) }, onClick = { menu = false; changed(c = c.id) }, modifier = Modifier.testTag("search_cat_${c.id}")) }
+                    }
+                }
+                if (tags.isNotEmpty() || tag != null) Box {
+                    FilterChip(selected = tag != null, onClick = { tagMenu = true }, label = { Text(tag?.let { "Tag: $it" } ?: "Any tag") }, modifier = Modifier.testTag("search_tag"))
+                    DropdownMenu(expanded = tagMenu, onDismissRequest = { tagMenu = false }) {
+                        DropdownMenuItem(text = { Text("Any tag") }, onClick = { tagMenu = false; changed(g = null) }, modifier = Modifier.testTag("search_tag_any"))
+                        tags.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { tagMenu = false; changed(g = t) }, modifier = Modifier.testTag("search_tag_$t")) }
                     }
                 }
                 FilterChip(selected = kind == SearchKind.EXPENSE, onClick = { changed(k = if (kind == SearchKind.EXPENSE) SearchKind.ANY else SearchKind.EXPENSE) }, label = { Text("Expenses") }, modifier = Modifier.testTag("search_kind_expense"))

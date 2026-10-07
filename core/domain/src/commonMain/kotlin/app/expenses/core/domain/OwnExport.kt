@@ -6,7 +6,7 @@ package app.expenses.core.domain
  * instead of producing rows that make no sense; the JSON backup is the lossless way to move data between phones.
  */
 object OwnExport {
-    val HEADER = listOf("Date", "Time", "Type", "Amount", "Currency", "Your share", "Category", "Account", "To account", "Person", "Merchant", "Note", "Source")
+    val HEADER = listOf("Date", "Time", "Type", "Amount", "Currency", "Your share", "Category", "Account", "To account", "Person", "Merchant", "Note", "Tags", "Source")
 
     fun matches(rows: List<List<String>>): Boolean = rows.firstOrNull()?.map { it.trim() } == HEADER
 

@@ -2,6 +2,7 @@ package app.expenses.core.storage
 
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.TagRules
 import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
@@ -79,6 +80,12 @@ class LedgerStore(
     /** How many entries, quick entries and repeating expenses refer to the account. */
     fun accountUsage(id: AccountId): Long = q.accountUsage(id.value).executeAsOne()
 
+    /** The tags of an entry, alphabetical. */
+    fun tagsOf(id: EntryId): List<String> = q.tagsOf(id.value).executeAsList()
+
+    /** Tags on live entries with how many entries use each, most used first. */
+    fun tagsInUse(limit: Long = 200): List<Pair<String, Long>> = q.tagsInUse(limit).executeAsList().map { it.tag to it.uses }
+
     /** Runs [block] as one all-or-nothing change: if anything in it throws, none of it is kept. */
     fun <T> atomically(block: () -> T): T = db.transactionWithResult { block() }
 
@@ -107,7 +114,17 @@ class LedgerStore(
             cols.shares.forEachIndexed { i, s -> q.insertShare(cols.id, i.toLong(), s.person?.value, s.amount.minorUnits) }
 
             val row = q.entryById(cols.id).executeAsOne()
-            logChanges("entry", cols.id, beforeFields, EntryMapping.fields(row, splitsOf(row), sharesOf(row)))
+            val fieldsAfter = LinkedHashMap(EntryMapping.fields(row, splitsOf(row), sharesOf(row)))
+            val tagsBefore = q.tagsOf(cols.id).executeAsList()
+            if (details.tags != null) {
+                val wanted = TagRules.clean(details.tags).map { q.tagSpelling(it).executeAsOneOrNull() ?: it }
+                q.deleteTags(cols.id)
+                wanted.forEach { q.insertTag(cols.id, it) }
+            }
+            val tagsNow = q.tagsOf(cols.id).executeAsList()
+            // Logged as one field so history and sync see a tag change like any other. An entry with no tags logs nothing (as for any empty field).
+            fieldsAfter["tags"] = TagRules.joined(tagsNow).ifEmpty { null }
+            logChanges("entry", cols.id, beforeFields?.plus("tags" to TagRules.joined(tagsBefore).ifEmpty { null }), fieldsAfter)
             rebuildSpendLines(entry)
         }
     }

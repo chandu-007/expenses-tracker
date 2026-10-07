@@ -113,6 +113,7 @@ class MainActivity : FragmentActivity() {
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = false,
+                                    allTags = s.tags,
                                     onSave = { d, _ -> viewModel.saveEntry(d, false) },
                                     onBack = viewModel::closeEditor,
                                     refundOf = e.refundOf,
@@ -164,6 +165,7 @@ class MainActivity : FragmentActivity() {
                                     onOpen = { viewModel.openEditor(it.id) },
                                     accounts = s.accounts,
                                     onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete,
+                                    tags = s.tags, onBulkAddTag = viewModel::bulkAddTag, onBulkRemoveTag = viewModel::bulkRemoveTag,
                                     onUndo = viewModel::undo,
                                 )
                             }
@@ -238,6 +240,7 @@ class MainActivity : FragmentActivity() {
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = true,
+                                    allTags = s.tags,
                                     onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false },
                                     onBack = { adding = false },
                                 )
@@ -272,6 +275,8 @@ class MainActivity : FragmentActivity() {
                                 onBulkCategory = viewModel::bulkSetCategory,
                                 onBulkAccount = viewModel::bulkSetAccount,
                                 onBulkDelete = viewModel::bulkDelete,
+                                onBulkAddTag = viewModel::bulkAddTag,
+                                onBulkRemoveTag = viewModel::bulkRemoveTag,
                             )
                         }
                     }

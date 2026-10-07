@@ -45,6 +45,7 @@ data class BackupEntry(
     val sourceRef: String? = null,
     val splits: List<BackupSplit> = emptyList(),
     val shares: List<BackupShare> = emptyList(),
+    val tags: List<String> = emptyList(),
 )
 
 @Serializable data class BackupTemplate(val id: String, val name: String, val amountMinor: Long? = null, val currency: String, val categoryId: String, val accountId: String, val merchant: String? = null)

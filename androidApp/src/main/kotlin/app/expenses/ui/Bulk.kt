@@ -39,9 +39,22 @@ fun BulkBar(
     accounts: List<AccountUi>,
     onCategory: (String) -> Unit,
     onAccount: (String) -> Unit,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+    tags: List<String>,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    var newTag by remember { mutableStateOf(false) }
+    if (newTag) {
+        var text by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { newTag = false }, title = { Text("Add a tag to these entries") },
+            text = { androidx.compose.material3.OutlinedTextField(text, { text = it }, label = { Text("Tag") }, singleLine = true, modifier = Modifier.testTag("bulk_tag_input")) },
+            confirmButton = { TextButton(onClick = { onAddTag(text); newTag = false }, enabled = text.isNotBlank(), modifier = Modifier.testTag("bulk_tag_ok")) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { newTag = false }) { Text("Cancel") } },
+        )
+    }
     var menu by remember { mutableStateOf<String?>(null) }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag("bulk_bar")) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -56,6 +69,14 @@ fun BulkBar(
                 TextButton(onClick = { menu = "account" }, modifier = Modifier.testTag("bulk_account")) { Text("Account") }
                 DropdownMenu(expanded = menu == "account", onDismissRequest = { menu = null }) {
                     accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onAccount(a.id) }, modifier = Modifier.testTag("bulk_acc_${a.name}")) }
+                }
+            }
+            Box {
+                TextButton(onClick = { menu = "tag" }, modifier = Modifier.testTag("bulk_tag")) { Text("Tag") }
+                DropdownMenu(expanded = menu == "tag", onDismissRequest = { menu = null }) {
+                    DropdownMenuItem(text = { Text("New tag…") }, onClick = { menu = null; newTag = true }, modifier = Modifier.testTag("bulk_tag_new"))
+                    tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Add $t") }, onClick = { menu = null; onAddTag(t) }, modifier = Modifier.testTag("bulk_tag_add_$t")) }
+                    tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Remove $t") }, onClick = { menu = null; onRemoveTag(t) }, modifier = Modifier.testTag("bulk_tag_remove_$t")) }
                 }
             }
             TextButton(onClick = onDelete, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }

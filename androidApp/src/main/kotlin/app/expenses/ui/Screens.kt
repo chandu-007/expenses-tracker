@@ -113,6 +113,8 @@ fun EntryListScreen(
     onBulkCategory: (List<String>, String) -> Unit,
     onBulkAccount: (List<String>, String) -> Unit,
     onBulkDelete: (List<String>) -> Unit,
+    onBulkAddTag: (List<String>, String) -> Unit,
+    onBulkRemoveTag: (List<String>, String) -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
@@ -150,6 +152,9 @@ fun EntryListScreen(
                 selected.size, state.categories, state.accounts,
                 onCategory = { c -> onBulkCategory(selected, c); selected = emptyList() },
                 onAccount = { a -> onBulkAccount(selected, a); selected = emptyList() },
+                onAddTag = { t -> onBulkAddTag(selected, t); selected = emptyList() },
+                onRemoveTag = { t -> onBulkRemoveTag(selected, t); selected = emptyList() },
+                tags = state.tags,
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
             )

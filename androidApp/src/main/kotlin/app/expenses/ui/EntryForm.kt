@@ -51,6 +51,7 @@ import app.expenses.core.domain.EntryDraft
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.SplitDraft
+import app.expenses.core.domain.TagRules
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.EntryId
@@ -63,10 +64,10 @@ import java.time.format.DateTimeFormatter
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long)
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>))
     },
 )
 
@@ -90,6 +91,7 @@ fun EntryFormScreen(
     refundOf: String? = null,
     onRefund: (() -> Unit)? = null,
     onHistory: (() -> Unit)? = null,
+    allTags: List<String> = emptyList(),
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -210,6 +212,7 @@ fun EntryFormScreen(
                 value = draft.note, onValueChange = { draft = draft.copy(note = it) },
                 label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),
             )
+            TagsEditor(draft.tags, allTags) { draft = draft.copy(tags = it) }
             if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || split)) {
                 Text(built.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("form_problem"))
             }
@@ -266,5 +269,37 @@ private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currenc
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { update(draft.copy(splits = draft.splits + SplitDraft("", left?.takeIf { it > 0 }?.let { Money(it, currency).toPlainString() } ?: ""))) }, modifier = Modifier.testTag("split_add")) { Text("Add a part") }
         }
+    }
+}
+
+/** Tags on this entry (tap one to take it off), the most-used existing tags to add with a tap, and a field for a new one. */
+@Composable
+private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: (List<String>) -> Unit) {
+    var typed by rememberSaveable { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    fun add(text: String) {
+        val why = TagRules.checkAdd(tags, text)
+        if (why != null) { problem = why; return }
+        onChange(tags + TagRules.normalize(text)!!); typed = ""; problem = null
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Tags (optional)", style = MaterialTheme.typography.labelMedium)
+        if (tags.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            tags.forEach { t -> FilterChip(selected = true, onClick = { onChange(tags - t) }, label = { Text("$t ×") }, modifier = Modifier.testTag("tag_chip_$t")) }
+        }
+        val offer = suggestions.filter { s -> tags.none { it.equals(s, ignoreCase = true) } }.take(8)
+        if (offer.isNotEmpty() && tags.size < TagRules.MAX_PER_ENTRY) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            offer.forEach { s -> AssistChip(onClick = { add(s) }, label = { Text("+ $s") }, modifier = Modifier.testTag("tag_suggest_$s")) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = typed, onValueChange = { typed = it; problem = null }, label = { Text("New tag") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (typed.isNotBlank()) add(typed) }),
+                modifier = Modifier.weight(1f).testTag("tag_input"),
+            )
+            TextButton(onClick = { add(typed) }, enabled = typed.isNotBlank(), modifier = Modifier.testTag("tag_add")) { Text("Add") }
+        }
+        problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tag_problem")) }
     }
 }

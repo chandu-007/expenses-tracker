@@ -184,6 +184,7 @@ data class SearchInput(
     val categoryId: String? = null,
     val kind: SearchKind = SearchKind.ANY,
     val range: SearchRange = SearchRange.ANY,
+    val tag: String? = null,
 )
 
 /** [problem] explains input that cannot be searched; [hasConditions] is false until something is typed or chosen. */
@@ -264,6 +265,8 @@ sealed interface UiState {
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val categories: List<CategoryUi>,
+        /** Tags in use, most used first, to offer when tagging. */
+        val tags: List<String>,
         /** What the add screen starts with: the category and account used last. */
         val lastCategory: String,
         val lastAccountId: String,
@@ -278,6 +281,7 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
+private const val TAG_SUGGESTIONS = 40L
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
@@ -421,6 +425,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun bulkSetCategory(ids: List<String>, category: String) = bulk("Changed the category of") { it.bulkSetCategory(ids, category) }
     fun bulkSetAccount(ids: List<String>, account: String) = bulk("Moved") { it.bulkSetAccount(ids, account) }
+    fun bulkAddTag(ids: List<String>, tag: String) = bulk("Tagged") { it.bulkAddTag(ids, tag) }
+    fun bulkRemoveTag(ids: List<String>, tag: String) = bulk("Removed the tag from") { it.bulkRemoveTag(ids, tag) }
     fun bulkDelete(ids: List<String>) = bulk("Deleted") { it.bulkDelete(ids) }
 
     /** Deletes an entry and offers to bring it back. */
@@ -672,7 +678,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val min = input.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
         val max = input.maxRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
         if (min != null && max != null && min.minorUnits > max.minorUnits) return problem("The smallest amount is above the largest")
-        val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY
+        val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY || input.tag != null
         if (!conditions) { _search.value = SearchUi(); return }
         _search.update { it.copy(searching = true, hasConditions = true, problem = null) }
         searchJob = viewModelScope.launch(Dispatchers.IO) {
@@ -704,7 +710,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val categoryIds = input.categoryId?.let { id -> listOf(id) + cats.filter { it.parentId == id }.map { it.id } }
         val query = SearchQuery(
             text = input.text, minMinor = min?.minorUnits, maxMinor = max?.minorUnits, currency = if (min != null || max != null) inr.code else null,
-            categoryIds = categoryIds, kind = when (input.kind) { SearchKind.ANY -> null; SearchKind.EXPENSE -> "EXPENSE"; SearchKind.INCOME -> "INCOME" },
+            tag = input.tag, categoryIds = categoryIds, kind = when (input.kind) { SearchKind.ANY -> null; SearchKind.EXPENSE -> "EXPENSE"; SearchKind.INCOME -> "INCOME" },
             fromMillis = period?.startMillis(zone) ?: Long.MIN_VALUE, untilMillis = period?.endMillis(zone) ?: Long.MAX_VALUE,
         )
         val found = ok.db.searchFiltered(query, SEARCH_LIMIT + 1)
@@ -998,6 +1004,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             accounts = active.map { AccountUi(it.id, it.name) },
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
             accountRows = accountRows(ok, accounts),
+            tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,

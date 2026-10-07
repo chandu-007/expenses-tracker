@@ -148,6 +148,15 @@ CREATE TABLE entry_share (
     PRIMARY KEY (entry_id, position)
 );
 
+-- Tags: many per entry, compared ignoring case. The first spelling used for a tag is the one every entry keeps (the store looks it up).
+CREATE TABLE entry_tag (
+    entry_id TEXT NOT NULL,
+    tag TEXT NOT NULL COLLATE NOCASE,
+    PRIMARY KEY (entry_id, tag)
+) WITHOUT ROWID;
+
+CREATE INDEX entry_tag_tag ON entry_tag(tag, entry_id);
+
 -- Signed spending per category for every live entry, written by the repository from the same domain code the
 -- in-memory ledger uses (SpendLines), so SQL reports and the ledger cannot disagree. Refunds are negative lines.
 -- Covered by spend_line_report, so totals never touch other tables. The earlier design summed entry rows
@@ -374,6 +383,31 @@ SELECT * FROM entry_share WHERE entry_id = :entryId ORDER BY position;
 
 allShares:
 SELECT * FROM entry_share ORDER BY entry_id, position;
+
+tagsOf:
+SELECT tag FROM entry_tag WHERE entry_id = :entryId ORDER BY tag COLLATE NOCASE;
+
+deleteTags:
+DELETE FROM entry_tag WHERE entry_id = :entryId;
+
+insertTag:
+INSERT OR IGNORE INTO entry_tag(entry_id, tag) VALUES (?, ?);
+
+-- The spelling already in use for a tag, if any.
+tagSpelling:
+SELECT tag FROM entry_tag WHERE tag = :tag LIMIT 1;
+
+allEntryTags:
+SELECT entry_id, tag FROM entry_tag ORDER BY entry_id, tag COLLATE NOCASE;
+
+-- Tags on live entries, most used first.
+tagsInUse:
+SELECT t.tag AS tag, COUNT(*) AS uses FROM entry_tag t JOIN entry e ON e.id = t.entry_id
+WHERE e.deleted = 0 GROUP BY t.tag COLLATE NOCASE ORDER BY uses DESC, t.tag COLLATE NOCASE LIMIT :limit;
+
+entriesWithTag:
+SELECT e.* FROM entry e JOIN entry_tag t ON t.entry_id = e.id
+WHERE t.tag = :tag AND e.deleted = 0 ORDER BY e.occurred_at DESC, e.seq DESC LIMIT :limit;
 
 upsertTemplate:
 INSERT INTO template(id, name, amount_minor, currency, category_id, account_id, merchant, deleted)
@@ -615,6 +649,18 @@ ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 searchFilteredNoText:
 SELECT * FROM entry INDEXED BY entry_time
 WHERE deleted = 0
+  AND (:currency IS NULL OR currency = :currency)
+  AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
+  AND (:kind IS NULL OR kind = :kind)
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+  AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+-- The same filters as searchFilteredNoText, plus a tag (ignoring case). Text is applied by the caller on these rows.
+searchTagged:
+SELECT * FROM entry
+WHERE deleted = 0
+  AND EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = entry.id AND t.tag = :tag)
   AND (:currency IS NULL OR currency = :currency)
   AND (:minMinor IS NULL OR amount_minor >= :minMinor) AND (:maxMinor IS NULL OR amount_minor <= :maxMinor)
   AND (:kind IS NULL OR kind = :kind)

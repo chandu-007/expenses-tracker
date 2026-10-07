@@ -11,6 +11,7 @@ import app.expenses.core.domain.RevisionKind
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.SplitDraft
+import app.expenses.core.domain.TagRules
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.ledger.AccountId
@@ -85,7 +86,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         val title = row.merchant ?: row.note ?: row.kind.lowercase().replaceFirstChar { it.uppercase() }
         fun readOnly(reason: String) = Editable.ReadOnly(entryId, title, reason)
         if (row.currency != "INR") return readOnly("Only rupee entries can be edited here for now.")
-        val base = EntryDraft(entryId, DraftKind.EXPENSE, Money(row.amount_minor, Currency.INR).toPlainString(), "", emptyList(), row.account_id.orEmpty(), "", row.merchant.orEmpty(), row.occurred_at)
+        val base = EntryDraft(entryId, DraftKind.EXPENSE, Money(row.amount_minor, Currency.INR).toPlainString(), "", emptyList(), row.account_id.orEmpty(), "", row.merchant.orEmpty(), row.occurred_at, tags = ok.store.tagsOf(EntryId(entryId)))
         return when (row.kind) {
             "EXPENSE" -> {
                 val splits = q.splitsOf(entryId).executeAsList()
@@ -150,7 +151,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             is DraftResult.Problem -> throw IllegalArgumentException(r.message)
         }
         val text = draft.note.trim().ifEmpty { null }
-        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = existing.note, source = existing.source, sourceRef = existing.source_ref) else EntryDetails(merchant = text))
+        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, tags = draft.tags))
         if (draft.kind == DraftKind.EXPENSE) {
             val category = if (EntryDrafts.isSplit(draft)) "" else draft.category
             if (category.isNotEmpty()) {
@@ -217,6 +218,21 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
     /** Moves every selected entry to [account] (a transfer's "from" account). A transfer that would then go from an account to itself is skipped. All or nothing. */
     fun bulkSetAccount(ids: List<String>, account: String): BulkResult = bulkEdit(ids, "a transfer can't start and end in the same account, and shared or foreign-currency entries can't be edited here") { d ->
         if (d.accountId == account) null else d.copy(accountId = account)
+    }
+
+    /** Adds [tag] to every selected entry that can be edited here (up to ten tags each). All or nothing. */
+    fun bulkAddTag(ids: List<String>, tag: String): BulkResult = bulkEdit(ids, "shared or foreign-currency entries can't be edited here, and an entry holds up to ${TagRules.MAX_PER_ENTRY} tags") { d ->
+        val t = TagRules.normalize(tag) ?: return@bulkEdit Skip
+        when {
+            d.tags.any { it.equals(t, ignoreCase = true) } -> null
+            d.tags.size >= TagRules.MAX_PER_ENTRY -> Skip
+            else -> d.copy(tags = d.tags + t)
+        }
+    }
+
+    /** Removes [tag] (ignoring case) from every selected entry that has it. */
+    fun bulkRemoveTag(ids: List<String>, tag: String): BulkResult = bulkEdit(ids, "shared or foreign-currency entries can't be edited here") { d ->
+        if (d.tags.none { it.equals(tag, ignoreCase = true) }) null else d.copy(tags = d.tags.filterNot { it.equals(tag, ignoreCase = true) })
     }
 
     private object Skip

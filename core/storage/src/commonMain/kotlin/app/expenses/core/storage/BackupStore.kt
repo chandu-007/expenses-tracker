@@ -55,6 +55,7 @@ class BackupStore(
     fun export(): BackupData {
         val splits = q.allSplits().executeAsList().groupBy { it.entry_id }
         val shares = q.allShares().executeAsList().groupBy { it.entry_id }
+        val tags = q.allEntryTags().executeAsList().groupBy({ it.entry_id }, { it.tag })
         return BackupData(
             currencies = q.selectCurrencies().executeAsList().map { BackupCurrency(it.code, it.digits.toInt()) },
             accounts = q.allAccounts().executeAsList().map { BackupAccount(it.id, it.name, it.type, it.currency, it.opening_minor, it.archived == 1L) },
@@ -68,6 +69,7 @@ class BackupStore(
                     r.merchant, r.note, r.source, r.source_ref,
                     splits[r.id].orEmpty().map { BackupSplit(it.category_id, it.amount_minor) },
                     shares[r.id].orEmpty().map { BackupShare(it.person_id, it.amount_minor) },
+                    tags[r.id].orEmpty(),
                 )
             },
             templates = q.allTemplates().executeAsList().map { BackupTemplate(it.id, it.name, it.amount_minor, it.currency, it.category_id, it.account_id, it.merchant) },
@@ -116,7 +118,7 @@ class BackupStore(
                 isUntouchedDefault(here) -> q.replaceCategory(c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.id)
             }
         }
-        for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef))
+        for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags))
         for (t in data.templates) if (q.templateById(t.id).executeAsOneOrNull() == null) {
             templates.save(Template(t.id, t.name, t.amountMinor?.let { Money(it, currency(t.currency)) }, CategoryId(t.categoryId), AccountId(t.accountId), t.merchant))
         }
