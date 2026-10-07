@@ -87,4 +87,14 @@ class TemplateStoreTest {
         assertEquals("Transport", store.setting("last_category"))
         assertTrue(db.schemaQueries.opsSince("", 1_000).executeAsList().none { it.entity == "setting" }, "settings stay on this device")
     }
+
+    @Test
+    fun aSettingIsWrittenOnlyWhenItsValueChanges() {
+        val before = db.schemaQueries.settingValue("k").executeAsOneOrNull()
+        assertEquals(null, before)
+        store.putSettingIfChanged("k", "a"); assertEquals("a", store.setting("k"))
+        db.schemaQueries.putSetting("k", "a") // same value again through the plain path
+        store.putSettingIfChanged("k", "a"); assertEquals("a", store.setting("k"))
+        store.putSettingIfChanged("k", "b"); assertEquals("b", store.setting("k"), "a different value is written")
+    }
 }

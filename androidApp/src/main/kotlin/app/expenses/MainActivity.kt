@@ -62,6 +62,7 @@ class MainActivity : FragmentActivity() {
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(managingCategories) { viewModel.setCategoriesScreenOpen(managingCategories) }
                     var managingAccounts by rememberSaveable { mutableStateOf(false) }
                     var customisingHome by rememberSaveable { mutableStateOf(false) }
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }

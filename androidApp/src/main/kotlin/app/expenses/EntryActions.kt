@@ -53,8 +53,8 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             Expense(EntryId(id), occurredAt, AccountId(accountId), amount, listOf(CategorySplit(CategoryId(category), amount))),
             EntryDetails(merchant = note),
         )
-        ok.templates.putSetting(LAST_CATEGORY, category)
-        ok.templates.putSetting(LAST_ACCOUNT, accountId)
+        ok.templates.putSettingIfChanged(LAST_CATEGORY, category)
+        ok.templates.putSettingIfChanged(LAST_ACCOUNT, accountId)
         return id
     }
 
@@ -155,8 +155,8 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         if (draft.kind == DraftKind.EXPENSE) {
             val category = if (EntryDrafts.isSplit(draft)) "" else draft.category
             if (category.isNotEmpty()) {
-                ok.templates.putSetting(LAST_CATEGORY, category)
-                ok.templates.putSetting(LAST_ACCOUNT, draft.accountId)
+                ok.templates.putSettingIfChanged(LAST_CATEGORY, category)
+                ok.templates.putSettingIfChanged(LAST_ACCOUNT, draft.accountId)
             }
         }
         return id

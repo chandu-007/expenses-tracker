@@ -62,6 +62,9 @@ class TemplateStore(
 
     fun putSetting(key: String, value: String) = q.putSetting(key, value)
 
+    /** Writes only when the value differs: each write is its own commit, and settings like "last category" almost never change between saves. */
+    fun putSettingIfChanged(key: String, value: String) { if (setting(key) != value) q.putSetting(key, value) }
+
     private fun currencyDigits(code: String): Int = q.selectCurrencies().executeAsList().firstOrNull { it.code == code }?.digits?.toInt() ?: 2
 
     private fun fieldsOf(t: Template): Map<String, String?> = linkedMapOf(

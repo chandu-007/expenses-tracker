@@ -395,6 +395,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
      * On a rule it breaks, the reason is shown and the form is left as it was (the editor stays open).
      */
     fun saveEntry(draft: EntryDraft, saveAsTemplate: Boolean) = withStore { ok ->
+        val startedAt = System.nanoTime()
         val id = EntryActions(ok).save(draft)
         val amount = parseAmount(draft.amountText, inr)!!
         if (saveAsTemplate && draft.kind == DraftKind.EXPENSE && draft.id == null && !EntryDrafts.isSplit(draft)) {
@@ -403,7 +404,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
         _editor.value = null
         val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund" }
-        refresh(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
+        refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
+        lastSaveMillis = (System.nanoTime() - startedAt) / 1e6
     }
 
     /** Opens the refund form for an expense. */
@@ -534,6 +536,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // Balances read the whole ledger (about 25 ms on a 100,000-entry ledger even with covering indexes), so they are not part of the
     // save path: they are worked out only while something shows them, a moment after the last write, and the screen updates when ready.
     private var accountRowsCache: List<AccountRowUi> = emptyList()
+    private var categoryUsageCache: Map<String, Long> = emptyMap()
+    private var categoriesOpen = false
     private var nudgeCache = false
     private var figuresReady = false
     private var accountsOpen = false
@@ -541,6 +545,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var balancesJob: kotlinx.coroutines.Job? = null
 
     fun setAccountsScreenOpen(open: Boolean) { accountsOpen = open; if (open) scheduleSlowFigures() }
+    fun setCategoriesScreenOpen(open: Boolean) { categoriesOpen = open; if (open) scheduleSlowFigures() }
 
     /**
      * The two figures that read the whole ledger, the account balances and the live entry count behind the backup reminder, are not part of a
@@ -549,7 +554,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun scheduleSlowFigures() {
         balancesJob?.cancel()
-        val wait = if (accountsOpen || !figuresReady) 0L else BALANCES_DEBOUNCE_MS
+        val wait = if (accountsOpen || categoriesOpen || !figuresReady) 0L else BALANCES_DEBOUNCE_MS
         balancesJob = viewModelScope.launch(Dispatchers.IO) {
             kotlinx.coroutines.delay(wait)
             val figures = container.write { ok ->
@@ -560,10 +565,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     ok.templates.setting(SETTING_NUDGE_SNOOZED_AT)?.toLongOrNull(), System.currentTimeMillis(),
                 )
                 val rows = if (accountsOpen || balancesVisible) accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) else accountRowsCache
-                nudge to rows
+                val usage = if (categoriesOpen) ok.categories.list().associate { it.id to ok.categories.usage(it.id) } else categoryUsageCache
+                Triple(nudge, rows, usage)
             } ?: return@launch
-            nudgeCache = figures.first; accountRowsCache = figures.second; figuresReady = true
-            _state.update { (it as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first) ?: it }
+            nudgeCache = figures.first; accountRowsCache = figures.second; categoryUsageCache = figures.third; figuresReady = true
+            _state.update { st ->
+                (st as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first, categories = st.categories.map { c -> c.copy(usage = figures.third[c.id] ?: c.usage) }) ?: st
+            }
         }
     }
 
@@ -1151,7 +1159,41 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** How long the last save (the write plus the whole refresh behind it) took, in milliseconds. Read by the timing gate. */
+    @Volatile var lastSaveMillis: Double = 0.0
+        internal set
+
+    // Formatted list rows by the stored row they came from: an unchanged entry is not formatted again after every save, and an edited one is a
+    // different key, so it is. Cleared by every full rebuild.
+    private val rowCache = HashMap<Entry, RowUi>()
+    private fun rowsOf(entries: List<Entry>): List<RowUi> {
+        if (rowCache.size > 2_000) rowCache.clear()
+        return entries.map { e -> rowCache.getOrPut(e) { toRow(e) } }
+    }
+
+    /**
+     * After a save: put on screen what the person is waiting to see (the new entry in the list and this period's total) at once, then rebuild
+     * everything else right behind it. On a 100,000-entry ledger the full rebuild is about 10 ms, which would otherwise sit inside the 50 ms
+     * save budget. Everything else is still correct within a few milliseconds; nothing is skipped.
+     */
+    private fun refreshQuickly(ok: AppContainer.Opened.Ok, undo: UndoUi?) {
+        val current = _state.value as? UiState.Ready
+        if (current == null) { refresh(ok, undo); return }
+        val q = ok.db.schemaQueries
+        val want = maxOf(loaded.size.toLong(), PAGE)
+        loaded = q.recentEntries(want).executeAsList().toMutableList()
+        endReached = loaded.size < want
+        loadedCategory = firstCategories(ok, loaded)
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val t = LocalDate.now()
+        val period = ok.budgets.period().containing(kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth))
+        val spent = ok.store.spendByCategory(inr, from = period.startMillis(zone), until = period.endMillis(zone)).values.fold(Money.zero(inr)) { a, m -> a + m }
+        _state.value = current.copy(rows = rowsOf(loaded), periodSpend = spent.formatted(), endReached = endReached, undo = undo)
+        viewModelScope.launch(Dispatchers.IO) { container.write { ok2 -> refresh(ok2, undo = (_state.value as? UiState.Ready)?.undo) } }
+    }
+
     private fun refresh(ok: AppContainer.Opened.Ok, undo: UndoUi? = null) {
+        rowCache.clear() // names (accounts, categories) may have changed since the rows were formatted
         val q = ok.db.schemaQueries
         val accounts = q.selectAccounts().executeAsList()
         accountNames = accounts.associate { it.id to it.name }
@@ -1183,7 +1225,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         balancesVisible = HomeSection.BALANCES in layout.visible()
         scheduleSlowFigures()
         _state.value = UiState.Ready(
-            rows = loaded.map(::toRow),
+            rows = rowsOf(loaded),
             periodSpend = spent.formatted(),
             budget = budgetUi(ok, status, cats),
             due = dueUi(ok, today),
@@ -1200,7 +1242,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
-            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
+            // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
+            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
             lastAccountId = lastAccount,

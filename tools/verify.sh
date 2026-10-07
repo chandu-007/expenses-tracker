@@ -13,7 +13,7 @@ rm -rf core/*/build/test-results androidApp/build/test-results androidApp/build/
 
 echo "== step 1: build, host tests, release build, functional device tests"
 ./gradlew check :androidApp:assembleRelease :androidApp:assembleDebug :androidApp:connectedDebugAndroidTest --rerun-tasks \
-  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RecreateStressTest > /tmp/verify-step1.log 2>&1
+  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest,app.expenses.RecreateStressTest > /tmp/verify-step1.log 2>&1
 step1=$?
 echo "step 1 gradle exit: $step1"
 cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verify-functional.xml 2>/dev/null
@@ -29,7 +29,7 @@ while :; do
 done
 echo "load at start of timing step: $load (waited ${waited}s)"
 rm -rf androidApp/build/outputs/androidTest-results
-./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=app.expenses.PerformanceBudgetTest > /tmp/verify-step2.log 2>&1
+./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest > /tmp/verify-step2.log 2>&1
 step2=$?
 echo "step 2 gradle exit: $step2"
 
