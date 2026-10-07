@@ -534,19 +534,36 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // Balances read the whole ledger (about 25 ms on a 100,000-entry ledger even with covering indexes), so they are not part of the
     // save path: they are worked out only while something shows them, a moment after the last write, and the screen updates when ready.
     private var accountRowsCache: List<AccountRowUi> = emptyList()
+    private var nudgeCache = false
+    private var figuresReady = false
     private var accountsOpen = false
+    private var balancesVisible = false
     private var balancesJob: kotlinx.coroutines.Job? = null
 
-    fun setAccountsScreenOpen(open: Boolean) { accountsOpen = open; if (open) scheduleAccountRows() }
+    fun setAccountsScreenOpen(open: Boolean) { accountsOpen = open; if (open) scheduleSlowFigures() }
 
-    private fun scheduleAccountRows() {
+    /**
+     * The two figures that read the whole ledger, the account balances and the live entry count behind the backup reminder, are not part of a
+     * write: they are worked out a moment after the last one, and the screen updates when they are ready. Balances are skipped while nothing
+     * shows them. (On a 100,000-entry ledger the count alone took 27 ms and the balances 25 ms, against a 50 ms save budget.)
+     */
+    private fun scheduleSlowFigures() {
         balancesJob?.cancel()
-        val wait = if (accountsOpen || accountRowsCache.isEmpty()) 0L else BALANCES_DEBOUNCE_MS
+        val wait = if (accountsOpen || !figuresReady) 0L else BALANCES_DEBOUNCE_MS
         balancesJob = viewModelScope.launch(Dispatchers.IO) {
             kotlinx.coroutines.delay(wait)
-            val rows = container.write { ok -> accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) } ?: return@launch
-            accountRowsCache = rows
-            _state.update { (it as? UiState.Ready)?.copy(accountRows = rows) ?: it }
+            val figures = container.write { ok ->
+                val live = ok.db.schemaQueries.entryCount().executeAsOne()
+                val nudge = BackupNudge.shouldShow(
+                    live,
+                    ok.templates.setting(DataActions.SETTING_BACKUP_AT)?.toLongOrNull()?.let { at -> LastBackup(at, ok.templates.setting(DataActions.SETTING_BACKUP_COUNT)?.toLongOrNull() ?: 0L) },
+                    ok.templates.setting(SETTING_NUDGE_SNOOZED_AT)?.toLongOrNull(), System.currentTimeMillis(),
+                )
+                val rows = if (accountsOpen || balancesVisible) accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) else accountRowsCache
+                nudge to rows
+            } ?: return@launch
+            nudgeCache = figures.first; accountRowsCache = figures.second; figuresReady = true
+            _state.update { (it as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first) ?: it }
         }
     }
 
@@ -1143,7 +1160,6 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val want = maxOf(loaded.size.toLong(), PAGE)
         loaded = q.recentEntries(want).executeAsList().toMutableList()
         endReached = loaded.size < want
-        val live = ok.db.schemaQueries.entryCount().executeAsOne() // live entries only
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now(zone)
         val status = ok.budgets.status(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth), kotlinx.datetime.TimeZone.currentSystemDefault(), inr)
@@ -1164,7 +1180,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val active = accounts.filter { it.archived == 0L }
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } } ?: active.firstOrNull()?.id ?: "cash"
         val layout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT))
-        if (accountsOpen || HomeSection.BALANCES in layout.visible()) scheduleAccountRows()
+        balancesVisible = HomeSection.BALANCES in layout.visible()
+        scheduleSlowFigures()
         _state.value = UiState.Ready(
             rows = loaded.map(::toRow),
             periodSpend = spent.formatted(),
@@ -1172,12 +1189,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             due = dueUi(ok, today),
             notifications = ok.notifications.prefs(),
             // 'ever' counts deleted entries too: someone who added something and deleted it is not new to the app.
-            showWelcome = ok.db.schemaQueries.entryCountEver().executeAsOne() == 0L && ok.templates.setting(SETTING_WELCOME_DISMISSED) != "1",
-            showBackupNudge = BackupNudge.shouldShow(
-                live,
-                ok.templates.setting(DataActions.SETTING_BACKUP_AT)?.toLongOrNull()?.let { at -> LastBackup(at, ok.templates.setting(DataActions.SETTING_BACKUP_COUNT)?.toLongOrNull() ?: 0L) },
-                ok.templates.setting(SETTING_NUDGE_SNOOZED_AT)?.toLongOrNull(), System.currentTimeMillis(),
-            ),
+            showWelcome = !ok.db.schemaQueries.entryCountEver().executeAsOne() && ok.templates.setting(SETTING_WELCOME_DISMISSED) != "1",
+            showBackupNudge = nudgeCache,
             hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
             accounts = active.map { AccountUi(it.id, it.name) },

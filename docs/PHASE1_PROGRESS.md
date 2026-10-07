@@ -425,3 +425,9 @@ Started 2026-10-06. Scope and exit criteria are in `ROADMAP.md`; requirement IDs
 **Custom budget period (the part of FR-BUD-02 I had mistaken report ranges for):** a budget can run for any length from 1 to 366 days, counted from the day you choose it, with a stepper (every quick tap counts, as with the start day). A fortnight is the 14-day case. Tiling property test extended, 3 mutations caught, persistence for every length, device test.
 
 **Verification:** 561 host/JVM tests (both targets counted), 183 functional device tests (1 skipped) and 12 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.
+
+## Slice 25: the save gate now measures the real save path (and it was 3x over)
+The existing "save one transaction" gate timed a raw `INSERT` only. A new gate times what the app does for one expense on the 100,000-entry dataset: `LedgerStore.save` (validation, splits, spend lines, change log, tags) plus the queries a screen refresh runs. **First measurement: p50 31 ms, p95 36 ms on the emulator, roughly 3x over the 50 ms phone budget.** Splitting the steps showed the save itself costs 3 ms; **`entryCount()` took 27 ms** (a full scan, run on every refresh for the backup reminder). Fixed: "has anything ever been recorded" is now an O(1) `EXISTS`, and the live count behind the reminder moved with the balances into the debounced background job. **Now p50 1.9 ms, p95 5.5 ms, max 7 ms** (limit 12.5 ms here = 50 ms phone at the assumed 4x slowdown, which is still unverified on a real phone). Gate: 13 tests.
+This leaves the §6.1 items still unmeasured at 100k: cold start, warm start, add-screen open, and scroll smoothness (the first needs a release build on a real phone; the last needs frame timing).
+
+**Verification:** 561 host/JVM tests (both targets counted), 183 functional device tests (1 skipped) and 13 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.

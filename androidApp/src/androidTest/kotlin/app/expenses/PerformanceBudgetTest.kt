@@ -222,6 +222,38 @@ class PerformanceBudgetTest {
         } finally { ids.forEach { driver.execute(null, "DELETE FROM account WHERE id = '$it'", 0) } }
     }
 
+    @Test fun theWholeSavePathStaysUnder50msPhoneBudgetAtP95() {
+        // What the app really does for one expense: LedgerStore.save (validation, splits, spend lines, change log) and then the queries the
+        // screen refresh runs (the recent list, whether anything was ever recorded, tags). The live count and the balances run later, in the background. The raw-insert test above only times one statement.
+        val clock = app.expenses.core.domain.sync.HlcClock("perf")
+        val ledger = app.expenses.core.storage.LedgerStore(db, clock) { System.currentTimeMillis() }
+        val accountRowsAdded = listOf("bank").filter { db.schemaQueries.accountById(it).executeAsOneOrNull() == null }
+        accountRowsAdded.forEach { driver.execute(null, "INSERT INTO account(id, name, type, currency, deleted) VALUES ('$it', '$it', 'BANK', 'INR', 0)", 0) }
+        val ids = (0 until 40).map { "path$it" }
+        try {
+            val times = DoubleArray(ids.size) { i ->
+                val s = System.nanoTime()
+                ledger.save(
+                    app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId(ids[i]), 1_900_000_000_000L + i, app.expenses.core.domain.ledger.AccountId("bank"), app.expenses.core.domain.Money(500, app.expenses.core.domain.Currency.INR),
+                        listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("cat1"), app.expenses.core.domain.Money(500, app.expenses.core.domain.Currency.INR)))),
+                    app.expenses.core.storage.EntryDetails(merchant = "path$i", tags = listOf("perf")),
+                )
+                val t1 = System.nanoTime()
+                db.schemaQueries.recentEntries(50).executeAsList(); val t2 = System.nanoTime()
+                db.schemaQueries.entryCountEver().executeAsOne(); val t3 = System.nanoTime() // the cheap check the refresh runs; the live count is in the background job
+                ledger.tagsInUse(40); val t4 = System.nanoTime()
+                if (i == 20) Log.w("PERF", "split: save ${"%.1f".format((t1 - s) / 1e6)} recent ${"%.1f".format((t2 - t1) / 1e6)} count ${"%.1f".format((t3 - t2) / 1e6)} tags ${"%.1f".format((t4 - t3) / 1e6)} ms")
+                (System.nanoTime() - s) / 1e6
+            }.sorted()
+            val p95 = times[(times.size * 0.95).toInt()]
+            Log.w("PERF", "whole save path: p50 ${"%.2f".format(times[times.size / 2])} ms, p95 ${"%.2f".format(p95)} ms, max ${"%.2f".format(times.last())} ms")
+            check("save one expense end to end (p95 of ${ids.size})", 50.0, p95)
+        } finally {
+            ids.forEach { runCatching { ledger.delete(app.expenses.core.domain.ledger.EntryId(it)) } }
+            accountRowsAdded.forEach { driver.execute(null, "DELETE FROM account WHERE id = '$it'", 0) }
+        }
+    }
+
     @Test fun savingOneTransactionStaysUnder50msPhoneBudgetAtP95() {
         val ids = (0 until 60).map { "save$it" }
         try {
