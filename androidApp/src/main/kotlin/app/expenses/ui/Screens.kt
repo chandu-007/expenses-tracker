@@ -102,6 +102,8 @@ fun EntryListScreen(
     onOpenReports: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
+    onDismissWelcome: () -> Unit,
+    onSnoozeBackupNudge: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -158,6 +160,7 @@ fun EntryListScreen(
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }
             BudgetSummary(state.budget, onOpenBudget)
+            if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
             DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
             Spacer(Modifier.height(8.dp))
             if (state.templates.isNotEmpty()) {
@@ -178,8 +181,12 @@ fun EntryListScreen(
             }
             HorizontalDivider()
             if (state.rows.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state.showWelcome) {
+                    WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             } else {
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {

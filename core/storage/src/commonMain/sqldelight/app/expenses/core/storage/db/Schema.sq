@@ -584,3 +584,7 @@ WHERE deleted = 0
   AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
   AND (:filterCats = 0 OR category_id IN :ids OR EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = entry.id AND s.category_id IN :ids))
 ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+-- Every entry ever recorded, deleted ones included: has this person used the app at all?
+entryCountEver:
+SELECT COUNT(*) FROM entry;

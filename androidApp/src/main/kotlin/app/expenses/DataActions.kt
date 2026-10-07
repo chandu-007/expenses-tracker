@@ -22,6 +22,11 @@ class DataActions(private val context: Context, private val container: AppContai
         class Ready(val header: BackupHeader, val data: BackupData, val report: RestoreReport) : Opened
     }
 
+    companion object {
+        const val SETTING_BACKUP_AT = "backup_last_at"
+        const val SETTING_BACKUP_COUNT = "backup_last_count"
+    }
+
     class Saved(val bytes: Int, val counts: BackupCounts, val encrypted: Boolean)
 
     /** Writes every entry as a CSV. Returns the number of entries. */
@@ -42,6 +47,11 @@ class DataActions(private val context: Context, private val container: AppContai
         // Check the file the way a restore would, so a backup that could not be restored is found out now.
         val back = if (passphrase != null) BackupCrypto.decrypt(read(uri), passphrase) else read(uri)
         BackupFile.decode(back)
+        // Remember that it worked, so the reminder to make a backup stops. Only now: a backup that failed above must not count.
+        container.write { ok ->
+            ok.templates.putSetting(SETTING_BACKUP_AT, now().toString())
+            ok.templates.putSetting(SETTING_BACKUP_COUNT, counts.entries.toString())
+        }
         return Saved(bytes.size, counts, passphrase != null)
     }
 

@@ -11,7 +11,9 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
+import app.expenses.core.domain.BackupNudge
 import app.expenses.core.domain.Csv
+import app.expenses.core.domain.LastBackup
 import app.expenses.core.domain.Flow
 import app.expenses.core.domain.ParsedStatement
 import app.expenses.core.domain.ReportMath
@@ -222,6 +224,10 @@ sealed interface UiState {
         val due: List<DueUi>,
         /** Occurrences older than the due window that nobody dealt with; mentioned so they do not vanish silently. */
         val hiddenOlder: Int,
+        /** True on a fresh install where nothing has ever been recorded, until the user adds something or skips it. */
+        val showWelcome: Boolean,
+        /** True when it is time to remind the user to make a backup. */
+        val showBackupNudge: Boolean,
         val notifications: NotificationPrefs,
         val recurring: List<RecurringUi>,
         val accounts: List<AccountUi>,
@@ -241,6 +247,8 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
+private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
+private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
 private const val MAX_STATEMENT_ROWS = 200_000
 private const val PREVIEW_ROWS = 6
@@ -399,6 +407,20 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteCategory(id: String) = withStore { ok ->
         ok.categories.delete(id)
+        refresh(ok)
+    }
+
+    // ---- first run and reminders ----
+
+    /** "Skip" on the first-run card: it is not shown again. */
+    fun dismissWelcome() = withStore { ok ->
+        ok.templates.putSetting(SETTING_WELCOME_DISMISSED, "1")
+        refresh(ok)
+    }
+
+    /** "Later" on the backup reminder: quiet for [BackupNudge.SNOOZE_DAYS] days. */
+    fun snoozeBackupNudge() = withStore { ok ->
+        ok.templates.putSetting(SETTING_NUDGE_SNOOZED_AT, System.currentTimeMillis().toString())
         refresh(ok)
     }
 
@@ -815,6 +837,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val want = maxOf(loaded.size.toLong(), PAGE)
         loaded = q.recentEntries(want).executeAsList().toMutableList()
         endReached = loaded.size < want
+        val live = ok.db.schemaQueries.entryCount().executeAsOne() // live entries only
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now(zone)
         val status = ok.budgets.status(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth), kotlinx.datetime.TimeZone.currentSystemDefault(), inr)
@@ -838,6 +861,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             budget = budgetUi(ok, status, cats),
             due = dueUi(ok, today),
             notifications = ok.notifications.prefs(),
+            // 'ever' counts deleted entries too: someone who added something and deleted it is not new to the app.
+            showWelcome = ok.db.schemaQueries.entryCountEver().executeAsOne() == 0L && ok.templates.setting(SETTING_WELCOME_DISMISSED) != "1",
+            showBackupNudge = BackupNudge.shouldShow(
+                live,
+                ok.templates.setting(DataActions.SETTING_BACKUP_AT)?.toLongOrNull()?.let { at -> LastBackup(at, ok.templates.setting(DataActions.SETTING_BACKUP_COUNT)?.toLongOrNull() ?: 0L) },
+                ok.templates.setting(SETTING_NUDGE_SNOOZED_AT)?.toLongOrNull(), System.currentTimeMillis(),
+            ),
             hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
             accounts = accounts.map { AccountUi(it.id, it.name) },

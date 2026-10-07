@@ -239,6 +239,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenSearch = { searching = true },
                                 onOpenSecurity = { securing = true },
+                                onDismissWelcome = viewModel::dismissWelcome,
+                                onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )
