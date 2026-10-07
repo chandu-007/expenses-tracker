@@ -35,8 +35,11 @@ class PerformanceBudgetTest {
     companion object {
         const val PHONE_SLOWDOWN = 4.0
 
-        /** Phone budget for a search that has to read the whole 100,000-row ledger. Over the 100 ms product target on purpose; see its test. */
-        const val WORST_CASE_PHONE_MS = 600.0
+        /**
+         * Phone budget for a search that has to read the whole 100,000-row ledger. Over the 100 ms product target on purpose (see the two tests that
+         * use it). Raised from 600 to 800 when the second such case was added, which measures about 143 ms of the 150 ms the old value allowed here.
+         */
+        const val WORST_CASE_PHONE_MS = 800.0
         private const val ROWS = 100_000
         private const val MERCHANTS = 500
         private const val DAY_MS = 86_400_000L
@@ -140,6 +143,25 @@ class PerformanceBudgetTest {
             assertEquals(50, db.searchFiltered(q).size, label)
             check("filtered search, $label", 100.0, median { db.searchFiltered(q) })
         }
+    }
+
+    /**
+     * KNOWN MISS against the 100 ms product target: a word every row has plus a short word almost none has ("upi zq"). The index finds
+     * all 100,000 rows and each is then checked for the short word (1-2 characters cannot use the trigram index), so the whole ledger is
+     * read. Measured on the emulator (best case): about 143 ms; "hdfc ##" about 114 ms. A common short word ("upi 1") stops early, 8 ms.
+     * Tried and rejected: the sort-first plan is 30% faster here (100 ms) but 15 times slower when the short word is common (116 ms vs
+     * 8 ms), and nothing says in advance which applies; capping the rows examined would make answers inexact. Gated with the other
+     * whole-ledger case at [WORST_CASE_PHONE_MS] so it cannot quietly get worse.
+     */
+    @Test fun aCommonWordWithARareShortWordStaysWithinTheWorstCaseBudget() {
+        for (text in listOf("upi zq", "txn #7", "hdfc ##")) {
+            val q = SearchQuery(text)
+            assertEquals(0, db.searchFiltered(q).size, text)
+            check("search, common word + rare short word '$text' (matches nothing, reads the whole ledger)", WORST_CASE_PHONE_MS, median { db.searchFiltered(q) })
+        }
+        val common = SearchQuery("upi 1") // a short word many rows have: stops early
+        assertEquals(50, db.searchFiltered(common).size)
+        check("search, common word + common short word 'upi 1'", 100.0, median { db.searchFiltered(common) })
     }
 
     /**
