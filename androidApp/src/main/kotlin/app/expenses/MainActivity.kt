@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.CategoriesScreen
+import app.expenses.ui.DataScreen
 import app.expenses.ui.ExpenseFormScreen
 import app.expenses.ui.FormStart
 import app.expenses.ui.ReadOnlyEntryScreen
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
+                    var yourData by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -101,6 +103,16 @@ class MainActivity : ComponentActivity() {
                                     onMove = viewModel::moveCategory,
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
+                                )
+                            }
+                            yourData -> {
+                                val dataState by viewModel.data.collectAsStateWithLifecycle()
+                                BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
+                                DataScreen(
+                                    state = dataState,
+                                    onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
+                                    onExportCsv = viewModel::exportCsv, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup,
+                                    onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                 )
                             }
                             alerts -> {
@@ -164,6 +176,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenBudget = { budgeting = true },
                                 onOpenRecurring = { repeating = true },
                                 onOpenNotifications = { alerts = true },
+                                onOpenData = { yourData = true },
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )

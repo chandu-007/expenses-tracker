@@ -480,3 +480,22 @@ INSERT INTO recurring_done(recurring_id, day, outcome, entry_id) VALUES (?, ?, ?
 
 deleteDone:
 DELETE FROM recurring_done WHERE recurring_id = :id AND day = :day;
+
+-- Backup and restore.
+replaceCategory:
+UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden, deleted = :deleted, merged_into = :mergedInto WHERE id = :id;
+
+allCategories:
+SELECT * FROM category ORDER BY position, id;
+
+insertCategoryRaw:
+INSERT INTO category(id, name, parent_id, color, position, hidden, deleted, merged_into) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+allAccounts:
+SELECT * FROM account WHERE deleted = 0 ORDER BY name, id;
+
+allTemplates:
+SELECT * FROM template WHERE deleted = 0 ORDER BY name, id;
+
+allRecurringDone:
+SELECT * FROM recurring_done ORDER BY recurring_id, day;

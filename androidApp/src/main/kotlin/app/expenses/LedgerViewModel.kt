@@ -3,6 +3,7 @@ package app.expenses
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
@@ -19,6 +20,8 @@ import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
+import app.expenses.core.storage.BackupData
+import app.expenses.core.storage.BackupException
 import app.expenses.core.storage.BudgetStatus
 import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.bulkLoad
@@ -100,6 +103,18 @@ data class RecurringUi(
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
 data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
 
+/** A backup file that was opened and checked, waiting for the user to confirm the restore. */
+data class PendingRestoreUi(val madeAt: String, val entriesInFile: Int, val newEntries: Int, val alreadyHereEntries: Int, val otherNewItems: Int)
+
+/** State of the Data screen. [status] is the outcome of the last action; [needsPassphrase] asks for the passphrase of an encrypted backup. */
+data class DataUi(
+    val busy: Boolean = false,
+    val status: String? = null,
+    val statusIsError: Boolean = false,
+    val needsPassphrase: Boolean = false,
+    val pending: PendingRestoreUi? = null,
+)
+
 sealed interface UiState {
     data object Opening : UiState
 
@@ -149,6 +164,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The entry being edited, or null. */
     val editor: StateFlow<Editable?> = _editor
+
+    private val _data = MutableStateFlow(DataUi())
+    val data: StateFlow<DataUi> = _data
+    private var openedBytes: ByteArray? = null
+    private var openedBackup: BackupData? = null
+    private val actions get() = DataActions(getApplication(), container)
 
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
@@ -312,6 +333,79 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { (it as? UiState.Ready)?.copy(message = if (done.size == 1) "Posted ${done[0].first.item.name}" else "Posted ${done.size} repeating expenses") ?: it }
         }
     }
+
+    // ---- export, backup and restore ----
+
+    /** Runs a file action off the main thread, showing "working" and then its outcome. A [BackupException] message is written for the user. */
+    private fun dataAction(block: suspend () -> String) {
+        _data.update { it.copy(busy = true, status = null, statusIsError = false) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val message = block()
+                _data.update { it.copy(busy = false, status = message, statusIsError = false) }
+            } catch (e: BackupException) {
+                _data.update { it.copy(busy = false, status = e.message, statusIsError = true) }
+            } catch (e: Exception) {
+                _data.update { it.copy(busy = false, status = "That did not work: ${e.message ?: e::class.java.simpleName}", statusIsError = true) }
+            }
+        }
+    }
+
+    fun exportCsv(uri: Uri) = dataAction { "Exported ${actions.exportCsv(uri)} entries as a spreadsheet file." }
+
+    fun createBackup(uri: Uri, passphrase: String?) = dataAction {
+        val saved = actions.backup(uri, passphrase)
+        "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories" + if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private."
+    }
+
+    /** Opens a backup file. Nothing changes until [confirmRestore]. */
+    fun openBackup(uri: Uri) = dataAction { showOpened(actions.open(uri, null)) }
+
+    fun unlockBackup(passphrase: String) = dataAction {
+        val bytes = openedBytes ?: throw BackupException("Choose the backup file again.")
+        showOpened(actions.openBytes(bytes, passphrase))
+    }
+
+    private fun showOpened(o: DataActions.Opened): String {
+        when (o) {
+            is DataActions.Opened.NeedsPassphrase -> {
+                openedBytes = o.bytes
+                _data.update { it.copy(needsPassphrase = true, pending = null) }
+                return "This backup is protected by a passphrase."
+            }
+            is DataActions.Opened.Ready -> {
+                openedBytes = null
+                openedBackup = o.data
+                val made = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(o.header.createdAt))
+                val r = o.report
+                _data.update {
+                    it.copy(
+                        needsPassphrase = false,
+                        pending = PendingRestoreUi(made, o.data.entries.size, r.added.entries, r.alreadyHere.entries, r.added.accounts + r.added.categories + r.added.templates + r.added.budgets + r.added.recurring),
+                    )
+                }
+                return "Backup checked: it is complete and not damaged."
+            }
+        }
+    }
+
+    fun confirmRestore() {
+        val data = openedBackup ?: return
+        dataAction {
+            val report = actions.restore(data)
+            openedBackup = null
+            _data.update { it.copy(pending = null) }
+            container.write { ok -> refresh(ok) }
+            "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are."
+        }
+    }
+
+    fun cancelRestore() {
+        openedBackup = null; openedBytes = null
+        _data.update { it.copy(pending = null, needsPassphrase = false) }
+    }
+
+    fun dismissDataStatus() = _data.update { it.copy(status = null) }
 
     // ---- notifications ----
 

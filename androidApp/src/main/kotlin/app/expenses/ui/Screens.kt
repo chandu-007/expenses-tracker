@@ -96,6 +96,7 @@ fun EntryListScreen(
     onOpenBudget: () -> Unit,
     onOpenRecurring: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenData: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -138,6 +139,7 @@ fun EntryListScreen(
                         TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
                         TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
                         TextButton(onClick = onOpenNotifications, modifier = Modifier.testTag("open_notifications")) { Text("Alerts") }
+                        TextButton(onClick = onOpenData, modifier = Modifier.testTag("open_data")) { Text("Data") }
                     }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
