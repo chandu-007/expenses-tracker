@@ -258,6 +258,10 @@ SELECT a.id AS id,
 FROM account a WHERE a.deleted = 0;
 
 -- How much of the ledger refers to an account: entries (live or deleted), quick entries and repeating expenses.
+-- Repeating items and quick entries that post to an account (archiving it would leave them pointing at a hidden account).
+accountSavedItemUsage:
+SELECT (SELECT COUNT(*) FROM template WHERE account_id = :id AND deleted = 0) + (SELECT COUNT(*) FROM recurring WHERE (account_id = :id OR to_account_id = :id) AND deleted = 0);
+
 accountUsage:
 SELECT (SELECT COUNT(*) FROM entry WHERE account_id = :id OR counter_account_id = :id)
      + (SELECT COUNT(*) FROM template WHERE account_id = :id AND deleted = 0)

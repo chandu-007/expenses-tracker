@@ -84,6 +84,8 @@ data class AccountUi(val id: String, val name: String)
 data class AccountRowUi(
     val id: String, val name: String, val type: String, val typeLabel: String, val isLiability: Boolean, val archived: Boolean,
     val balanceText: String, val balanceMinor: Long, val owed: Boolean, val openingText: String, val usage: Long,
+    /** Repeating items and quick entries that post to it: while there are any, it cannot be archived. */
+    val savedItems: Long = 0,
 )
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
@@ -537,6 +539,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 a.id, a.name, a.type, ACCOUNT_TYPE_LABELS.getValue(a.type), type.isLiability, a.archived == 1L,
                 bal.formatted(), bal.minorUnits, AccountRules.isOwed(Account(AccountId(a.id), a.name, type, inr), bal.minorUnits),
                 if (shownOpening == 0L) "" else Money(shownOpening, inr).toPlainString(), ok.store.accountUsage(AccountId(a.id)),
+                ok.db.schemaQueries.accountSavedItemUsage(a.id).executeAsOne(),
             )
         }.sortedWith(compareBy({ it.archived }, { it.name.lowercase() }))
     }
@@ -569,6 +572,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAccountArchived(id: String, archived: Boolean) = withStore { ok ->
         val row = ok.db.schemaQueries.accountById(id).executeAsOneOrNull() ?: return@withStore
+        require(!archived || ok.db.schemaQueries.accountSavedItemUsage(id).executeAsOne() == 0L) { "Repeating items or quick entries still use this account. Change them first, then archive it." }
         require(!archived || ok.db.schemaQueries.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id } > 0) { "Keep at least one active account." }
         ok.store.saveAccount(Account(AccountId(id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, archived))
         refresh(ok)
@@ -676,11 +680,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("That file could not be opened.")
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
                 val table = Csv.parse(StatementText.decode(bytes))
+                require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }
                 require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
                 require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
-                require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }
                 importTable = table
-                val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList() }.orEmpty()
+                val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList().filter { a -> a.archived == 0L } }.orEmpty()
                 val account = (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()
                 recomputeImport(StatementDetector.detect(table.rows), account)
             } catch (e: IllegalArgumentException) {

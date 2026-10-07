@@ -208,6 +208,14 @@ class ImportUiTest {
         assertEquals(1L, entryCount(), "nothing was imported: only the one entry that was exported is there")
     }
 
+    @Test
+    fun anEmptyExportOfTheAppsOwnDataGetsTheRestoreMessageNotAGenericOne() {
+        openData()
+        val header = runBlocking { container.write { ok -> CsvExport(ok.db).build(kotlinx.datetime.TimeZone.UTC) } }!!   // a fresh ledger: only the header row
+        viewModel().startImport(file("own-empty.csv", header))
+        waitText("import_error", "exported from this app")
+    }
+
     // ---- reading the bytes ----
 
     @Test

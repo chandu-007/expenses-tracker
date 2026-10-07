@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assert
@@ -113,6 +114,18 @@ class AccountsUiTest {
         openAccounts()
         tap("account_Old bank"); tap("account_unarchive"); waitGone("account_unarchive")
         assertTrue(runBlocking { container.write { ok -> ok.db.schemaQueries.accountById("old").executeAsOne().archived } } == 0L)
+    }
+
+    @Test
+    fun anAccountThatARepeatingItemOrQuickEntryPostsToCannotBeArchivedAndSaysWhy() {
+        launch()
+        runBlocking { container.write { ok -> ok.templates.save(app.expenses.core.domain.Template("t", "Chai", Money(2_000, Currency.INR), app.expenses.core.domain.ledger.CategoryId("Food"), AccountId("cash"), null)) } }
+        launch(); openAccounts(); tap("account_Cash"); waitFor("account_saved_note")
+        compose.onNodeWithTag("account_archive").assertIsNotEnabled()
+        runBlocking { container.write { ok -> ok.templates.delete("t") } }
+        launch(); openAccounts(); tap("account_Cash"); waitFor("account_archive")
+        assertTrue(!has("account_saved_note"))
+        tap("account_archive"); waitGone("account_archive")
     }
 
     @Test

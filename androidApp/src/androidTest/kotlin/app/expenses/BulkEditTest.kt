@@ -105,6 +105,18 @@ class BulkEditTest {
     }
 
     @Test
+    fun bulkChangesAndTheirUndoNeverWipeAnEntrysTags() {
+        db { ok -> ok.store.save(Expense(EntryId("a"), t++, AccountId("cash"), Money(10_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(10_000, inr)))), EntryDetails(merchant = "Alpha", tags = listOf("Trip", "Tax"))) }
+        val moved = db { ok -> EntryActions(ok).bulkSetAccount(listOf("a"), "bank") }
+        assertEquals(listOf("Tax", "Trip"), db { it.store.tagsOf(EntryId("a")) }, "moving the account keeps the tags")
+        db { ok -> EntryActions(ok).bulkSetCategory(listOf("a"), "Bills") }
+        assertEquals(listOf("Tax", "Trip"), db { it.store.tagsOf(EntryId("a")) }, "so does a category change")
+        db { ok -> ok.store.atomically { moved.undoDrafts.forEach { EntryActions(ok).save(it) } } }
+        assertEquals(listOf("Tax", "Trip"), db { it.store.tagsOf(EntryId("a")) }, "and restoring the earlier version")
+        assertEquals("cash", accountOf("a"))
+    }
+
+    @Test
     fun aBulkAccountMoveSkipsATransferThatWouldGoFromAnAccountToItself() {
         expense("a", "Alpha"); expense("b", "Bravo", account = "bank")
         db { ok -> ok.store.save(Transfer(EntryId("t"), t++, AccountId("cash"), AccountId("bank"), Money(5_000, inr)), EntryDetails(merchant = "Move")) }

@@ -132,7 +132,8 @@ private fun AccountDialog(
                 if (existing != null) {
                     Spacer(Modifier.height(4.dp))
                     if (existing.archived) TextButton(onClick = { onArchive(existing.id, false); onClose() }, modifier = Modifier.testTag("account_unarchive")) { Text("Restore to the pickers") }
-                    else TextButton(onClick = { onArchive(existing.id, true); onClose() }, enabled = !onlyActive, modifier = Modifier.testTag("account_archive")) { Text(if (onlyActive) "Archive (keep one active account)" else "Archive: hide it, keep its history") }
+                    else TextButton(onClick = { onArchive(existing.id, true); onClose() }, enabled = !onlyActive && existing.savedItems == 0L, modifier = Modifier.testTag("account_archive")) { Text(if (onlyActive) "Archive (keep one active account)" else "Archive: hide it, keep its history") }
+                    if (!existing.archived && existing.savedItems > 0L) Text("${existing.savedItems} repeating items or quick entries post to it. Change them first, then archive it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_saved_note"))
                     if (existing.usage == 0L) TextButton(onClick = { onDelete(existing.id); onClose() }, enabled = !onlyActive, modifier = Modifier.testTag("account_delete")) { Text("Delete") }
                     else Text("It has ${existing.usage} entries or saved items, so it can be archived but not deleted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

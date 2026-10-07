@@ -139,6 +139,7 @@ fun ReportsScreen(
             item {
                 HorizontalDivider()
                 Text("By ${report.group.name.lowercase()}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp).testTag("report_group_title"))
+                if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("report_account_note"))
                 if (report.group == ReportGroup.TAG) Text("An entry with several tags counts under each, so these can add up to more than the total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) Text("Nothing spent in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))

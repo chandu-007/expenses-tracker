@@ -56,3 +56,6 @@ sqldelight {
 
 // BackupFormatDocTest reads docs/BACKUP_FORMAT.md; declare it so a change to the document alone re-runs the test instead of being skipped as up to date.
 tasks.withType<Test>().configureEach { inputs.file(rootProject.file("docs/BACKUP_FORMAT.md")).withPropertyName("backupFormatDoc") }
+
+// UiConventionsTest reads the screen sources; declare them so a change there re-runs it.
+tasks.withType<Test>().configureEach { inputs.dir(rootProject.file("androidApp/src/main/kotlin/app/expenses/ui")).withPropertyName("uiSources") }

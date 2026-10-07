@@ -48,7 +48,7 @@ class PrivacyUiTest {
     private fun text(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun anyText(s: String) = compose.onAllNodes(hasText(s, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
-    private fun hidden() = db { it.templates.setting("hide_amounts") }
+    private fun hidden(): String? = runBlocking { container.write { it.templates.setting("hide_amounts") } } // null until the setting is first written
     private fun seed() = db { ok ->
         ok.store.save(Expense(EntryId("e"), System.currentTimeMillis(), AccountId("cash"), Money(123_456, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(123_456, Currency.INR)))), EntryDetails(merchant = "Cafe"))
     }

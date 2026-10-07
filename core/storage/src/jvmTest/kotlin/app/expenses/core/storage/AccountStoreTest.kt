@@ -110,6 +110,7 @@ class AccountStoreTest {
         val rnd = Random(99)
         val types = listOf(AccountType.BANK, AccountType.CASH, AccountType.WALLET, AccountType.CREDIT_CARD, AccountType.LOAN)
         val ids = (1..6).map { "acc$it" }
+        ledger.saveAccount(Account(AccountId("usd"), "Dollars", AccountType.BANK, Currency.USD, openingMinor = 1_000))
         ids.forEachIndexed { i, id -> ledger.saveAccount(acct(id, types[i % types.size], opening = rnd.nextLong(-500_000, 900_000), archived = i == 5)) }
         fun any() = AccountId(ids[rnd.nextInt(ids.size)])
         val expenses = mutableListOf<Pair<String, Long>>()
@@ -120,7 +121,11 @@ class AccountStoreTest {
             when (rnd.nextInt(8)) {
                 0, 1, 2 -> { ledger.save(Expense(EntryId("e$i"), at, any(), m(amount), listOf(CategorySplit(CategoryId("Food"), m(amount))))); expenses += "e$i" to amount; kinds += "expense" }
                 3 -> { ledger.save(Income(EntryId("i$i"), at, any(), m(amount), CategoryId("Other"))); kinds += "income" }
-                4 -> { val from = any(); var to = any(); while (to == from) to = any(); ledger.save(Transfer(EntryId("t$i"), at, from, to, m(amount))); kinds += "transfer" }
+                4 -> {
+                    if (rnd.nextInt(3) == 0) { // between currencies: the destination gets a different amount in dollars
+                        ledger.save(Transfer(EntryId("x$i"), at, any(), AccountId("usd"), m(amount), Money(rnd.nextLong(1, 4_000), Currency.USD))); kinds += "cross-currency transfer"
+                    } else { val from = any(); var to = any(); while (to == from) to = any(); ledger.save(Transfer(EntryId("t$i"), at, from, to, m(amount))); kinds += "transfer" }
+                }
                 5 -> { val (id, total) = expenses.randomOrNull(rnd) ?: return@repeat; val acc = db.schemaQueries.entryById(id).executeAsOne().account_id!!
                     runCatching { ledger.save(Refund(EntryId("r$i"), at, AccountId(acc), m(rnd.nextLong(1, total + 1)), EntryId(id))); kinds += "refund" } }
                 6 -> { ledger.save(Settlement(EntryId("s$i"), at, PersonId("p${rnd.nextInt(3)}"), any(), m(amount), SettlementDirection.entries[rnd.nextInt(2)])); kinds += "settlement" }
@@ -128,9 +133,9 @@ class AccountStoreTest {
             }
             if (rnd.nextInt(12) == 0) runCatching { ledger.delete(EntryId(expenses.randomOrNull(rnd)?.first ?: "none")) }
         }
-        assertTrue(kinds.size == 6, "the ledger contains every kind of entry: $kinds")
+        assertTrue(kinds.size == 7, "the ledger contains every kind of entry: $kinds")
         assertEquals(ledger.loadLedger().balances(), ledger.balances(), "SQL balances equal the in-memory ledger's")
-        assertEquals(ledger.loadLedger().netWorth(inr), ledger.balances().values.fold(Money.zero(inr)) { a, b -> a + b })
+        assertEquals(ledger.loadLedger().netWorth(inr), ledger.balances().values.filter { it.currency == inr }.fold(Money.zero(inr)) { a, b -> a + b })
     }
 
     @Test
