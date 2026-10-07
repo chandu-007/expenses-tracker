@@ -36,6 +36,7 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.HomeLayout
 import app.expenses.core.storage.DrillLine
 import app.expenses.core.domain.DatePeriod
 import app.expenses.core.domain.compact
@@ -289,6 +290,7 @@ sealed interface UiState {
         /** Everything an old entry might refer to (archived accounts included), for showing and editing it. */
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
+        val homeLayout: HomeLayout,
         val categories: List<CategoryUi>,
         /** Tags in use, most used first, to offer when tagging. */
         val tags: List<String>,
@@ -307,6 +309,7 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
 private const val TAG_SUGGESTIONS = 40L
+private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
@@ -564,6 +567,14 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteAccount(id: String) = withStore { ok ->
         ok.store.deleteAccount(AccountId(id))
+        refresh(ok)
+    }
+
+    // ---- home layout ----
+
+    /** Saves which home blocks are shown and in what order; takes effect at once. */
+    fun setHomeLayout(layout: HomeLayout) = withStore { ok ->
+        ok.templates.putSetting(SETTING_HOME_LAYOUT, layout.encode())
         refresh(ok)
     }
 
@@ -1104,6 +1115,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             accounts = active.map { AccountUi(it.id, it.name) },
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
             accountRows = accountRows(ok, accounts),
+            homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },

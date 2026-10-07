@@ -75,6 +75,7 @@ class Device(node: String) {
         recurring.save(RecurringItem("pay", "Pay", m(5_000_000), CategoryId("Other"), AccountId("bank"), "Acme", Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 9, 1)), auto = true, kind = RecurringKind.INCOME))
         recurring.post("rent", LocalDate(2026, 8, 31), TimeZone.UTC)
         recurring.skip("power", LocalDate(2026, 9, 1))
+        templates.putSetting("home_layout", "QUICK_ENTRIES,BUDGET,BILLS,BALANCES;BILLS")
         notifications.setPrefs(NotificationPrefs(bills = false, quietStartMinute = 23 * 60 + 30, billHour = 18))
     }
 

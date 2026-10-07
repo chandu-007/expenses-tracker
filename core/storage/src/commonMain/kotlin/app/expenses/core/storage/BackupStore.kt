@@ -171,6 +171,6 @@ class BackupStore(
 
     companion object {
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
-        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour")
+        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout")
     }
 }

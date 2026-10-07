@@ -81,6 +81,7 @@ import app.expenses.TemplateUi
 import app.expenses.UiState
 import app.expenses.core.domain.Currency
 import app.expenses.DueUi
+import app.expenses.core.domain.HomeSection
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.parseAmount
 
@@ -105,6 +106,7 @@ fun EntryListScreen(
     onOpenData: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onCustomiseHome: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -173,6 +175,7 @@ fun EntryListScreen(
                         TextButton(onClick = { more = true }, modifier = Modifier.testTag("more_menu")) { Text("More") }
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
                             DropdownMenuItem(text = { Text("Calendar") }, onClick = { more = false; onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
                             DropdownMenuItem(text = { Text("Accounts") }, onClick = { more = false; onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
                             DropdownMenuItem(text = { Text("Categories") }, onClick = { more = false; onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
@@ -185,26 +188,33 @@ fun EntryListScreen(
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }
-            BudgetSummary(state.budget, onOpenBudget)
             if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
-            DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
-            Spacer(Modifier.height(8.dp))
-            if (state.templates.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier.testTag("templates"),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.templates, key = { it.id }) { t ->
-                        AssistChip(
-                            onClick = { onTemplate(t) },
-                            label = { Text(if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …") },
-                            modifier = Modifier.testTag("template_${t.name}").combinedClickable(onClick = { onTemplate(t) }, onLongClick = { removing = t }),
-                        )
+            state.homeLayout.visible().forEach { section ->
+                when (section) {
+                    HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
+                    HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
+                    HomeSection.BALANCES -> BalancesStrip(state.accountRows.filter { !it.archived }, onManageAccounts)
+                    HomeSection.QUICK_ENTRIES -> {
+                if (state.templates.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier.testTag("templates"),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.templates, key = { it.id }) { t ->
+                            AssistChip(
+                                onClick = { onTemplate(t) },
+                                label = { Text(if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …") },
+                                modifier = Modifier.testTag("template_${t.name}").combinedClickable(onClick = { onTemplate(t) }, onLongClick = { removing = t }),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
             }
+            Spacer(Modifier.height(8.dp))
             HorizontalDivider()
             if (state.rows.isEmpty()) {
                 if (state.showWelcome) {

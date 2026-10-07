@@ -25,6 +25,7 @@ import app.expenses.core.domain.EntryDraft
 import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CalendarScreen
 import app.expenses.ui.CategoriesScreen
+import app.expenses.ui.HomeLayoutScreen
 import app.expenses.ui.DataScreen
 import app.expenses.ui.ImportScreen
 import app.expenses.ui.EntryFormScreen
@@ -62,6 +63,7 @@ class MainActivity : FragmentActivity() {
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
                     var managingAccounts by rememberSaveable { mutableStateOf(false) }
+                    var customisingHome by rememberSaveable { mutableStateOf(false) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
@@ -128,6 +130,10 @@ class MainActivity : FragmentActivity() {
                                 val e = editing as Editable.ReadOnly
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            customisingHome -> {
+                                BackHandler { customisingHome = false }
+                                HomeLayoutScreen(s.homeLayout, onChange = viewModel::setHomeLayout, onBack = { customisingHome = false })
                             }
                             managingAccounts -> {
                                 BackHandler { managingAccounts = false }
@@ -278,6 +284,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenData = { yourData = true },
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
+                                onCustomiseHome = { customisingHome = true },
                                 onOpenSearch = { searching = true },
                                 onOpenSecurity = { securing = true },
                                 onDismissWelcome = viewModel::dismissWelcome,
