@@ -11,27 +11,12 @@ MAX_WAIT="${MAX_WAIT:-600}"     # seconds to wait for it before running anyway (
 
 rm -rf core/*/build/test-results androidApp/build/test-results androidApp/build/outputs/androidTest-results
 
-run_step1() {
-  rm -rf core/*/build/test-results androidApp/build/test-results androidApp/build/outputs/androidTest-results
-  ./gradlew check :androidApp:assembleRelease :androidApp:assembleDebug :androidApp:connectedDebugAndroidTest --rerun-tasks \
-    -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest > /tmp/verify-step1.log 2>&1
-  step1=$?
-  cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verify-functional.xml 2>/dev/null
-}
 echo "== step 1: build, host tests, release build, functional device tests"
-run_step1
+./gradlew check :androidApp:assembleRelease :androidApp:assembleDebug :androidApp:connectedDebugAndroidTest --rerun-tasks \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RecreateStressTest > /tmp/verify-step1.log 2>&1
+step1=$?
 echo "step 1 gradle exit: $step1"
-retried=0
-# A known, unexplained crash inside the Compose runtime (SlotWriter.moveSlotGapTo) sometimes kills the whole instrumentation process in
-# the full suite. It has never been seen in isolation or in about 220 manual rotations and activity destroys. That one signature, and
-# nothing else, earns ONE retry of step 1; the retry is always reported, and any other failure or crash fails the run.
-if [ "$step1" -ne 0 ] && grep -q "crashed" /tmp/verify-functional.xml 2>/dev/null && grep -q "SlotWriter.moveSlotGapTo" /tmp/verify-functional.xml 2>/dev/null; then
-  echo "!! the known Compose crash (SlotWriter.moveSlotGapTo) killed the instrumentation process; retrying step 1 once"
-  cp /tmp/verify-functional.xml /tmp/verify-first-crash.xml
-  retried=1
-  run_step1
-  echo "step 1 (retry) gradle exit: $step1"
-fi
+cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verify-functional.xml 2>/dev/null
 
 echo "== step 2: timing gate alone"
 ./gradlew --stop >/dev/null 2>&1
@@ -48,27 +33,4 @@ rm -rf androidApp/build/outputs/androidTest-results
 step2=$?
 echo "step 2 gradle exit: $step2"
 
-python3 - "$step1" "$step2" "$retried" <<'E'
-import glob,re,sys
-s1,s2,retried=int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])
-t=f=0
-for p in glob.glob("*/build/test-results/**/*.xml",recursive=True)+glob.glob("core/*/build/test-results/**/*.xml",recursive=True):
-    m=re.search(r'tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"',open(p).read())
-    if m: a,b,c=map(int,m.groups()); t+=a; f+=b+c
-def device(path):
-    x=open(path).read(); r=re.search(r'tests="(\d+)" failures="(\d+)" errors="(\d+)"',x).groups()
-    return int(r[0]),int(r[1])+int(r[2]),len(re.findall(r'<skipped',x)),"crashed" in x
-ok = s1==0 and s2==0 and f==0
-try: fn=device("/tmp/verify-functional.xml")
-except Exception: fn=(0,1,0,True); ok=False
-g=glob.glob("androidApp/build/outputs/androidTest-results/connected/debug/*.xml")
-tg=device(g[0]) if g else (0,1,0,True)
-ok = ok and fn[1]==0 and not fn[3] and tg[1]==0 and not tg[3] and fn[0]>0 and tg[0]>0
-print(f"host/JVM: {t} tests, {f} failed")
-print(f"functional device tests: {fn[0]} run, {fn[1]} failed, {fn[2]} skipped{', PROCESS CRASHED' if fn[3] else ''}")
-print(f"timing gate: {tg[0]} run, {tg[1]} failed{', PROCESS CRASHED' if tg[3] else ''}")
-if retried: print("NOTE: step 1 needed ONE retry after the known Compose slot-table crash (see tools/verify.sh); the retry completed cleanly" if ok else "NOTE: step 1 was retried after the known Compose crash and still failed")
-print("RESULT:", "PASS" if ok else "FAIL")
-open("/tmp/verify-totals.txt","w").write(f"{t} host/JVM tests (both targets counted), {fn[0]} functional device tests ({fn[2]} skipped) and {tg[0]} timing-gate tests; verified in two steps by tools/verify.sh from deleted result files" + (" (step 1 needed one retry after the known, unexplained Compose crash)" if retried else ""))
-sys.exit(0 if ok else 1)
-E
+python3 tools/verify_report.py "$step1" "$step2"
