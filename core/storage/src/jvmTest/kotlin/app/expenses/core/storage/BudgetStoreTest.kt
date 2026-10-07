@@ -134,7 +134,7 @@ class BudgetStoreTest {
     @Test
     fun theWeeklyPeriodAndThe25thSurviveAReopen() {
         assertEquals(BudgetPeriod.Monthly(1), budgets.period(), "calendar month by default")
-        for (p in listOf(BudgetPeriod.Monthly(25), BudgetPeriod.Weekly(DayOfWeek.SUNDAY), BudgetPeriod.Weekly(DayOfWeek.MONDAY))) {
+        for (p in listOf(BudgetPeriod.Monthly(25), BudgetPeriod.Weekly(DayOfWeek.SUNDAY), BudgetPeriod.Weekly(DayOfWeek.MONDAY), BudgetPeriod.BiWeekly(LocalDate(2026, 1, 5)), BudgetPeriod.BiWeekly(LocalDate(1999, 12, 31)), BudgetPeriod.SemiMonthly, BudgetPeriod.Yearly(), BudgetPeriod.Yearly(1))) {
             budgets.setPeriod(p)
             assertEquals(p, BudgetStore(db, clock, { 2_000L }, ledger, recurring).period())
         }
@@ -223,5 +223,20 @@ class BudgetStoreTest {
         assertEquals(m((30_500 - 7_300) / 21), s.perDay)
         recurring.skip("gym", LocalDate(2026, 10, 15))
         assertEquals(m(6_300), status(2026, 10, 11).safeToSpend!!.upcoming, "a skipped bill is no longer coming")
+    }
+
+    @Test
+    fun aRepeatingIncomeOrTransferStillWaitingIsNotABillSoSafeToSpendIsUnchanged() {
+        val sch = app.expenses.core.domain.Schedule(app.expenses.core.domain.RepeatUnit.MONTH, 1, LocalDate(2026, 10, 28), app.expenses.core.domain.ScheduleEnd.AfterCount(1))
+        budgets.setLimit(null, m(31_000))
+        val before = status(2026, 10, 11).safeToSpend!!
+        ledger.saveAccount(Account(AccountId("sav"), "Savings", AccountType.BANK, inr))
+        recurring.save(app.expenses.core.domain.RecurringItem("salary", "Salary", m(50_000), CategoryId("Other"), bank.id, null, sch, kind = app.expenses.core.domain.RecurringKind.INCOME))
+        recurring.save(app.expenses.core.domain.RecurringItem("sip", "SIP", m(8_000), null, bank.id, null, sch, kind = app.expenses.core.domain.RecurringKind.TRANSFER, toAccount = AccountId("sav")))
+        val after = status(2026, 10, 11).safeToSpend!!
+        assertEquals(m(0), after.upcoming, "neither money coming in nor a move to your own savings is spending still to come")
+        assertEquals(before.available, after.available); assertEquals(before.perDay, after.perDay)
+        recurring.save(app.expenses.core.domain.RecurringItem("rent", "Rent", m(6_000), CategoryId("Bills"), bank.id, null, sch))
+        assertEquals(m(6_000), status(2026, 10, 11).safeToSpend!!.upcoming, "a real bill alongside them still counts, and only it")
     }
 }

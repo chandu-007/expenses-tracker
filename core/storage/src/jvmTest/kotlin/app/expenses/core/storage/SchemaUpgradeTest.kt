@@ -23,6 +23,8 @@ class SchemaUpgradeTest {
         d.execute(null, "ALTER TABLE account DROP COLUMN opening_minor", 0)
         d.execute(null, "ALTER TABLE account DROP COLUMN archived", 0)
         d.execute(null, "DROP TABLE entry_tag", 0)
+        d.execute(null, "ALTER TABLE recurring DROP COLUMN kind", 0)
+        d.execute(null, "ALTER TABLE recurring DROP COLUMN to_account_id", 0)
         return d
     }
 
@@ -39,6 +41,7 @@ class SchemaUpgradeTest {
         val ledger = LedgerStore(db, HlcClock("n")) { 1L }
         ledger.save(Expense(EntryId("e"), 1, AccountId("cash"), Money(100, Currency.INR)), EntryDetails(tags = listOf("trip")))
         assertEquals(listOf("trip"), ledger.tagsOf(EntryId("e")))
+        assertEquals(emptyList(), app.expenses.core.storage.RecurringStore(db, HlcClock("n"), { 1L }, ledger).list(), "the repeating-item table has its new columns")
     }
 
     @Test

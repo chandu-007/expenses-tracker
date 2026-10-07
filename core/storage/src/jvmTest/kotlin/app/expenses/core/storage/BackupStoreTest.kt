@@ -6,6 +6,7 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -70,6 +71,8 @@ class Device(node: String) {
         budgets.setLimit(null, m(5_000_000)); budgets.setLimit(pets.id, m(100_000)); budgets.setPeriod(BudgetPeriod.Monthly(25))
         recurring.save(RecurringItem("rent", "Rent", m(1_500_000), CategoryId("Bills"), AccountId("bank"), "Landlord", Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 8, 31), ScheduleEnd.AfterCount(12)), auto = true))
         recurring.save(RecurringItem("power", "Power", null, CategoryId("Bills"), AccountId("bank"), null, Schedule(RepeatUnit.WEEK, 2, LocalDate(2026, 9, 1), ScheduleEnd.OnOrBefore(LocalDate(2027, 1, 1)))))
+        recurring.save(RecurringItem("sip", "SIP", m(100_000), null, AccountId("bank"), null, Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 9, 5)), kind = RecurringKind.TRANSFER, toAccount = AccountId("cash")))
+        recurring.save(RecurringItem("pay", "Pay", m(5_000_000), CategoryId("Other"), AccountId("bank"), "Acme", Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 9, 1)), auto = true, kind = RecurringKind.INCOME))
         recurring.post("rent", LocalDate(2026, 8, 31), TimeZone.UTC)
         recurring.skip("power", LocalDate(2026, 9, 1))
         notifications.setPrefs(NotificationPrefs(bills = false, quietStartMinute = 23 * 60 + 30, billHour = 18))

@@ -57,4 +57,43 @@ sealed interface BudgetPeriod {
             return DatePeriod(start, start.plus(7, DateTimeUnit.DAY))
         }
     }
+
+    /** Every two weeks, counted from [anchor] (the first day of any one of the fortnights; which one does not matter). */
+    data class BiWeekly(val anchor: LocalDate) : BudgetPeriod {
+        override fun containing(date: LocalDate): DatePeriod {
+            val daysSince = anchor.daysUntil(date)
+            val back = ((daysSince % 14) + 14) % 14 // floor mod, so dates before the anchor tile too
+            val start = date.minus(back, DateTimeUnit.DAY)
+            return DatePeriod(start, start.plus(14, DateTimeUnit.DAY))
+        }
+    }
+
+    /** Twice a month: the 1st to the 15th, and the 16th to the end of the month. */
+    data object SemiMonthly : BudgetPeriod {
+        override fun containing(date: LocalDate): DatePeriod {
+            val firstHalf = date.day <= 15
+            val start = LocalDate(date.year, date.month, if (firstHalf) 1 else 16)
+            val end = if (firstHalf) LocalDate(date.year, date.month, 16) else LocalDate(date.year, date.month, 1).plus(1, DateTimeUnit.MONTH)
+            return DatePeriod(start, end)
+        }
+    }
+
+    /**
+     * A year that starts on the 1st of [startMonth]. The Indian financial year is April to March, the default. January gives the calendar year.
+     */
+    data class Yearly(val startMonth: Int = FINANCIAL_YEAR_START_MONTH) : BudgetPeriod {
+        init {
+            require(startMonth in 1..12) { "A year starts in month 1 to 12" }
+        }
+
+        override fun containing(date: LocalDate): DatePeriod {
+            val startYear = if (date.monthNumber >= startMonth) date.year else date.year - 1
+            val start = LocalDate(startYear, startMonth, 1)
+            return DatePeriod(start, LocalDate(startYear + 1, startMonth, 1))
+        }
+
+        companion object {
+            const val FINANCIAL_YEAR_START_MONTH = 4
+        }
+    }
 }

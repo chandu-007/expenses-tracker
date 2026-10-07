@@ -27,6 +27,7 @@ import kotlinx.datetime.plus
 import app.expenses.core.storage.DrillTarget
 import kotlinx.datetime.minus
 import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -133,6 +134,8 @@ data class RecurringUi(
     val merchant: String,
     val schedule: Schedule,
     val auto: Boolean,
+    val kind: RecurringKind,
+    val toAccountId: String,
     /** "₹15,000.00 · every month · next 1 Nov". */
     val summary: String,
 )
@@ -570,8 +573,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Creates ([id] null) or changes a repeating expense. Changes apply to occurrences not yet posted; posted ones stay as they are. */
-    fun saveRecurring(id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean) = withStore { ok ->
-        ok.recurring.save(RecurringItem(id ?: UUID.randomUUID().toString(), name.trim(), amount, CategoryId(category), AccountId(account), merchant.trim().ifEmpty { null }, schedule, auto && amount != null))
+    fun saveRecurring(id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean, kind: RecurringKind = RecurringKind.EXPENSE, toAccount: String = "") = withStore { ok ->
+        ok.recurring.save(RecurringItem(
+            id ?: UUID.randomUUID().toString(), name.trim(), amount, category.takeIf { kind != RecurringKind.TRANSFER }?.let(::CategoryId), AccountId(account),
+            merchant.trim().ifEmpty { null }, schedule, auto && amount != null, kind, toAccount.takeIf { kind == RecurringKind.TRANSFER }?.let(::AccountId),
+        ))
         refresh(ok)
     }
 
@@ -1039,6 +1045,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             periodName = when (period) {
                 is BudgetPeriod.Weekly -> "this week"
                 is BudgetPeriod.Monthly -> if (period.startDay == 1) "this month" else "this cycle"
+                is BudgetPeriod.BiWeekly -> "this fortnight"
+                BudgetPeriod.SemiMonthly -> "this half-month"
+                is BudgetPeriod.Yearly -> if (period.startMonth == 4) "this financial year" else if (period.startMonth == 1) "this year" else "this year of the budget"
             },
             overall = line(null, "Everything"),
             categories = lines,
@@ -1071,7 +1080,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val cadence = if (s.every == 1) "every ${s.unit.name.lowercase()}" else "every ${s.every} ${s.unit.name.lowercase()}s"
             val next = s.nextOnOrAfter(now)?.let { "next ${fmt.format(LocalDate.ofEpochDay(it.date.toEpochDays()))}" } ?: "ended"
             RecurringUi(
-                i.id, i.name, i.amount?.toPlainString().orEmpty(), i.category.value, i.account.value, i.merchant.orEmpty(), s, i.auto,
+                i.id, i.name, i.amount?.toPlainString().orEmpty(), i.category?.value.orEmpty(), i.account.value, i.merchant.orEmpty(), s, i.auto, i.kind, i.toAccount?.value.orEmpty(),
                 listOfNotNull(i.amount?.formatted() ?: "amount each time", cadence, next, if (i.auto) "posts by itself" else null).joinToString(" · "),
             )
         }

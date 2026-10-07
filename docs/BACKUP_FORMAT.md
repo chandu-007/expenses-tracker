@@ -47,7 +47,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 ### `templates`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`
 ### `budgets`: `scope`, `limitMinor`, `currency`
 ### `budgetPeriod`: `kind`, `startValue`
-### `recurring`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`, `unit`, `every`, `startDay`, `endKind`, `endValue`, `auto`
+### `recurring`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`, `unit`, `every`, `startDay`, `endKind`, `endValue`, `auto`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`), `toAccountId` (the account a repeating transfer goes to)
 ### `recurringDone`: `recurringId`, `day`, `outcome`, `entryId`
 ### `settings`: a map of text to text (reminder preferences and similar).
 

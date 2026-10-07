@@ -3,6 +3,7 @@ package app.expenses.core.storage
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -76,7 +77,7 @@ class BackupStore(
             budgets = q.allBudgets().executeAsList().map { BackupBudget(it.scope, it.limit_minor, it.currency) },
             budgetPeriod = q.budgetPeriod().executeAsOneOrNull()?.let { BackupBudgetPeriod(it.kind, it.start_value) },
             recurring = q.liveRecurring().executeAsList().map {
-                BackupRecurring(it.id, it.name, it.amount_minor, it.currency, it.category_id, it.account_id, it.merchant, it.unit, it.every.toInt(), it.start_day, it.end_kind, it.end_value, it.auto == 1L)
+                BackupRecurring(it.id, it.name, it.amount_minor, it.currency, it.category_id, it.account_id, it.merchant, it.unit, it.every.toInt(), it.start_day, it.end_kind, it.end_value, it.auto == 1L, it.kind, it.to_account_id)
             },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
             settings = SETTINGS.mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.let { k to it } }.toMap(),
@@ -163,8 +164,8 @@ class BackupStore(
             else -> ScheduleEnd.Never
         }
         return RecurringItem(
-            r.id, r.name, r.amountMinor?.let { Money(it, currency(r.currency)) }, CategoryId(r.categoryId), AccountId(r.accountId), r.merchant,
-            Schedule(RepeatUnit.valueOf(r.unit), r.every, LocalDate.fromEpochDays(r.startDay), end), r.auto,
+            r.id, r.name, r.amountMinor?.let { Money(it, currency(r.currency)) }, r.categoryId.ifEmpty { null }?.let(::CategoryId), AccountId(r.accountId), r.merchant,
+            Schedule(RepeatUnit.valueOf(r.unit), r.every, LocalDate.fromEpochDays(r.startDay), end), r.auto, RecurringKind.valueOf(r.kind), r.toAccountId?.let(::AccountId),
         )
     }
 

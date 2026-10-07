@@ -182,6 +182,23 @@ class BudgetUiTest {
     }
 
     @Test
+    fun theFinancialYearFortnightAndHalfMonthPeriodsCanBeChosenAndAreNamedAndKept() {
+        launch(); openBudget()
+        compose.onNodeWithTag("period_yearly").performClick()
+        compose.waitUntil(10_000) { period() == BudgetPeriod.Yearly() }
+        waitForText("period_range", "1 Apr"); waitForText("period_range", "31 Mar") // the financial year is April to March
+        compose.onNodeWithTag("period_semimonthly").performClick()
+        compose.waitUntil(10_000) { period() == BudgetPeriod.SemiMonthly }
+        compose.onNodeWithTag("period_biweekly").performClick()
+        compose.waitUntil(10_000) { period() is BudgetPeriod.BiWeekly }
+        val anchor = (period() as BudgetPeriod.BiWeekly).anchor
+        assertEquals(kotlinx.datetime.DayOfWeek.MONDAY, anchor.dayOfWeek)
+        launch(); waitFor("budget_summary")
+        compose.onNodeWithTag("budget_summary").performClick(); waitFor("period_biweekly")
+        compose.onNodeWithTag("period_biweekly").assertIsSelected()
+    }
+
+    @Test
     fun manyQuickChangesToTheStartDayAreAllCountedNoneLost() {
         launch()
         val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]

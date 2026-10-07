@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -66,6 +67,35 @@ class RecurringStoreTest {
         assertEquals("recurring", row.source)
         assertEquals(mapOf<CategoryId?, Money>(CategoryId("Bills") to m(1_500_000)), ledger.spendByCategory(inr))
         assertEquals(listOf(d(2026, 10, 1)), recurring.due(d(2026, 10, 1)).map { it.date })
+    }
+
+    @Test
+    fun aRepeatingIncomeAndATransferPostAsIncomeAndTransferNotAsExpenses() {
+        ledger.saveAccount(Account(AccountId("sav"), "Savings", AccountType.BANK, inr))
+        recurring.save(RecurringItem("pay", "Salary", m(8_000_000), CategoryId("Other"), bank.id, "Acme", Schedule(RepeatUnit.MONTH, 1, d(2026, 8, 1)), kind = RecurringKind.INCOME))
+        recurring.save(RecurringItem("sip", "SIP", m(1_000_000), null, bank.id, null, Schedule(RepeatUnit.MONTH, 1, d(2026, 8, 5)), kind = RecurringKind.TRANSFER, toAccount = AccountId("sav")))
+        val pay = recurring.post("pay", d(2026, 9, 1), zone)!!; val sip = recurring.post("sip", d(2026, 9, 5), zone)!!
+        assertEquals("INCOME", db.schemaQueries.entryById(pay).executeAsOne().kind)
+        assertEquals("Other", db.schemaQueries.entryById(pay).executeAsOne().category_id)
+        val t = db.schemaQueries.entryById(sip).executeAsOne()
+        assertEquals("TRANSFER", t.kind); assertEquals("bank", t.account_id); assertEquals("sav", t.counter_account_id)
+        assertEquals(emptyMap(), ledger.spendByCategory(inr), "neither is spending")
+        val b = ledger.balances()
+        assertEquals(m(8_000_000 - 1_000_000), b.getValue(AccountId("bank"))); assertEquals(m(1_000_000), b.getValue(AccountId("sav")))
+        // undo takes them back like any other occurrence
+        recurring.undo("sip", d(2026, 9, 5)); assertEquals(m(0), ledger.balances().getValue(AccountId("sav")))
+        assertEquals(RecurringKind.TRANSFER, recurring.list().first { it.id == "sip" }.kind)
+        assertEquals(AccountId("sav"), recurring.list().first { it.id == "sip" }.toAccount)
+        assertEquals(null, recurring.list().first { it.id == "sip" }.category)
+    }
+
+    @Test
+    fun aRepeatingTransferMustHaveTwoDifferentAccountsAndNoCategory() {
+        val sch = Schedule(RepeatUnit.MONTH, 1, d(2026, 8, 1))
+        kotlin.test.assertFailsWith<IllegalArgumentException> { RecurringItem("x", "X", m(1), null, bank.id, null, sch, kind = RecurringKind.TRANSFER) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { RecurringItem("x", "X", m(1), null, bank.id, null, sch, kind = RecurringKind.TRANSFER, toAccount = bank.id) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { RecurringItem("x", "X", m(1), CategoryId("Bills"), bank.id, null, sch, kind = RecurringKind.TRANSFER, toAccount = AccountId("sav")) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { RecurringItem("x", "X", m(1), CategoryId("Bills"), bank.id, null, sch, kind = RecurringKind.EXPENSE, toAccount = AccountId("sav")) }
     }
 
     @Test

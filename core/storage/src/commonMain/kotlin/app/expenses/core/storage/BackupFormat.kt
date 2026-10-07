@@ -56,6 +56,7 @@ data class BackupEntry(
 data class BackupRecurring(
     val id: String, val name: String, val amountMinor: Long? = null, val currency: String, val categoryId: String, val accountId: String,
     val merchant: String? = null, val unit: String, val every: Int, val startDay: Long, val endKind: String, val endValue: Long? = null, val auto: Boolean = false,
+    val kind: String = "EXPENSE", val toAccountId: String? = null,
 )
 
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)

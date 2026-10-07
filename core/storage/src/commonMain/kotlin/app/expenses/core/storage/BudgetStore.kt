@@ -7,6 +7,7 @@ import app.expenses.core.domain.BudgetProgress
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DatePeriod
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.SafeToSpend
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
@@ -61,6 +62,9 @@ class BudgetStore(
         val row = q.budgetPeriod().executeAsOneOrNull() ?: return BudgetPeriod.Monthly(1)
         return when (row.kind) {
             "weekly" -> BudgetPeriod.Weekly(DayOfWeek.entries.first { it.ordinal + 1 == row.start_value.toInt() })
+            "biweekly" -> BudgetPeriod.BiWeekly(kotlinx.datetime.LocalDate.fromEpochDays(row.start_value))
+            "semimonthly" -> BudgetPeriod.SemiMonthly
+            "yearly" -> BudgetPeriod.Yearly(row.start_value.toInt())
             else -> BudgetPeriod.Monthly(row.start_value.toInt())
         }
     }
@@ -69,6 +73,9 @@ class BudgetStore(
         val (kind, param) = when (period) {
             is BudgetPeriod.Monthly -> "monthly" to period.startDay.toLong()
             is BudgetPeriod.Weekly -> "weekly" to (period.startsOn.ordinal + 1).toLong()
+            is BudgetPeriod.BiWeekly -> "biweekly" to period.anchor.toEpochDays()
+            BudgetPeriod.SemiMonthly -> "semimonthly" to 0L
+            is BudgetPeriod.Yearly -> "yearly" to period.startMonth.toLong()
         }
         db.transaction {
             val before = q.budgetPeriod().executeAsOneOrNull()
@@ -91,7 +98,8 @@ class BudgetStore(
         val progress = BudgetMath.progress(limits, spent, children)
         val overall = progress.firstOrNull { it.categoryId == null }
         // Repeating expenses still waiting in this period (past-due ones are included: they will post dated inside it).
-        val upcoming = recurring.unhandled(period.start, period.endExclusive).mapNotNull { it.item.amount }.filter { it.currency == currency }
+        // Only expenses are spending still to come; a repeating income or a transfer between own accounts is not set aside.
+        val upcoming = recurring.unhandled(period.start, period.endExclusive).filter { it.item.kind == RecurringKind.EXPENSE }.mapNotNull { it.item.amount }.filter { it.currency == currency }
             .fold(Money.zero(currency)) { a, m -> a + m }
         return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period, upcoming) })
     }

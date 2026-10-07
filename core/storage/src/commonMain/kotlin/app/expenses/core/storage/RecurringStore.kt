@@ -4,6 +4,7 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DueItem
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.RecurringItem
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -12,6 +13,8 @@ import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.domain.ledger.Income
+import app.expenses.core.domain.ledger.Transfer
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.DateTimeUnit
@@ -40,18 +43,18 @@ class RecurringStore(
 
     fun save(requested: RecurringItem) {
         db.transaction {
-            val item = requested.copy(category = CategoryId(db.resolveCategory(requested.category.value)))
+            val item = requested.copy(category = requested.category?.let { CategoryId(db.resolveCategory(it.value)) })
             val before = q.recurringById(item.id).executeAsOneOrNull()
             require(before == null || before.deleted == 0L) { "That repeating expense was deleted" }
             val currency = item.amount?.currency ?: Currency.INR
             q.insertCurrency(currency.code, currency.minorUnitDigits.toLong())
             val end = item.schedule.end
             q.upsertRecurring(
-                item.id, item.name.trim(), item.amount?.minorUnits, currency.code, item.category.value, item.account.value, item.merchant,
+                item.id, item.name.trim(), item.amount?.minorUnits, currency.code, item.category?.value.orEmpty(), item.account.value, item.merchant,
                 item.schedule.unit.name, item.schedule.every.toLong(), item.schedule.start.toEpochDays(),
                 when (end) { ScheduleEnd.Never -> "never"; is ScheduleEnd.OnOrBefore -> "date"; is ScheduleEnd.AfterCount -> "count" },
                 when (end) { ScheduleEnd.Never -> null; is ScheduleEnd.OnOrBefore -> end.date.toEpochDays(); is ScheduleEnd.AfterCount -> end.count.toLong() },
-                if (item.auto) 1 else 0,
+                if (item.auto) 1 else 0, item.kind.name, item.toAccount?.value,
             )
             val after = fieldsOf(item.copy(name = item.name.trim()))
             val prior = before?.let { fieldsOf(itemOf(it)) }
@@ -90,8 +93,13 @@ class RecurringStore(
         val entryId = "rec:$id:${date.toEpochDays()}"
         // An occurrence that was posted, undone and is now posted again reuses its entry, which undo only marked as deleted.
         if (q.entryById(entryId).executeAsOneOrNull()?.deleted == 1L) ledger.restore(EntryId(entryId))
+        val at = date.atStartOfDayIn(zone).toEpochMilliseconds()
         ledger.save(
-            Expense(EntryId(entryId), date.atStartOfDayIn(zone).toEpochMilliseconds(), item.account, paid, listOf(CategorySplit(item.category, paid))),
+            when (item.kind) {
+                RecurringKind.EXPENSE -> Expense(EntryId(entryId), at, item.account, paid, item.category?.let { listOf(CategorySplit(it, paid)) }.orEmpty())
+                RecurringKind.INCOME -> Income(EntryId(entryId), at, item.account, paid, item.category)
+                RecurringKind.TRANSFER -> Transfer(EntryId(entryId), at, item.account, item.toAccount!!, paid)
+            },
             EntryDetails(merchant = item.merchant ?: item.name, source = "recurring", sourceRef = "$id:${date.toEpochDays()}"),
         )
         markDone(id, date, "posted", entryId)
@@ -162,8 +170,8 @@ class RecurringStore(
         }
         val digits = q.selectCurrencies().executeAsList().firstOrNull { it.code == r.currency }?.digits?.toInt() ?: 2
         return RecurringItem(
-            r.id, r.name, r.amount_minor?.let { Money(it, Currency(r.currency, digits)) }, CategoryId(r.category_id), AccountId(r.account_id), r.merchant,
-            Schedule(RepeatUnit.valueOf(r.unit), r.every.toInt(), start, end), r.auto == 1L,
+            r.id, r.name, r.amount_minor?.let { Money(it, Currency(r.currency, digits)) }, r.category_id.ifEmpty { null }?.let(::CategoryId), AccountId(r.account_id), r.merchant,
+            Schedule(RepeatUnit.valueOf(r.unit), r.every.toInt(), start, end), r.auto == 1L, RecurringKind.valueOf(r.kind), r.to_account_id?.let(::AccountId),
         )
     }
 
@@ -171,7 +179,7 @@ class RecurringStore(
         val end = i.schedule.end
         return mapOf(
             "name" to i.name, "amount_minor" to i.amount?.minorUnits?.toString(), "currency" to (i.amount?.currency?.code ?: Currency.INR.code),
-            "category_id" to i.category.value, "account_id" to i.account.value, "merchant" to i.merchant,
+            "category_id" to i.category?.value.orEmpty(), "account_id" to i.account.value, "merchant" to i.merchant, "kind" to i.kind.name, "to_account_id" to i.toAccount?.value,
             "unit" to i.schedule.unit.name, "every" to i.schedule.every.toString(), "start_day" to i.schedule.start.toEpochDays().toString(),
             "end_kind" to when (end) { ScheduleEnd.Never -> "never"; is ScheduleEnd.OnOrBefore -> "date"; is ScheduleEnd.AfterCount -> "count" },
             "end_value" to when (end) { ScheduleEnd.Never -> null; is ScheduleEnd.OnOrBefore -> end.date.toEpochDays().toString(); is ScheduleEnd.AfterCount -> end.count.toString() },

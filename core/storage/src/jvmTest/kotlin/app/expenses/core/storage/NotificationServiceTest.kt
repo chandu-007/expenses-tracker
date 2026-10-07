@@ -71,6 +71,16 @@ class NotificationServiceTest {
     }
 
     @Test
+    fun aRepeatingIncomeOrTransferRemindsToConfirmItInNeutralWordsNotAsABill() {
+        ledger.saveAccount(app.expenses.core.domain.ledger.Account(AccountId("sav"), "Savings", app.expenses.core.domain.ledger.AccountType.BANK, inr))
+        recurring.save(RecurringItem("pay", "Salary", m(5_000_000), CategoryId("Other"), bank.id, null, Schedule(RepeatUnit.MONTH, 1, today), kind = app.expenses.core.domain.RecurringKind.INCOME))
+        recurring.save(RecurringItem("sip", "SIP", m(1_000_000), null, bank.id, null, Schedule(RepeatUnit.MONTH, 1, today), kind = app.expenses.core.domain.RecurringKind.TRANSFER, toAccount = AccountId("sav")))
+        val notices = service.check(today, noon, zone).notices.sortedBy { it.title }
+        assertEquals(setOf("Salary due today", "SIP due today"), notices.map { it.title }.toSet())
+        assertTrue(notices.all { "bill" !in it.title.lowercase() && "bill" !in it.text.lowercase() && "post or skip" in it.text }, "$notices")
+    }
+
+    @Test
     fun budgetAlertsFollowSpendingAndOnlyFireOncePerLevel() {
         budgets.setLimit(null, m(100_000))
         spend("a", 700, "Food")

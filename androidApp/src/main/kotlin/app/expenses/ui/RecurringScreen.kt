@@ -57,6 +57,7 @@ import app.expenses.DueUi
 import app.expenses.RecurringUi
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
@@ -128,7 +129,7 @@ fun RecurringScreen(
     onBack: () -> Unit,
     onPost: (DueUi, Money?) -> Unit,
     onSkip: (DueUi) -> Unit,
-    onSave: (id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean) -> Unit,
+    onSave: (id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean, kind: RecurringKind, toAccount: String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) } // an item id, or NEW
@@ -139,7 +140,7 @@ fun RecurringScreen(
     if (editing == NEW || edited != null) {
         RecurringEditor(
             start = edited, categories = categories, accounts = accounts, today = today,
-            onSave = { name, amount, cat, acct, merchant, schedule, auto -> onSave(edited?.id, name, amount, cat, acct, merchant, schedule, auto); editing = null },
+            onSave = { name, amount, cat, acct, merchant, schedule, auto, kind, to -> onSave(edited?.id, name, amount, cat, acct, merchant, schedule, auto, kind, to); editing = null },
             onDelete = { edited?.let { onDelete(it.id) }; editing = null },
             onBack = { editing = null },
         )
@@ -221,7 +222,7 @@ private fun RecurringEditor(
     categories: List<CategoryUi>,
     accounts: List<AccountUi>,
     today: LocalDate,
-    onSave: (name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean) -> Unit,
+    onSave: (name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean, kind: RecurringKind, toAccount: String) -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -230,6 +231,8 @@ private fun RecurringEditor(
     var amountText by rememberSaveable(key) { mutableStateOf(start?.amountPlain.orEmpty()) }
     var category by rememberSaveable(key) { mutableStateOf(start?.categoryId ?: categories.firstOrNull { !it.hidden }?.id.orEmpty()) }
     var account by rememberSaveable(key) { mutableStateOf(start?.accountId ?: accounts.firstOrNull()?.id.orEmpty()) }
+    var kind by rememberSaveable(key) { mutableStateOf(start?.kind ?: RecurringKind.EXPENSE) }
+    var toAccount by rememberSaveable(key) { mutableStateOf(start?.toAccountId ?: accounts.getOrNull(1)?.id.orEmpty()) }
     var unit by rememberSaveable(key) { mutableStateOf(start?.schedule?.unit ?: RepeatUnit.MONTH) }
     var every by rememberSaveable(key) { mutableStateOf(start?.schedule?.every ?: 1) }
     var startDay by rememberSaveable(key) { mutableStateOf((start?.schedule?.start ?: today).toEpochDays()) }
@@ -245,7 +248,8 @@ private fun RecurringEditor(
     val startDate = LocalDate.fromEpochDays(startDay)
     val endDate = LocalDate.fromEpochDays(endDay)
     val endProblem = if (endKind == "date" && endDate < startDate) "The end date is before the start date" else null
-    val canSave = name.isNotBlank() && category.isNotEmpty() && account.isNotEmpty() && !amountInvalid && endProblem == null
+    val canSave = name.isNotBlank() && (kind == RecurringKind.TRANSFER || category.isNotEmpty()) && account.isNotEmpty() && !amountInvalid && endProblem == null &&
+        (kind != RecurringKind.TRANSFER || (toAccount.isNotEmpty() && toAccount != account))
 
     picking?.let { which ->
         DatePickDialog(
@@ -265,12 +269,12 @@ private fun RecurringEditor(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(if (start == null) "New repeating expense" else "Edit repeating expense", maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("rec_cancel")) { Text("Cancel") } }) },
+        topBar = { TopAppBar(title = { Text((if (start == null) "New repeating " else "Edit repeating ") + kind.name.lowercase(), maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("rec_cancel")) { Text("Cancel") } }) },
         bottomBar = {
             Button(
                 onClick = {
                     val end = when (endKind) { "date" -> ScheduleEnd.OnOrBefore(endDate); "count" -> ScheduleEnd.AfterCount(endCount); else -> ScheduleEnd.Never }
-                    onSave(name.trim(), amount, category, account, start?.merchant.orEmpty(), Schedule(unit, every, startDate, end), auto && amount != null)
+                    onSave(name.trim(), amount, category, account, start?.merchant.orEmpty(), Schedule(unit, every, startDate, end), auto && amount != null, kind, toAccount)
                 },
                 enabled = canSave,
                 modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("rec_save"),
@@ -278,6 +282,9 @@ private fun RecurringEditor(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RecurringKind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.name.lowercase().replaceFirstChar { it.uppercase() }) }, modifier = Modifier.testTag("rec_kind_${k.name}")) }
+            }
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rec_name"))
             OutlinedTextField(
                 value = amountText, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amountText = v },
@@ -286,15 +293,22 @@ private fun RecurringEditor(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth().testTag("rec_amount"),
             )
-            Text("Category", style = MaterialTheme.typography.labelMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (kind != RecurringKind.TRANSFER) Text("Category", style = MaterialTheme.typography.labelMedium)
+            if (kind != RecurringKind.TRANSFER) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 categories.filter { !it.hidden || it.id == category }.forEach { c ->
                     FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(displayName(categories, c)) }, modifier = Modifier.testTag("rec_cat_${c.id}"))
                 }
             }
-            Text("Account", style = MaterialTheme.typography.labelMedium)
+            Text(when (kind) { RecurringKind.TRANSFER -> "From"; RecurringKind.INCOME -> "Received in"; RecurringKind.EXPENSE -> "Account" }, style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("rec_acct_${a.id}")) }
+            }
+            if (kind == RecurringKind.TRANSFER) {
+                Text("To", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    accounts.forEach { a -> FilterChip(selected = a.id == toAccount, onClick = { toAccount = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("rec_to_${a.id}")) }
+                }
+                if (toAccount == account) Text("Choose two different accounts.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("rec_problem"))
             }
             HorizontalDivider()
             Text("Repeats", style = MaterialTheme.typography.labelMedium)

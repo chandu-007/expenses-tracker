@@ -105,6 +105,32 @@ class RecurringUiTest {
     }
 
     @Test
+    fun aRepeatingIncomeAndATransferCreatedOnTheScreenPostAsIncomeAndTransferAndNeitherIsSpending() {
+        launch(); openFromMenu("open_recurring"); waitFor("new_recurring")
+        compose.onNodeWithTag("new_recurring").performClick(); waitFor("rec_name")
+        compose.onNodeWithTag("rec_kind_INCOME").performClick()
+        compose.onNodeWithTag("rec_name").performTextInput("Salary"); compose.onNodeWithTag("rec_amount").performTextInput("50000")
+        compose.onNodeWithTag("rec_save").performClick(); waitFor("rec_row_Salary")
+        compose.onNodeWithTag("new_recurring").performClick(); waitFor("rec_name")
+        compose.onNodeWithTag("rec_kind_TRANSFER").performClick()
+        compose.onNodeWithTag("rec_name").performTextInput("SIP"); compose.onNodeWithTag("rec_amount").performTextInput("5000")
+        compose.onNodeWithTag("rec_acct_bank").performClick(); compose.onNodeWithTag("rec_to_bank").performClick()
+        waitFor("rec_problem"); compose.onNodeWithTag("rec_save").assertIsNotEnabled()   // the same account on both sides
+        compose.onNodeWithTag("rec_to_cash").performClick(); compose.onNodeWithTag("rec_save").assertIsEnabled()
+        compose.onNodeWithTag("rec_save").performClick(); waitFor("rec_row_SIP")
+        val items = runBlocking { container.write { it.recurring.list().associateBy { i -> i.name } } }!!
+        assertEquals(app.expenses.core.domain.RecurringKind.INCOME, items.getValue("Salary").kind)
+        assertEquals(app.expenses.core.domain.RecurringKind.TRANSFER, items.getValue("SIP").kind)
+        compose.onNodeWithTag(dueTag(items.getValue("Salary").id, "post")).performClick(); waitGone(dueTag(items.getValue("Salary").id, "card"))
+        compose.onNodeWithTag(dueTag(items.getValue("SIP").id, "post")).performClick(); waitGone(dueTag(items.getValue("SIP").id, "card"))
+        val kinds = runBlocking { container.write { it.db.schemaQueries.recentEntries(10).executeAsList().map { e -> e.kind } } }!!
+        assertEquals(listOf("INCOME", "TRANSFER"), kinds.sorted())
+        compose.onNodeWithTag("recurring_back").performClick(); waitSpend("₹0.00")
+        val b = runBlocking { container.write { it.store.balances().mapKeys { e -> e.key.value }.mapValues { e -> e.value.minorUnits } } }!!
+        assertEquals(mapOf("bank" to 4_500_000L, "cash" to 500_000L), b)
+    }
+
+    @Test
     fun skippingTakesItOffTheListWithoutSpendingAndUndoBringsItBack() {
         seed(item("gym", "Gym", 1_000))
         launch()

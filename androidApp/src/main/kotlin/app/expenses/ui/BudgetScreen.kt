@@ -144,6 +144,21 @@ fun BudgetScreen(
                             label = { Text("Weekly") }, modifier = Modifier.testTag("period_weekly"),
                         )
                     }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = budget.period is BudgetPeriod.BiWeekly,
+                            onClick = { if (budget.period !is BudgetPeriod.BiWeekly) onSetPeriod(BudgetPeriod.BiWeekly(FORTNIGHT_FROM_THIS_MONDAY())) },
+                            label = { Text("Every 2 weeks") }, modifier = Modifier.testTag("period_biweekly"),
+                        )
+                        FilterChip(
+                            selected = budget.period is BudgetPeriod.SemiMonthly, onClick = { if (budget.period !is BudgetPeriod.SemiMonthly) onSetPeriod(BudgetPeriod.SemiMonthly) },
+                            label = { Text("Twice a month") }, modifier = Modifier.testTag("period_semimonthly"),
+                        )
+                        FilterChip(
+                            selected = budget.period is BudgetPeriod.Yearly, onClick = { if (budget.period !is BudgetPeriod.Yearly) onSetPeriod(BudgetPeriod.Yearly()) },
+                            label = { Text("Financial year") }, modifier = Modifier.testTag("period_yearly"),
+                        )
+                    }
                     when (val p = budget.period) {
                         is BudgetPeriod.Monthly -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Starts on day ", style = MaterialTheme.typography.bodyMedium)
@@ -157,6 +172,9 @@ fun BudgetScreen(
                                 modifier = Modifier.testTag("start_day_up").semantics { contentDescription = "Start one day later" },
                             ) { Text("+") }
                         }
+                        is BudgetPeriod.BiWeekly -> Text("Two-week periods, counted from the week you chose this.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        BudgetPeriod.SemiMonthly -> Text("The 1st to the 15th, and the 16th to the end of the month.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        is BudgetPeriod.Yearly -> Text(if (p.startMonth == 4) "April to March, the Indian financial year." else "A year from month ${p.startMonth}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         is BudgetPeriod.Weekly -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             WEEKDAYS.forEach { (day, label) ->
                                 FilterChip(selected = p.startsOn == day, onClick = { onSetPeriod(BudgetPeriod.Weekly(day)) }, label = { Text(label) }, modifier = Modifier.testTag("weekday_$label"))
@@ -243,4 +261,11 @@ private fun LimitDialog(line: BudgetLineUi, periodName: String, onSave: (Money) 
         confirmButton = { TextButton(onClick = { amount?.let(onSave) }, enabled = amount != null, modifier = Modifier.testTag("limit_save")) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** The Monday of this week: the fortnights are counted from it. */
+private fun FORTNIGHT_FROM_THIS_MONDAY(): kotlinx.datetime.LocalDate {
+    val today = java.time.LocalDate.now()
+    val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+    return kotlinx.datetime.LocalDate(monday.year, monday.monthValue, monday.dayOfMonth)
 }
