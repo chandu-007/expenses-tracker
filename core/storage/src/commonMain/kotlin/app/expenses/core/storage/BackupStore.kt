@@ -57,7 +57,7 @@ class BackupStore(
         val shares = q.allShares().executeAsList().groupBy { it.entry_id }
         return BackupData(
             currencies = q.selectCurrencies().executeAsList().map { BackupCurrency(it.code, it.digits.toInt()) },
-            accounts = q.allAccounts().executeAsList().map { BackupAccount(it.id, it.name, it.type, it.currency) },
+            accounts = q.allAccounts().executeAsList().map { BackupAccount(it.id, it.name, it.type, it.currency, it.opening_minor, it.archived == 1L) },
             // Live categories, and merged ones (as tombstones) so an edit that still uses an old id lands on its target after a restore.
             categories = q.allCategories().executeAsList().filter { it.deleted == 0L || it.merged_into != null }
                 .map { BackupCategory(it.id, it.name, it.parent_id, it.color, it.position.toInt(), it.hidden == 1L, it.deleted == 1L, it.merged_into) },
@@ -105,7 +105,7 @@ class BackupStore(
         fun currency(code: String) = Currency(code, digits[code] ?: error("The backup does not say how many decimal places $code has"))
         data.currencies.forEach { q.insertCurrency(it.code, it.digits.toLong()) }
 
-        for (a in data.accounts) if (q.accountById(a.id).executeAsOneOrNull() == null) ledger.saveAccount(Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency)))
+        for (a in data.accounts) if (q.accountById(a.id).executeAsOneOrNull() == null) ledger.saveAccount(Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency), a.openingMinor, a.archived))
         // Parents before children, so a subcategory never refers to a category that is not there yet.
         for (c in data.categories.sortedBy { it.parentId != null }) {
             val here = q.categoryById(c.id).executeAsOneOrNull()

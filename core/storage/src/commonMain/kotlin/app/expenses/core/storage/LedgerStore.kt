@@ -49,11 +49,23 @@ class LedgerStore(
             ensureCurrency(account.currency)
             val before = q.accountById(account.id.value).executeAsOneOrNull()
             require(before == null || before.currency == account.currency.code) { "An account's currency cannot change" }
-            q.insertAccount(account.id.value, account.name, account.type.name, account.currency.code)
-            val beforeFields = before?.let { mapOf("name" to it.name, "type" to it.type, "currency" to it.currency) }
-            logChanges("account", account.id.value, beforeFields, mapOf("name" to account.name, "type" to account.type.name, "currency" to account.currency.code))
+            q.insertAccount(account.id.value, account.name, account.type.name, account.currency.code, account.openingMinor, if (account.archived) 1L else 0L)
+            val beforeFields = before?.let { mapOf("name" to it.name, "type" to it.type, "currency" to it.currency, "opening_minor" to it.opening_minor.toString(), "archived" to it.archived.toString()) }
+            logChanges("account", account.id.value, beforeFields, mapOf(
+                "name" to account.name, "type" to account.type.name, "currency" to account.currency.code,
+                "opening_minor" to account.openingMinor.toString(), "archived" to (if (account.archived) "1" else "0"),
+            ))
         }
     }
+
+    /** Every account's balance, from SQL. Equal to [Ledger.balances] for the same data. */
+    fun balances(): Map<AccountId, Money> {
+        val accounts = q.selectAccounts().executeAsList().associateBy { it.id }
+        return q.accountBalances().executeAsList().associate { AccountId(it.id) to Money(((it.balance as Any?) as? Number)?.toLong() ?: 0L, currency(accounts.getValue(it.id).currency)) }
+    }
+
+    /** How many entries, quick entries and repeating expenses refer to the account. */
+    fun accountUsage(id: AccountId): Long = q.accountUsage(id.value).executeAsOne()
 
     // ---- entries ----
 
@@ -172,7 +184,7 @@ class LedgerStore(
     private fun currency(code: String) = Currency(code, digits[code] ?: error("Unknown currency $code"))
 
     private fun accountOf(a: app.expenses.core.storage.db.Account) =
-        Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency))
+        Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency), a.opening_minor, a.archived == 1L)
 
     private fun splitsOf(row: EntryRow): List<CategorySplit> =
         q.splitsOf(row.id).executeAsList().map { CategorySplit(CategoryId(it.category_id), Money(it.amount_minor, currency(row.currency))) }

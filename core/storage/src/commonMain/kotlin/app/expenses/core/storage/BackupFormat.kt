@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 data class BackupHeader(val format: String, val version: Int, val createdAt: Long, val payloadBytes: Int, val sha256: String)
 
 @Serializable data class BackupCurrency(val code: String, val digits: Int)
-@Serializable data class BackupAccount(val id: String, val name: String, val type: String, val currency: String)
+@Serializable data class BackupAccount(val id: String, val name: String, val type: String, val currency: String, val openingMinor: Long = 0L, val archived: Boolean = false)
 @Serializable data class BackupCategory(val id: String, val name: String, val parentId: String? = null, val color: Long? = null, val position: Int, val hidden: Boolean = false, val deleted: Boolean = false, val mergedInto: String? = null)
 @Serializable data class BackupSplit(val categoryId: String, val amountMinor: Long)
 @Serializable data class BackupShare(val personId: String? = null, val amountMinor: Long)

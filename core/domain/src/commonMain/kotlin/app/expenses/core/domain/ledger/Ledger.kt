@@ -50,7 +50,7 @@ class Ledger private constructor(
     /** Signed balance of every account. Liability accounts are negative when money is owed. */
     fun balances(): Map<AccountId, Money> {
         val totals = HashMap<AccountId, Long>()
-        for (id in accounts.keys) totals[id] = 0L
+        for ((id, account) in accounts) totals[id] = account.openingMinor
         fun move(account: AccountId, delta: Long) {
             totals[account] = (totals[account] ?: 0L) + delta
         }

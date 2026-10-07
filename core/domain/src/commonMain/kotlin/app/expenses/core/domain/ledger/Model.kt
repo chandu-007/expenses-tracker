@@ -21,11 +21,17 @@ enum class AccountType(val isLiability: Boolean) {
     LOAN(true),
 }
 
+/**
+ * [openingMinor] is what the account held before the first entry in the app (negative for money owed on a card or loan). [archived]
+ * hides it from pickers; its history stays and still counts, because entries refer to it.
+ */
 data class Account(
     val id: AccountId,
     val name: String,
     val type: AccountType,
     val currency: Currency,
+    val openingMinor: Long = 0L,
+    val archived: Boolean = false,
 )
 
 /** One slice of an expense assigned to a category. A null category elsewhere means "uncategorized". */
