@@ -20,19 +20,30 @@ for p in glob.glob("*/build/test-results/**/*.xml", recursive=True) + glob.glob(
         a, b, c = map(int, m.groups()); tests += a; failed += b + c
 
 
+def attr(x, name):
+    m = re.search(rf'\b{name}="(\d+)"', x)
+    return int(m.group(1)) if m else None
+
+
 def device(path):
-    x = open(path).read()
-    r = re.search(r'tests="(\d+)" failures="(\d+)" errors="(\d+)"', x).groups()
-    return int(r[0]), int(r[1]) + int(r[2]), len(re.findall(r"<skipped", x)), "crashed" in x, "SlotWriter.moveSlotGapTo" in x
+    """(tests, failed, skipped, process crashed, known crash, problem). A file that is missing or unreadable counts as a failed, crashed run."""
+    try:
+        x = open(path).read()
+    except OSError as e:
+        return 0, 1, 0, True, False, f"cannot read {path}: {e.strerror}"
+    tests, failures, errors = attr(x, "tests"), attr(x, "failures"), attr(x, "errors")
+    if tests is None or failures is None or errors is None:
+        return 0, 1, 0, True, False, f"{path} is not a test result file"
+    return tests, failures + errors, len(re.findall(r"<skipped", x)), "crashed" in x, "SlotWriter.moveSlotGapTo" in x, None
 
 
-try:
-    fn = device(functional)
-except Exception:
-    fn = (0, 1, 0, True, False)
-gate = device(gate_files[0]) if gate_files else (0, 1, 0, True, False)
+fn = device(functional)
+gate = device(gate_files[0]) if gate_files else (0, 1, 0, True, False, "no timing-gate result file was produced")
+for name, r in (("functional", fn), ("timing gate", gate)):
+    if r[5]:
+        print(f"PROBLEM ({name}): {r[5]}")
 
-ok = step1 == 0 and step2 == 0 and failed == 0 and fn[1] == 0 and not fn[3] and gate[1] == 0 and not gate[3] and fn[0] > 0 and gate[0] > 0
+ok = step1 == 0 and step2 == 0 and failed == 0 and fn[1] == 0 and not fn[3] and gate[1] == 0 and not gate[3] and fn[0] > 0 and gate[0] > 0 and fn[5] is None and gate[5] is None
 print(f"host/JVM: {tests} tests, {failed} failed")
 print(f"functional device tests: {fn[0]} run, {fn[1]} failed, {fn[2]} skipped{', PROCESS CRASHED' if fn[3] else ''}")
 print(f"timing gate: {gate[0]} run, {gate[1]} failed{', PROCESS CRASHED' if gate[3] else ''}")
