@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
                                 BackHandler { repeating = false }
                                 val now = java.time.LocalDate.now()
                                 RecurringScreen(
-                                    due = s.due, items = s.recurring, categories = s.categories, accounts = s.accounts,
+                                    due = s.due, hiddenOlder = s.hiddenOlder, items = s.recurring, categories = s.categories, accounts = s.accounts,
                                     today = kotlinx.datetime.LocalDate(now.year, now.monthValue, now.dayOfMonth),
                                     onBack = { repeating = false },
                                     onPost = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },

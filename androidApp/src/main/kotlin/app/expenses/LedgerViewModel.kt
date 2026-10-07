@@ -109,6 +109,8 @@ sealed interface UiState {
         val periodSpend: String,
         val budget: BudgetUi,
         val due: List<DueUi>,
+        /** Occurrences older than the due window that nobody dealt with; mentioned so they do not vanish silently. */
+        val hiddenOlder: Int,
         val recurring: List<RecurringUi>,
         val accounts: List<AccountUi>,
         val templates: List<TemplateUi>,
@@ -390,6 +392,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             periodSpend = spent.formatted(),
             budget = budgetUi(ok, status, cats),
             due = dueUi(ok, today),
+            hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
             accounts = accounts.map { AccountUi(it.id, it.name) },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },

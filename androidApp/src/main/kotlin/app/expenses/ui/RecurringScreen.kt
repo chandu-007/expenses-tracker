@@ -120,6 +120,7 @@ fun AmountDialog(title: String, onConfirm: (Money) -> Unit, onDismiss: () -> Uni
 @Composable
 fun RecurringScreen(
     due: List<DueUi>,
+    hiddenOlder: Int,
     items: List<RecurringUi>,
     categories: List<CategoryUi>,
     accounts: List<AccountUi>,
@@ -157,6 +158,15 @@ fun RecurringScreen(
                     }
                 }
                 item { HorizontalDivider(Modifier.padding(top = 8.dp)) }
+            }
+            if (hiddenOlder > 0) {
+                item {
+                    Text(
+                        "$hiddenOlder older ${if (hiddenOlder == 1) "occurrence is" else "occurrences are"} not shown (more than 60 days ago, never posted or skipped).",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("hidden_older"),
+                    )
+                }
             }
             item { Text("All repeating expenses", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)) }
             if (items.isEmpty()) {

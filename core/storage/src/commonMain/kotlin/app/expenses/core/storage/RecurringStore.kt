@@ -75,10 +75,7 @@ class RecurringStore(
 
     /** Occurrences with `from <= date < until` that are still waiting, across all items, oldest first. */
     fun unhandled(from: LocalDate, until: LocalDate): List<DueItem> =
-        list().flatMap { item ->
-            val done = q.doneDays(item.id, from.toEpochDays()).executeAsList().toSet()
-            item.schedule.occurrences(from, until).filter { it.date.toEpochDays() !in done }.map { DueItem(item, it.date) }
-        }.sortedWith(compareBy({ it.date }, { it.item.name.lowercase() }))
+        list().flatMap { item -> unhandledOf(item, from, until).map { DueItem(item, it) } }.sortedWith(compareBy({ it.date }, { it.item.name.lowercase() }))
 
     /**
      * Posts one occurrence as an expense dated on its due day and returns the entry id, or null if it was already posted or skipped.
@@ -121,10 +118,29 @@ class RecurringStore(
 
     /** Posts every due occurrence of items set to post by themselves. Returns what was posted, with the entry ids. */
     fun autoPost(today: LocalDate, zone: TimeZone): List<Pair<DueItem, String>> = db.transactionWithResult {
-        due(today).filter { it.item.auto }.mapNotNull { d -> post(d.item.id, d.date, zone)?.let { d to it } }
+        val until = today.plus(1, DateTimeUnit.DAY)
+        list().filter { it.auto }.flatMap { item ->
+            // Scan back to the last occurrence dealt with, not just 60 days, so a long absence never drops an occurrence. An item
+            // with no history yet starts at the normal window: a start date far in the past is not a request to post years of backlog.
+            val last = q.lastDoneDay(item.id).executeAsOne().MAX
+            val from = last?.let { LocalDate.fromEpochDays(it + 1) } ?: today.minus(DUE_WINDOW_DAYS, DateTimeUnit.DAY)
+            unhandledOf(item, from, until).map { DueItem(item, it) }
+        }.sortedBy { it.date }.mapNotNull { d -> post(d.item.id, d.date, zone)?.let { d to it } }
+    }
+
+    /** How many occurrences older than the due window were never dealt with, so the screen can say they are hidden. */
+    fun hiddenOlder(today: LocalDate): Int {
+        val cutoff = today.minus(DUE_WINDOW_DAYS, DateTimeUnit.DAY)
+        return list().sumOf { item -> if (item.schedule.start >= cutoff) 0 else unhandledOf(item, item.schedule.start, cutoff).size }
     }
 
     // ---- internals ----
+
+    private fun unhandledOf(item: RecurringItem, from: LocalDate, until: LocalDate): List<LocalDate> {
+        if (from >= until) return emptyList()
+        val done = q.doneDays(item.id, from.toEpochDays()).executeAsList().toSet()
+        return item.schedule.occurrences(from, until).map { it.date }.filter { it.toEpochDays() !in done }
+    }
 
     private fun live(id: String): RecurringItem =
         q.recurringById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L }?.let(::itemOf) ?: throw IllegalArgumentException("That repeating expense no longer exists")

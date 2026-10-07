@@ -185,4 +185,27 @@ class RecurringStoreTest {
         recurring.save(ongoing)
         assertEquals(ongoing, recurring.list().first { it.id == "gym" })
     }
+
+    @Test
+    fun autoPostAfterALongAbsenceCatchesUpEveryMissedOccurrenceAndNeverTheBacklogOfANewItem() {
+        recurring.save(rent(start = d(2026, 1, 1), auto = true))
+        recurring.post("rent", d(2026, 1, 1), zone) // last dealt with in January
+        val posted = recurring.autoPost(d(2026, 6, 15), zone).map { it.first.date }
+        assertEquals(listOf(d(2026, 2, 1), d(2026, 3, 1), d(2026, 4, 1), d(2026, 5, 1), d(2026, 6, 1)), posted, "all five months, not just the last 60 days")
+        // a brand-new auto item whose start is far in the past only gets the normal window
+        recurring.save(rent(id = "new", start = d(2024, 1, 1), auto = true))
+        assertEquals(listOf(d(2026, 5, 1), d(2026, 6, 1)), recurring.autoPost(d(2026, 6, 15), zone).filter { it.first.item.id == "new" }.map { it.first.date })
+    }
+
+    @Test
+    fun occurrencesOlderThanTheWindowAreCountedNotLost() {
+        recurring.save(rent(start = d(2026, 1, 1)))
+        recurring.skip("rent", d(2026, 1, 1))
+        // 15 Jun: window starts 16 Apr, so 1 Feb, 1 Mar, 1 Apr are hidden (1 Jan was skipped)
+        assertEquals(3, recurring.hiddenOlder(d(2026, 6, 15)))
+        recurring.skip("rent", d(2026, 2, 1))
+        assertEquals(2, recurring.hiddenOlder(d(2026, 6, 15)))
+        recurring.save(rent(id = "fresh", start = d(2026, 6, 1)))
+        assertEquals(2, recurring.hiddenOlder(d(2026, 6, 15)), "an item that started inside the window hides nothing")
+    }
 }

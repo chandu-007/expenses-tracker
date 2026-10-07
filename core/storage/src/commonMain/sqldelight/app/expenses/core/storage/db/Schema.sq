@@ -469,6 +469,9 @@ UPDATE recurring SET category_id = :into WHERE category_id = :from;
 doneDays:
 SELECT day FROM recurring_done WHERE recurring_id = :id AND day >= :fromDay;
 
+lastDoneDay:
+SELECT MAX(day) FROM recurring_done WHERE recurring_id = :id;
+
 doneRow:
 SELECT * FROM recurring_done WHERE recurring_id = :id AND day = :day;
 

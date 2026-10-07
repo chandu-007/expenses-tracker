@@ -205,4 +205,13 @@ class RecurringUiTest {
         compose.onNodeWithTag("recurring_back").performClick()
         waitSpend("₹1,000.00")
     }
+
+    @Test
+    fun olderOccurrencesThatAreNoLongerOfferedAreCountedOnTheScreen() {
+        seed(item("old", "Old bill", 100, start = LocalDate.fromEpochDays(today.toEpochDays() - 100)))
+        launch()
+        compose.onNodeWithTag("open_recurring").performClick()
+        waitFor("hidden_older")
+        compose.onNodeWithTag("hidden_older", useUnmergedTree = true).assertTextContains("older", substring = true)
+    }
 }
