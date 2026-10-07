@@ -105,6 +105,55 @@ class ReportsUiTest {
         compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹5,000.00")
     }
 
+    private fun vm() = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
+
+    @Test
+    fun groupingByAccountTagAndMerchantEachAddsUpAndEveryRowDrillsToItsEntries() {
+        runBlocking {
+            container.write { ok ->
+                fun e(id: String, rupees: Long, account: String, merchant: String, tags: List<String>) =
+                    ok.store.save(Expense(EntryId(id), System.currentTimeMillis(), AccountId(account), Money(rupees * 100, inr), listOf(CategorySplit(CategoryId("Food"), Money(rupees * 100, inr)))), EntryDetails(merchant = merchant, tags = tags))
+                e("a", 600, "cash", "Swiggy", listOf("Trip")); e("b", 400, "bank", "swiggy", listOf("Trip", "Tax")); e("c", 300, "bank", "Uber", emptyList())
+            }
+        }
+        openReports()
+        compose.onNodeWithTag("group_ACCOUNT").performClick()
+        waitFor("report_group_row_bank"); waitFor("report_group_row_cash")
+        compose.onNodeWithTag("report_group_row_bank").performClick(); waitFor("drill_total")
+        compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹700.00"); waitText("drill_count", "2 entries")
+        compose.onNodeWithTag("drill_back").performClick(); waitFor("group_TAG")
+        compose.onNodeWithTag("group_TAG").performClick(); waitFor("report_group_row_Trip"); waitFor("report_group_row_Tax"); waitFor("report_group_row_none")
+        compose.onNodeWithTag("report_group_row_Trip").performClick(); waitFor("drill_total")
+        compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹1,000.00")
+        compose.onNodeWithTag("drill_back").performClick(); waitFor("group_MERCHANT")
+        compose.onNodeWithTag("group_MERCHANT").performClick(); waitFor("report_group_row_swiggy")
+        compose.onNodeWithTag("report_group_row_swiggy").performClick(); waitFor("drill_total")
+        compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹1,000.00") // "Swiggy" and "swiggy" are one merchant
+    }
+
+    @Test
+    fun theFinancialYearAndAnyDatesGiveTheirOwnTitlesTotalsAndMonthlyBars() {
+        val fy = BudgetPeriod.Yearly().containing(today)
+        spend("in", 500, "Food", noonOf(fy.start)); spend("before", 700, "Food", noonOf(fy.start) - 5 * 86_400_000L)
+        val lastMonth = ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1)
+        openReports()
+        compose.onNodeWithTag("mode_fy").performClick()
+        waitText("report_title", "FY ${fy.start.year}–${(fy.start.year + 1) % 100}")
+        waitText("report_spent", "₹500.00")
+        compose.onNodeWithTag("report_next").assertIsNotEnabled()                   // this financial year is the latest
+        compose.onNodeWithTag("report_prev").performClick()
+        waitText("report_spent", "₹700.00"); waitText("report_title", "FY ${fy.start.year - 1}–${fy.start.year % 100}")
+        // any dates: exactly the days chosen, inclusive
+        vm().setReportRange(fy.start.toEpochDays().toLong() - 5, fy.start.toEpochDays().toLong() - 5)
+        waitText("report_spent", "₹700.00")
+        vm().setReportRange(fy.start.toEpochDays().toLong() - 4, fy.start.toEpochDays().toLong() + 3)
+        waitText("report_spent", "₹500.00")
+        vm().setReportRange(fy.start.toEpochDays().toLong() + 3, fy.start.toEpochDays().toLong() - 5) // end before start: swapped, not an error
+        waitText("report_spent", "₹1,200.00")
+        waitFor("custom_from"); waitFor("trend_bar_0")
+        assertTrue(lastMonth.days > 0)
+    }
+
     @Test
     fun aSubcategoryIsRolledIntoItsParentAndHasItsOwnRow() {
         val cafe = runBlocking { container.write { it.categories.create("Cafe", parentId = "Food").id } }!!

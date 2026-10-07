@@ -25,6 +25,7 @@ import app.expenses.core.storage.SearchQuery
 import app.expenses.core.storage.searchFiltered
 import kotlinx.datetime.plus
 import app.expenses.core.storage.DrillTarget
+import app.expenses.core.storage.ReportGroup
 import kotlinx.datetime.minus
 import app.expenses.core.domain.RecurringItem
 import app.expenses.core.domain.RecurringKind
@@ -216,7 +217,10 @@ data class CalendarUi(
     val selectedEpochDay: Long?, val dayTitle: String, val dayTotal: String, val dayLines: List<DrillLine>, val dayBills: List<String>,
 )
 
-enum class ReportMode { PERIOD, YEAR }
+enum class ReportMode { PERIOD, YEAR, FINANCIAL_YEAR, CUSTOM }
+
+/** A row of a report grouped by account, tag or merchant. [key] is what drilling in needs (null: entries with no tag). */
+data class GroupRowUi(val key: String?, val name: String, val amount: String, val share: Int, val negative: Boolean)
 
 data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList())
 
@@ -241,6 +245,10 @@ data class ReportUi(
     val rows: List<ReportRowUi>,
     val trend: List<TrendBarUi>,
     val drill: DrillUi?,
+    val group: ReportGroup = ReportGroup.CATEGORY,
+    val groupRows: List<GroupRowUi> = emptyList(),
+    /** The custom range as days since 1970-01-01, the end exclusive; set in the custom mode. */
+    val customStartDay: Long = 0, val customEndDay: Long = 0,
 )
 
 /** A backup file that was opened and checked, waiting for the user to confirm the restore. */
@@ -340,7 +348,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var searchInput: SearchInput? = null
     private var searchJob: kotlinx.coroutines.Job? = null
 
-    private data class ReportRequest(val mode: ReportMode, val offset: Int, val drillTarget: DrillTarget? = null, val drillStart: Long? = null, val drillEnd: Long? = null)
+    private data class ReportRequest(
+        val mode: ReportMode, val offset: Int, val drillTarget: DrillTarget? = null, val drillStart: Long? = null, val drillEnd: Long? = null,
+        val group: ReportGroup = ReportGroup.CATEGORY, val customStart: Long? = null, val customEnd: Long? = null, val drillLabel: String? = null,
+    )
     private var reportRequest: ReportRequest? = null
     private val _report = MutableStateFlow<ReportUi?>(null)
     val report: StateFlow<ReportUi?> = _report
@@ -743,11 +754,18 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- reports ----
 
     fun openReports() = reportAction { ReportRequest(ReportMode.PERIOD, 0) }
-    fun setReportMode(mode: ReportMode) = reportAction { ReportRequest(mode, 0) }
-    fun stepReport(delta: Int) = reportAction { r -> r.copy(offset = minOf(0, r.offset + delta), drillTarget = null, drillStart = null, drillEnd = null) }
+    fun setReportMode(mode: ReportMode) = reportAction { r -> r.copy(mode = mode, offset = 0, drillTarget = null, drillStart = null, drillEnd = null) }
+    fun setReportGroup(group: ReportGroup) = reportAction { r -> r.copy(group = group, drillTarget = null, drillStart = null, drillEnd = null) }
+    fun stepReport(delta: Int) = reportAction { r -> if (r.mode == ReportMode.CUSTOM) r else r.copy(offset = minOf(0, r.offset + delta), drillTarget = null, drillStart = null, drillEnd = null) }
+
+    /** A report over any dates: [startDay] to [endDay] inclusive, as days since 1970-01-01. An end before the start is swapped. */
+    fun setReportRange(startDay: Long, endDay: Long) = reportAction { r ->
+        val a = minOf(startDay, endDay); val b = maxOf(startDay, endDay)
+        r.copy(mode = ReportMode.CUSTOM, customStart = a, customEnd = b + 1, drillTarget = null, drillStart = null, drillEnd = null)
+    }
 
     /** Opens the entries behind a figure: a category, the whole period, uncategorised, or income. [startDay] and [endDay] pick another period (a trend bar). */
-    fun drill(target: DrillTarget, startDay: Long? = null, endDay: Long? = null) = reportAction { r -> r.copy(drillTarget = target, drillStart = startDay, drillEnd = endDay) }
+    fun drill(target: DrillTarget, startDay: Long? = null, endDay: Long? = null, label: String? = null) = reportAction { r -> r.copy(drillTarget = target, drillStart = startDay, drillEnd = endDay, drillLabel = label) }
 
     /** Leaves the entry list and returns to the report. */
     fun closeDrill() = reportAction { r -> r.copy(drillTarget = null, drillStart = null, drillEnd = null) }
@@ -809,12 +827,22 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val t = LocalDate.now()
         val today = kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth)
         val budgetPeriod = ok.budgets.period()
-        fun periodAt(offset: Int) = if (r.mode == ReportMode.PERIOD) ReportMath.periodAt(budgetPeriod, today, offset) else ReportMath.yearAt(today, offset)
+        val customStart = kotlinx.datetime.LocalDate.fromEpochDays((r.customStart ?: (today.toEpochDays() - 29L)).toInt())
+        val customEnd = kotlinx.datetime.LocalDate.fromEpochDays((r.customEnd ?: (today.toEpochDays() + 1L)).toInt())
+        fun periodAt(offset: Int) = when (r.mode) {
+            ReportMode.PERIOD -> ReportMath.periodAt(budgetPeriod, today, offset)
+            ReportMode.YEAR -> ReportMath.yearAt(today, offset)
+            ReportMode.FINANCIAL_YEAR -> BudgetPeriod.Yearly().containing(today.plus(offset, kotlinx.datetime.DateTimeUnit.YEAR))
+            ReportMode.CUSTOM -> app.expenses.core.domain.DatePeriod(customStart, customEnd)
+        }
         val period = periodAt(r.offset)
-        val previous = periodAt(r.offset - 1)
+        // The same length of time just before (for a custom range); the year or period before otherwise.
+        val previous = if (r.mode == ReportMode.CUSTOM) app.expenses.core.domain.DatePeriod(customStart.minus(period.days, kotlinx.datetime.DateTimeUnit.DAY), customStart) else periodAt(r.offset - 1)
         fun javaDate(d: kotlinx.datetime.LocalDate) = LocalDate.ofEpochDay(d.toEpochDays())
         val rangeFmt = DateTimeFormatter.ofPattern("d MMM")
         val title = if (r.mode == ReportMode.YEAR) period.start.year.toString()
+        else if (r.mode == ReportMode.FINANCIAL_YEAR) "FY ${period.start.year}–${(period.start.year + 1) % 100}"
+        else if (r.mode == ReportMode.CUSTOM) DateTimeFormatter.ofPattern("d MMM yyyy").let { f -> f.format(javaDate(period.start)) + " – " + f.format(javaDate(period.endExclusive).minusDays(1)) }
         else rangeFmt.format(javaDate(period.start)) + " – " + rangeFmt.format(javaDate(period.endExclusive).minusDays(1)) + if (period.start.year != period.endExclusive.minus(1, kotlinx.datetime.DateTimeUnit.DAY).year) " ${period.endExclusive.year}" else ""
 
         val reports = ok.reports
@@ -827,6 +855,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         // Trend: the six periods ending at this one, or the twelve months of the year.
         val bars: List<Triple<String, kotlinx.datetime.LocalDate, app.expenses.core.domain.DatePeriod>> = if (r.mode == ReportMode.YEAR) {
             ReportMath.monthsOf(period.start.year).map { Triple(DateTimeFormatter.ofPattern("MMM").format(javaDate(it.start)), it.start, it) }
+        } else if (r.mode == ReportMode.FINANCIAL_YEAR || r.mode == ReportMode.CUSTOM) {
+            ReportMath.monthBars(period).map { Triple(DateTimeFormatter.ofPattern("MMM").format(javaDate(it.start)), it.start, it) }
         } else {
             (5 downTo 0).map { k -> periodAt(r.offset - k).let { p -> Triple(DateTimeFormatter.ofPattern(if (p.days >= 28) "MMM" else "d MMM").format(javaDate(p.start)), p.start, p) } }
         }
@@ -838,7 +868,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
         val change = ReportMath.percentChange(spent, reports.spent(previous, zone, inr))
         val comparison = change?.let {
-            val what = if (r.mode == ReportMode.YEAR) "the year before" else "the period before"
+            val what = when (r.mode) { ReportMode.YEAR, ReportMode.FINANCIAL_YEAR -> "the year before"; ReportMode.CUSTOM -> "the same length of time before"; else -> "the period before" }
             when { it > 0 -> "$it% more than $what"; it < 0 -> "${-it}% less than $what"; else -> "The same as $what" }
         }
 
@@ -852,6 +882,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 DrillTarget.Income -> "Income"
                 DrillTarget.Uncategorised -> ReportMath.UNCATEGORISED
                 is DrillTarget.InCategory -> categoryNames[target.id] ?: target.id
+                is DrillTarget.InAccount -> r.drillLabel ?: accountNames[target.id] ?: "Account"
+                is DrillTarget.WithTag -> "Tag: ${r.drillLabel ?: target.tag}"
+                DrillTarget.Untagged -> "No tag"
+                is DrillTarget.AtMerchant -> r.drillLabel ?: target.key.ifEmpty { "No merchant" }
             }
             val range = if (dp == period) title else rangeFmt.format(javaDate(dp.start)) + " – " + rangeFmt.format(javaDate(dp.endExclusive).minusDays(1))
             val total = Money(lines.sumOf { it.amount.minorUnits }, inr)
@@ -861,7 +895,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 truncated = lines.size.toLong() == limit,
             )
         }
-        return ReportUi(r.mode, title, r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison, reports.breakdown(period, zone, inr).map(::row), trend, drill)
+        val groupRows = if (r.group == ReportGroup.CATEGORY) emptyList() else reports.groups(r.group, period, zone, inr).map { GroupRowUi(it.key, it.name, it.total.formatted(), it.share, it.total.minorUnits < 0) }
+        return ReportUi(
+            r.mode, title, r.mode != ReportMode.CUSTOM && r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison,
+            reports.breakdown(period, zone, inr).map(::row), trend, drill, r.group, groupRows, period.start.toEpochDays().toLong(), period.endExclusive.toEpochDays().toLong(),
+        )
     }
 
     // ---- export, backup and restore ----

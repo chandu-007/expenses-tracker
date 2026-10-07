@@ -67,4 +67,36 @@ object ReportMath {
         val first = LocalDate(year, m, 1)
         DatePeriod(first, first.plus(1, DateTimeUnit.MONTH))
     }
+
+    /**
+     * The calendar months a range touches, each cut to the range (the first and last may be partial), at most the last [MAX_BARS] of them.
+     * Together they cover the range exactly once.
+     */
+    fun monthBars(range: DatePeriod): List<DatePeriod> {
+        val bars = ArrayList<DatePeriod>()
+        var start = range.start
+        while (start < range.endExclusive) {
+            val monthEnd = LocalDate(start.year, start.monthNumber, 1).plus(1, DateTimeUnit.MONTH)
+            val end = minOf(monthEnd, range.endExclusive)
+            bars += DatePeriod(start, end)
+            start = end
+        }
+        return bars.takeLast(MAX_BARS)
+    }
+
+    const val MAX_BARS = 24
+
+    /** One row of a report grouped by account, tag or merchant. [key] identifies it for drilling in (null for "Untagged"). */
+    data class GroupRow(val key: String?, val name: String, val total: Money, val share: Int)
+
+    /**
+     * Ranks grouped totals, biggest first (ties by name, ignoring case), with each row's share of the positive total as a whole percent.
+     * Groups that net to zero or less (a refunded purchase) stay listed, with no share.
+     */
+    fun groups(items: List<Triple<String?, String, Money>>, currency: Currency): List<GroupRow> {
+        val positive = items.sumOf { it.third.minorUnits.coerceAtLeast(0) }
+        return items.sortedWith(compareByDescending<Triple<String?, String, Money>> { it.third.minorUnits }.thenBy { it.second.lowercase() })
+            .map { (k, n, m) -> GroupRow(k, n, m, if (m.minorUnits <= 0 || positive <= 0) 0 else (m.minorUnits * 100 / positive).toInt().coerceAtMost(100)) }
+            .also { rows -> require(rows.all { it.total.currency == currency }) { "Groups must all be in $currency" } }
+    }
 }

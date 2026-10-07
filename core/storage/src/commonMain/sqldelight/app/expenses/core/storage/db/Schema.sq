@@ -321,6 +321,45 @@ FROM spend_line
 WHERE currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 GROUP BY category_id;
 
+-- Your spending grouped by something other than category. All of them count exactly the spend lines the category report counts.
+spendByAccount:
+SELECT e.account_id AS key, SUM(s.mine_minor) AS mine FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+GROUP BY e.account_id;
+
+-- A refund counts with the purchase it reverses (its merchant and its tags), but under its own account.
+-- An entry with several tags counts under each of them, so these rows can add up to more than the total.
+spendByTag:
+SELECT t.tag AS key, SUM(s.mine_minor) AS mine FROM spend_line s JOIN entry e ON e.id = s.entry_id JOIN entry_tag t ON t.entry_id = COALESCE(e.refunds_entry, e.id)
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+GROUP BY t.tag COLLATE NOCASE;
+
+spendUntagged:
+SELECT COALESCE(SUM(s.mine_minor), 0) FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id));
+
+-- By merchant exactly as typed, ignoring case and spaces at the ends. No merchant is the empty key.
+spendByMerchant:
+SELECT lower(trim(coalesce(o.merchant, e.merchant, ''))) AS key, MAX(coalesce(o.merchant, e.merchant)) AS display, SUM(s.mine_minor) AS mine
+FROM spend_line s JOIN entry e ON e.id = s.entry_id LEFT JOIN entry o ON o.id = e.refunds_entry
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+GROUP BY lower(trim(coalesce(o.merchant, e.merchant, '')));
+
+-- The entries behind one of those rows. Each filter is optional; :untagged keeps only entries with no tag.
+drillGrouped:
+SELECT e.id AS entry_id, e.kind AS kind, e.merchant AS merchant, e.note AS note, s.occurred_at AS occurred_at,
+       SUM(s.mine_minor) AS mine, MIN(s.category_id) AS category_id
+FROM spend_line s JOIN entry e ON e.id = s.entry_id LEFT JOIN entry o ON o.id = e.refunds_entry
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+  AND (:account IS NULL OR e.account_id = :account)
+  AND (:tag IS NULL OR EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id) AND t.tag = :tag))
+  AND (:merchantKey IS NULL OR lower(trim(coalesce(o.merchant, e.merchant, ''))) = :merchantKey)
+  AND (:untagged = 0 OR NOT EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id)))
+GROUP BY e.id
+ORDER BY s.occurred_at DESC, e.seq DESC
+LIMIT :limit;
+
 -- What was spent and when, for the calendar: the covering index answers it without touching entries.
 spendPointsBetween:
 SELECT occurred_at, mine_minor FROM spend_line

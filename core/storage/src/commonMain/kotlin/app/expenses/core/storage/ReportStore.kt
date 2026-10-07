@@ -9,6 +9,8 @@ import app.expenses.core.domain.ReportMath
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.TimeZone
 
+enum class ReportGroup { CATEGORY, ACCOUNT, TAG, MERCHANT }
+
 /** What a report figure was opened from. */
 sealed interface DrillTarget {
     /** Everything spent in the period. */
@@ -18,6 +20,18 @@ sealed interface DrillTarget {
     data class InCategory(val id: String) : DrillTarget
 
     data object Uncategorised : DrillTarget
+
+    /** Spending from one account. */
+    data class InAccount(val id: String) : DrillTarget
+
+    /** Spending on entries carrying a tag (ignoring case). */
+    data class WithTag(val tag: String) : DrillTarget
+
+    /** Spending on entries with no tag at all. */
+    data object Untagged : DrillTarget
+
+    /** Spending at one merchant: [key] is the name in lower case (empty for entries with no merchant). */
+    data class AtMerchant(val key: String) : DrillTarget
 
     /** Income received in the period. */
     data object Income : DrillTarget
@@ -67,7 +81,6 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
                 DrillLine(it.id, it.occurred_at, it.kind, title(it.kind, it.merchant, it.note), it.category_id?.let { id -> names[id] ?: id }, money(it.amount_minor))
             }
         }
-        data class Row(val id: String, val kind: String, val merchant: String?, val note: String?, val at: Long, val mine: Long, val category: String?)
         val rows = when (target) {
             DrillTarget.All -> q.drillAll(currency.code, from, until, limit).executeAsList().map { Row(it.entry_id, it.kind, it.merchant, it.note, it.occurred_at, it.mine ?: 0L, it.category_id) }
             DrillTarget.Uncategorised -> q.drillUncategorised(currency.code, from, until, limit).executeAsList().map { Row(it.entry_id, it.kind, it.merchant, it.note, it.occurred_at, it.mine ?: 0L, it.category_id) }
@@ -77,8 +90,36 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
                 q.drillCategories(currency.code, from, until, ids, limit).executeAsList().map { Row(it.entry_id, it.kind, it.merchant, it.note, it.occurred_at, it.mine ?: 0L, it.category_id) }
             }
             DrillTarget.Income -> emptyList()
+            is DrillTarget.InAccount -> grouped(currency, from, until, account = target.id)
+            is DrillTarget.WithTag -> grouped(currency, from, until, tag = target.tag)
+            DrillTarget.Untagged -> grouped(currency, from, until, untagged = true)
+            is DrillTarget.AtMerchant -> grouped(currency, from, until, merchantKey = target.key)
         }
         return rows.map { DrillLine(it.id, it.at, it.kind, title(it.kind, it.merchant, it.note), it.category?.let { id -> names[id] ?: id }, money(it.mine)) }
+    }
+
+    private fun grouped(currency: Currency, from: Long, until: Long, account: String? = null, tag: String? = null, merchantKey: String? = null, untagged: Boolean = false, limit: Long = 500) =
+        q.drillGrouped(currency.code, from, until, account, tag, merchantKey, if (untagged) 1L else 0L, limit).executeAsList().map { Row(it.entry_id, it.kind, it.merchant, it.note, it.occurred_at, it.mine ?: 0L, it.category_id) }
+
+    private data class Row(val id: String, val kind: String, val merchant: String?, val note: String?, val at: Long, val mine: Long, val category: String?)
+
+    /** Your spending in [period] grouped by account, tag or merchant (the category report has its own tree), biggest first. */
+    fun groups(group: ReportGroup, period: DatePeriod, zone: TimeZone, currency: Currency): List<ReportMath.GroupRow> {
+        val from = period.startMillis(zone); val until = period.endMillis(zone)
+        val items: List<Triple<String?, String, Money>> = when (group) {
+            ReportGroup.CATEGORY -> emptyList()
+            ReportGroup.ACCOUNT -> {
+                val names = q.allAccounts().executeAsList().associate { it.id to it.name }
+                q.spendByAccount(currency.code, from, until).executeAsList().map { Triple(it.key, names[it.key] ?: "An account that was removed", Money(it.mine ?: 0L, currency)) }
+            }
+            ReportGroup.TAG -> {
+                val tagged = q.spendByTag(currency.code, from, until).executeAsList().map { Triple<String?, String, Money>(it.key, it.key, Money(it.mine ?: 0L, currency)) }
+                val untagged = q.spendUntagged(currency.code, from, until).executeAsOne()
+                if (untagged != 0L) tagged + Triple(null, "No tag", Money(untagged, currency)) else tagged
+            }
+            ReportGroup.MERCHANT -> q.spendByMerchant(currency.code, from, until).executeAsList().map { Triple<String?, String, Money>(it.key, it.display?.trim()?.takeIf { d -> d.isNotEmpty() } ?: "No merchant", Money(it.mine ?: 0L, currency)) }
+        }
+        return ReportMath.groups(items, currency)
     }
 
     private fun spentByCategory(period: DatePeriod, zone: TimeZone, currency: Currency): Map<String?, Money> =

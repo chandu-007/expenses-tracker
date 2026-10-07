@@ -187,7 +187,8 @@ class MainActivity : FragmentActivity() {
                                     report = report,
                                     onBack = { reporting = false; viewModel.closeReports() },
                                     onMode = viewModel::setReportMode, onStep = viewModel::stepReport,
-                                    onDrill = { target, start, end -> viewModel.drill(target, start, end) },
+                                    onDrill = { target, start, end, label -> viewModel.drill(target, start, end, label) },
+                                    onGroup = viewModel::setReportGroup, onRange = viewModel::setReportRange,
                                     onCloseDrill = viewModel::closeDrill,
                                     onOpenEntry = viewModel::openEditor,
                                 )
