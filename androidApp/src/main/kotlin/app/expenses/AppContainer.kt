@@ -9,6 +9,7 @@ import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.BudgetStore
 import app.expenses.core.storage.CategoryStore
+import app.expenses.core.storage.NotificationService
 import app.expenses.core.storage.RecurringStore
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
@@ -30,7 +31,7 @@ import java.util.UUID
  */
 class AppContainer(private val context: Context) {
     sealed interface Opened {
-        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore) : Opened
+        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService) : Opened
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
         class KeyLost(val message: String) : Opened
@@ -100,7 +101,8 @@ class AppContainer(private val context: Context) {
         }
         StartupTrace.mark("open: store ready")
         val recurring = RecurringStore(db, clock, System::currentTimeMillis, store)
-        Opened.Ok(driver, db, store, TemplateStore(db, clock, System::currentTimeMillis), CategoryStore(db, clock, System::currentTimeMillis), BudgetStore(db, clock, System::currentTimeMillis, store, recurring), recurring)
+        val budgets = BudgetStore(db, clock, System::currentTimeMillis, store, recurring)
+        Opened.Ok(driver, db, store, TemplateStore(db, clock, System::currentTimeMillis), CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets))
     } catch (e: DatabaseKeyUnavailableException) {
         Opened.KeyLost(e.message ?: "The database key is unavailable")
     }

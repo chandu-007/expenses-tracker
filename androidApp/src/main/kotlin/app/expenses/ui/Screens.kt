@@ -1,6 +1,7 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -94,6 +95,7 @@ fun EntryListScreen(
     onManageCategories: () -> Unit,
     onOpenBudget: () -> Unit,
     onOpenRecurring: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -132,8 +134,11 @@ fun EntryListScreen(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
-                    TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
+                        TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
+                        TextButton(onClick = onOpenNotifications, modifier = Modifier.testTag("open_notifications")) { Text("Alerts") }
+                    }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
             }

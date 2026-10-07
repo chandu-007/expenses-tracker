@@ -7,6 +7,9 @@ import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.Notice
+import app.expenses.core.domain.NoticeKind
+import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.RecurringItem
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
@@ -111,6 +114,7 @@ sealed interface UiState {
         val due: List<DueUi>,
         /** Occurrences older than the due window that nobody dealt with; mentioned so they do not vanish silently. */
         val hiddenOlder: Int,
+        val notifications: NotificationPrefs,
         val recurring: List<RecurringUi>,
         val accounts: List<AccountUi>,
         val templates: List<TemplateUi>,
@@ -309,6 +313,19 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- notifications ----
+
+    fun setNotificationPrefs(p: NotificationPrefs) = withStore { ok ->
+        ok.notifications.setPrefs(p)
+        refresh(ok)
+    }
+
+    /** Shows one notice immediately, so the user can see that permission and channels work. Not recorded; it is not an event. */
+    fun sendTestNotification() {
+        val shown = Notifier.show(getApplication(), listOf(Notice("test:${System.nanoTime()}", NoticeKind.BILL_DUE, "Test notification", "If you can read this, reminders and alerts will reach you.")))
+        if (shown.isEmpty()) _state.update { (it as? UiState.Ready)?.copy(message = "Notifications are blocked for this app") ?: it }
+    }
+
     // ---- budgets ----
 
     /** Sets a limit for a category, or for everything when [categoryId] is null. */
@@ -392,6 +409,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             periodSpend = spent.formatted(),
             budget = budgetUi(ok, status, cats),
             due = dueUi(ok, today),
+            notifications = ok.notifications.prefs(),
             hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
             accounts = accounts.map { AccountUi(it.id, it.name) },

@@ -26,6 +26,7 @@ import app.expenses.ui.FormStart
 import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
+import app.expenses.ui.NotificationSettingsScreen
 import app.expenses.ui.OpeningScreen
 import app.expenses.ui.RecurringScreen
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
+                    var alerts by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -100,6 +102,10 @@ class MainActivity : ComponentActivity() {
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
                                 )
+                            }
+                            alerts -> {
+                                BackHandler { alerts = false }
+                                NotificationSettingsScreen(prefs = s.notifications, onChange = viewModel::setNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false })
                             }
                             repeating -> {
                                 BackHandler { repeating = false }
@@ -157,6 +163,7 @@ class MainActivity : ComponentActivity() {
                                 onManageCategories = { managingCategories = true },
                                 onOpenBudget = { budgeting = true },
                                 onOpenRecurring = { repeating = true },
+                                onOpenNotifications = { alerts = true },
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )

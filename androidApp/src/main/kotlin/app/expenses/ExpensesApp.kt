@@ -6,6 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class ExpensesApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Notifier.createChannels(this)
+        NotificationWork.schedule(this)
+    }
+
     /** Created on first use, so nothing heavy runs before the first screen. */
     val container: AppContainer by lazy { AppContainer(this) }
 
