@@ -17,6 +17,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.CategorySplit
@@ -130,13 +131,16 @@ class EditDeleteTest {
 
     // ---- the actions underneath, with cases the screen cannot easily reach ----
 
+    private fun draft(id: String, minor: Long, category: String, note: String, account: String, at: Long) =
+        app.expenses.core.domain.EntryDraft(id, app.expenses.core.domain.DraftKind.EXPENSE, Money(minor, inr).toPlainString(), category, emptyList(), account, "", note, at)
+
     @Test
     fun movingAnExpenseToAnotherMonthTakesItOutOfThisMonthsTotal() {
         seed("e1", 10_000, "Food", "Cafe")
         val now = System.currentTimeMillis()
         runBlocking {
             container.write { ok ->
-                EntryActions(ok).edit("e1", Money(10_000, inr), "Food", "Cafe", "cash", now - 70L * 86_400_000L)
+                EntryActions(ok).save(draft("e1", 10_000, "Food", "Cafe", "cash", now - 70L * 86_400_000L))
                 ok.store.spendByCategory(inr, from = now - 20L * 86_400_000L)
             }
         }.let { assertTrue(it!!.isEmpty(), "the moved expense must not count in a window that starts after its new date") }
@@ -146,7 +150,7 @@ class EditDeleteTest {
     @Test
     fun editingKeepsWhereAnImportedEntryCameFrom() {
         seed("e1", 10_000, "Food", "Cafe", source = "sms", ref = "UPI123456789012")
-        runBlocking { container.write { ok -> EntryActions(ok).edit("e1", Money(12_000, inr), "Food", "Cafe", "cash", System.currentTimeMillis()) } }
+        runBlocking { container.write { ok -> EntryActions(ok).save(draft("e1", 12_000, "Food", "Cafe", "cash", System.currentTimeMillis())) } }
         val row = runBlocking { container.write { it.db.schemaQueries.entryById("e1").executeAsOne() } }!!
         assertEquals("sms", row.source)
         assertEquals("UPI123456789012", row.source_ref)
@@ -161,9 +165,9 @@ class EditDeleteTest {
                 val a = EntryActions(ok)
                 a.delete("e1")
                 assertEquals(null, a.editable("e1"))
-                assertFailsWith<IllegalArgumentException> { a.edit("e1", Money(5, inr), "Food", null, "cash", 1L) }
+                assertFailsWith<IllegalArgumentException> { a.save(draft("e1", 5, "Food", "", "cash", 1L)) }
                 a.restore("e1")
-                assertTrue(a.editable("e1") is Editable.Simple)
+                assertTrue(a.editable("e1") is Editable.Form)
             }
         }
     }

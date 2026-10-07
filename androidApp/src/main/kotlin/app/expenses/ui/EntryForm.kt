@@ -1,0 +1,266 @@
+package app.expenses.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import app.expenses.AccountUi
+import app.expenses.CategoryUi
+import app.expenses.core.domain.Currency
+import app.expenses.core.domain.DraftKind
+import app.expenses.core.domain.DraftResult
+import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.EntryDrafts
+import app.expenses.core.domain.Money
+import app.expenses.core.domain.SplitDraft
+import app.expenses.core.domain.formatted
+import app.expenses.core.domain.toPlainString
+import app.expenses.core.domain.ledger.EntryId
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
+/** Saves a draft that [EntryDrafts.build] accepted. */
+typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
+
+private val DraftSaver = listSaver<EntryDraft, Any?>(
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }) },
+    restore = { l ->
+        @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long)
+    },
+)
+
+/**
+ * One form for every kind of entry. [kinds] is what the user may switch between (several when adding, one when editing). A split is two
+ * or more category parts that must add up to the amount; "left to assign" is shown as the user types. The Save button is enabled only
+ * when [EntryDrafts.build] accepts the draft, and otherwise the form says why.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EntryFormScreen(
+    title: String,
+    start: EntryDraft,
+    kinds: List<DraftKind>,
+    accounts: List<AccountUi>,
+    categories: List<CategoryUi>,
+    onCreateCategory: (name: String, parentId: String?, onCreated: (String) -> Unit) -> Unit,
+    showTemplateOption: Boolean,
+    onSave: DraftSave,
+    onBack: () -> Unit,
+    refundOf: String? = null,
+    onRefund: (() -> Unit)? = null,
+) {
+    var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
+    var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
+    var pickingDate by rememberSaveable { mutableStateOf(false) }
+    var creatingCategory by rememberSaveable { mutableStateOf(false) }
+    val currency = Currency.INR
+    val built = EntryDrafts.build(draft, EntryId("preview"), currency)
+    val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
+    val zone = ZoneId.systemDefault()
+    val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM yyyy").withZone(zone).format(Instant.ofEpochMilli(draft.occurredAt))
+    val split = EntryDrafts.isSplit(draft)
+    val activeAccounts = accounts
+
+    if (creatingCategory) {
+        CategoryNameDialog(
+            title = "New category", categories = categories, allowParent = false,
+            onConfirm = { name, parent -> onCreateCategory(name, parent) { id -> draft = draft.copy(category = id) }; creatingCategory = false },
+            onDismiss = { creatingCategory = false },
+        )
+    }
+    if (pickingDate) {
+        val picker = rememberDatePickerState(initialSelectedDateMillis = Instant.ofEpochMilli(draft.occurredAt).atZone(zone).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { pickingDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let { utc ->
+                        val picked = Instant.ofEpochMilli(utc).atZone(ZoneOffset.UTC).toLocalDate()
+                        val time = Instant.ofEpochMilli(draft.occurredAt).atZone(zone).toLocalTime()
+                        draft = draft.copy(occurredAt = picked.atTime(time).atZone(zone).toInstant().toEpochMilli())
+                    }
+                    pickingDate = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
+        ) { DatePicker(state = picker) }
+    }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } }) },
+        // Pinned above the keyboard so Save is always reachable, however small the screen.
+        bottomBar = {
+            Button(
+                onClick = { if (built is DraftResult.Ok) onSave(draft, saveAsTemplate) },
+                enabled = built is DraftResult.Ok,
+                modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("save"),
+            ) { Text("Save") }
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (kinds.size > 1) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    kinds.forEach { k ->
+                        FilterChip(
+                            selected = draft.kind == k,
+                            onClick = {
+                                // Switching kind keeps what is typed; a category only makes sense for expenses and income.
+                                draft = draft.copy(kind = k, splits = if (k == DraftKind.EXPENSE) draft.splits else emptyList(), toAccountId = if (k == DraftKind.TRANSFER) draft.toAccountId.ifEmpty { activeAccounts.firstOrNull { it.id != draft.accountId }?.id.orEmpty() } else draft.toAccountId)
+                            },
+                            label = { Text(k.label) }, modifier = Modifier.testTag("kind_${k.name}"),
+                        )
+                    }
+                }
+            }
+            if (refundOf != null) Text("Refund of $refundOf", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("refund_of"))
+            OutlinedTextField(
+                value = draft.amountText,
+                onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(amountText = v) },
+                label = { Text("Amount (₹)") },
+                isError = draft.amountText.isNotEmpty() && amount == null,
+                supportingText = {
+                    if (draft.amountText.isNotEmpty() && amount == null) Text("Enter an amount with at most 2 decimals")
+                    else if (draft.kind == DraftKind.REFUND) Text("Up to ${Money(draft.refundableMinor, currency).formatted()} can still be refunded")
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("amount"),
+            )
+            OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
+
+            if (draft.kind == DraftKind.EXPENSE && !split || draft.kind == DraftKind.INCOME) {
+                Text(if (draft.kind == DraftKind.INCOME) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Hidden categories are not offered, except one already chosen (an entry being edited keeps its category).
+                    categories.filter { !it.hidden || it.id == draft.category }.forEach { c ->
+                        FilterChip(
+                            selected = c.id == draft.category,
+                            onClick = { draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && c.id == draft.category) "" else c.id) },
+                            label = { Text(displayName(categories, c)) },
+                            leadingIcon = c.colorArgb?.let { col -> { ColorDot(col) } },
+                            modifier = Modifier.testTag("category_chip_${c.id}"),
+                        )
+                    }
+                    AssistChip(onClick = { creatingCategory = true }, label = { Text("+ New") }, modifier = Modifier.testTag("new_category_chip"))
+                    if (draft.kind == DraftKind.EXPENSE) {
+                        AssistChip(onClick = { draft = draft.copy(splits = listOf(SplitDraft(draft.category, ""), SplitDraft("", ""))) }, label = { Text("Split") }, modifier = Modifier.testTag("split_start"))
+                    }
+                }
+            }
+
+            if (split) SplitEditor(draft, categories, currency) { draft = it }
+
+            val fromLabel = when (draft.kind) { DraftKind.TRANSFER -> "From"; DraftKind.INCOME -> "Received in"; DraftKind.REFUND -> "Refunded to"; DraftKind.EXPENSE -> "Paid from" }
+            Text(fromLabel, style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                activeAccounts.forEach { a -> FilterChip(selected = a.id == draft.accountId, onClick = { draft = draft.copy(accountId = a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("account_chip_${a.name}")) }
+            }
+            if (draft.kind == DraftKind.TRANSFER) {
+                Text("To", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    activeAccounts.forEach { a -> FilterChip(selected = a.id == draft.toAccountId, onClick = { draft = draft.copy(toAccountId = a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("to_chip_${a.name}")) }
+                }
+                Text("Moving money between your own accounts is not spending or income: use it for an ATM withdrawal, paying a card bill, or topping up a wallet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedTextField(
+                value = draft.note, onValueChange = { draft = draft.copy(note = it) },
+                label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),
+            )
+            if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || split)) {
+                Text(built.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("form_problem"))
+            }
+            if (showTemplateOption && draft.kind == DraftKind.EXPENSE && !split) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = saveAsTemplate, onCheckedChange = { saveAsTemplate = it }, modifier = Modifier.testTag("save_template"))
+                    Text("Save as a quick entry")
+                }
+            }
+            if (onRefund != null) {
+                OutlinedButton(onClick = onRefund, modifier = Modifier.testTag("refund_start")) { Text("Record a refund for this expense") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currency: Currency, update: (EntryDraft) -> Unit) {
+    val left = EntryDrafts.leftToAssign(draft, currency)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Split across categories", style = MaterialTheme.typography.labelMedium)
+        draft.splits.forEachIndexed { i, part ->
+            var open by remember { mutableStateOf(false) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("split_category_$i")) {
+                        Text(categories.firstOrNull { it.id == part.category }?.let { displayName(categories, it) } ?: "Category")
+                    }
+                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        categories.filter { !it.hidden || it.id == part.category }.forEach { c ->
+                            DropdownMenuItem(text = { Text(displayName(categories, c)) }, onClick = { open = false; update(draft.copy(splits = draft.splits.toMutableList().also { it[i] = part.copy(category = c.id) })) }, modifier = Modifier.testTag("split_pick_${i}_${c.id}"))
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = part.amountText,
+                    onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) update(draft.copy(splits = draft.splits.toMutableList().also { it[i] = part.copy(amountText = v) })) },
+                    label = { Text("₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f).testTag("split_amount_$i"),
+                )
+                TextButton(onClick = { update(draft.copy(splits = draft.splits.filterIndexed { k, _ -> k != i }.let { if (it.size < 2) emptyList() else it }, category = if (draft.splits.size <= 2) draft.splits.getOrNull(1 - i)?.category.orEmpty() else draft.category)) }, modifier = Modifier.testTag("split_remove_$i")) { Text("Remove") }
+            }
+        }
+        left?.let { l ->
+            Text(
+                when { l == 0L -> "All assigned"; l > 0 -> "${Money(l, currency).formatted()} left to assign"; else -> "${Money(-l, currency).formatted()} too much" },
+                style = MaterialTheme.typography.bodySmall, color = if (l < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("split_left"),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { update(draft.copy(splits = draft.splits + SplitDraft("", left?.takeIf { it > 0 }?.let { Money(it, currency).toPlainString() } ?: ""))) }, modifier = Modifier.testTag("split_add")) { Text("Add a part") }
+        }
+    }
+}

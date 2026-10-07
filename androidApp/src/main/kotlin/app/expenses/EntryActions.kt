@@ -1,7 +1,12 @@
 package app.expenses
 
 import app.expenses.core.domain.Currency
+import app.expenses.core.domain.DraftKind
+import app.expenses.core.domain.DraftResult
+import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.SplitDraft
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.ledger.AccountId
@@ -17,8 +22,8 @@ private const val LAST_ACCOUNT = "last_account"
 
 /** What the edit screen may do with an entry. */
 sealed interface Editable {
-    /** An expense simple enough for the one-screen editor. [category] is empty when the expense has none. */
-    data class Simple(val id: String, val amountText: String, val category: String, val accountId: String, val note: String, val occurredAt: Long) : Editable
+    /** An entry the form can edit (or, for a refund, create). [refundOf] is the title of the refunded expense; [canRefund] offers a refund from this expense. */
+    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false) : Editable
 
     /** Shown read-only, with the reason it cannot be edited here yet, so nothing is changed by accident. */
     data class ReadOnly(val id: String, val title: String, val reason: String) : Editable
@@ -71,42 +76,81 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         val row = q.entryById(entryId).executeAsOneOrNull()?.takeIf { it.deleted == 0L } ?: return null
         val title = row.merchant ?: row.note ?: row.kind.lowercase().replaceFirstChar { it.uppercase() }
         fun readOnly(reason: String) = Editable.ReadOnly(entryId, title, reason)
-        if (row.kind != "EXPENSE") return readOnly("Only expenses can be edited here for now.")
-        val splits = q.splitsOf(entryId).executeAsList()
-        return when {
-            q.sharesOf(entryId).executeAsList().isNotEmpty() -> readOnly("This expense is shared with other people, which can't be edited here yet.")
-            splits.size > 1 -> readOnly("This expense is split across several categories, which can't be edited here yet.")
-            row.original_amount_minor != null -> readOnly("This expense has a foreign-currency amount, which can't be edited here yet.")
-            q.hasLiveRefunds(entryId).executeAsOne() -> readOnly("This expense has refunds. Delete the refunds first to edit it.")
-            row.currency != "INR" -> readOnly("Only rupee expenses can be edited here for now.")
-            else -> Editable.Simple(
-                id = entryId,
-                amountText = Money(row.amount_minor, Currency.INR).toPlainString(),
-                category = splits.firstOrNull()?.category_id.orEmpty(),
-                accountId = row.account_id.orEmpty(),
-                note = row.merchant.orEmpty(),
-                occurredAt = row.occurred_at,
-            )
+        if (row.currency != "INR") return readOnly("Only rupee entries can be edited here for now.")
+        val base = EntryDraft(entryId, DraftKind.EXPENSE, Money(row.amount_minor, Currency.INR).toPlainString(), "", emptyList(), row.account_id.orEmpty(), "", row.merchant.orEmpty(), row.occurred_at)
+        return when (row.kind) {
+            "EXPENSE" -> {
+                val splits = q.splitsOf(entryId).executeAsList()
+                when {
+                    q.sharesOf(entryId).executeAsList().isNotEmpty() -> readOnly("This expense is shared with other people, which can't be edited here yet.")
+                    row.original_amount_minor != null -> readOnly("This expense has a foreign-currency amount, which can't be edited here yet.")
+                    q.hasLiveRefunds(entryId).executeAsOne() -> readOnly("This expense has refunds. Delete the refunds first to edit it.")
+                    else -> Editable.Form(
+                        base.copy(
+                            category = if (splits.size == 1) splits[0].category_id else "",
+                            splits = if (splits.size > 1) splits.map { SplitDraft(it.category_id, Money(it.amount_minor, Currency.INR).toPlainString()) } else emptyList(),
+                        ),
+                        title = "Edit expense", canRefund = true,
+                    )
+                }
+            }
+            "INCOME" -> Editable.Form(base.copy(kind = DraftKind.INCOME, category = row.category_id.orEmpty()), "Edit income")
+            "TRANSFER" -> Editable.Form(base.copy(kind = DraftKind.TRANSFER, toAccountId = row.counter_account_id.orEmpty()), "Edit transfer")
+                .takeIf { row.to_currency == null || row.to_currency == "INR" && row.to_amount_minor == row.amount_minor }
+                ?: readOnly("This transfer is between currencies, which can't be edited here yet.")
+            "REFUND" -> {
+                val target = row.refunds_entry!!
+                val refundable = refundableMinor(target, exceptRefund = entryId)
+                Editable.Form(base.copy(kind = DraftKind.REFUND, refundsEntry = target, refundableMinor = refundable), "Edit refund", refundOf = titleOf(target))
+            }
+            else -> readOnly("This kind of entry can't be edited here yet.")
         }
     }
 
-    /**
-     * Rewrites a simple expense. The note, source and source reference stored with it are kept as they were, so editing an
-     * expense captured from an SMS does not lose where it came from. An empty [category] leaves it uncategorised.
-     */
-    fun edit(entryId: String, amount: Money, category: String, note: String?, accountId: String, occurredAt: Long) {
-        val row = ok.db.schemaQueries.entryById(entryId).executeAsOneOrNull()?.takeIf { it.deleted == 0L }
-            ?: throw IllegalArgumentException("This entry no longer exists")
-        require(row.kind == "EXPENSE") { "Only expenses can be edited here" }
-        val splits = if (category.isEmpty()) emptyList() else listOf(CategorySplit(CategoryId(category), amount))
-        ok.store.save(
-            Expense(EntryId(entryId), occurredAt, AccountId(accountId), amount, splits),
-            EntryDetails(merchant = note, note = row.note, source = row.source, sourceRef = row.source_ref),
+    private fun titleOf(entryId: String): String {
+        val r = ok.db.schemaQueries.entryById(entryId).executeAsOneOrNull() ?: return "an expense"
+        return r.merchant ?: r.note ?: "an expense"
+    }
+
+    /** What is still refundable on an expense: its amount less the other live refunds (the one being edited is excluded). */
+    private fun refundableMinor(expenseId: String, exceptRefund: String?): Long {
+        val q = ok.db.schemaQueries
+        val total = q.entryById(expenseId).executeAsOneOrNull()?.amount_minor ?: return 0L
+        return total - q.refundedExcept(expenseId, exceptRefund.orEmpty()).executeAsOne()
+    }
+
+    /** The form for refunding [expenseId]: its account and what is still refundable. Null if it is not a live expense. */
+    fun startRefund(expenseId: String): Editable.Form? {
+        val row = ok.db.schemaQueries.entryById(expenseId).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.kind == "EXPENSE" && it.currency == "INR" } ?: return null
+        val remaining = refundableMinor(expenseId, null)
+        return Editable.Form(
+            EntryDraft(null, DraftKind.REFUND, "", "", emptyList(), row.account_id.orEmpty(), "", "", nowMillis(), expenseId, remaining),
+            "Refund", refundOf = titleOf(expenseId),
         )
-        if (category.isNotEmpty()) {
-            ok.templates.putSetting(LAST_CATEGORY, category)
-            ok.templates.putSetting(LAST_ACCOUNT, accountId)
+    }
+
+    /**
+     * Saves a draft as a new entry ([EntryDraft.id] null) or over an existing one. When editing, the note, source and source reference
+     * already stored with the entry are kept, so editing an expense captured from an SMS does not lose where it came from.
+     * Throws [IllegalArgumentException] with a reason the user can read.
+     */
+    fun save(draft: EntryDraft): String {
+        val existing = draft.id?.let { ok.db.schemaQueries.entryById(it).executeAsOneOrNull()?.takeIf { r -> r.deleted == 0L } ?: throw IllegalArgumentException("This entry no longer exists") }
+        val id = draft.id ?: UUID.randomUUID().toString()
+        val entry = when (val r = EntryDrafts.build(draft, EntryId(id), Currency.INR)) {
+            is DraftResult.Ok -> r.entry
+            is DraftResult.Problem -> throw IllegalArgumentException(r.message)
         }
+        val text = draft.note.trim().ifEmpty { null }
+        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = existing.note, source = existing.source, sourceRef = existing.source_ref) else EntryDetails(merchant = text))
+        if (draft.kind == DraftKind.EXPENSE) {
+            val category = if (EntryDrafts.isSplit(draft)) "" else draft.category
+            if (category.isNotEmpty()) {
+                ok.templates.putSetting(LAST_CATEGORY, category)
+                ok.templates.putSetting(LAST_ACCOUNT, draft.accountId)
+            }
+        }
+        return id
     }
 
     /** Deletes an entry (it can be restored). Refused, with a message, while an expense still has refunds. */

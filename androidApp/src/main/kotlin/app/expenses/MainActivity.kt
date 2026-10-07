@@ -20,12 +20,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
+import app.expenses.core.domain.DraftKind
+import app.expenses.core.domain.EntryDraft
 import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.DataScreen
 import app.expenses.ui.ImportScreen
-import app.expenses.ui.ExpenseFormScreen
-import app.expenses.ui.FormStart
+import app.expenses.ui.EntryFormScreen
 import app.expenses.ui.ReadOnlyEntryScreen
 import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
@@ -92,19 +93,25 @@ class MainActivity : FragmentActivity() {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
                         is UiState.Ready -> when {
-                            editing is Editable.Simple -> {
-                                val e = editing as Editable.Simple
+                            editing is Editable.Form -> {
+                                val e = editing as Editable.Form
                                 BackHandler { viewModel.closeEditor() }
-                                ExpenseFormScreen(
-                                    title = "Edit expense",
-                                    start = FormStart(e.amountText, e.category, e.accountId.ifEmpty { s.lastAccountId }, e.note, e.occurredAt),
-                                    accounts = s.allAccounts.filter { a -> a.id == e.accountId || s.accounts.any { it.id == a.id } }, // an archived account stays pickable for an entry that uses it
+                                // Keyed, so opening a refund from an expense's editor starts a new form instead of reusing the expense's typed state.
+                                androidx.compose.runtime.key(e.draft.id, e.draft.kind, e.draft.refundsEntry) {
+                                EntryFormScreen(
+                                    title = e.title,
+                                    start = e.draft.let { d -> d.copy(accountId = d.accountId.ifEmpty { s.lastAccountId }) },
+                                    kinds = listOf(e.draft.kind),
+                                    accounts = s.allAccounts.filter { a -> a.id == e.draft.accountId || a.id == e.draft.toAccountId || s.accounts.any { it.id == a.id } }, // an archived account stays pickable for an entry that uses it
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = false,
-                                    onSave = { amount, category, note, account, _, at -> viewModel.saveEdit(e.id, amount, category, note, account, at) },
+                                    onSave = { d, _ -> viewModel.saveEntry(d, false) },
                                     onBack = viewModel::closeEditor,
+                                    refundOf = e.refundOf,
+                                    onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
                                 )
+                                }
                             }
                             editing is Editable.ReadOnly -> {
                                 val e = editing as Editable.ReadOnly
@@ -212,17 +219,15 @@ class MainActivity : FragmentActivity() {
                             }
                             adding -> {
                                 BackHandler { adding = false }
-                                ExpenseFormScreen(
-                                    title = "Add expense",
-                                    start = FormStart("", prefillCategory ?: s.lastCategory, prefillAccount ?: s.lastAccountId, prefillNote, System.currentTimeMillis()),
+                                EntryFormScreen(
+                                    title = "Add",
+                                    start = EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, System.currentTimeMillis()),
+                                    kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER),
                                     accounts = s.accounts,
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = true,
-                                    onSave = { amount, category, note, account, asTemplate, at ->
-                                        viewModel.addExpense(amount, category, note, account, asTemplate, at)
-                                        adding = false
-                                    },
+                                    onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false },
                                     onBack = { adding = false },
                                 )
                             }

@@ -34,6 +34,9 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.DraftKind
+import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
@@ -331,14 +334,25 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Records an expense from the add screen. Remembers its category and account as the next defaults. */
-    fun addExpense(amount: Money, category: String, note: String, accountId: String, saveAsTemplate: Boolean, occurredAt: Long) = withStore { ok ->
-        val id = EntryActions(ok).recordExpense(amount, category, note.trim().ifEmpty { null }, accountId, occurredAt)
-        if (saveAsTemplate) {
-            val name = note.trim().ifEmpty { category }
-            ok.templates.save(Template(UUID.randomUUID().toString(), name, amount, CategoryId(category), AccountId(accountId), note.trim().ifEmpty { null }))
+    /**
+     * Saves the add or edit form: a new entry when [EntryDraft.id] is null, otherwise an edit. A new expense can also become a quick entry.
+     * On a rule it breaks, the reason is shown and the form is left as it was (the editor stays open).
+     */
+    fun saveEntry(draft: EntryDraft, saveAsTemplate: Boolean) = withStore { ok ->
+        val id = EntryActions(ok).save(draft)
+        val amount = parseAmount(draft.amountText, inr)!!
+        if (saveAsTemplate && draft.kind == DraftKind.EXPENSE && draft.id == null && !EntryDrafts.isSplit(draft)) {
+            val name = draft.note.trim().ifEmpty { draft.category }
+            ok.templates.save(Template(UUID.randomUUID().toString(), name, amount, CategoryId(draft.category), AccountId(draft.accountId), draft.note.trim().ifEmpty { null }))
         }
-        refresh(ok, undo = UndoUi(id, "Added ${amount.formatted()}"))
+        _editor.value = null
+        val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund" }
+        refresh(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
+    }
+
+    /** Opens the refund form for an expense. */
+    fun startRefund(expenseId: String) = withStore { ok ->
+        _editor.value = EntryActions(ok).startRefund(expenseId)
     }
 
     /** One tap: records the template's expense right away. Templates without an amount are handled by the add screen. */
@@ -366,12 +380,6 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeEditor() {
         _editor.value = null
-    }
-
-    fun saveEdit(entryId: String, amount: Money, category: String, note: String, accountId: String, occurredAt: Long) = withStore { ok ->
-        EntryActions(ok).edit(entryId, amount, category, note.trim().ifEmpty { null }, accountId, occurredAt)
-        _editor.value = null
-        refresh(ok)
     }
 
     /** Deletes an entry and offers to bring it back. */

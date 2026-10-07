@@ -340,6 +340,10 @@ SELECT * FROM entry WHERE deleted = 0 ORDER BY seq;
 refundsOf:
 SELECT * FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0 ORDER BY seq;
 
+-- What other live refunds already take from an expense (the one being edited is left out).
+refundedExcept:
+SELECT COALESCE(SUM(amount_minor), 0) FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0 AND id <> :exceptId;
+
 hasLiveRefunds:
 SELECT EXISTS(SELECT 1 FROM entry WHERE kind = 'REFUND' AND refunds_entry = :expenseId AND deleted = 0);
 
