@@ -115,6 +115,7 @@ fun BudgetScreen(
     onSetLimit: (categoryId: String?, amount: Money) -> Unit,
     onClearLimit: (categoryId: String?) -> Unit,
     onSetPeriod: (BudgetPeriod) -> Unit,
+    onShiftStartDay: (Int) -> Unit,
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editingOverall by rememberSaveable { mutableStateOf(false) }
@@ -147,12 +148,12 @@ fun BudgetScreen(
                         is BudgetPeriod.Monthly -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Starts on day ", style = MaterialTheme.typography.bodyMedium)
                             TextButton(
-                                onClick = { onSetPeriod(BudgetPeriod.Monthly(p.startDay - 1)) }, enabled = p.startDay > 1,
+                                onClick = { onShiftStartDay(-1) }, enabled = p.startDay > 1,
                                 modifier = Modifier.testTag("start_day_down").semantics { contentDescription = "Start one day earlier" },
                             ) { Text("−") }
                             Text(p.startDay.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("start_day"))
                             TextButton(
-                                onClick = { onSetPeriod(BudgetPeriod.Monthly(p.startDay + 1)) }, enabled = p.startDay < BudgetPeriod.Monthly.MAX_START_DAY,
+                                onClick = { onShiftStartDay(1) }, enabled = p.startDay < BudgetPeriod.Monthly.MAX_START_DAY,
                                 modifier = Modifier.testTag("start_day_up").semantics { contentDescription = "Start one day later" },
                             ) { Text("+") }
                         }

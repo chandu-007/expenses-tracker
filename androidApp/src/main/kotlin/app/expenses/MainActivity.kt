@@ -29,6 +29,7 @@ import app.expenses.ui.EntryListScreen
 import app.expenses.ui.KeyLostScreen
 import app.expenses.ui.NotificationSettingsScreen
 import app.expenses.ui.OpeningScreen
+import app.expenses.ui.ReportsScreen
 import app.expenses.ui.RecurringScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
                     var yourData by rememberSaveable { mutableStateOf(false) }
+                    var reporting by rememberSaveable { mutableStateOf(false) }
                     var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
                     var prefillNote by rememberSaveable { mutableStateOf("") }
@@ -105,6 +107,19 @@ class MainActivity : ComponentActivity() {
                                     onDelete = viewModel::deleteCategory,
                                 )
                             }
+                            reporting -> {
+                                val report by viewModel.report.collectAsStateWithLifecycle()
+                                // Back leaves the entry list first, then the report.
+                                BackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
+                                ReportsScreen(
+                                    report = report,
+                                    onBack = { reporting = false; viewModel.closeReports() },
+                                    onMode = viewModel::setReportMode, onStep = viewModel::stepReport,
+                                    onDrill = { target, start, end -> viewModel.drill(target, start, end) },
+                                    onCloseDrill = viewModel::closeDrill,
+                                    onOpenEntry = viewModel::openEditor,
+                                )
+                            }
                             yourData -> {
                                 val dataState by viewModel.data.collectAsStateWithLifecycle()
                                 BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
@@ -117,7 +132,7 @@ class MainActivity : ComponentActivity() {
                             }
                             alerts -> {
                                 BackHandler { alerts = false }
-                                NotificationSettingsScreen(prefs = s.notifications, onChange = viewModel::setNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false })
+                                NotificationSettingsScreen(prefs = s.notifications, onChange = viewModel::updateNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false })
                             }
                             repeating -> {
                                 BackHandler { repeating = false }
@@ -140,6 +155,7 @@ class MainActivity : ComponentActivity() {
                                     onSetLimit = viewModel::setBudget,
                                     onClearLimit = viewModel::clearBudget,
                                     onSetPeriod = viewModel::setBudgetPeriod,
+                                    onShiftStartDay = viewModel::shiftBudgetStartDay,
                                 )
                             }
                             adding -> {
@@ -177,6 +193,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenRecurring = { repeating = true },
                                 onOpenNotifications = { alerts = true },
                                 onOpenData = { yourData = true },
+                                onOpenReports = { reporting = true; viewModel.openReports() },
                                 onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                                 onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             )

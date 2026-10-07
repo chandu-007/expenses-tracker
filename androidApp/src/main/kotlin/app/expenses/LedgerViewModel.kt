@@ -11,6 +11,9 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
+import app.expenses.core.domain.ReportMath
+import app.expenses.core.storage.DrillTarget
+import kotlinx.datetime.minus
 import app.expenses.core.domain.RecurringItem
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
@@ -103,6 +106,33 @@ data class RecurringUi(
 /** [restore] is true for a deletion: undoing it brings the entry back instead of removing one. */
 data class UndoUi(val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0)
 
+enum class ReportMode { PERIOD, YEAR }
+
+data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList())
+
+/** One bar of the trend. [fraction] is its height relative to the tallest bar (0 to 1). Tapping it opens the entries of that period. */
+data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long)
+
+data class DrillLineUi(val entryId: String, val date: String, val title: String, val category: String, val amount: String, val negative: Boolean)
+
+/** The entries behind a figure. [total] is the sum of [lines], shown so the list visibly adds up to what was tapped. */
+data class DrillUi(val title: String, val subtitle: String, val total: String, val lines: List<DrillLineUi>, val truncated: Boolean)
+
+data class ReportUi(
+    val mode: ReportMode,
+    val title: String,
+    val canGoNext: Boolean,
+    val spent: String,
+    val income: String,
+    val net: String,
+    val netPositive: Boolean,
+    /** "12% more than the period before" or null when there is nothing to compare with. */
+    val comparison: String?,
+    val rows: List<ReportRowUi>,
+    val trend: List<TrendBarUi>,
+    val drill: DrillUi?,
+)
+
 /** A backup file that was opened and checked, waiting for the user to confirm the restore. */
 data class PendingRestoreUi(val madeAt: String, val entriesInFile: Int, val newEntries: Int, val alreadyHereEntries: Int, val otherNewItems: Int)
 
@@ -170,6 +200,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private var openedBytes: ByteArray? = null
     private var openedBackup: BackupData? = null
     private val actions get() = DataActions(getApplication(), container)
+
+    private data class ReportRequest(val mode: ReportMode, val offset: Int, val drillTarget: DrillTarget? = null, val drillStart: Long? = null, val drillEnd: Long? = null)
+    private var reportRequest: ReportRequest? = null
+    private val _report = MutableStateFlow<ReportUi?>(null)
+    val report: StateFlow<ReportUi?> = _report
 
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
@@ -334,6 +369,89 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- reports ----
+
+    fun openReports() = reportAction { ReportRequest(ReportMode.PERIOD, 0) }
+    fun setReportMode(mode: ReportMode) = reportAction { ReportRequest(mode, 0) }
+    fun stepReport(delta: Int) = reportAction { r -> r.copy(offset = minOf(0, r.offset + delta), drillTarget = null, drillStart = null, drillEnd = null) }
+
+    /** Opens the entries behind a figure: a category, the whole period, uncategorised, or income. [startDay] and [endDay] pick another period (a trend bar). */
+    fun drill(target: DrillTarget, startDay: Long? = null, endDay: Long? = null) = reportAction { r -> r.copy(drillTarget = target, drillStart = startDay, drillEnd = endDay) }
+
+    /** Leaves the entry list and returns to the report. */
+    fun closeDrill() = reportAction { r -> r.copy(drillTarget = null, drillStart = null, drillEnd = null) }
+
+    fun closeReports() {
+        reportRequest = null
+        _report.value = null
+    }
+
+    private fun reportAction(next: (ReportRequest) -> ReportRequest) {
+        val current = reportRequest ?: ReportRequest(ReportMode.PERIOD, 0)
+        reportRequest = next(current)
+        viewModelScope.launch(Dispatchers.IO) { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } }
+    }
+
+    private fun buildReport(ok: AppContainer.Opened.Ok, r: ReportRequest): ReportUi {
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val t = LocalDate.now()
+        val today = kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth)
+        val budgetPeriod = ok.budgets.period()
+        fun periodAt(offset: Int) = if (r.mode == ReportMode.PERIOD) ReportMath.periodAt(budgetPeriod, today, offset) else ReportMath.yearAt(today, offset)
+        val period = periodAt(r.offset)
+        val previous = periodAt(r.offset - 1)
+        fun javaDate(d: kotlinx.datetime.LocalDate) = LocalDate.ofEpochDay(d.toEpochDays())
+        val rangeFmt = DateTimeFormatter.ofPattern("d MMM")
+        val title = if (r.mode == ReportMode.YEAR) period.start.year.toString()
+        else rangeFmt.format(javaDate(period.start)) + " – " + rangeFmt.format(javaDate(period.endExclusive).minusDays(1)) + if (period.start.year != period.endExclusive.minus(1, kotlinx.datetime.DateTimeUnit.DAY).year) " ${period.endExclusive.year}" else ""
+
+        val reports = ok.reports
+        val spent = reports.spent(period, zone, inr)
+        val income = reports.income(period, zone, inr)
+        val net = income - spent
+        val colors = ok.categories.list().associate { it.id to it.colorArgb }
+        fun row(c: app.expenses.core.domain.CategoryRow): ReportRowUi = ReportRowUi(c.categoryId, c.name, c.total.formatted(), c.share, c.categoryId?.let { colors[it] }, c.total.minorUnits < 0, c.children.map(::row))
+
+        // Trend: the six periods ending at this one, or the twelve months of the year.
+        val bars: List<Triple<String, kotlinx.datetime.LocalDate, app.expenses.core.domain.DatePeriod>> = if (r.mode == ReportMode.YEAR) {
+            ReportMath.monthsOf(period.start.year).map { Triple(DateTimeFormatter.ofPattern("MMM").format(javaDate(it.start)), it.start, it) }
+        } else {
+            (5 downTo 0).map { k -> periodAt(r.offset - k).let { p -> Triple(DateTimeFormatter.ofPattern(if (p.days >= 28) "MMM" else "d MMM").format(javaDate(p.start)), p.start, p) } }
+        }
+        val totals = reports.trend(bars.map { it.third }, zone, inr)
+        val tallest = totals.maxOfOrNull { it.minorUnits }?.takeIf { it > 0 } ?: 1L
+        val trend = bars.mapIndexed { i, (label, _, p) ->
+            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays())
+        }
+
+        val change = ReportMath.percentChange(spent, reports.spent(previous, zone, inr))
+        val comparison = change?.let {
+            val what = if (r.mode == ReportMode.YEAR) "the year before" else "the period before"
+            when { it > 0 -> "$it% more than $what"; it < 0 -> "${-it}% less than $what"; else -> "The same as $what" }
+        }
+
+        val drill = r.drillTarget?.let { target ->
+            val dp = if (r.drillStart != null && r.drillEnd != null) app.expenses.core.domain.DatePeriod(kotlinx.datetime.LocalDate.fromEpochDays(r.drillStart.toInt()), kotlinx.datetime.LocalDate.fromEpochDays(r.drillEnd.toInt())) else period
+            val limit = 500L
+            val lines = reports.drill(dp, zone, inr, target, limit)
+            val dateFmt = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
+            val what = when (target) {
+                DrillTarget.All -> "All spending"
+                DrillTarget.Income -> "Income"
+                DrillTarget.Uncategorised -> ReportMath.UNCATEGORISED
+                is DrillTarget.InCategory -> categoryNames[target.id] ?: target.id
+            }
+            val range = if (dp == period) title else rangeFmt.format(javaDate(dp.start)) + " – " + rangeFmt.format(javaDate(dp.endExclusive).minusDays(1))
+            val total = Money(lines.sumOf { it.amount.minorUnits }, inr)
+            DrillUi(
+                what, range, total.formatted(),
+                lines.map { DrillLineUi(it.entryId, dateFmt.format(Instant.ofEpochMilli(it.occurredAt)), it.title, it.categoryName.orEmpty(), it.amount.formatted(), it.amount.minorUnits < 0) },
+                truncated = lines.size.toLong() == limit,
+            )
+        }
+        return ReportUi(r.mode, title, r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison, reports.breakdown(period, zone, inr).map(::row), trend, drill)
+    }
+
     // ---- export, backup and restore ----
 
     /** Runs a file action off the main thread, showing "working" and then its outcome. A [BackupException] message is written for the user. */
@@ -409,8 +527,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- notifications ----
 
-    fun setNotificationPrefs(p: NotificationPrefs) = withStore { ok ->
-        ok.notifications.setPrefs(p)
+    /**
+     * Changes the notification choices relative to what is *stored*, inside the write. Basing a change on the value on screen would lose
+     * taps: two quick taps on "+" both read the same old time and write the same new one.
+     */
+    fun updateNotificationPrefs(change: (NotificationPrefs) -> NotificationPrefs) = withStore { ok ->
+        ok.notifications.setPrefs(change(ok.notifications.prefs()))
         refresh(ok)
     }
 
@@ -435,6 +557,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setBudgetPeriod(period: BudgetPeriod) = withStore { ok ->
         ok.budgets.setPeriod(period)
+        refresh(ok)
+    }
+
+    /** Moves a monthly period's start day by [delta], relative to the stored day (see [updateNotificationPrefs] for why), staying within 1 to 28. */
+    fun shiftBudgetStartDay(delta: Int) = withStore { ok ->
+        val current = ok.budgets.period() as? BudgetPeriod.Monthly ?: return@withStore
+        ok.budgets.setPeriod(BudgetPeriod.Monthly((current.startDay + delta).coerceIn(1, BudgetPeriod.Monthly.MAX_START_DAY)))
         refresh(ok)
     }
 
@@ -494,6 +623,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             .values.fold(Money.zero(inr)) { a, m -> a + m }
         val cats = ok.categories.list()
         categoryNames = cats.associate { it.id to it.name }
+        reportRequest?.let { _report.value = buildReport(ok, it) } // keep an open report in step with edits made from its entry list
         loadedCategory = firstCategories(ok, loaded)
         val visible = cats.filter { !it.hidden }
         val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""

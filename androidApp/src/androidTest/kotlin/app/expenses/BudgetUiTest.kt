@@ -182,6 +182,22 @@ class BudgetUiTest {
     }
 
     @Test
+    fun manyQuickChangesToTheStartDayAreAllCountedNoneLost() {
+        launch()
+        val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
+        repeat(10) { vm.shiftBudgetStartDay(1) } // fired back to back, before the screen could redraw in between
+        compose.waitUntil(10_000) { period() == BudgetPeriod.Monthly(11) }
+        repeat(30) { vm.shiftBudgetStartDay(1) }
+        compose.waitUntil(10_000) { period() == BudgetPeriod.Monthly(28) }
+        repeat(40) { vm.shiftBudgetStartDay(-1) }
+        compose.waitUntil(10_000) { period() == BudgetPeriod.Monthly(1) }
+        runBlocking { container.write { it.budgets.setPeriod(BudgetPeriod.Weekly(kotlinx.datetime.DayOfWeek.MONDAY)) } }
+        vm.shiftBudgetStartDay(1) // a weekly period has no start day to move
+        Thread.sleep(500)
+        assertEquals(BudgetPeriod.Weekly(kotlinx.datetime.DayOfWeek.MONDAY), period())
+    }
+
+    @Test
     fun aSalaryCycleRenamesThePeriodAndTheStartDayStaysBetween1And28() {
         launch()
         openBudget()

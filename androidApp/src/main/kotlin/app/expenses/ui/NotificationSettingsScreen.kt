@@ -46,13 +46,14 @@ private fun hourLabel(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60
 /** Moves a time of day by whole hours, wrapping around midnight. */
 private fun shiftHours(minute: Int, hours: Int) = Math.floorMod(minute + hours * 60, NotificationPrefs.MINUTES_PER_DAY)
 
+/** [onShift] receives -1 or +1 hours; the change is applied to the stored time, not the one shown, so quick taps are never lost. */
 @Composable
-private fun TimeRow(label: String, minute: Int, tag: String, enabled: Boolean, onChange: (Int) -> Unit) {
+private fun TimeRow(label: String, minute: Int, tag: String, enabled: Boolean, onShift: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { onChange(shiftHours(minute, -1)) }, enabled = enabled, modifier = Modifier.testTag("${tag}_down").semantics { contentDescription = "$label, one hour earlier" }) { Text("−") }
+        TextButton(onClick = { onShift(-1) }, enabled = enabled, modifier = Modifier.testTag("${tag}_down").semantics { contentDescription = "$label, one hour earlier" }) { Text("−") }
         Text(hourLabel(minute), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag(tag))
-        TextButton(onClick = { onChange(shiftHours(minute, 1)) }, enabled = enabled, modifier = Modifier.testTag("${tag}_up").semantics { contentDescription = "$label, one hour later" }) { Text("+") }
+        TextButton(onClick = { onShift(1) }, enabled = enabled, modifier = Modifier.testTag("${tag}_up").semantics { contentDescription = "$label, one hour later" }) { Text("+") }
     }
 }
 
@@ -69,7 +70,7 @@ private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: Stri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: (NotificationPrefs) -> Unit, onSendTest: () -> Unit, onBack: () -> Unit) {
+fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((NotificationPrefs) -> NotificationPrefs) -> Unit, onSendTest: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var allowed by remember { mutableStateOf(Notifier.canShow(context)) }
     // The user may change this in system settings and come back, so look again every time the screen is resumed.
@@ -90,14 +91,14 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: (Notification
                     ) { Text("Allow notifications") }
                 }
             }
-            SwitchRow("Bill reminders", "Once, on the day a repeating expense is due and again if it is overdue", prefs.bills, "notif_bills") { onChange(prefs.copy(bills = it)) }
-            TimeRow("Remind me from", prefs.billHour * 60, "notif_bill_hour", prefs.bills) { onChange(prefs.copy(billHour = it / 60)) }
+            SwitchRow("Bill reminders", "Once, on the day a repeating expense is due and again if it is overdue", prefs.bills, "notif_bills") { on -> onChange { p -> p.copy(bills = on) } }
+            TimeRow("Remind me from", prefs.billHour * 60, "notif_bill_hour", prefs.bills) { d -> onChange { p -> p.copy(billHour = Math.floorMod(p.billHour + d, 24)) } }
             HorizontalDivider()
-            SwitchRow("Budget alerts", "Once when a budget reaches 80% of its limit, and once when it goes over", prefs.budgets, "notif_budgets") { onChange(prefs.copy(budgets = it)) }
+            SwitchRow("Budget alerts", "Once when a budget reaches 80% of its limit, and once when it goes over", prefs.budgets, "notif_budgets") { on -> onChange { p -> p.copy(budgets = on) } }
             HorizontalDivider()
-            SwitchRow("Quiet hours", "Nothing is shown in this window; it arrives when it ends", prefs.quietEnabled, "notif_quiet") { onChange(prefs.copy(quietEnabled = it)) }
-            TimeRow("From", prefs.quietStartMinute, "notif_quiet_start", prefs.quietEnabled) { onChange(prefs.copy(quietStartMinute = it)) }
-            TimeRow("Until", prefs.quietEndMinute, "notif_quiet_end", prefs.quietEnabled) { onChange(prefs.copy(quietEndMinute = it)) }
+            SwitchRow("Quiet hours", "Nothing is shown in this window; it arrives when it ends", prefs.quietEnabled, "notif_quiet") { on -> onChange { p -> p.copy(quietEnabled = on) } }
+            TimeRow("From", prefs.quietStartMinute, "notif_quiet_start", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietStartMinute = shiftHours(p.quietStartMinute, d)) } }
+            TimeRow("Until", prefs.quietEndMinute, "notif_quiet_end", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietEndMinute = shiftHours(p.quietEndMinute, d)) } }
             HorizontalDivider()
             Text("This app only sends the two kinds above. It never sends promotions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(

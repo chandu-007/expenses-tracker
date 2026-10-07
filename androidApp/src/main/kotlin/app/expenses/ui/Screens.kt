@@ -97,6 +97,7 @@ fun EntryListScreen(
     onOpenRecurring: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenData: () -> Unit,
+    onOpenReports: () -> Unit,
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
 ) {
@@ -136,6 +137,7 @@ fun EntryListScreen(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        TextButton(onClick = onOpenReports, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
                         TextButton(onClick = onOpenRecurring, modifier = Modifier.testTag("open_recurring")) { Text("Repeating") }
                         TextButton(onClick = onManageCategories, modifier = Modifier.testTag("manage_categories")) { Text("Categories") }
                         TextButton(onClick = onOpenNotifications, modifier = Modifier.testTag("open_notifications")) { Text("Alerts") }

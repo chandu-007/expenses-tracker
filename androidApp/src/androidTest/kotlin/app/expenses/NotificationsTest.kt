@@ -143,6 +143,17 @@ class NotificationsTest {
     }
 
     @Test
+    fun manyQuickChangesToANotificationTimeAreAllCountedNoneLost() {
+        launch()
+        val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
+        repeat(5) { vm.updateNotificationPrefs { p -> p.copy(quietStartMinute = Math.floorMod(p.quietStartMinute + 60, 1440)) } }
+        compose.waitUntil(10_000) { prefs().quietStartMinute == 3 * 60 } // 22:00 plus five hours, wrapping past midnight
+        repeat(3) { vm.updateNotificationPrefs { p -> p.copy(billHour = Math.floorMod(p.billHour - 1, 24)) } }
+        compose.waitUntil(10_000) { prefs().billHour == 6 }
+        assertEquals(true, prefs().quietEnabled, "unrelated choices are untouched")
+    }
+
+    @Test
     fun switchesAndQuietHoursAreSavedAndWrapAroundMidnight() {
         launch()
         compose.onNodeWithTag("open_notifications").performClick()

@@ -499,3 +499,41 @@ SELECT * FROM template WHERE deleted = 0 ORDER BY name, id;
 
 allRecurringDone:
 SELECT * FROM recurring_done ORDER BY recurring_id, day;
+
+-- Reports. The entries behind a spending figure: one row per entry with the part of it that falls in the chosen categories.
+-- Built from the same spend lines as the totals, so the rows always add up to the figure they were opened from.
+drillCategories:
+SELECT e.id AS entry_id, e.kind AS kind, e.merchant AS merchant, e.note AS note, s.occurred_at AS occurred_at,
+       SUM(s.mine_minor) AS mine, MIN(s.category_id) AS category_id
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND s.category_id IN :ids AND e.deleted = 0
+GROUP BY e.id
+ORDER BY s.occurred_at DESC, e.seq DESC
+LIMIT :limit;
+
+drillUncategorised:
+SELECT e.id AS entry_id, e.kind AS kind, e.merchant AS merchant, e.note AS note, s.occurred_at AS occurred_at,
+       SUM(s.mine_minor) AS mine, MIN(s.category_id) AS category_id
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND s.category_id IS NULL AND e.deleted = 0
+GROUP BY e.id
+ORDER BY s.occurred_at DESC, e.seq DESC
+LIMIT :limit;
+
+drillAll:
+SELECT e.id AS entry_id, e.kind AS kind, e.merchant AS merchant, e.note AS note, s.occurred_at AS occurred_at,
+       SUM(s.mine_minor) AS mine, MIN(s.category_id) AS category_id
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+GROUP BY e.id
+ORDER BY s.occurred_at DESC, e.seq DESC
+LIMIT :limit;
+
+incomeTotal:
+SELECT COALESCE(SUM(amount_minor), 0) FROM entry
+WHERE kind = 'INCOME' AND deleted = 0 AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
+incomeEntries:
+SELECT * FROM entry
+WHERE kind = 'INCOME' AND deleted = 0 AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
