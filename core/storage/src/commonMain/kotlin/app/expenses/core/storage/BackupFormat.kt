@@ -59,6 +59,8 @@ data class BackupRecurring(
     val kind: String = "EXPENSE", val toAccountId: String? = null,
 )
 
+@Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -73,6 +75,7 @@ data class BackupData(
     val budgetPeriod: BackupBudgetPeriod? = null,
     val recurring: List<BackupRecurring> = emptyList(),
     val recurringDone: List<BackupDone> = emptyList(),
+    val savedSearches: List<BackupSavedSearch> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

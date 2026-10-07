@@ -23,6 +23,7 @@ class SchemaUpgradeTest {
         d.execute(null, "ALTER TABLE account DROP COLUMN opening_minor", 0)
         d.execute(null, "ALTER TABLE account DROP COLUMN archived", 0)
         d.execute(null, "DROP TABLE entry_tag", 0)
+        d.execute(null, "DROP TABLE saved_search", 0)
         d.execute(null, "ALTER TABLE recurring DROP COLUMN kind", 0)
         d.execute(null, "ALTER TABLE recurring DROP COLUMN to_account_id", 0)
         return d
@@ -38,10 +39,12 @@ class SchemaUpgradeTest {
         SchemaUpgrade.ensureLatest(d)
         val account = db.schemaQueries.selectAccounts().executeAsList().single()
         assertEquals("Cash", account.name); assertEquals(0L, account.opening_minor); assertEquals(0L, account.archived)
-        val ledger = LedgerStore(db, HlcClock("n")) { 1L }
+        val clock = HlcClock("n") // one clock for every store, as in the app
+        val ledger = LedgerStore(db, clock) { 1L }
         ledger.save(Expense(EntryId("e"), 1, AccountId("cash"), Money(100, Currency.INR)), EntryDetails(tags = listOf("trip")))
         assertEquals(listOf("trip"), ledger.tagsOf(EntryId("e")))
-        assertEquals(emptyList(), app.expenses.core.storage.RecurringStore(db, HlcClock("n"), { 1L }, ledger).list(), "the repeating-item table has its new columns")
+        SavedSearchStore(db, clock) { 2L }.let { it.save(SavedSearch("s", "Cabs", "uber")); assertEquals(listOf("Cabs"), it.list().map { s -> s.name }) }
+        assertEquals(emptyList(), app.expenses.core.storage.RecurringStore(db, clock, { 1L }, ledger).list(), "the repeating-item table has its new columns")
     }
 
     @Test

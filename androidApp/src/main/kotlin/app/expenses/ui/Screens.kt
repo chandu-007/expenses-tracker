@@ -202,10 +202,10 @@ fun EntryListScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(state.templates, key = { it.id }) { t ->
-                            AssistChip(
-                                onClick = { onTemplate(t) },
-                                label = { Text(if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …") },
-                                modifier = Modifier.testTag("template_${t.name}").combinedClickable(onClick = { onTemplate(t) }, onLongClick = { removing = t }),
+                            LongPressChip(
+                                label = if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …",
+                                onClick = { onTemplate(t) }, onLongClick = { removing = t },
+                                modifier = Modifier.testTag("template_${t.name}"),
                             )
                         }
                     }

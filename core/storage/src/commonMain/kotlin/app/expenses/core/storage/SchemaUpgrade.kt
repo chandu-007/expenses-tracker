@@ -16,6 +16,7 @@ object SchemaUpgrade {
         if ("archived" !in columns(driver, "account")) run(driver, "ALTER TABLE account ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         if ("kind" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN kind TEXT NOT NULL DEFAULT 'EXPENSE'")
         if ("to_account_id" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN to_account_id TEXT")
+        run(driver, "CREATE TABLE IF NOT EXISTS saved_search (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', min_rupees TEXT NOT NULL DEFAULT '', max_rupees TEXT NOT NULL DEFAULT '', category_id TEXT, kind TEXT NOT NULL DEFAULT 'ANY', range_kind TEXT NOT NULL DEFAULT 'ANY', tag TEXT, deleted INTEGER NOT NULL DEFAULT 0)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_tag (entry_id TEXT NOT NULL, tag TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (entry_id, tag)) WITHOUT ROWID")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_tag_tag ON entry_tag(tag, entry_id)")
     }

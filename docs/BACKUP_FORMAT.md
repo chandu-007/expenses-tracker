@@ -27,7 +27,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 
 ## Payload
 
-`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
+`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
 
 ### `currencies`: `code`, `digits`
 
@@ -49,6 +49,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 ### `budgetPeriod`: `kind`, `startValue`
 ### `recurring`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`, `unit`, `every`, `startDay`, `endKind`, `endValue`, `auto`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`), `toAccountId` (the account a repeating transfer goes to)
 ### `recurringDone`: `recurringId`, `day`, `outcome`, `entryId`
+### `savedSearches`: `id`, `name`, `text`, `minRupees`, `maxRupees`, `categoryId`, `kind` (`ANY`, `EXPENSE`, `INCOME`), `range` (`ANY`, `LAST_30_DAYS`, `THIS_PERIOD`, `THIS_YEAR`), `tag`
 ### `settings`: a map of text to text (reminder preferences and similar).
 
 ## Restoring

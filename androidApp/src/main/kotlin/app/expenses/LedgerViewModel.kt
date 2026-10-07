@@ -36,6 +36,8 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.storage.SavedSearch
+import app.expenses.core.storage.resolveCategory
 import app.expenses.core.domain.HomeLayout
 import app.expenses.core.storage.DrillLine
 import app.expenses.core.domain.DatePeriod
@@ -183,6 +185,9 @@ data class ImportUi(
     val result: ImportResultUi? = null,
 )
 
+/** A search kept under a name, ready to apply. */
+data class SavedSearchUi(val id: String, val name: String, val input: SearchInput)
+
 enum class SearchKind { ANY, EXPENSE, INCOME }
 enum class SearchRange { ANY, LAST_30_DAYS, THIS_PERIOD, THIS_YEAR }
 
@@ -291,6 +296,7 @@ sealed interface UiState {
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val homeLayout: HomeLayout,
+        val savedSearches: List<SavedSearchUi>,
         val categories: List<CategoryUi>,
         /** Tags in use, most used first, to offer when tagging. */
         val tags: List<String>,
@@ -569,6 +575,24 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         ok.store.deleteAccount(AccountId(id))
         refresh(ok)
     }
+
+    // ---- saved searches ----
+
+    /** Keeps the current search under [name]. [onDone] gets null on success or the reason it was refused (shown in the dialog, which stays open). */
+    fun saveSearch(name: String, input: SearchInput, onDone: (String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem = try {
+                container.write { ok ->
+                    ok.savedSearches.save(SavedSearch(UUID.randomUUID().toString(), name, input.text, input.minRupees, input.maxRupees, input.categoryId, input.kind.name, input.range.name, input.tag))
+                    refresh(ok)
+                }
+                null
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun deleteSavedSearch(id: String) = withStore { ok -> ok.savedSearches.delete(id); refresh(ok) }
 
     // ---- home layout ----
 
@@ -1115,6 +1139,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             accounts = active.map { AccountUi(it.id, it.name) },
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
             accountRows = accountRows(ok, accounts),
+            savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, ok.categories.usage(it.id)) },

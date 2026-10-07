@@ -66,7 +66,13 @@ fun SearchScreen(
     onBulkAddTag: (List<String>, String) -> Unit,
     onBulkRemoveTag: (List<String>, String) -> Unit,
     onUndo: (app.expenses.UndoUi) -> Unit,
+    saved: List<app.expenses.SavedSearchUi>,
+    onSaveSearch: (String, SearchInput, (String?) -> Unit) -> Unit,
+    onDeleteSaved: (String) -> Unit,
 ) {
+    var savingName by rememberSaveable { mutableStateOf<String?>(null) }
+    var savingProblem by remember { mutableStateOf<String?>(null) }
+    var deletingSaved by remember { mutableStateOf<app.expenses.SavedSearchUi?>(null) }
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     androidx.activity.compose.BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     var text by rememberSaveable { mutableStateOf("") }
@@ -84,9 +90,30 @@ fun SearchScreen(
         text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g
         onChange(SearchInput(t, lo, hi, c, k, r, g))
     }
+    fun changedAll(i: SearchInput) = changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag)
     // The screen may be re-created (rotation) with its inputs restored: search again so the results match what is shown.
     LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null) onChange(SearchInput(text, min, max, categoryId, kind, range, tag)) }
 
+    savingName?.let { n ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { savingName = null; savingProblem = null }, title = { Text("Save this search") },
+            text = {
+                Column {
+                    OutlinedTextField(n, { savingName = it; savingProblem = null }, label = { Text("Name") }, singleLine = true, modifier = Modifier.testTag("saved_name"))
+                    savingProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("saved_problem")) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { onSaveSearch(n, SearchInput(text, min, max, categoryId, kind, range, tag)) { p -> if (p == null) { savingName = null; savingProblem = null } else savingProblem = p } }, modifier = Modifier.testTag("saved_ok")) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { savingName = null; savingProblem = null }) { Text("Cancel") } },
+        )
+    }
+    deletingSaved?.let { d ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deletingSaved = null }, title = { Text("Remove \"${d.name}\"?") }, text = { Text("Only the saved search goes. No entries are touched.") },
+            confirmButton = { TextButton(onClick = { onDeleteSaved(d.id); deletingSaved = null }, modifier = Modifier.testTag("saved_delete_ok")) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { deletingSaved = null }) { Text("Keep") } },
+        )
+    }
     Scaffold(
         bottomBar = {
             if (selected.isNotEmpty()) BulkBar(
@@ -107,6 +134,11 @@ fun SearchScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).focusRequester(focus).testTag("search_text"),
             )
+            if (saved.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                saved.forEach { s ->
+                    LongPressChip(label = s.name, onClick = { changedAll(s.input) }, onLongClick = { deletingSaved = s }, modifier = Modifier.testTag("saved_${s.name}"))
+                }
+            }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = min, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(lo = v) }, label = { Text("From ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("search_min"))
                 OutlinedTextField(value = max, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(hi = v) }, label = { Text("To ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("search_max"))
@@ -134,7 +166,8 @@ fun SearchScreen(
                     FilterChip(selected = range == r, onClick = { changed(r = if (range == r) SearchRange.ANY else r) }, label = { Text(label) }, modifier = Modifier.testTag("search_range_${r.name}"))
                 }
             }
-            HorizontalDivider(Modifier.padding(top = 8.dp))
+            if (state.hasConditions && state.problem == null) TextButton(onClick = { savingName = "" }, modifier = Modifier.padding(horizontal = 8.dp).testTag("save_search")) { Text("Save this search") }
+            HorizontalDivider()
             when {
                 state.problem != null -> Text(state.problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp).testTag("search_problem"))
                 !state.hasConditions -> Text("Type a merchant or note, or choose an amount, category or dates.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_hint"))

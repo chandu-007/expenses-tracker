@@ -175,6 +175,7 @@ class MainActivity : FragmentActivity() {
                                     onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete,
                                     tags = s.tags, onBulkAddTag = viewModel::bulkAddTag, onBulkRemoveTag = viewModel::bulkRemoveTag,
                                     onUndo = viewModel::undo,
+                                    saved = s.savedSearches, onSaveSearch = viewModel::saveSearch, onDeleteSaved = viewModel::deleteSavedSearch,
                                 )
                             }
                             calendaring -> {

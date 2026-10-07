@@ -17,6 +17,7 @@ import app.expenses.core.storage.ReportStore
 import app.expenses.core.storage.StatementImporter
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.SavedSearchStore
 import app.expenses.core.storage.SchemaUpgrade
 import app.expenses.core.storage.FtsTuning
 import app.expenses.core.storage.LedgerStore
@@ -36,7 +37,7 @@ import java.util.UUID
  */
 class AppContainer(private val context: Context) {
     sealed interface Opened {
-        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter) : Opened
+        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore) : Opened
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
         class KeyLost(val message: String) : Opened
@@ -109,7 +110,7 @@ class AppContainer(private val context: Context) {
         val recurring = RecurringStore(db, clock, System::currentTimeMillis, store)
         val templates = TemplateStore(db, clock, System::currentTimeMillis)
         val budgets = BudgetStore(db, clock, System::currentTimeMillis, store, recurring)
-        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store))
+        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, System::currentTimeMillis))
     } catch (e: DatabaseKeyUnavailableException) {
         Opened.KeyLost(e.message ?: "The database key is unavailable")
     }
