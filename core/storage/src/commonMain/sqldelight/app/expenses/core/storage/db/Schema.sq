@@ -130,6 +130,7 @@ CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE del
 CREATE INDEX entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0;
 CREATE INDEX entry_transfer_in ON entry(counter_account_id, to_amount_minor) WHERE kind = 'TRANSFER' AND deleted = 0;
 CREATE INDEX entry_refunds ON entry(refunds_entry) WHERE refunds_entry IS NOT NULL;
+CREATE INDEX entry_deleted_ids ON entry(id) WHERE deleted = 1;
 CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
 
 -- Category splits and shared-expense shares of an entry, in their original order.
@@ -553,10 +554,16 @@ SELECT tag FROM entry_tag WHERE tag = :tag LIMIT 1;
 allEntryTags:
 SELECT entry_id, tag FROM entry_tag ORDER BY entry_id, tag COLLATE NOCASE;
 
--- Tags on live entries, most used first.
-tagsInUse:
-SELECT t.tag AS tag, COUNT(*) AS uses FROM entry_tag t JOIN entry e ON e.id = t.entry_id
-WHERE e.deleted = 0 GROUP BY t.tag COLLATE NOCASE ORDER BY uses DESC, t.tag COLLATE NOCASE LIMIT :limit;
+-- How many entries carry each tag, deleted entries included: one pass over the tag index, which covers it (no entry rows are read).
+-- The joined form (live entries only, grouped) read every tagged entry's row and took about 700 ms on 33,000 tagged entries.
+tagCountsAll:
+SELECT tag, COUNT(*) AS uses FROM entry_tag GROUP BY tag COLLATE NOCASE;
+
+-- The same count for deleted entries only, which are few; subtracting it gives the live count.
+tagCountsDeleted:
+-- CROSS JOIN fixes the order: deleted entries first (a few rows from the partial index), then their tags. Left to choose, the planner
+-- scanned every tag row and looked each entry up, which took 300 ms on a phone-class database.
+SELECT t.tag AS tag, COUNT(*) AS uses FROM entry e CROSS JOIN entry_tag t ON t.entry_id = e.id WHERE e.deleted = 1 GROUP BY t.tag COLLATE NOCASE;
 
 entriesWithTag:
 SELECT e.* FROM entry e JOIN entry_tag t ON t.entry_id = e.id

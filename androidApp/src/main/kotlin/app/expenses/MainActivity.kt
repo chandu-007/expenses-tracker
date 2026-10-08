@@ -60,7 +60,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
-        intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let(viewModel::seed)
+        intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
         setContent {
             val themeState by viewModel.state.collectAsStateWithLifecycle()
             val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
@@ -296,7 +296,7 @@ class MainActivity : FragmentActivity() {
                             }
                             else -> EntryListScreen(
                                 state = s,
-                                onAdd = { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
+                                onAdd = { StartupTrace.mark("add: tapped"); prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
                                 onLoadMore = viewModel::loadMore,
                                 onMessageShown = viewModel::dismissMessage,
                                 onTemplate = { t ->

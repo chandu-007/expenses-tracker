@@ -71,6 +71,7 @@ class PerformanceBudgetTest {
                     db.schemaQueries.insertEntry("e$i", "EXPENSE", at, "bank", null, 100L + i % 900, "INR", "cat${i % 40}", merchantName(m), "UPI ${banks[i % banks.size]} Ref ${100_000_000L + i * 7919L} txn", "manual", null)
                     // what LedgerStore writes for an unsplit, unshared expense
                     db.schemaQueries.insertSpendLine("e$i", 0, at, "INR", "cat${i % 40}", 100L + i % 900, 100L + i % 900)
+                    if (i % 3 == 0) db.schemaQueries.insertTag("e$i", "tag${i % 500}") // a third of the ledger tagged, 500 distinct tags (PRODUCT_CONTEXT 6.1)
                 }
             }
         }
@@ -100,6 +101,14 @@ class PerformanceBudgetTest {
         driver.executeQuery(null, "SELECT COUNT(*) FROM spend_line WHERE occurred_at >= $from AND occurred_at < $until", { c ->
             c.next(); app.cash.sqldelight.db.QueryResult.Value(c.getLong(0)!!)
         }, 0).value
+
+    @Test fun tagSuggestionsAcrossAThirdOfTheLedgerTaggedStayUnder50msPhoneBudget() {
+        // Runs on every refresh, so on every launch and every save. It once took 787 ms on the first (cold) launch of a 100k ledger with 33k tagged entries.
+        val ledger = app.expenses.core.storage.LedgerStore(db, app.expenses.core.domain.sync.HlcClock("perf")) { System.currentTimeMillis() }
+        assertEquals(40, ledger.tagsInUse(40).size)
+        assertEquals(67L, ledger.tagsInUse(40).first().second, "the most used tag has 67 of the 33,334 tagged entries")
+        check("tag suggestions (33k tagged entries, 500 tags)", 50.0, median { ledger.tagsInUse(40) })
+    }
 
     @Test fun datasetIsAsDescribed() {
         assertEquals(ROWS.toLong(), db.schemaQueries.entryCount().executeAsOne())

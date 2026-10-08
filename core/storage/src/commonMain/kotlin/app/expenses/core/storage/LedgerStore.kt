@@ -84,7 +84,15 @@ class LedgerStore(
     fun tagsOf(id: EntryId): List<String> = q.tagsOf(id.value).executeAsList()
 
     /** Tags on live entries with how many entries use each, most used first. */
-    fun tagsInUse(limit: Long = 200): List<Pair<String, Long>> = q.tagsInUse(limit).executeAsList().map { it.tag to it.uses }
+    fun tagsInUse(limit: Long = 200): List<Pair<String, Long>> {
+        // Counted over every tag row, less the (few) tags on deleted entries; most used first, ties by name ignoring case.
+        val deleted = q.tagCountsDeleted().executeAsList().associate { it.tag.lowercase() to it.uses }
+        return q.tagCountsAll().executeAsList().asSequence()
+            .map { it.tag to it.uses - (deleted[it.tag.lowercase()] ?: 0L) }
+            .filter { it.second > 0 }
+            .sortedWith(compareBy<Pair<String, Long>>({ -it.second }, { it.first.lowercase() }))
+            .take(limit.toInt()).toList()
+    }
 
     /** Runs [block] as one all-or-nothing change: if anything in it throws, none of it is kept. */
     fun <T> atomically(block: () -> T): T = db.transactionWithResult { block() }

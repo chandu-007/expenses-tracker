@@ -23,6 +23,7 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS saved_search (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', min_rupees TEXT NOT NULL DEFAULT '', max_rupees TEXT NOT NULL DEFAULT '', category_id TEXT, kind TEXT NOT NULL DEFAULT 'ANY', range_kind TEXT NOT NULL DEFAULT 'ANY', tag TEXT, deleted INTEGER NOT NULL DEFAULT 0)")
         run(driver, "CREATE TABLE IF NOT EXISTS card_terms (account_id TEXT NOT NULL PRIMARY KEY, statement_day INTEGER NOT NULL, due_day INTEGER NOT NULL, min_due_percent INTEGER NOT NULL DEFAULT 5, remind_days INTEGER NOT NULL DEFAULT 3)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_tag (entry_id TEXT NOT NULL, tag TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (entry_id, tag)) WITHOUT ROWID")
+        run(driver, "CREATE INDEX IF NOT EXISTS entry_deleted_ids ON entry(id) WHERE deleted = 1")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_tag_tag ON entry_tag(tag, entry_id)")
     }
 

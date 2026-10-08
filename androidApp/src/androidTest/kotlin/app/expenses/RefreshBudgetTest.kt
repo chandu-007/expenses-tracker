@@ -42,6 +42,7 @@ class RefreshBudgetTest {
                         val at = 1_300_000_000_000L + i * 3_000_000L
                         ok.db.schemaQueries.insertEntry("e$i", "EXPENSE", at, "bank", null, 100L + i % 900, "INR", "Category ${i % 500}", "Shop ${i % 300}", "UPI Ref ${100_000_000L + i * 7919L} txn", "manual", null)
                         ok.db.schemaQueries.insertSpendLine("e$i", 0, at, "INR", "Category ${i % 500}", 100L + i % 900, 100L + i % 900)
+                        if (i % 3 == 0) ok.db.schemaQueries.insertTag("e$i", "tag${i % 500}") // a third of the ledger tagged: its tag suggestions once cost 700 ms per refresh
                     }
                 }
             }

@@ -85,4 +85,17 @@ class TagStoreTest {
         assertEquals(emptyList(), db.searchFiltered(SearchQuery(tag = "nothing"), 10).map { it.id })
         assertEquals(5, db.searchFiltered(SearchQuery(tag = "Trip"), 5).size, "the limit applies")
     }
+
+    @Test
+    fun suggestionsAreOrderedByUseThenNameAndLimitedAndATagOnlyOnDeletedEntriesIsGoneUntilRestored() {
+        ledger.save(ex("a"), EntryDetails(tags = listOf("zeta", "Beta", "alpha")))
+        ledger.save(ex("b"), EntryDetails(tags = listOf("beta", "zeta")))
+        ledger.save(ex("c"), EntryDetails(tags = listOf("only-here")))
+        assertEquals(listOf("Beta" to 2L, "zeta" to 2L, "alpha" to 1L, "only-here" to 1L), ledger.tagsInUse(), "ties by name ignoring case")
+        assertEquals(listOf("Beta" to 2L, "zeta" to 2L), ledger.tagsInUse(2))
+        ledger.delete(EntryId("c"))
+        assertEquals(listOf("Beta", "zeta", "alpha"), ledger.tagsInUse().map { it.first })
+        ledger.restore(EntryId("c"))
+        assertEquals("only-here" to 1L, ledger.tagsInUse().last())
+    }
 }

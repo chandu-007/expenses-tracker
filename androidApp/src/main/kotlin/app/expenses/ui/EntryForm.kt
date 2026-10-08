@@ -25,7 +25,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import app.expenses.core.domain.CategoryChoices
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -40,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -103,11 +110,17 @@ fun EntryFormScreen(
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     var pickingDate by rememberSaveable { mutableStateOf(false) }
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
+    var pickingCategory by rememberSaveable { mutableStateOf(false) }
     val currency = BaseCurrency.current
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
+    if (pickingCategory) CategoryPickerDialog(
+        categories.filter { !it.hidden || it.id == draft.category }, draft.category,
+        onPick = { id -> draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && id == draft.category) "" else id); pickingCategory = false },
+        onClose = { pickingCategory = false },
+    )
     val zone = ZoneId.systemDefault()
     val dateLabel = DateTimeFormatter.ofPattern("EEE, d MMM yyyy").withZone(zone).format(Instant.ofEpochMilli(draft.occurredAt))
     val split = EntryDrafts.isSplit(draft)
@@ -176,7 +189,7 @@ fun EntryFormScreen(
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("amount"),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.testTag("amount"),
             )
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
 
@@ -184,7 +197,10 @@ fun EntryFormScreen(
                 Text(if (draft.kind == DraftKind.INCOME) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Hidden categories are not offered, except one already chosen (an entry being edited keeps its category).
-                    categories.filter { !it.hidden || it.id == draft.category }.forEach { c ->
+                    val offered = categories.filter { !it.hidden || it.id == draft.category }
+                    val picks = remember(offered, draft.category) { CategoryChoices.pick(offered.map { it.id }, draft.category.ifEmpty { null }) }
+                    val byId = remember(categories) { categories.associateBy { it.id } }
+                    picks.shown.mapNotNull { byId[it] }.forEach { c ->
                         FilterChip(
                             selected = c.id == draft.category,
                             onClick = { draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && c.id == draft.category) "" else c.id) },
@@ -193,6 +209,7 @@ fun EntryFormScreen(
                             modifier = Modifier.testTag("category_chip_${c.id}"),
                         )
                     }
+                    if (picks.more > 0) AssistChip(onClick = { pickingCategory = true }, label = { Text("More (${picks.more})") }, modifier = Modifier.testTag("more_categories"))
                     AssistChip(onClick = { creatingCategory = true }, label = { Text("+ New") }, modifier = Modifier.testTag("new_category_chip"))
                     if (draft.kind == DraftKind.EXPENSE) {
                         AssistChip(onClick = { draft = draft.copy(splits = listOf(SplitDraft(draft.category, ""), SplitDraft("", ""))) }, label = { Text("Split") }, modifier = Modifier.testTag("split_start"))
@@ -336,4 +353,33 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
         OutlinedButton(onClick = { picker.launch(arrayOf("image/*", "application/pdf", "*/*")) }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
         Text("Kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** Every category in a searchable list, for the ones that did not fit among the chips. */
+@Composable
+private fun CategoryPickerDialog(categories: List<CategoryUi>, selected: String, onPick: (String) -> Unit, onClose: () -> Unit) {
+    var typed by rememberSaveable { mutableStateOf("") }
+    val named = remember(categories) { categories.map { it.id to displayName(categories, it) } }
+    val found = remember(named, typed) { CategoryChoices.search(named, typed) }
+    val nameOf = remember(named) { named.toMap() }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("All categories") },
+        text = {
+            Column {
+                OutlinedTextField(typed, { typed = it }, label = { Text("Search") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("category_search"))
+                LazyColumn(Modifier.heightIn(max = 360.dp).testTag("category_list")) {
+                    items(found, key = { it }) { id ->
+                        Text(
+                            nameOf.getValue(id) + if (id == selected) "  ✓" else "",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 12.dp).testTag("category_option_$id"),
+                        )
+                    }
+                    if (found.isEmpty()) item { Text("No category matches.", modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+    )
 }

@@ -1288,18 +1288,24 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Debug and benchmark builds only: fills the database with realistic rows to measure speed at scale. */
-    fun seed(rows: Int) {
+    /** [full] also adds the rest of the §6.1 dataset: 500 more categories, 500 tags on a third of the entries, and 1,000 attachment records (no files). */
+    fun seed(rows: Int, full: Boolean = false) {
         check(BuildConfig.SEEDING_ENABLED) { "Seeding is not available in this build" }
         withStore { ok ->
             val q = ok.db.schemaQueries
             val step = 3_650L * 86_400_000L / rows
             val start = System.currentTimeMillis() - 3_650L * 86_400_000L
+            val extraCategories = if (full) (0 until 500).map { "Category $it" } else emptyList()
             ok.db.bulkLoad(ok.driver) {
+                extraCategories.forEachIndexed { n, name -> q.insertCategoryRaw(name, name, null, null, (100 + n).toLong(), 0, 0, null) }
+                val categories = DEFAULT_CATEGORIES + extraCategories
                 for (i in 0 until rows) {
                     val at = start + i * step
                     val amount = 100L + (i * 37L) % 90_000L
                     q.insertEntry("seed$i", "EXPENSE", at, "cash", null, amount, "INR", null, "Merchant ${i % 400}", "seed note $i", "seed", null)
-                    q.insertSpendLine("seed$i", 0, at, "INR", DEFAULT_CATEGORIES[i % DEFAULT_CATEGORIES.size], amount, amount)
+                    q.insertSpendLine("seed$i", 0, at, "INR", categories[i % categories.size], amount, amount)
+                    if (full && i % 3 == 0) q.insertTag("seed$i", "tag${i % 500}")
+                    if (full && i % (rows / 1000).coerceAtLeast(1) == 0) q.insertAttachment("seedatt$i", "seed$i", "receipt$i.jpg", "image/jpeg", 250_000, "0".repeat(64), at)
                 }
             }
             refresh(ok)
