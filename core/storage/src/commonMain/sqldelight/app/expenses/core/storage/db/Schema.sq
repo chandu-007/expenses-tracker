@@ -421,6 +421,9 @@ DELETE FROM attachment WHERE id = :id;
 allAttachmentIds:
 SELECT id FROM attachment;
 
+entryBySourceRef:
+SELECT id FROM entry WHERE source = :source AND source_ref = :sourceRef AND deleted = 0;
+
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

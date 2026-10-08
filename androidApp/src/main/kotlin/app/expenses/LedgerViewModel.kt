@@ -57,6 +57,11 @@ import app.expenses.core.domain.BillOnDay
 import app.expenses.core.domain.CalendarMath
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
+import app.expenses.core.domain.DraftResult
+import app.expenses.core.domain.ledger.EntryId
+import app.expenses.core.storage.EntryDetails
+import app.expenses.core.storage.InboxStatus
+import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.domain.OwnExport
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.toPlainString
@@ -70,6 +75,7 @@ import app.expenses.core.storage.BudgetStatus
 import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.bulkLoad
 import app.expenses.core.storage.db.Entry
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,6 +93,14 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val inflow: Boolean,
 )
 data class AccountUi(val id: String, val name: String)
+
+/** A captured transaction waiting for review. [accountId] and [categoryId] are the suggestions the row starts with. */
+data class InboxRowUi(
+    val id: String, val issuer: String, val direction: String, val amountText: String, val dateText: String, val last4: String?, val body: String, val payee: String?,
+    val accountId: String, val categoryId: String, val rememberedAccount: Boolean, val confidence: String,
+)
+
+data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String)
 
 /**
  * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
@@ -324,6 +338,8 @@ sealed interface UiState {
         val homeLayout: HomeLayout,
         val appearance: Appearance,
         val baseCurrency: Currency,
+        val inboxPending: Int,
+        val smsCapture: Boolean,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
@@ -344,6 +360,18 @@ sealed interface UiState {
 val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
+
+/**
+ * Whether [e] is the database saying it has been closed. The container closes the database on purpose (starting a fresh ledger, tearing the app
+ * down in tests), and background work that was already running then finds it shut: that is not a bug in the work and must not end the process.
+ */
+internal fun isDatabaseClosed(e: Throwable): Boolean =
+    e is IllegalStateException && (e.message.orEmpty().contains("already-closed") || e.message.orEmpty().contains("connection pool has been closed"))
+
+/** Where the view model's background work runs. Any failure other than a closed database still reaches the thread's uncaught handler, as before. */
+private val BACKGROUND = Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+    if (!isDatabaseClosed(e)) Thread.currentThread().let { it.uncaughtExceptionHandler?.uncaughtException(it, e) ?: throw e }
+}
 private const val SEARCH_LIMIT = 100L
 private const val TAG_SUGGESTIONS = 40L
 private const val PROFILE_SEARCH_ROWS = 15
@@ -409,7 +437,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Last resort after key loss, only on the user's explicit choice: deletes all data. */
     fun startFresh() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             _state.value = UiState.Opening
             when (val o = container.startFresh()) {
                 is AppContainer.Opened.Ok -> container.write { ok -> refresh(ok) }
@@ -486,7 +514,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Copies a picked photo or file in and attaches it to [entryId]. A refusal is shown as a message and leaves nothing behind. */
     fun addAttachment(entryId: String, uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             val id = UUID.randomUUID().toString()
             _attachmentProblem.value = null
             try {
@@ -559,15 +587,19 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     fun loadMore() {
         val current = _state.value as? UiState.Ready ?: return
         if (endReached) return
-        viewModelScope.launch(Dispatchers.IO) {
-            val ok = container.open() as? AppContainer.Opened.Ok ?: return@launch
-            val last = loaded.lastOrNull() ?: return@launch
-            val page = ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
-            if (page.size < PAGE) endReached = true
-            if (page.isEmpty()) return@launch
-            loaded.addAll(page)
-            loadedCategory = loadedCategory + firstCategories(ok, page)
-            _state.update { s -> (s as? UiState.Ready)?.copy(rows = s.rows + page.map(::toRow), endReached = endReached) ?: current }
+        // Through the write lock like every other change to [loaded]: a refresh replaces and reads that list, and adding to it from outside the
+        // lock threw ConcurrentModificationException when the two overlapped (seen in the timing gate, which then crashed the app process).
+        viewModelScope.launch(BACKGROUND) {
+            container.write { ok ->
+                if (endReached) return@write
+                val last = loaded.lastOrNull() ?: return@write
+                val page = ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
+                if (page.size < PAGE) endReached = true
+                if (page.isEmpty()) return@write
+                loaded.addAll(page)
+                loadedCategory = loadedCategory + firstCategories(ok, page)
+                _state.update { s -> (s as? UiState.Ready)?.copy(rows = s.rows + page.map(::toRow), endReached = endReached) ?: current }
+            }
         }
     }
 
@@ -630,7 +662,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private fun scheduleSlowFigures() {
         balancesJob?.cancel()
         val wait = if (accountsOpen || categoriesOpen || !figuresReady) 0L else BALANCES_DEBOUNCE_MS
-        balancesJob = viewModelScope.launch(Dispatchers.IO) {
+        balancesJob = viewModelScope.launch(BACKGROUND) {
             kotlinx.coroutines.delay(wait)
             val figures = container.write { ok ->
                 val live = ok.db.schemaQueries.entryCount().executeAsOne()
@@ -675,7 +707,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
      * on success, otherwise the reason it was refused (shown in the form, which stays open).
      */
     fun saveAccount(id: String?, name: String, type: String, openingText: String, onDone: (String?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
                     val all = ok.db.schemaQueries.selectAccounts().executeAsList()
@@ -699,7 +731,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Sets or, with blank days, removes a credit card's billing dates. [onDone] gets null on success, otherwise the reason (shown in the dialog). */
     fun saveCardTerms(accountId: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, onDone: (String?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
                     val s = statementDay.trim().toIntOrNull(); val d = dueDay.trim().toIntOrNull()
@@ -736,7 +768,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Keeps the current search under [name]. [onDone] gets null on success or the reason it was refused (shown in the dialog, which stays open). */
     fun saveSearch(name: String, input: SearchInput, onDone: (String?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
                     ok.savedSearches.save(SavedSearch(UUID.randomUUID().toString(), name, input.text, input.minRupees, input.maxRupees, input.categoryId, input.kind.name, input.range.name, input.tag))
@@ -771,12 +803,95 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Runs an export now, whatever the schedule says, and shows how it went. */
     fun exportNow() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             val uri = container.write { it.templates.setting(AutoExport.S_FOLDER) }
             AutoExport.run(container, AutoExport.folderOf(getApplication(), uri), System.currentTimeMillis(), force = true)
             container.write { refresh(it) }
         }
     }
+
+    // ---- capture inbox ----
+
+    private val _inbox = MutableStateFlow<List<InboxRowUi>>(emptyList())
+
+    /** Pending captured transactions, newest first. Loaded when the inbox opens and kept current while it is open. */
+    val inbox: StateFlow<List<InboxRowUi>> get() = _inbox
+
+    private val _captureSettings = MutableStateFlow(CaptureSettingsUi(false, ""))
+    val captureSettings: StateFlow<CaptureSettingsUi> get() = _captureSettings
+
+    fun loadInbox() = withStore { ok -> _inbox.value = inboxRows(ok) }
+
+    fun loadCaptureSettings() = withStore { ok ->
+        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(Capture.SETTING_SMS_ON) == "1", ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty())
+    }
+
+    fun setSmsCapture(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(Capture.SETTING_SMS_ON, if (on) "1" else "0")
+        _captureSettings.value = _captureSettings.value.copy(smsOn = on)
+        refresh(ok)
+    }
+
+    fun setExtraHeaders(text: String) = withStore { ok ->
+        ok.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, text.trim())
+        _captureSettings.value = _captureSettings.value.copy(extraHeaders = text.trim())
+    }
+
+    private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
+        val lastCategory = ok.templates.setting(LAST_CATEGORY).orEmpty()
+        val zone = ZoneId.systemDefault()
+        val fmt = DateTimeFormatter.ofPattern("d MMM")
+        return ok.inbox.list().map { i ->
+            val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
+            val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
+            InboxRowUi(
+                i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
+                i.accountLast4, i.body.orEmpty(), PayeeGuess.of(i.body.orEmpty()), remembered ?: accounts.firstOrNull()?.id.orEmpty(), if (i.direction == "DEBIT") lastCategory else "",
+                rememberedAccount = remembered != null, confidence = i.confidence,
+            )
+        }
+    }
+
+    private fun accountKey(issuer: String, last4: String?) = "capture_acct:$issuer:${last4.orEmpty()}"
+
+    /**
+     * Turns a pending captured transaction into an entry in [accountId] (and [categoryId] for a debit). [onDone] gets null on success, otherwise
+     * why not (shown on the row). A reference already in the ledger from the same source is refused rather than added twice.
+     */
+    fun confirmCapture(id: String, accountId: String, categoryId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val i = ok.inbox.get(id) ?: return@write "That item is no longer in the inbox."
+                    if (i.status != InboxStatus.PENDING) return@write "That item was already handled."
+                    if (i.currency != BaseCurrency.current.code) return@write "This is in ${i.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
+                    val kind = if (i.direction == "CREDIT") DraftKind.INCOME else DraftKind.EXPENSE
+                    val at = i.txnDate?.let { runCatching { LocalDate.parse(it).atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() } ?: i.receivedAt
+                    val payee = PayeeGuess.of(i.body.orEmpty()) ?: i.issuer
+                    val draft = EntryDraft(null, kind, Money(i.amountMinor, BaseCurrency.current).toPlainString(), if (kind == DraftKind.EXPENSE) categoryId else categoryId, emptyList(), accountId, "", payee, at)
+                    val entry = when (val r = EntryDrafts.build(draft, EntryId(UUID.randomUUID().toString()), BaseCurrency.current)) {
+                        is DraftResult.Ok -> r.entry
+                        is DraftResult.Problem -> return@write r.message
+                    }
+                    val sourceRef = i.reference ?: i.id
+                    if (ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull() != null)
+                        return@write "An entry from this message is already in your ledger (reference $sourceRef). Dismiss this one."
+                    ok.store.atomically {
+                        ok.store.save(entry, EntryDetails(merchant = payee, note = null, source = "sms", sourceRef = sourceRef))
+                        ok.inbox.confirm(id, entry.id.value)
+                    }
+                    ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
+                    _inbox.value = inboxRows(ok)
+                    refresh(ok)
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun dismissCapture(id: String) = withStore { ok -> ok.inbox.dismiss(id); _inbox.value = inboxRows(ok); refresh(ok) }
 
     // ---- currency ----
 
@@ -872,7 +987,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     /** Reads a statement file the user picked and guesses its layout. Nothing is saved. */
     fun startImport(uri: Uri) {
         _import.value = ImportUi(active = true, busy = true)
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             try {
                 val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("That file could not be opened.")
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
@@ -898,7 +1013,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun changeImportMapping(change: (StatementMapping) -> StatementMapping) {
         val m = _import.value.mapping ?: return
-        viewModelScope.launch(Dispatchers.IO) { recomputeImport(change(m), _import.value.accountId) }
+        viewModelScope.launch(BACKGROUND) { recomputeImport(change(m), _import.value.accountId) }
     }
 
     fun changeImportAccount(id: String) {
@@ -931,7 +1046,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val account = _import.value.accountId
         if (account.isEmpty() || parsed.txns.isEmpty()) return
         _import.update { it.copy(busy = true, error = null) }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             try {
                 container.write { ok ->
                     val r = ok.statements.import(parsed.txns, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
@@ -966,7 +1081,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY || input.tag != null
         if (!conditions) { _search.value = SearchUi(); return }
         _search.update { it.copy(searching = true, hasConditions = true, problem = null) }
-        searchJob = viewModelScope.launch(Dispatchers.IO) {
+        searchJob = viewModelScope.launch(BACKGROUND) {
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
             container.write { ok -> _search.value = runSearch(ok, input, min, max) }
         }
@@ -1038,7 +1153,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun calendarAction(next: (CalendarRequest) -> CalendarRequest) {
         calendarRequest = next(calendarRequest ?: CalendarRequest(0, null))
-        viewModelScope.launch(Dispatchers.IO) { container.write { ok -> calendarRequest?.let { _calendar.value = buildCalendar(ok, it) } } }
+        viewModelScope.launch(BACKGROUND) { container.write { ok -> calendarRequest?.let { _calendar.value = buildCalendar(ok, it) } } }
     }
 
     fun openCalendar() = calendarAction { CalendarRequest(0, null) }
@@ -1073,7 +1188,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     private fun reportAction(next: (ReportRequest) -> ReportRequest) {
         val current = reportRequest ?: ReportRequest(ReportMode.PERIOD, 0)
         reportRequest = next(current)
-        viewModelScope.launch(Dispatchers.IO) { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } }
+        viewModelScope.launch(BACKGROUND) { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } }
     }
 
     private fun buildReport(ok: AppContainer.Opened.Ok, r: ReportRequest): ReportUi {
@@ -1161,7 +1276,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     /** Runs a file action off the main thread, showing "working" and then its outcome. A [BackupException] message is written for the user. */
     private fun dataAction(block: suspend () -> String) {
         _data.update { it.copy(busy = true, status = null, statusIsError = false) }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             try {
                 val message = block()
                 _data.update { it.copy(busy = false, status = message, statusIsError = false) }
@@ -1316,7 +1431,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Runs [block] off the main thread through the container's process-wide write lock, once the database is open. */
     private fun withStore(block: (AppContainer.Opened.Ok) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             try {
                 container.write(block)
             } catch (e: IllegalArgumentException) {
@@ -1360,7 +1475,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val spent = ok.store.spendByCategory(inr, from = period.startMillis(zone), until = period.endMillis(zone)).values.fold(Money.zero(inr)) { a, m -> a + m }
         _state.value = current.copy(rows = rowsOf(loaded), periodSpend = spent.formatted(), endReached = endReached, undo = undo)
         val quickDone = System.nanoTime()
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             container.write { ok2 -> refresh(ok2, undo = (_state.value as? UiState.Ready)?.undo) }
             lastSettleMillis = (System.nanoTime() - quickDone) / 1e6
         }
@@ -1415,6 +1530,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             baseCurrency = BaseCurrency.current,
+            inboxPending = ok.inbox.pendingCount().toInt(),
+            smsCapture = ok.templates.setting(Capture.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             autoExport = autoExportUi(ok),
@@ -1518,12 +1635,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // could run before they were initialised (a date formatter below it was still null on about 3% of starts, and the load died silently,
     // leaving the opening screen up forever).
     init {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(BACKGROUND) {
             when (val o = container.open()) {
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
                 is AppContainer.Opened.Ok -> {
                     container.write { ok -> refresh(ok) }; StartupTrace.mark("open: first page loaded")
+                    viewModelScope.launch(BACKGROUND) { Capture.changes.collect { container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) } } }
                     // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
                     container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }
                 }

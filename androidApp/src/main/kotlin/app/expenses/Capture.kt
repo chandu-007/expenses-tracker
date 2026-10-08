@@ -17,6 +17,10 @@ import java.util.UUID
 object Capture {
     const val SMS = "SMS"
     const val SETTING_EXTRA_ROOTS = "capture_extra_roots"
+    const val SETTING_SMS_ON = "capture_sms_on"
+
+    /** Bumped whenever capture changed the inbox, so an open screen can refresh. */
+    val changes = kotlinx.coroutines.flow.MutableStateFlow(0)
 
     /** The same text delivered twice has the same fingerprint (same source, sender, time the phone stamped it, and words). */
     fun fingerprint(source: String, sender: String, receivedAt: Long, body: String): String {
@@ -51,6 +55,7 @@ object Capture {
                 }
             }
             ok.inbox.recordEvent(now, SenderRules.headerRoot(sender), outcome)
+            if (outcome == CaptureEventOutcome.CAPTURED) changes.value += 1
             outcome
         } ?: CaptureEventOutcome.NOT_A_TRANSACTION
 }

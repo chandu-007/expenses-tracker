@@ -110,6 +110,8 @@ fun EntryListScreen(
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
     onOpenCurrency: () -> Unit,
+    onOpenInbox: () -> Unit,
+    onOpenCapture: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -179,6 +181,8 @@ fun EntryListScreen(
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
+                            DropdownMenuItem(text = { Text("To review" + if (state.inboxPending > 0) " (${state.inboxPending})" else "") }, onClick = { more = false; onOpenInbox() }, modifier = Modifier.testTag("open_inbox"))
+                            DropdownMenuItem(text = { Text("Capture from texts") }, onClick = { more = false; onOpenCapture() }, modifier = Modifier.testTag("open_capture"))
                             DropdownMenuItem(text = { Text("Currency") }, onClick = { more = false; onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
                             DropdownMenuItem(text = { Text("Appearance") }, onClick = { more = false; onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
                             DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
@@ -193,6 +197,9 @@ fun EntryListScreen(
                     }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
+            }
+            if (state.inboxPending > 0) androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpenInbox).testTag("inbox_banner")) {
+                Text("${state.inboxPending} to review: transactions found in your texts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp))
             }
             if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
             state.homeLayout.visible().forEach { section ->

@@ -30,6 +30,8 @@ import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CalendarScreen
 import app.expenses.ui.AppearanceScreen
 import app.expenses.ui.CurrencyScreen
+import app.expenses.ui.InboxScreen
+import app.expenses.ui.CaptureSettingsScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.HomeLayoutScreen
 import app.expenses.ui.DataScreen
@@ -77,6 +79,15 @@ class MainActivity : FragmentActivity() {
                     var customisingHome by rememberSaveable { mutableStateOf(false) }
                     var appearing by rememberSaveable { mutableStateOf(false) }
                     var currencyOpen by rememberSaveable { mutableStateOf(false) }
+                    var inboxOpen by rememberSaveable { mutableStateOf(false) }
+                    var captureOpen by rememberSaveable { mutableStateOf(false) }
+                    val inboxRows by viewModel.inbox.collectAsStateWithLifecycle()
+                    val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle()
+                    var smsPermission by androidx.compose.runtime.remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+                    val smsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+                        smsPermission = granted
+                        viewModel.setSmsCapture(granted)
+                    }
                     val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle()
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
@@ -150,6 +161,18 @@ class MainActivity : FragmentActivity() {
                                 val e = editing as Editable.ReadOnly
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            inboxOpen -> {
+                                BackHandler { inboxOpen = false }
+                                InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = viewModel::confirmCapture, onDismiss = viewModel::dismissCapture, onBack = { inboxOpen = false })
+                            }
+                            captureOpen -> {
+                                BackHandler { captureOpen = false }
+                                CaptureSettingsScreen(
+                                    captureSettings, smsPermission,
+                                    onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS) },
+                                    onHeaders = viewModel::setExtraHeaders, onBack = { captureOpen = false },
+                                )
                             }
                             currencyOpen -> {
                                 BackHandler { currencyOpen = false }
@@ -331,6 +354,8 @@ class MainActivity : FragmentActivity() {
                                 onBulkRemoveTag = viewModel::bulkRemoveTag,
                                 onToggleHideAmounts = { viewModel.setHideAmounts(!s.hideAmounts) },
                                 onOpenCurrency = { currencyOpen = true; viewModel.loadCurrencyBlocker() },
+                                onOpenInbox = { inboxOpen = true; viewModel.loadInbox() },
+                                onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },
                             )
                         }
                         }

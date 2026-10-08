@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Restricted by Google Play: needs the SMS permissions declaration. Asked for at runtime only after the person turns SMS capture on. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Phones are the target, but the app still installs without a telephony stack (tablets, Chromebooks): capture is just unavailable there. -->
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <application
         android:name=".ExpensesApp"
@@ -32,6 +36,15 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="0">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".QuickAddTileService"
