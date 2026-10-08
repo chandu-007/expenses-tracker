@@ -36,6 +36,7 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.core.storage.SavedSearch
 import app.expenses.core.storage.resolveCategory
 import app.expenses.core.domain.HomeLayout
@@ -93,6 +94,9 @@ val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLE
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long)
+
+/** Automatic export to the user's own folder, as the Data screen shows it. [status] is the last outcome. */
+data class AutoExportUi(val frequency: AutoExportFrequency, val folderName: String?, val lastText: String?, val status: String?, val statusOk: Boolean)
 
 /** A saved quick entry as the UI needs it. [amountText] is null when the template asks for the amount. */
 data class TemplateUi(val id: String, val name: String, val amountText: String?, val category: String, val accountId: String, val note: String)
@@ -299,6 +303,7 @@ sealed interface UiState {
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val homeLayout: HomeLayout,
+        val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
         val savedSearches: List<SavedSearchUi>,
@@ -646,6 +651,34 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteSavedSearch(id: String) = withStore { ok -> ok.savedSearches.delete(id); refresh(ok) }
+
+    // ---- automatic export ----
+
+    private fun autoExportUi(ok: AppContainer.Opened.Ok): AutoExportUi {
+        val t = ok.templates
+        val freq = AutoExportFrequency.entries.firstOrNull { it.name == t.setting(AutoExport.S_FREQ) } ?: AutoExportFrequency.OFF
+        val folder = t.setting(AutoExport.S_FOLDER)?.let { Uri.parse(it).lastPathSegment?.substringAfterLast(':')?.ifEmpty { null } ?: "the chosen folder" }
+        val last = t.setting(AutoExport.S_LAST_AT)?.toLongOrNull()?.let { DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(it)) }
+        val status = t.setting(AutoExport.S_STATUS)
+        return AutoExportUi(freq, folder, last, status?.substringAfter('|')?.ifEmpty { null }, status?.startsWith("ok|") ?: true)
+    }
+
+    fun setAutoExportFolder(uri: Uri) = withStore { ok ->
+        ok.templates.putSetting(AutoExport.S_FOLDER, uri.toString())
+        if (ok.templates.setting(AutoExport.S_FREQ) == null || ok.templates.setting(AutoExport.S_FREQ) == AutoExportFrequency.OFF.name) ok.templates.putSetting(AutoExport.S_FREQ, AutoExportFrequency.WEEKLY.name)
+        refresh(ok)
+    }
+
+    fun setAutoExportFrequency(f: AutoExportFrequency) = withStore { ok -> ok.templates.putSetting(AutoExport.S_FREQ, f.name); refresh(ok) }
+
+    /** Runs an export now, whatever the schedule says, and shows how it went. */
+    fun exportNow() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uri = container.write { it.templates.setting(AutoExport.S_FOLDER) }
+            AutoExport.run(container, AutoExport.folderOf(getApplication(), uri), System.currentTimeMillis(), force = true)
+            container.write { refresh(it) }
+        }
+    }
 
     // ---- privacy ----
 
@@ -1250,6 +1283,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
+            autoExport = autoExportUi(ok),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
             categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L) },

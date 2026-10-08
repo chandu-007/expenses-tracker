@@ -22,6 +22,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import app.expenses.core.domain.AutoExportFrequency
+import app.expenses.AutoExport
+import app.expenses.AutoExportUi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,6 +47,10 @@ fun DataScreen(
     onBack: () -> Unit,
     onExportCsv: (Uri) -> Unit,
     onExportXlsx: (Uri) -> Unit = {},
+    autoExport: AutoExportUi? = null,
+    onAutoFolder: (Uri) -> Unit = {},
+    onAutoFrequency: (AutoExportFrequency) -> Unit = {},
+    onAutoNow: () -> Unit = {},
     onBackup: (Uri, String?) -> Unit,
     onOpenBackup: (Uri) -> Unit,
     onImportStatement: (Uri) -> Unit,
@@ -61,6 +70,14 @@ fun DataScreen(
     }
     val today = LocalDate.now()
     val xlsxPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { it?.let(onExportXlsx) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let {
+            // Keep the permission: the scheduled export runs later, when no screen is open.
+            context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            onAutoFolder(it)
+        }
+    }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { it?.let(onExportCsv) }
     val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { it?.let { uri -> onBackup(uri, pass.ifEmpty { null }) } }
     val openPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(onOpenBackup) }
@@ -109,6 +126,19 @@ fun DataScreen(
             OutlinedButton(onClick = { xlsxPicker.launch("expenses-$today.xlsx") }, enabled = !state.busy, modifier = Modifier.testTag("export_xlsx")) { Text("Export as Excel (.xlsx)") }
             OutlinedButton(onClick = { csvPicker.launch("expenses-$today.csv") }, enabled = !state.busy, modifier = Modifier.testTag("export_csv")) { Text("Export as CSV") }
             HorizontalDivider()
+
+            if (autoExport != null) {
+                Text("Automatic copies to your own folder", style = MaterialTheme.typography.titleMedium)
+                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${AutoExport.KEEP} of each are kept. They are not encrypted, so choose a folder only you can reach. This is the safety net for losing or resetting the phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.testTag("auto_folder")) { Text(autoExport.folderName?.let { "Folder: $it" } ?: "Choose a folder") }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AutoExportFrequency.entries.forEach { f -> FilterChip(selected = autoExport.frequency == f, onClick = { onAutoFrequency(f) }, label = { Text(f.label) }, modifier = Modifier.testTag("auto_freq_${f.name}")) }
+                }
+                autoExport.lastText?.let { Text("Last saved $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_last")) }
+                autoExport.status?.let { Text(it, color = if (autoExport.statusOk) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_status")) }
+                OutlinedButton(onClick = onAutoNow, enabled = autoExport.folderName != null, modifier = Modifier.testTag("auto_now")) { Text("Save a copy now") }
+                HorizontalDivider()
+            }
 
             Text("Bring in a bank statement", style = MaterialTheme.typography.titleMedium)
             Text("Import a CSV downloaded from your bank or card. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -10,6 +10,7 @@ class ExpensesApp : Application() {
         super.onCreate()
         Notifier.createChannels(this)
         NotificationWork.schedule(this)
+        AutoExportWorker.schedule(this)
     }
 
     /** Created on first use, so nothing heavy runs before the first screen. */

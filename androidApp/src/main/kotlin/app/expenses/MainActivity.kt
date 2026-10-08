@@ -217,7 +217,8 @@ class MainActivity : FragmentActivity() {
                                     DataScreen(
                                         state = dataState,
                                         onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
-                                        onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
+                                        onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx,
+                                        autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                         onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                     )
                                 }
