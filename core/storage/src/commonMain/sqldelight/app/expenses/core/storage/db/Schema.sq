@@ -435,7 +435,7 @@ allAttachmentIds:
 SELECT id FROM attachment;
 
 entryBySourceRef:
-SELECT id FROM entry WHERE source = :source AND source_ref = :sourceRef AND deleted = 0;
+SELECT id, deleted FROM entry WHERE source = :source AND source_ref = :sourceRef;
 
 allCaptureRules:
 SELECT * FROM capture_rule ORDER BY position, id;

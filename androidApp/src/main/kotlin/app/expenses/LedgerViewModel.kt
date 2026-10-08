@@ -958,8 +958,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         is DraftResult.Problem -> return@write r.message
                     }
                     val sourceRef = i.reference ?: i.id
-                    if (ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull() != null)
-                        return@write "An entry from this message is already in your ledger (reference $sourceRef). Dismiss this one."
+                    // the unique index on (source, reference) covers deleted entries too: say why instead of failing on it
+                    ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
+                        return@write if (existing.deleted == 1L) "You deleted an entry from this message earlier, so it is not added again. Skip this one."
+                        else "An entry from this message is already in your ledger (reference $sourceRef). Skip this one."
+                    }
                     ok.store.atomically {
                         ok.store.save(entry, EntryDetails(merchant = payee, note = null, source = "sms", sourceRef = sourceRef))
                         ok.inbox.confirm(id, entry.id.value)
