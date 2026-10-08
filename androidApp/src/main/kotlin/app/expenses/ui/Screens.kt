@@ -112,6 +112,7 @@ fun EntryListScreen(
     onOpenCurrency: () -> Unit,
     onOpenInbox: () -> Unit,
     onOpenCapture: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -183,6 +184,7 @@ fun EntryListScreen(
                             DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
                             DropdownMenuItem(text = { Text("To review" + if (state.inboxPending > 0) " (${state.inboxPending})" else "") }, onClick = { more = false; onOpenInbox() }, modifier = Modifier.testTag("open_inbox"))
                             DropdownMenuItem(text = { Text("Capture from texts") }, onClick = { more = false; onOpenCapture() }, modifier = Modifier.testTag("open_capture"))
+                            DropdownMenuItem(text = { Text("Privacy: what this app can see") }, onClick = { more = false; onOpenPrivacy() }, modifier = Modifier.testTag("open_privacy"))
                             DropdownMenuItem(text = { Text("Currency") }, onClick = { more = false; onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
                             DropdownMenuItem(text = { Text("Appearance") }, onClick = { more = false; onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
                             DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))

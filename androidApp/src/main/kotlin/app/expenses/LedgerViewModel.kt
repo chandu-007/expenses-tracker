@@ -39,6 +39,10 @@ import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BaseCurrencyRules
+import app.expenses.core.domain.CaptureCount
+import app.expenses.core.domain.CaptureHealth
+import app.expenses.core.domain.CaptureHealthReport
+import app.expenses.core.parsers.SenderRules
 import app.expenses.core.domain.DupEntry
 import app.expenses.core.domain.DupStrength
 import app.expenses.core.domain.Duplicates
@@ -958,6 +962,28 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val n = container.write { ok -> ok.captureRules.matchesInHistory(pattern) } ?: 0L
             withContext(Dispatchers.Main) { onResult(n) }
         }
+    }
+
+    private val _health = MutableStateFlow<CaptureHealthReport?>(null)
+
+    /** How capture has been doing over the last 30 days; null until loaded. Counts only: no text is ever in it. */
+    val captureHealth: StateFlow<CaptureHealthReport?> get() = _health
+
+    fun loadCaptureHealth(permissionGranted: Boolean) = withStore { ok ->
+        val now = System.currentTimeMillis()
+        val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
+        _health.value = CaptureHealth.report(counts, now, ok.templates.setting(Capture.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN)
+    }
+
+    /** Adds a sender name the list was missing, so its texts are read from now on. */
+    fun addSenderHeader(root: String, permissionGranted: Boolean) = withStore { ok ->
+        val have = ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+        if (have.none { it.equals(root, ignoreCase = true) }) ok.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, (have + root).joinToString("\n"))
+        _captureSettings.value = _captureSettings.value.copy(extraHeaders = ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty())
+        val now = System.currentTimeMillis()
+        val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
+        val extra = ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
+        _health.value = CaptureHealth.report(counts, now, ok.templates.setting(Capture.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN + extra)
     }
 
     fun dismissCapture(id: String) = withStore { ok -> ok.inbox.dismiss(id); _inbox.value = inboxRows(ok); refresh(ok) }

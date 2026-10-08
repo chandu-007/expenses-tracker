@@ -31,6 +31,8 @@ import app.expenses.ui.CalendarScreen
 import app.expenses.ui.AppearanceScreen
 import app.expenses.ui.CurrencyScreen
 import app.expenses.ui.InboxScreen
+import app.expenses.ui.CaptureHealthScreen
+import app.expenses.ui.PrivacyScreen
 import app.expenses.ui.CaptureRulesScreen
 import app.expenses.ui.CaptureSettingsScreen
 import app.expenses.ui.CategoriesScreen
@@ -83,6 +85,9 @@ class MainActivity : FragmentActivity() {
                     var inboxOpen by rememberSaveable { mutableStateOf(false) }
                     var captureOpen by rememberSaveable { mutableStateOf(false) }
                     var rulesOpen by rememberSaveable { mutableStateOf(false) }
+                    var healthOpen by rememberSaveable { mutableStateOf(false) }
+                    var privacyOpen by rememberSaveable { mutableStateOf(false) }
+                    val health by viewModel.captureHealth.collectAsStateWithLifecycle()
                     val captureRules by viewModel.captureRules.collectAsStateWithLifecycle()
                     val inboxRows by viewModel.inbox.collectAsStateWithLifecycle()
                     val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle()
@@ -169,6 +174,14 @@ class MainActivity : FragmentActivity() {
                                 BackHandler { inboxOpen = false }
                                 InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = viewModel::confirmCapture, onDismiss = viewModel::dismissCapture, onBack = { inboxOpen = false })
                             }
+                            healthOpen -> {
+                                BackHandler { healthOpen = false }
+                                CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
+                            }
+                            privacyOpen -> {
+                                BackHandler { privacyOpen = false }
+                                PrivacyScreen(privacyRows(), PermissionNotes.canUseInternet(this), onBack = { privacyOpen = false })
+                            }
                             rulesOpen -> {
                                 BackHandler { rulesOpen = false }
                                 CaptureRulesScreen(captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false })
@@ -178,7 +191,7 @@ class MainActivity : FragmentActivity() {
                                 CaptureSettingsScreen(
                                     captureSettings, smsPermission,
                                     onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS) },
-                                    onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onBack = { captureOpen = false },
+                                    onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                                 )
                             }
                             currencyOpen -> {
@@ -363,6 +376,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenCurrency = { currencyOpen = true; viewModel.loadCurrencyBlocker() },
                                 onOpenInbox = { inboxOpen = true; viewModel.loadInbox() },
                                 onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },
+                                onOpenPrivacy = { privacyOpen = true },
                             )
                         }
                         }
@@ -386,6 +400,8 @@ class MainActivity : FragmentActivity() {
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
     }
+
+    private fun privacyRows() = PermissionNotes.rows(this)
 
     private fun colorSchemeFor(look: Appearance, dark: Boolean): androidx.compose.material3.ColorScheme {
         fun c(rgb: Int) = androidx.compose.ui.graphics.Color(0xFF000000.toInt() or rgb)

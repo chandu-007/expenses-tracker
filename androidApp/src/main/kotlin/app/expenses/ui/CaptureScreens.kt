@@ -100,7 +100,7 @@ private fun InboxCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureSettingsScreen(
-    settings: CaptureSettingsUi, permissionGranted: Boolean, onToggle: (Boolean) -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onBack: () -> Unit,
+    settings: CaptureSettingsUi, permissionGranted: Boolean, onToggle: (Boolean) -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
 ) {
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
@@ -120,6 +120,7 @@ fun CaptureSettingsScreen(
             OutlinedButton(onClick = { onHeaders(headers) }, modifier = Modifier.testTag("capture_headers_save")) { Text("Save names") }
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
+            OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }
         }
     }
 }
