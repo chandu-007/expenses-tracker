@@ -25,7 +25,7 @@ object Notifier {
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_BILLS, "Bill reminders", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "A repeating expense that is due" })
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_BILLS, "Bill reminders", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "A repeating expense or a credit card bill that is due" })
         manager.createNotificationChannel(NotificationChannel(CHANNEL_BUDGETS, "Budget alerts", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "A budget that is near or over its limit" })
     }
 
@@ -35,7 +35,10 @@ object Notifier {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    private fun channelOf(kind: NoticeKind) = if (kind == NoticeKind.BILL_DUE) CHANNEL_BILLS else CHANNEL_BUDGETS
+    internal fun channelOf(kind: NoticeKind) = when (kind) {
+        NoticeKind.BILL_DUE, NoticeKind.CARD_DUE -> CHANNEL_BILLS
+        NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> CHANNEL_BUDGETS
+    }
 
     /** Shows each notice that can be shown and returns those that were. */
     fun show(context: Context, notices: List<Notice>): List<Notice> {

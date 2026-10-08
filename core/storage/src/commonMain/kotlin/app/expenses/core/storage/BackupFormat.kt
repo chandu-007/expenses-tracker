@@ -59,6 +59,7 @@ data class BackupRecurring(
     val kind: String = "EXPENSE", val toAccountId: String? = null,
 )
 
+@Serializable data class BackupCardTerms(val accountId: String, val statementDay: Int, val dueDay: Int, val minDuePercent: Int = 5, val remindDaysBefore: Int = 3)
 @Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null)
 
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
@@ -76,6 +77,7 @@ data class BackupData(
     val recurring: List<BackupRecurring> = emptyList(),
     val recurringDone: List<BackupDone> = emptyList(),
     val savedSearches: List<BackupSavedSearch> = emptyList(),
+    val cardTerms: List<BackupCardTerms> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

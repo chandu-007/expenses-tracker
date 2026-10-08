@@ -182,4 +182,25 @@ class NotificationsTest {
         compose.waitUntil(10_000) { !prefs().quietEnabled }
         compose.onNodeWithTag("notif_quiet_start_up").assertIsNotEnabled()
     }
+
+    @Test
+    fun aCreditCardBillWithSomethingLeftIsRemindedInTheBillsChannelAndNotOnceItIsPaid() {
+        anytime()
+        runBlocking {
+            container.write { ok ->
+                ok.store.saveAccount(app.expenses.core.domain.ledger.Account(AccountId("amex"), "Amex", app.expenses.core.domain.ledger.AccountType.CREDIT_CARD, inr))
+                ok.store.save(Expense(EntryId("big"), System.currentTimeMillis() - 60L * 86_400_000, AccountId("amex"), Money(40_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(40_000, inr)))), EntryDetails(merchant = "Phone"))
+                // due within the next days whatever today's date is (and "overdue" when that wraps past the 28th, which also reminds)
+                val target = java.time.LocalDate.now().plusDays(2).dayOfMonth.coerceAtMost(28)
+                ok.cards.save(app.expenses.core.domain.CardTerms("amex", statementDay = 1, dueDay = target, remindDaysBefore = 10))
+            }
+        }
+        assertEquals(1, check())
+        val shown = manager.activeNotifications.single()
+        assertTrue(shown.notification.extras.getCharSequence("android.title").toString().startsWith("Amex bill"), shown.notification.extras.getCharSequence("android.title").toString())
+        assertEquals(Notifier.channelOf(app.expenses.core.domain.NoticeKind.BILL_DUE), shown.notification.channelId, "with the bill reminders, not the budget alerts")
+        manager.cancelAll()
+        runBlocking { container.write { it.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), AccountId("amex"), Money(40_000, inr))) } }
+        assertEquals(0, check(), "paid in full: nothing to remind")
+    }
 }

@@ -166,6 +166,15 @@ CREATE TABLE attachment (
 
 CREATE INDEX attachment_entry ON attachment(entry_id);
 
+-- How a credit card bills: the day the statement is cut and the day payment is due (see CardTerms in the domain).
+CREATE TABLE card_terms (
+    account_id TEXT NOT NULL PRIMARY KEY,
+    statement_day INTEGER NOT NULL,
+    due_day INTEGER NOT NULL,
+    min_due_percent INTEGER NOT NULL DEFAULT 5,
+    remind_days INTEGER NOT NULL DEFAULT 3
+);
+
 -- A search the user keeps under a name. Dates are relative ("last 30 days"), so it stays useful tomorrow.
 CREATE TABLE saved_search (
     id TEXT NOT NULL PRIMARY KEY,
@@ -378,6 +387,38 @@ DELETE FROM attachment WHERE id = :id;
 
 allAttachmentIds:
 SELECT id FROM attachment;
+
+upsertCardTerms:
+INSERT INTO card_terms(account_id, statement_day, due_day, min_due_percent, remind_days) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(account_id) DO UPDATE SET statement_day = excluded.statement_day, due_day = excluded.due_day, min_due_percent = excluded.min_due_percent, remind_days = excluded.remind_days;
+
+cardTermsOf:
+SELECT * FROM card_terms WHERE account_id = :id;
+
+allCardTerms:
+SELECT t.* FROM card_terms t JOIN account a ON a.id = t.account_id WHERE a.deleted = 0 AND a.type = 'CREDIT_CARD' ORDER BY a.name;
+
+deleteCardTerms:
+DELETE FROM card_terms WHERE account_id = :id;
+
+-- What an account held at a moment: the same sum as accountBalances, limited to entries before :untilMillis (an exclusive end).
+accountBalanceBefore:
+SELECT a.opening_minor
+    + COALESCE((SELECT SUM(CASE e.kind
+          WHEN 'EXPENSE' THEN -e.amount_minor
+          WHEN 'INCOME' THEN e.amount_minor
+          WHEN 'TRANSFER' THEN -e.amount_minor
+          WHEN 'REFUND' THEN e.amount_minor
+          WHEN 'SETTLEMENT' THEN CASE e.direction WHEN 'RECEIVED_FROM_PERSON' THEN e.amount_minor ELSE -e.amount_minor END
+          ELSE 0 END)
+       FROM entry e WHERE e.account_id = a.id AND e.deleted = 0 AND e.occurred_at < :untilMillis), 0)
+    + COALESCE((SELECT SUM(e.to_amount_minor) FROM entry e WHERE e.kind = 'TRANSFER' AND e.counter_account_id = a.id AND e.deleted = 0 AND e.occurred_at < :untilMillis), 0) AS balance
+FROM account a WHERE a.id = :id;
+
+-- Money that came into an account from :fromMillis on: income, refunds and transfers in (what pays down a card).
+accountInflowSince:
+SELECT COALESCE((SELECT SUM(e.amount_minor) FROM entry e WHERE e.account_id = :id AND e.kind IN ('INCOME', 'REFUND') AND e.deleted = 0 AND e.occurred_at >= :fromMillis), 0)
+     + COALESCE((SELECT SUM(e.to_amount_minor) FROM entry e WHERE e.kind = 'TRANSFER' AND e.counter_account_id = :id AND e.deleted = 0 AND e.occurred_at >= :fromMillis), 0);
 
 upsertSavedSearch:
 INSERT INTO saved_search(id, name, text, min_rupees, max_rupees, category_id, kind, range_kind, tag, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)

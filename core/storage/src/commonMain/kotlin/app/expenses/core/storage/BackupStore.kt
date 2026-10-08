@@ -80,6 +80,7 @@ class BackupStore(
                 BackupRecurring(it.id, it.name, it.amount_minor, it.currency, it.category_id, it.account_id, it.merchant, it.unit, it.every.toInt(), it.start_day, it.end_kind, it.end_value, it.auto == 1L, it.kind, it.to_account_id)
             },
             savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag) },
+            cardTerms = q.allCardTerms().executeAsList().map { BackupCardTerms(it.account_id, it.statement_day.toInt(), it.due_day.toInt(), it.min_due_percent.toInt(), it.remind_days.toInt()) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
             settings = SETTINGS.mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.let { k to it } }.toMap(),
         )
@@ -130,6 +131,8 @@ class BackupStore(
         for (d in data.recurringDone) if (q.doneRow(d.recurringId, d.day).executeAsOneOrNull() == null) q.putDone(d.recurringId, d.day, d.outcome, d.entryId)
         // Added as they are (a search with the same name as one here is kept too, rather than the restore refusing).
         for (s in data.savedSearches) if (q.savedSearchById(s.id).executeAsOneOrNull() == null) q.upsertSavedSearch(s.id, s.name, s.text, s.minRupees, s.maxRupees, s.categoryId, s.kind, s.range, s.tag)
+        // Only for a card that exists here and has no terms yet; the terms of a card that was not restored have nothing to attach to.
+        for (c in data.cardTerms) if (q.cardTermsOf(c.accountId).executeAsOneOrNull() == null && q.accountById(c.accountId).executeAsOneOrNull()?.let { it.deleted == 0L && it.type == "CREDIT_CARD" } == true) q.upsertCardTerms(c.accountId, c.statementDay.toLong(), c.dueDay.toLong(), c.minDuePercent.toLong(), c.remindDaysBefore.toLong())
         for ((k, v) in data.settings) if (k in SETTINGS && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
         report
     }

@@ -54,6 +54,8 @@ fun AccountsScreen(
     onSave: (id: String?, name: String, type: String, opening: String, done: (String?) -> Unit) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
+    onSaveCard: (id: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, done: (String?) -> Unit) -> Unit,
+    onClearCard: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf<AccountRowUi?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -80,8 +82,8 @@ fun AccountsScreen(
             }
         }
     }
-    if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete)
-    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete) }
+    if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete, onSaveCard, onClearCard)
+    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard) }
 }
 
 @Composable
@@ -90,6 +92,10 @@ private fun AccountRow(a: AccountRowUi, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(a.name, style = MaterialTheme.typography.bodyLarge)
             Text(a.typeLabel + if (a.owed) " · owed" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            a.card?.let { c ->
+                Text(c.termsText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (c.statusText.isNotEmpty()) Text(c.statusText, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("card_status_${a.name}"))
+            }
         }
         Text(a.balanceText, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("balance_${a.name}"))
     }
@@ -104,13 +110,17 @@ private fun AccountDialog(
     onSave: (String?, String, String, String, (String?) -> Unit) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
+    onSaveCard: (String, String, String, String, String, (String?) -> Unit) -> Unit,
+    onClearCard: (String) -> Unit,
 ) {
+    var cardOpen by remember { mutableStateOf(false) }
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.type ?: "BANK") }
     var opening by rememberSaveable(existing?.id) { mutableStateOf(existing?.openingText ?: "") }
     var problem by remember { mutableStateOf<String?>(null) }
     val liability = type == "CREDIT_CARD" || type == "LOAN"
     val onlyActive = existing != null && !existing.archived && all.count { !it.archived } == 1
+    if (cardOpen && existing != null) CardTermsDialog(existing, onSaveCard, onClearCard) { cardOpen = false }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(if (existing == null) "New account" else "Edit account") },
@@ -130,6 +140,11 @@ private fun AccountDialog(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("account_problem")) }
+                if (type == "CREDIT_CARD") {
+                    if (existing != null && existing.type == "CREDIT_CARD") {
+                        TextButton(onClick = { cardOpen = true }, modifier = Modifier.testTag("card_dates")) { Text(if (existing.card == null) "Set billing dates and reminders" else "Billing dates: ${existing.card.termsText}") }
+                    } else Text("Save the card first, then add its billing dates to get due-date reminders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (existing != null) {
                     Spacer(Modifier.height(4.dp))
                     if (existing.archived) TextButton(onClick = { onArchive(existing.id, false); onClose() }, modifier = Modifier.testTag("account_unarchive")) { Text("Restore to the pickers") }
@@ -141,6 +156,35 @@ private fun AccountDialog(
             }
         },
         confirmButton = { TextButton(onClick = { onSave(existing?.id, name, type, opening) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("account_save")) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}
+
+/** The billing dates of a credit card. Days are 1 to 28 so every month has them. */
+@Composable
+private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, String, String, (String?) -> Unit) -> Unit, onClear: (String) -> Unit, onClose: () -> Unit) {
+    var statement by rememberSaveable(a.id) { mutableStateOf(a.card?.statementDay?.toString() ?: "") }
+    var due by rememberSaveable(a.id) { mutableStateOf(a.card?.dueDay?.toString() ?: "") }
+    var percent by rememberSaveable(a.id) { mutableStateOf(a.card?.minDuePercent?.toString() ?: "5") }
+    var remind by rememberSaveable(a.id) { mutableStateOf(a.card?.remindDaysBefore?.toString() ?: "3") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    @Composable fun field(value: String, label: String, tag: String, set: (String) -> Unit) =
+        OutlinedTextField(value, { v -> if (v.all { it.isDigit() } && v.length <= 3) { set(v); problem = null } }, label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth().testTag(tag))
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("${a.name}: billing dates") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                field(statement, "Statement day (1 to 28)", "card_statement_day") { statement = it }
+                field(due, "Payment due day (1 to 28)", "card_due_day") { due = it }
+                field(percent, "Minimum due, percent of the statement", "card_min_percent") { percent = it }
+                field(remind, "Remind this many days before (0 to 10)", "card_remind_days") { remind = it }
+                Text("Both days are on your card statement. The minimum is only an estimate; your statement has the exact figure. You get one reminder ahead and one on the due day, and none once the statement is paid.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("card_problem")) }
+                if (a.card != null) TextButton(onClick = { onClear(a.id); onClose() }, modifier = Modifier.testTag("card_clear")) { Text("Remove billing dates") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(a.id, statement, due, percent, remind) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("card_save")) { Text("Save") } },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
 }

@@ -1,6 +1,7 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.BillDue
+import app.expenses.core.domain.CardDue
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.BudgetStanding
 import app.expenses.core.domain.Currency
@@ -27,6 +28,7 @@ class NotificationService(
     private val db: ExpensesDb,
     private val recurring: RecurringStore,
     private val budgets: BudgetStore,
+    private val cards: CardStore,
 ) {
     private val q get() = db.schemaQueries
 
@@ -63,7 +65,15 @@ class NotificationService(
             val left = if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left of ${it.limit.formatted()}" else "${app.expenses.core.domain.Money(-it.remaining.minorUnits, currency).formatted()} over ${it.limit.formatted()}"
             BudgetStanding(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.state, left, status.period.start)
         }
-        return CheckResult(posted, NoticePlanner.plan(prefs(), today, minuteOfDay, bills, standings, sent()))
+        return CheckResult(posted, NoticePlanner.plan(prefs(), today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone)))
+    }
+
+    /** Credit cards with billing dates that still have something to pay on their latest statement. */
+    private fun cardsDue(today: LocalDate, zone: TimeZone): List<CardDue> = cards.all().mapNotNull { terms ->
+        val account = q.accountById(terms.accountId).executeAsOneOrNull() ?: return@mapNotNull null
+        val standing = cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 } ?: return@mapNotNull null
+        val currency = app.expenses.core.domain.Currency(account.currency, q.selectCurrencies().executeAsList().first { it.code == account.currency }.digits.toInt())
+        CardDue(terms.accountId, account.name, standing.cycle.dueDate, app.expenses.core.domain.Money(standing.remaining, currency).formatted(), app.expenses.core.domain.Money(standing.minimumDue, currency).formatted(), terms.remindDaysBefore)
     }
 
     fun markShown(notices: List<Notice>) {

@@ -39,6 +39,8 @@ import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BaseCurrencyRules
+import app.expenses.core.domain.CardTerms
+import app.expenses.core.domain.CardText
 import app.expenses.core.domain.CurrencyChoices
 import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.AttachmentRules
@@ -95,7 +97,12 @@ data class AccountRowUi(
     val balanceText: String, val balanceMinor: Long, val owed: Boolean, val openingText: String, val usage: Long,
     /** Repeating items and quick entries that post to it: while there are any, it cannot be archived. */
     val savedItems: Long = 0,
+    /** Billing dates of a credit card, when set. */
+    val card: CardRowUi? = null,
 )
+
+/** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
+data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String)
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
@@ -645,6 +652,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
         val balances = ok.store.balances()
+        val today = java.time.LocalDate.now().let { kotlinx.datetime.LocalDate(it.year, it.monthValue, it.dayOfMonth) }
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         return rows.map { a ->
             val type = AccountType.valueOf(a.type)
             val bal = balances[AccountId(a.id)] ?: Money.zero(inr)
@@ -654,6 +663,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 bal.formatted(), bal.minorUnits, AccountRules.isOwed(Account(AccountId(a.id), a.name, type, inr), bal.minorUnits),
                 if (shownOpening == 0L) "" else Money(shownOpening, inr).toPlainString(), ok.store.accountUsage(AccountId(a.id)),
                 ok.db.schemaQueries.accountSavedItemUsage(a.id).executeAsOne(),
+                if (type != AccountType.CREDIT_CARD) null else ok.cards.terms(a.id)?.let { t ->
+                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty())
+                },
             )
         }.sortedWith(compareBy({ it.archived }, { it.name.lowercase() }))
     }
@@ -676,6 +688,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         ok.store.accountUsage(AccountId(id)) > 0) return@write "A card or loan cannot become a bank, cash or wallet account once it has entries, or the other way round."
                     val existing = id?.let { ok.db.schemaQueries.accountById(it).executeAsOneOrNull() }
                     ok.store.saveAccount(Account(AccountId(id ?: UUID.randomUUID().toString()), clean, kind, inr, if (kind.isLiability) -opening else opening, existing?.archived == 1L))
+                    if (id != null && kind != AccountType.CREDIT_CARD) ok.cards.clear(id) // billing dates belong to a credit card only
                     refresh(ok)
                     null
                 }
@@ -683,6 +696,28 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.Main) { onDone(problem) }
         }
     }
+
+    /** Sets or, with blank days, removes a credit card's billing dates. [onDone] gets null on success, otherwise the reason (shown in the dialog). */
+    fun saveCardTerms(accountId: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem = try {
+                container.write { ok ->
+                    val s = statementDay.trim().toIntOrNull(); val d = dueDay.trim().toIntOrNull()
+                    val p = minPercent.trim().ifEmpty { "5" }.toIntOrNull(); val r = remindDays.trim().ifEmpty { "3" }.toIntOrNull()
+                    when {
+                        s == null || s !in 1..28 -> "The statement day is the day of the month your statement is made, 1 to 28."
+                        d == null || d !in 1..28 -> "The due day is the day of the month payment is due, 1 to 28."
+                        p == null || p !in 0..100 -> "The minimum due percentage is 0 to 100 (most cards: 5)."
+                        r == null || r !in 0..10 -> "Reminders can start 0 to 10 days before the due date."
+                        else -> { ok.cards.save(CardTerms(accountId, s, d, p, r)); refresh(ok); null }
+                    }
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun clearCardTerms(accountId: String) = withStore { ok -> ok.cards.clear(accountId); refresh(ok) }
 
     fun setAccountArchived(id: String, archived: Boolean) = withStore { ok ->
         val row = ok.db.schemaQueries.accountById(id).executeAsOneOrNull() ?: return@withStore

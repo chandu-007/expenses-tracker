@@ -45,7 +45,7 @@ class Device(node: String) {
     val templates = TemplateStore(db, clock) { 5_000L }
     val recurring = RecurringStore(db, clock, { 5_000L }, ledger)
     val budgets = BudgetStore(db, clock, { 5_000L }, ledger, recurring)
-    val notifications = NotificationService(db, recurring, budgets)
+    val notifications = NotificationService(db, recurring, budgets, CardStore(db, clock) { 1L })
     val backup = BackupStore(db, clock, { 5_000L }, ledger, templates, recurring)
     fun m(v: Long) = Money(v, inr)
 

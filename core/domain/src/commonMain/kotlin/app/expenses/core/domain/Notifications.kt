@@ -2,7 +2,7 @@ package app.expenses.core.domain
 
 import kotlinx.datetime.LocalDate
 
-enum class NoticeKind { BILL_DUE, BUDGET_NEAR, BUDGET_OVER }
+enum class NoticeKind { BILL_DUE, CARD_DUE, BUDGET_NEAR, BUDGET_OVER }
 
 /**
  * What the user chose about notifications. Bill reminders and budget alerts are separate switches; nothing else is ever sent.
@@ -60,6 +60,7 @@ object NoticePlanner {
         bills: List<BillDue>,
         budgets: List<BudgetStanding>,
         alreadySent: Set<String>,
+        cards: List<CardDue> = emptyList(),
     ): List<Notice> {
         if (prefs.isQuiet(minuteOfDay)) return emptyList()
         val out = mutableListOf<Notice>()
@@ -69,6 +70,19 @@ object NoticePlanner {
                 if (key in alreadySent) continue
                 val when_ = if (b.date == today) "due today" else "overdue"
                 out += Notice(key, NoticeKind.BILL_DUE, "${b.name} $when_", listOfNotNull(b.amountText, "Open the app to post or skip it").joinToString(" · "))
+            }
+        }
+        if (prefs.bills && minuteOfDay >= prefs.billHour * 60) {
+            // A card gets a heads-up from [CardDue.remindDaysBefore] days ahead (once) and a notice on the due day or after it (once per due date).
+            for (c in cards.sortedBy { it.dueDate }) {
+                val daysLeft = (c.dueDate.toEpochDays() - today.toEpochDays()).toInt()
+                val key = cardKey(c.accountId, c.dueDate, daysLeft <= 0)
+                if (key in alreadySent) continue
+                val message = listOf("Pay ${c.remainingText}", "minimum about ${c.minimumText}").joinToString(", ")
+                when {
+                    daysLeft <= 0 -> out += Notice(key, NoticeKind.CARD_DUE, "${c.name} bill ${if (daysLeft == 0) "is due today" else "is overdue"}", message)
+                    daysLeft <= c.remindDaysBefore -> out += Notice(key, NoticeKind.CARD_DUE, "${c.name} bill due ${if (daysLeft == 1) "tomorrow" else "in $daysLeft days"}", message)
+                }
             }
         }
         if (prefs.budgets) {
@@ -84,6 +98,8 @@ object NoticePlanner {
         }
         return out
     }
+
+    fun cardKey(accountId: String, due: LocalDate, onOrAfterDue: Boolean) = "card:$accountId:${due.toEpochDays()}:${if (onOrAfterDue) "due" else "ahead"}"
 
     fun billKey(itemId: String, date: LocalDate) = "bill:$itemId:${date.toEpochDays()}"
 

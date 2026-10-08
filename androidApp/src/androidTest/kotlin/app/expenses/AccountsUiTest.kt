@@ -152,4 +152,29 @@ class AccountsUiTest {
         compose.onNodeWithTag("balance_A", useUnmergedTree = true).assertTextEquals("₹600.00")
         compose.onNodeWithTag("balance_B", useUnmergedTree = true).assertTextEquals("₹400.00")
     }
+
+    private fun statusOf(name: String): String = compose.onNodeWithTag("card_status_$name", useUnmergedTree = true).fetchSemanticsNode().config.let { c -> c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } }
+
+    @Test
+    fun aCardGetsBillingDatesShowsWhatIsLeftOnTheStatementAndPayingItOffClearsItAndRemovingThemWorks() {
+        launch(); openAccounts()
+        create("Amex", "CREDIT_CARD"); waitFor("account_Amex")
+        val cardId = idOf("Amex"); val bankId = idOf("Bank")
+        val sixtyDaysAgo = System.currentTimeMillis() - 60L * 86_400_000
+        runBlocking { container.write { ok -> ok.store.save(Expense(EntryId("big"), sixtyDaysAgo, AccountId(cardId), Money(40_000, Currency.INR)), EntryDetails(merchant = "Phone")) } }
+        tap("account_Amex"); tap("card_dates")
+        // refused values are explained in the dialog, which stays open
+        type("card_statement_day", "31"); type("card_due_day", "5"); tap("card_save")
+        waitFor("card_problem")
+        type("card_statement_day", "15"); tap("card_save")
+        waitFor("card_status_Amex")
+        text("Statement on the 15th")
+        assertTrue(statusOf("Amex").contains("₹400.00 left · minimum about ₹20.00"), statusOf("Amex"))
+        runBlocking { container.write { ok -> ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("pay"), System.currentTimeMillis(), AccountId(bankId), AccountId(cardId), Money(40_000, Currency.INR))) } }
+        tap("back"); openAccounts()
+        compose.waitUntil(10_000) { has("card_status_Amex") && statusOf("Amex").contains("is paid") }
+        tap("account_Amex"); tap("card_dates"); tap("card_clear")
+        compose.waitUntil(10_000) { !has("card_status_Amex") }
+        assertEquals(null, runBlocking { container.write { it.cards.terms(cardId) } })
+    }
 }

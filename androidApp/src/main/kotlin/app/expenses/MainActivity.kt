@@ -168,6 +168,7 @@ class MainActivity : FragmentActivity() {
                                 AccountsScreen(
                                     rows = s.accountRows, onBack = { managingAccounts = false },
                                     onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
+                                    onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms,
                                 )
                             }
                             managingCategories -> {
