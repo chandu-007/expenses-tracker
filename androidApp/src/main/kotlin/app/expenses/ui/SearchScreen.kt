@@ -190,7 +190,7 @@ fun SearchScreen(
                             Row(
                                 Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
                                     .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else onOpen(row) }, onLongClick = { selected = selected.toggled(row.id) })
-                                    .padding(horizontal = 16.dp, vertical = 12.dp).testTag("result_${row.id}"),
+                                    .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))

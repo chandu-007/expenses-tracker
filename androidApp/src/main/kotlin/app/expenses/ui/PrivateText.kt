@@ -43,3 +43,10 @@ fun Text(
 
 /** For text that is not drawn with [Text], such as a screen reader description: the same masking, with the setting passed in. */
 fun privatelyPlain(text: String, hide: Boolean): String = if (hide) AmountMask.mask(text) else text
+
+/** True while the compact density is on: lists use tighter rows. */
+val LocalCompact = compositionLocalOf { false }
+
+/** The vertical padding of a list row: [comfortable] normally, about two thirds of it when compact (never below 4 dp, so the row stays easy to hit). */
+@Composable
+fun rowPadding(comfortable: androidx.compose.ui.unit.Dp): androidx.compose.ui.unit.Dp = if (LocalCompact.current) maxOf(androidx.compose.ui.unit.Dp(4f), comfortable * 2 / 3) else comfortable

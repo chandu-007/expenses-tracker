@@ -21,10 +21,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
+import app.expenses.core.domain.Appearance
+import app.expenses.core.domain.Appearances
+import app.expenses.core.domain.Density
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
 import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CalendarScreen
+import app.expenses.ui.AppearanceScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.HomeLayoutScreen
 import app.expenses.ui.DataScreen
@@ -57,7 +61,11 @@ class MainActivity : FragmentActivity() {
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let(viewModel::seed)
         setContent {
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+            val themeState by viewModel.state.collectAsStateWithLifecycle()
+            val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
+            val dark = Appearances.isDark(look.mode, isSystemInDarkTheme())
+            MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
+              androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT)) {
                 Surface {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
@@ -66,6 +74,7 @@ class MainActivity : FragmentActivity() {
                     LaunchedEffect(managingCategories) { viewModel.setCategoriesScreenOpen(managingCategories) }
                     var managingAccounts by rememberSaveable { mutableStateOf(false) }
                     var customisingHome by rememberSaveable { mutableStateOf(false) }
+                    var appearing by rememberSaveable { mutableStateOf(false) }
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
@@ -138,6 +147,10 @@ class MainActivity : FragmentActivity() {
                                 val e = editing as Editable.ReadOnly
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            appearing -> {
+                                BackHandler { appearing = false }
+                                AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false })
                             }
                             customisingHome -> {
                                 BackHandler { customisingHome = false }
@@ -296,6 +309,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                                 onCustomiseHome = { customisingHome = true },
+                                onOpenAppearance = { appearing = true },
                                 onOpenSearch = { searching = true },
                                 onOpenSecurity = { securing = true },
                                 onDismissWelcome = viewModel::dismissWelcome,
@@ -313,6 +327,7 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 }
+              }
             }
         }
     }
@@ -329,6 +344,14 @@ class MainActivity : FragmentActivity() {
         (application as ExpensesApp).lock.onStop(this)
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
+    }
+
+    private fun colorSchemeFor(look: Appearance, dark: Boolean): androidx.compose.material3.ColorScheme {
+        fun c(rgb: Int) = androidx.compose.ui.graphics.Color(0xFF000000.toInt() or rgb)
+        val primary = Appearances.primaryFor(look.accent, dark)
+        val base = if (dark) darkColorScheme() else lightColorScheme()
+        val container = Appearances.containerFor(primary, dark)
+        return base.copy(primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)))
     }
 
     private fun openAttachment(uri: Uri, mime: String) {

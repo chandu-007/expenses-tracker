@@ -229,7 +229,7 @@ private fun DrillScreen(drill: DrillUi, onBack: () -> Unit, onOpenEntry: (String
 
 @Composable
 private fun DrillRow(line: DrillLineUi, onOpen: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onOpen(line.entryId) }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("drill_row_${line.entryId}"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable { onOpen(line.entryId) }.padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("drill_row_${line.entryId}"), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(line.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             Text(listOf(line.date, line.category).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -242,7 +242,7 @@ private fun dayLabel(epochDay: Long): String = java.time.format.DateTimeFormatte
 
 @Composable
 private fun GroupReportRow(row: GroupRowUi, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp).testTag("report_group_row_${row.key ?: "none"}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("report_group_row_${row.key ?: "none"}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
             Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)

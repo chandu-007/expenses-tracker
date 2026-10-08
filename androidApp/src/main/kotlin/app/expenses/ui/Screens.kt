@@ -108,6 +108,7 @@ fun EntryListScreen(
     onOpenCalendar: () -> Unit,
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
+    onOpenAppearance: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -177,6 +178,7 @@ fun EntryListScreen(
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
+                            DropdownMenuItem(text = { Text("Appearance") }, onClick = { more = false; onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
                             DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
                             DropdownMenuItem(text = { Text("Calendar") }, onClick = { more = false; onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
                             DropdownMenuItem(text = { Text("Accounts") }, onClick = { more = false; onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
@@ -262,7 +264,7 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
         Row(
             Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
                 .combinedClickable(onClick = { if (selecting) onToggle() else onOpen(row) }, onLongClick = onLongPress)
-                .padding(horizontal = 16.dp, vertical = 12.dp).semantics { selected = isSelected },
+                .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))

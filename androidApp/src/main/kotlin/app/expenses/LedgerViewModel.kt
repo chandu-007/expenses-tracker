@@ -36,6 +36,8 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.Appearance
+import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.ImportProfiles
 import app.expenses.core.domain.AutoExportFrequency
@@ -310,6 +312,7 @@ sealed interface UiState {
         val allAccounts: List<AccountUi>,
         val templates: List<TemplateUi>,
         val homeLayout: HomeLayout,
+        val appearance: Appearance,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
@@ -336,6 +339,7 @@ private const val PROFILE_SEARCH_ROWS = 15
 private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
+private const val SETTING_APPEARANCE = "appearance"
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
@@ -734,6 +738,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             container.write { refresh(it) }
         }
     }
+
+    // ---- appearance ----
+
+    fun setAppearance(a: Appearance) = withStore { ok -> ok.templates.putSetting(SETTING_APPEARANCE, a.encode()); refresh(ok) }
 
     // ---- privacy ----
 
@@ -1344,6 +1352,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             allAccounts = accounts.map { AccountUi(it.id, it.name) },
             accountRows = accountRowsCache,
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
+            appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             autoExport = autoExportUi(ok),
