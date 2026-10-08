@@ -85,9 +85,11 @@ private fun InboxCard(
                 categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
             }
         }
+        r.duplicateNote?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_duplicate_${r.id}")) }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onConfirm(r.id, account, category) { p -> problem = p } }, enabled = account.isNotEmpty(), modifier = Modifier.testTag("inbox_add_${r.id}")) { Text("Add") }
+            if (r.duplicateNote != null) OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
+            Button(onClick = { onConfirm(r.id, account, category) { p -> problem = p } }, enabled = account.isNotEmpty(), modifier = Modifier.testTag("inbox_add_${r.id}")) { Text(if (r.duplicateNote != null) "Add anyway" else "Add") }
             OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
             TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
         }

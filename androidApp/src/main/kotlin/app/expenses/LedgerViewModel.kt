@@ -39,6 +39,10 @@ import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BaseCurrencyRules
+import app.expenses.core.domain.DupEntry
+import app.expenses.core.domain.DupStrength
+import app.expenses.core.domain.Duplicates
+import app.expenses.core.domain.PendingKey
 import app.expenses.core.domain.CategorySuggest
 import app.expenses.core.domain.SuggestionSource
 import app.expenses.core.domain.CardTerms
@@ -102,6 +106,9 @@ data class InboxRowUi(
     val accountId: String, val categoryId: String, val rememberedAccount: Boolean, val confidence: String,
     /** Where the suggested category came from: "your rule", "what you chose last time", or empty. */
     val categoryNote: String = "",
+    /** Set when this looks like something already in the ledger (or the same payment as another text): what to tell the person. */
+    val duplicateNote: String? = null,
+    val duplicateOfEntry: String? = null,
 )
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
@@ -850,7 +857,25 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val learned = ok.captureRules.learned()
         val zone = ZoneId.systemDefault()
         val fmt = DateTimeFormatter.ofPattern("d MMM")
-        return ok.inbox.list().map { i ->
+        val items = ok.inbox.list()
+        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference) })
+        val byId = items.associateBy { it.id }
+        val dayMs = 86_400_000L
+        return items.map { i ->
+            val day = (i.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(i.receivedAt).atZone(zone).toLocalDate())
+            val dayStart = { d: LocalDate -> d.atStartOfDay(zone).toInstant().toEpochMilli() }
+            val from = dayStart(day.minusDays(Duplicates.DAY_WINDOW)); val until = dayStart(day.plusDays(Duplicates.DAY_WINDOW + 1))
+            fun dup(id: String, at: Long, ref: String?, merchant: String?) = DupEntry(id, i.amountMinor, Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay(), ref, merchant ?: "an entry")
+            val near = if (i.direction == "CREDIT") ok.db.schemaQueries.entriesNearCredit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
+                else ok.db.schemaQueries.entriesNearDebit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
+            val sameRef = i.reference?.let { r -> ok.db.schemaQueries.entriesWithReference(r).executeAsList().filter { it.amount_minor == i.amountMinor }.map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) } }.orEmpty()
+            val match = Duplicates.best(day.toEpochDay(), i.reference, (near + sameRef).distinctBy { it.id })
+            val first = repeats[i.id]?.let { byId[it] }
+            val note = when {
+                match != null -> (if (match.strength == DupStrength.SAME_REFERENCE) "Already in your ledger: " else "Looks like one you already added: ") + "${match.entry.label} on ${fmt.format(LocalDate.ofEpochDay(match.entry.day))}"
+                first != null -> "Probably the same payment as the text from ${first.issuer} above"
+                else -> null
+            }
             val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
             val payee = PayeeGuess.of(i.body.orEmpty())
@@ -859,6 +884,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
+                duplicateNote = note, duplicateOfEntry = match?.entry?.id,
                 categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
             )
         }

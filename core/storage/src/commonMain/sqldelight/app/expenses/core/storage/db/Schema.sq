@@ -464,6 +464,23 @@ DELETE FROM merchant_map WHERE key = ?;
 entriesMentioning:
 SELECT COUNT(*) FROM entry WHERE deleted = 0 AND kind IN ('EXPENSE', 'INCOME') AND (merchant LIKE '%' || :word || '%' ESCAPE '\' OR note LIKE '%' || :word || '%' ESCAPE '\');
 
+-- Entries a captured debit might be: same amount going out (an expense, or a transfer out), in a window of time.
+entriesNearDebit:
+SELECT id, occurred_at, source_ref, merchant FROM entry
+WHERE deleted = 0 AND kind IN ('EXPENSE', 'TRANSFER') AND amount_minor = :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
+-- Entries a captured credit might be: the same amount coming in (income, a refund, or a transfer in).
+entriesNearCredit:
+SELECT id, occurred_at, source_ref, merchant FROM entry
+WHERE deleted = 0 AND kind IN ('INCOME', 'REFUND') AND amount_minor = :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+UNION ALL
+SELECT id, occurred_at, source_ref, merchant FROM entry
+WHERE deleted = 0 AND kind = 'TRANSFER' AND to_amount_minor = :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
+-- The entries carrying a bank reference, whatever their date and amount: the same reference is the same transaction.
+entriesWithReference:
+SELECT id, occurred_at, source_ref, merchant, amount_minor FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
+
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
