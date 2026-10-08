@@ -76,7 +76,7 @@ private fun InboxCard(
             Text(r.payee ?: r.issuer, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             Text((if (credit) "+" else "") + r.amountText, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_amount_${r.id}"))
         }
-        Text("${if (credit) "Money in" else "Money out"} · ${r.dateText} · ${r.issuer}" + (r.last4?.let { " · ending $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${if (credit) "Money in" else "Money out"} · ${r.dateText} · ${r.issuer}" + (r.last4?.let { " · ending $it" } ?: "") + when (r.payeeKind) { "person" -> " · ${if (credit) "from" else "to"} a person"; "business" -> " · ${if (credit) "from" else "to"} a business"; else -> "" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_meta_${r.id}"))
         Text(r.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
         Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (paired && r.treatment == "TRANSFER") {

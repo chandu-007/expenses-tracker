@@ -72,6 +72,8 @@ import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.InboxStatus
 import app.expenses.core.parsers.PayeeGuess
+import app.expenses.core.parsers.PayeeKind
+import app.expenses.core.parsers.PayeeKinds
 import app.expenses.core.parsers.KindRules
 import app.expenses.core.parsers.MessageKind
 import app.expenses.core.parsers.Direction
@@ -123,6 +125,8 @@ data class InboxRowUi(
     val fromAccountId: String = "",
     val toAccountId: String = "",
     val refundOfEntry: String = "",
+    /** "person" or "business" when the payee's UPI address says so, else empty. */
+    val payeeKind: String = "",
 )
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
@@ -927,6 +931,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
                 duplicateNote = note, duplicateOfEntry = match?.entry?.id,
+                payeeKind = when (PayeeKinds.of(payee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
                 categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
             )

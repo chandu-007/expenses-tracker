@@ -118,4 +118,15 @@ class InboxUiTest {
         assertEquals(emptyList(), entries())
         app.expenses.core.domain.BaseCurrency.current = app.expenses.core.domain.Currency.INR
     }
+
+    @Test
+    fun theRowSaysWhenTheUpiAddressIsAPersonOrABusinessAndNothingWhenItCannotTell() {
+        fun text(vpa: String, ref: String) = "Rs.100.00 debited from A/c XX1234 on 05-10-26 to VPA $vpa (UPI Ref $ref). Not you? Call 18002586161"
+        ingest(text("9876543210@ybl", "100000000001"), 1_000); ingest(text("q123456789@ybl", "100000000002"), 2_000_000); ingest(text("shop@okhdfc", "100000000003"), 4_000_000)
+        launch(); openInbox()
+        val byTime = runBlocking { container.write { it.inbox.list().associate { i -> i.receivedAt to i.id } } }!!
+        val meta = { t: Long -> compose.onNodeWithTag("inbox_meta_" + byTime.getValue(t), useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } }
+        waitFor("inbox_meta_" + byTime.getValue(1_000))
+        assertTrue(meta(1_000).endsWith("to a person"), meta(1_000)); assertTrue(meta(2_000_000).endsWith("to a business"), meta(2_000_000)); assertTrue(meta(4_000_000).endsWith("ending 1234"), meta(4_000_000))
+    }
 }
