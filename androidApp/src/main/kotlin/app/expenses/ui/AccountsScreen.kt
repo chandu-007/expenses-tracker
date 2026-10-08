@@ -1,5 +1,6 @@
 package app.expenses.ui
 
+import app.expenses.core.domain.BaseCurrency
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -67,7 +68,7 @@ fun AccountsScreen(
                 val net = active.sumOf { it.balanceMinor }
                 Column(Modifier.padding(16.dp)) {
                     Text("Net worth", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Money(net, Currency.INR).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
+                    Text(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
                     Text("Balances start from the opening balance you set, then follow your entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 HorizontalDivider()

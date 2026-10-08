@@ -203,6 +203,9 @@ class LedgerStore(
         }
     }
 
+    /** Records the decimal places of [c] (and keeps this store's cache in step) so entries and accounts in it can be read back. */
+    fun registerCurrency(c: Currency) = ensureCurrency(c)
+
     private fun ensureCurrency(c: Currency) {
         val known = digits[c.code]
         if (known == null) {

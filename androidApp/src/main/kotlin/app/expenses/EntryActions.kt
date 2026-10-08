@@ -1,5 +1,6 @@
 package app.expenses
 
+import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.DraftResult
@@ -85,8 +86,8 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         val row = q.entryById(entryId).executeAsOneOrNull()?.takeIf { it.deleted == 0L } ?: return null
         val title = row.merchant ?: row.note ?: row.kind.lowercase().replaceFirstChar { it.uppercase() }
         fun readOnly(reason: String) = Editable.ReadOnly(entryId, title, reason)
-        if (row.currency != "INR") return readOnly("Only rupee entries can be edited here for now.")
-        val base = EntryDraft(entryId, DraftKind.EXPENSE, Money(row.amount_minor, Currency.INR).toPlainString(), "", emptyList(), row.account_id.orEmpty(), "", row.merchant.orEmpty(), row.occurred_at, tags = ok.store.tagsOf(EntryId(entryId)))
+        if (row.currency != BaseCurrency.current.code) return readOnly("Only entries in ${BaseCurrency.current.code} can be edited here for now.")
+        val base = EntryDraft(entryId, DraftKind.EXPENSE, Money(row.amount_minor, BaseCurrency.current).toPlainString(), "", emptyList(), row.account_id.orEmpty(), "", row.merchant.orEmpty(), row.occurred_at, tags = ok.store.tagsOf(EntryId(entryId)))
         return when (row.kind) {
             "EXPENSE" -> {
                 val splits = q.splitsOf(entryId).executeAsList()
@@ -97,7 +98,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
                     else -> Editable.Form(
                         base.copy(
                             category = if (splits.size == 1) splits[0].category_id else "",
-                            splits = if (splits.size > 1) splits.map { SplitDraft(it.category_id, Money(it.amount_minor, Currency.INR).toPlainString()) } else emptyList(),
+                            splits = if (splits.size > 1) splits.map { SplitDraft(it.category_id, Money(it.amount_minor, BaseCurrency.current).toPlainString()) } else emptyList(),
                         ),
                         title = "Edit expense", canRefund = true,
                     )
@@ -105,7 +106,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             }
             "INCOME" -> Editable.Form(base.copy(kind = DraftKind.INCOME, category = row.category_id.orEmpty()), "Edit income")
             "TRANSFER" -> Editable.Form(base.copy(kind = DraftKind.TRANSFER, toAccountId = row.counter_account_id.orEmpty()), "Edit transfer")
-                .takeIf { row.to_currency == null || row.to_currency == "INR" && row.to_amount_minor == row.amount_minor }
+                .takeIf { row.to_currency == null || row.to_currency == BaseCurrency.current.code && row.to_amount_minor == row.amount_minor }
                 ?: readOnly("This transfer is between currencies, which can't be edited here yet.")
             "REFUND" -> {
                 val target = row.refunds_entry!!
@@ -146,7 +147,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
     fun save(draft: EntryDraft): String {
         val existing = draft.id?.let { ok.db.schemaQueries.entryById(it).executeAsOneOrNull()?.takeIf { r -> r.deleted == 0L } ?: throw IllegalArgumentException("This entry no longer exists") }
         val id = draft.id ?: UUID.randomUUID().toString()
-        val entry = when (val r = EntryDrafts.build(draft, EntryId(id), Currency.INR)) {
+        val entry = when (val r = EntryDrafts.build(draft, EntryId(id), BaseCurrency.current)) {
             is DraftResult.Ok -> r.entry
             is DraftResult.Problem -> throw IllegalArgumentException(r.message)
         }
@@ -171,7 +172,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         val zone = java.time.ZoneId.systemDefault()
         val day = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").withZone(zone)
         val stamp = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(zone)
-        val fmt = HistoryFormat(Currency.INR, { accounts[it] ?: "an account that was removed" }, { categories[it] ?: it }, { day.format(java.time.Instant.ofEpochMilli(it)) })
+        val fmt = HistoryFormat(BaseCurrency.current, { accounts[it] ?: "an account that was removed" }, { categories[it] ?: it }, { day.format(java.time.Instant.ofEpochMilli(it)) })
         val canRestore = editable(entryId) is Editable.Form
         val title = (editable(entryId) as? Editable.Form)?.title ?: "Entry"
         return HistoryUi(
@@ -192,7 +193,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         val revisions = ok.store.history(EntryId(entryId))
         val r = revisions.getOrNull(index)?.takeIf { it.kind == RevisionKind.EDITED } ?: throw IllegalArgumentException("That change can't be undone any more.")
         val form = editable(entryId) as? Editable.Form ?: throw IllegalArgumentException("This entry can't be edited here.")
-        save(HistoryRestore.apply(form.draft, r.before, Currency.INR))
+        save(HistoryRestore.apply(form.draft, r.before, BaseCurrency.current))
     }
 
     /**
@@ -244,7 +245,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             if (form == null) { skipped++; continue }
             when (val r = change(form.draft)) {
                 null -> Unit // already as wanted
-                is EntryDraft -> if (EntryDrafts.build(r, EntryId(id), Currency.INR) is DraftResult.Ok) { old += form.draft; new += r } else skipped++
+                is EntryDraft -> if (EntryDrafts.build(r, EntryId(id), BaseCurrency.current) is DraftResult.Ok) { old += form.draft; new += r } else skipped++
                 else -> skipped++
             }
         }

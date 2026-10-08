@@ -18,6 +18,8 @@ import app.expenses.core.storage.StatementImporter
 import app.expenses.core.storage.DatabaseKeyUnavailableException
 import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.AttachmentStore
+import app.expenses.core.storage.BaseCurrencyStore
+import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.storage.SavedSearchStore
 import app.expenses.core.storage.SchemaUpgrade
 import app.expenses.core.storage.FtsTuning
@@ -38,7 +40,7 @@ import java.util.UUID
  */
 class AppContainer(private val context: Context) {
     sealed interface Opened {
-        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore) : Opened
+        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore, val currency: BaseCurrencyStore) : Opened
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
         class KeyLost(val message: String) : Opened
@@ -103,15 +105,17 @@ class AppContainer(private val context: Context) {
         StartupTrace.mark("open: database opened")
         val clock = HlcClock(nodeId())
         val store = LedgerStore(db, clock, System::currentTimeMillis)
+        val templates = TemplateStore(db, clock, System::currentTimeMillis)
+        val currency = BaseCurrencyStore(db, clock, System::currentTimeMillis, templates, store)
+        BaseCurrency.current = currency.current() // before anything formats or parses an amount
         if (db.schemaQueries.selectAccounts().executeAsList().isEmpty()) {
-            store.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, Currency.INR))
-            store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, Currency.INR))
+            store.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, BaseCurrency.current))
+            store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, BaseCurrency.current))
         }
         StartupTrace.mark("open: store ready")
         val recurring = RecurringStore(db, clock, System::currentTimeMillis, store)
-        val templates = TemplateStore(db, clock, System::currentTimeMillis)
         val budgets = BudgetStore(db, clock, System::currentTimeMillis, store, recurring)
-        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, System::currentTimeMillis), AttachmentStore(db, clock, System::currentTimeMillis))
+        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, System::currentTimeMillis), AttachmentStore(db, clock, System::currentTimeMillis), currency)
     } catch (e: DatabaseKeyUnavailableException) {
         Opened.KeyLost(e.message ?: "The database key is unavailable")
     }

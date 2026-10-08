@@ -1,5 +1,7 @@
 package app.expenses.ui
 
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.symbolOrCode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -101,7 +103,7 @@ fun EntryFormScreen(
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     var pickingDate by rememberSaveable { mutableStateOf(false) }
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
-    val currency = Currency.INR
+    val currency = BaseCurrency.current
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
     val focus = remember { FocusRequester() }
@@ -166,7 +168,7 @@ fun EntryFormScreen(
             OutlinedTextField(
                 value = draft.amountText,
                 onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(amountText = v) },
-                label = { Text("Amount (₹)") },
+                label = { Text("Amount (${BaseCurrency.current.symbolOrCode()})") },
                 isError = draft.amountText.isNotEmpty() && amount == null,
                 supportingText = {
                     if (draft.amountText.isNotEmpty() && amount == null) Text("Enter an amount with at most 2 decimals")
@@ -258,7 +260,7 @@ private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currenc
                 OutlinedTextField(
                     value = part.amountText,
                     onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) update(draft.copy(splits = draft.splits.toMutableList().also { it[i] = part.copy(amountText = v) })) },
-                    label = { Text("₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text(BaseCurrency.current.symbolOrCode()) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f).testTag("split_amount_$i"),
                 )
                 TextButton(onClick = { update(draft.copy(splits = draft.splits.filterIndexed { k, _ -> k != i }.let { if (it.size < 2) emptyList() else it }, category = if (draft.splits.size <= 2) draft.splits.getOrNull(1 - i)?.category.orEmpty() else draft.category)) }, modifier = Modifier.testTag("split_remove_$i")) { Text("Remove") }

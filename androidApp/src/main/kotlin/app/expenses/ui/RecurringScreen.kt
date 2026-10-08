@@ -1,5 +1,7 @@
 package app.expenses.ui
 
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.symbolOrCode
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -96,7 +98,7 @@ fun DueCard(d: DueUi, onPost: (DueUi) -> Unit, onSkip: (DueUi) -> Unit) {
 @Composable
 fun AmountDialog(title: String, onConfirm: (Money) -> Unit, onDismiss: () -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
-    val amount = parseAmount(text, Currency.INR)?.takeIf { it.minorUnits > 0 }
+    val amount = parseAmount(text, BaseCurrency.current)?.takeIf { it.minorUnits > 0 }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
@@ -104,7 +106,7 @@ fun AmountDialog(title: String, onConfirm: (Money) -> Unit, onDismiss: () -> Uni
         title = { Text(title) },
         text = {
             OutlinedTextField(
-                value = text, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) text = v }, label = { Text("Amount (₹)") }, singleLine = true,
+                value = text, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) text = v }, label = { Text("Amount (${BaseCurrency.current.symbolOrCode()})") }, singleLine = true,
                 isError = text.isNotEmpty() && amount == null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { amount?.let(onConfirm) }),
@@ -242,7 +244,7 @@ private fun RecurringEditor(
     var picking by rememberSaveable(key) { mutableStateOf<String?>(null) } // "start" or "end"
     var confirmingDelete by rememberSaveable(key) { mutableStateOf(false) }
 
-    val amount = if (amountText.isBlank()) null else parseAmount(amountText, Currency.INR)?.takeIf { it.minorUnits > 0 }
+    val amount = if (amountText.isBlank()) null else parseAmount(amountText, BaseCurrency.current)?.takeIf { it.minorUnits > 0 }
     val amountInvalid = amountText.isNotBlank() && amount == null
     val startDate = LocalDate.fromEpochDays(startDay)
     val endDate = LocalDate.fromEpochDays(endDay)
@@ -287,7 +289,7 @@ private fun RecurringEditor(
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rec_name"))
             OutlinedTextField(
                 value = amountText, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amountText = v },
-                label = { Text("Amount (₹)") }, singleLine = true, isError = amountInvalid,
+                label = { Text("Amount (${BaseCurrency.current.symbolOrCode()})") }, singleLine = true, isError = amountInvalid,
                 supportingText = { Text(if (amountInvalid) "Enter an amount above zero, with at most 2 decimals" else "Leave empty if it differs each time; you'll be asked when it's due") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth().testTag("rec_amount"),

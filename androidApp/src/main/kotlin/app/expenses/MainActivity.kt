@@ -29,6 +29,7 @@ import app.expenses.core.domain.EntryDraft
 import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CalendarScreen
 import app.expenses.ui.AppearanceScreen
+import app.expenses.ui.CurrencyScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.HomeLayoutScreen
 import app.expenses.ui.DataScreen
@@ -75,6 +76,8 @@ class MainActivity : FragmentActivity() {
                     var managingAccounts by rememberSaveable { mutableStateOf(false) }
                     var customisingHome by rememberSaveable { mutableStateOf(false) }
                     var appearing by rememberSaveable { mutableStateOf(false) }
+                    var currencyOpen by rememberSaveable { mutableStateOf(false) }
+                    val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle()
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var repeating by rememberSaveable { mutableStateOf(false) }
@@ -147,6 +150,10 @@ class MainActivity : FragmentActivity() {
                                 val e = editing as Editable.ReadOnly
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                            }
+                            currencyOpen -> {
+                                BackHandler { currencyOpen = false }
+                                CurrencyScreen(s.baseCurrency, currencyBlocker, onChoose = viewModel::setBaseCurrency, onBack = { currencyOpen = false })
                             }
                             appearing -> {
                                 BackHandler { appearing = false }
@@ -322,6 +329,7 @@ class MainActivity : FragmentActivity() {
                                 onBulkAddTag = viewModel::bulkAddTag,
                                 onBulkRemoveTag = viewModel::bulkRemoveTag,
                                 onToggleHideAmounts = { viewModel.setHideAmounts(!s.hideAmounts) },
+                                onOpenCurrency = { currencyOpen = true; viewModel.loadCurrencyBlocker() },
                             )
                         }
                         }

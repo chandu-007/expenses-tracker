@@ -77,7 +77,7 @@ class DataActions(private val context: Context, private val container: AppContai
 
     /** Merges the opened backup into this device. Everything already here is left as it is. */
     suspend fun restore(data: BackupData): RestoreReport =
-        container.write { it.backup.restore(data) } ?: throw BackupException("The data is not available.")
+        container.write { ok -> ok.backup.restore(data).also { app.expenses.core.domain.BaseCurrency.current = ok.currency.current() } } ?: throw BackupException("The data is not available.")
 
     private fun read(uri: Uri): ByteArray =
         context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw BackupException("That file could not be opened.")

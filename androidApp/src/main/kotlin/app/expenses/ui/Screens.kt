@@ -109,6 +109,7 @@ fun EntryListScreen(
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenCurrency: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -178,6 +179,7 @@ fun EntryListScreen(
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
+                            DropdownMenuItem(text = { Text("Currency") }, onClick = { more = false; onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
                             DropdownMenuItem(text = { Text("Appearance") }, onClick = { more = false; onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
                             DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
                             DropdownMenuItem(text = { Text("Calendar") }, onClick = { more = false; onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))

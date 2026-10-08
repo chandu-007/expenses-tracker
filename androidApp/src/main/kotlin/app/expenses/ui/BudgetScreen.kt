@@ -1,5 +1,7 @@
 package app.expenses.ui
 
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.symbolOrCode
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -249,7 +251,7 @@ private fun LimitDialog(line: BudgetLineUi, periodName: String, onSave: (Money) 
         mutableStateOf(TextFieldValue(line.limitPlain, TextRange(0, line.limitPlain.length)))
     }
     val text = field.text
-    val amount = parseAmount(text, Currency.INR)?.takeIf { it.minorUnits > 0 }
+    val amount = parseAmount(text, BaseCurrency.current)?.takeIf { it.minorUnits > 0 }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
@@ -259,7 +261,7 @@ private fun LimitDialog(line: BudgetLineUi, periodName: String, onSave: (Money) 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = field, onValueChange = { v -> if (v.text.all { it.isDigit() || it == '.' }) field = v },
-                    label = { Text("Amount (₹) $periodName") }, singleLine = true,
+                    label = { Text("Amount (${BaseCurrency.current.symbolOrCode()}) $periodName") }, singleLine = true,
                     isError = text.isNotEmpty() && amount == null,
                     supportingText = { if (text.isNotEmpty() && amount == null) Text("Enter an amount above zero, with at most 2 decimals") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),

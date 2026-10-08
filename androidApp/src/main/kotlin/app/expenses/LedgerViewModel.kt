@@ -37,6 +37,9 @@ import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.Appearance
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.BaseCurrencyRules
+import app.expenses.core.domain.CurrencyChoices
 import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.ImportProfiles
@@ -313,6 +316,7 @@ sealed interface UiState {
         val templates: List<TemplateUi>,
         val homeLayout: HomeLayout,
         val appearance: Appearance,
+        val baseCurrency: Currency,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
@@ -355,7 +359,7 @@ private const val LAST_ACCOUNT = "last_account"
  * thread, and writes are serialised so rapid taps cannot overlap. New rows are requested with keyset paging.
  */
 class LedgerViewModel(app: Application) : AndroidViewModel(app) {
-    private val inr = Currency.INR
+    private val inr get() = BaseCurrency.current
     private val container = (app as ExpensesApp).container
     private val _state = MutableStateFlow<UiState>(UiState.Opening)
     val state: StateFlow<UiState> = _state
@@ -737,6 +741,22 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             AutoExport.run(container, AutoExport.folderOf(getApplication(), uri), System.currentTimeMillis(), force = true)
             container.write { refresh(it) }
         }
+    }
+
+    // ---- currency ----
+
+    private val _currencyBlocker = MutableStateFlow<String?>(null)
+
+    /** Why the currency cannot be changed right now, or null when it can. Loaded when the currency screen opens. */
+    val currencyBlocker: StateFlow<String?> get() = _currencyBlocker
+
+    fun loadCurrencyBlocker() = withStore { ok -> _currencyBlocker.value = BaseCurrencyRules.blocker(ok.currency.facts()) }
+
+    fun setBaseCurrency(code: String) = withStore { ok ->
+        val refusal = ok.currency.change(CurrencyChoices.byCode(code))
+        BaseCurrency.current = ok.currency.current()
+        _currencyBlocker.value = refusal ?: BaseCurrencyRules.blocker(ok.currency.facts())
+        refresh(ok)
     }
 
     // ---- appearance ----
@@ -1353,6 +1373,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             accountRows = accountRowsCache,
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
+            baseCurrency = BaseCurrency.current,
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             autoExport = autoExportUi(ok),
