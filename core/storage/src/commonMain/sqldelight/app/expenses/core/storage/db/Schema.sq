@@ -481,6 +481,12 @@ WHERE deleted = 0 AND kind = 'TRANSFER' AND to_amount_minor = :amount AND occurr
 entriesWithReference:
 SELECT id, occurred_at, source_ref, merchant, amount_minor FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
 
+-- Expenses a refund of :amount could be for: at least that much, in a window before it, best amount match first, then nearest.
+refundCandidates:
+SELECT id, merchant, note, amount_minor, occurred_at FROM entry
+WHERE deleted = 0 AND kind = 'EXPENSE' AND amount_minor >= :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
+ORDER BY (amount_minor = :amount) DESC, occurred_at DESC LIMIT 8;
+
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

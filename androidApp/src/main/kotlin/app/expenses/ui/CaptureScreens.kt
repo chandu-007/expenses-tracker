@@ -42,7 +42,7 @@ import app.expenses.InboxRowUi
 @Composable
 fun InboxScreen(
     rows: List<InboxRowUi>, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (id: String, accountId: String, categoryId: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onBack: () -> Unit,
+    onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onBack: () -> Unit,
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
         if (rows.isEmpty()) {
@@ -60,8 +60,12 @@ fun InboxScreen(
 @Composable
 private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit,
+    onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit,
 ) {
+    var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
+    var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
+    var toAcct by rememberSaveable(r.id) { mutableStateOf(r.toAccountId) }
+    val paired = r.treatment != "PAYMENT" && !asPayment
     var account by rememberSaveable(r.id) { mutableStateOf(r.accountId) }
     var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
@@ -75,11 +79,23 @@ private fun InboxCard(
         Text("${if (credit) "Money in" else "Money out"} · ${r.dateText} · ${r.issuer}" + (r.last4?.let { " · ending $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(r.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
         Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (paired && r.treatment == "TRANSFER") {
+            val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose" }
+            Text("Recorded as a ${r.treatmentLabel}: from ${nameOf(fromAcct)} to ${nameOf(toAcct)}. It moves money between your own accounts, so it is not spending.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+            if (changing) {
+                Text("From", style = MaterialTheme.typography.labelSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == fromAcct, onClick = { fromAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_from_${r.id}_${a.id}")) } }
+                Text("To", style = MaterialTheme.typography.labelSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == toAcct, onClick = { toAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_to_${r.id}_${a.id}")) } }
+            }
+        } else if (paired && r.treatment == "REFUND") {
+            Text("Recorded as a ${r.treatmentLabel}, so the original expense is reduced instead of this counting as income.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+        }
         val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
         val categoryName = categories.firstOrNull { it.id == category }?.name
         val why = if (category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
-        Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_goes_${r.id}"))
-        if (changing) {
+        if (!paired) Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_goes_${r.id}"))
+        if (changing && !paired) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
             if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
@@ -89,8 +105,12 @@ private fun InboxCard(
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (r.duplicateNote != null) OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
-            Button(onClick = { onConfirm(r.id, account, category) { p -> problem = p } }, enabled = account.isNotEmpty(), modifier = Modifier.testTag("inbox_add_${r.id}")) { Text(if (r.duplicateNote != null) "Add anyway" else "Add") }
+            Button(
+                onClick = { onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } }, enabled = account.isNotEmpty(),
+                modifier = Modifier.testTag("inbox_add_${r.id}"),
+            ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
             OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
+            if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
             TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
         }
     }

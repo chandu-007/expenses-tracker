@@ -131,7 +131,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
 
     /** The form for refunding [expenseId]: its account and what is still refundable. Null if it is not a live expense. */
     fun startRefund(expenseId: String): Editable.Form? {
-        val row = ok.db.schemaQueries.entryById(expenseId).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.kind == "EXPENSE" && it.currency == "INR" } ?: return null
+        val row = ok.db.schemaQueries.entryById(expenseId).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.kind == "EXPENSE" && it.currency == BaseCurrency.current.code } ?: return null
         val remaining = refundableMinor(expenseId, null)
         return Editable.Form(
             EntryDraft(null, DraftKind.REFUND, "", "", emptyList(), row.account_id.orEmpty(), "", "", nowMillis(), expenseId, remaining),

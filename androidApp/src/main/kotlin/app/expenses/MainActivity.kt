@@ -172,7 +172,7 @@ class MainActivity : FragmentActivity() {
                             }
                             inboxOpen -> {
                                 BackHandler { inboxOpen = false }
-                                InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = viewModel::confirmCapture, onDismiss = viewModel::dismissCapture, onBack = { inboxOpen = false })
+                                InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onBack = { inboxOpen = false })
                             }
                             healthOpen -> {
                                 BackHandler { healthOpen = false }

@@ -72,6 +72,9 @@ import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.InboxStatus
 import app.expenses.core.parsers.PayeeGuess
+import app.expenses.core.parsers.KindRules
+import app.expenses.core.parsers.MessageKind
+import app.expenses.core.parsers.Direction
 import app.expenses.core.domain.OwnExport
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.toPlainString
@@ -113,6 +116,13 @@ data class InboxRowUi(
     /** Set when this looks like something already in the ledger (or the same payment as another text): what to tell the person. */
     val duplicateNote: String? = null,
     val duplicateOfEntry: String? = null,
+    /** How the ledger should record it: "PAYMENT" (an expense or income), "TRANSFER" (between the person's own accounts) or "REFUND" (of an earlier expense). */
+    val treatment: String = "PAYMENT",
+    /** What the treatment is, in words ("cash withdrawal", "credit card payment", "refund of Cafe"). */
+    val treatmentLabel: String = "",
+    val fromAccountId: String = "",
+    val toAccountId: String = "",
+    val refundOfEntry: String = "",
 )
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
@@ -377,6 +387,9 @@ sealed interface UiState {
 val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 
 private const val PAGE = 50L
+
+/** How far back an expense can be and still be what a refund text is about. */
+private const val REFUND_LOOKBACK_DAYS = 120L
 
 /**
  * Whether [e] is the database saying it has been closed. The container closes the database on purpose (starting a fresh ledger, tearing the app
@@ -881,6 +894,26 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 else -> null
             }
             val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
+            val kind = KindRules.of(i.body.orEmpty(), if (i.direction == "CREDIT") Direction.CREDIT else Direction.DEBIT)
+            val cards = accounts.filter { it.type == "CREDIT_CARD" }
+            val cashAccounts = accounts.filter { it.type == "CASH" }
+            val ownBank = accounts.firstOrNull { it.id == remembered && it.type != "CREDIT_CARD" && it.type != "CASH" } ?: accounts.firstOrNull { it.type == "BANK" }
+            var treatment = "PAYMENT"; var treatmentLabel = ""; var fromAcct = ""; var toAcct = ""; var refundOf = ""
+            when {
+                kind == MessageKind.ATM_WITHDRAWAL && cashAccounts.isNotEmpty() && ownBank != null -> { treatment = "TRANSFER"; treatmentLabel = "cash withdrawal"; fromAcct = ownBank.id; toAcct = cashAccounts.first().id }
+                kind == MessageKind.CARD_PAYMENT && cards.isNotEmpty() && ownBank != null -> {
+                    treatment = "TRANSFER"; treatmentLabel = "credit card payment"
+                    toAcct = (remembered?.takeIf { id -> cards.any { it.id == id } } ?: cards.first().id); fromAcct = ownBank.id
+                }
+                kind == MessageKind.REFUND -> {
+                    val day = (i.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(i.receivedAt).atZone(zone).toLocalDate())
+                    val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    val lower = i.body.orEmpty().lowercase()
+                    val pick = ok.db.schemaQueries.refundCandidates(i.amountMinor, day.minusDays(REFUND_LOOKBACK_DAYS).atStartOfDay(zone).toInstant().toEpochMilli(), end).executeAsList()
+                        .firstOrNull { c -> (c.amount_minor == i.amountMinor || (c.merchant ?: "").lowercase().let { m -> m.length >= 3 && lower.contains(m) }) && (EntryActions(ok).startRefund(c.id)?.draft?.refundableMinor ?: 0L) >= i.amountMinor }
+                    if (pick != null) { treatment = "REFUND"; treatmentLabel = "refund of ${pick.merchant ?: pick.note ?: "an earlier expense"}"; refundOf = pick.id }
+                }
+            }
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
             val payee = PayeeGuess.of(i.body.orEmpty())
             val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(payee, i.body.orEmpty(), rules, learned, usable) else null
@@ -889,6 +922,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
                 duplicateNote = note, duplicateOfEntry = match?.entry?.id,
+                treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
                 categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
             )
         }
@@ -900,7 +934,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
      * Turns a pending captured transaction into an entry in [accountId] (and [categoryId] for a debit). [onDone] gets null on success, otherwise
      * why not (shown on the row). A reference already in the ledger from the same source is refused rather than added twice.
      */
-    fun confirmCapture(id: String, accountId: String, categoryId: String, onDone: (String?) -> Unit) {
+    fun confirmCapture(id: String, accountId: String, categoryId: String, onDone: (String?) -> Unit) = confirmCapture(id, accountId, categoryId, "PAYMENT", "", "", "", onDone)
+
+    /** As above, but recorded as [treatment]: a TRANSFER from [fromId] to [toId] (the person's own accounts), or a REFUND of the entry [refundOf]. */
+    fun confirmCapture(id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
@@ -910,7 +947,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     val kind = if (i.direction == "CREDIT") DraftKind.INCOME else DraftKind.EXPENSE
                     val at = i.txnDate?.let { runCatching { LocalDate.parse(it).atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() } ?: i.receivedAt
                     val payee = PayeeGuess.of(i.body.orEmpty()) ?: i.issuer
-                    val draft = EntryDraft(null, kind, Money(i.amountMinor, BaseCurrency.current).toPlainString(), if (kind == DraftKind.EXPENSE) categoryId else categoryId, emptyList(), accountId, "", payee, at)
+                    val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
+                    val draft = when (treatment) {
+                        "TRANSFER" -> EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), fromId, toId, payee, at)
+                        "REFUND" -> (EntryActions(ok).startRefund(refundOf)?.draft ?: return@write "The expense this refunds is no longer there.").copy(amountText = amountText, occurredAt = at)
+                        else -> EntryDraft(null, kind, amountText, categoryId, emptyList(), accountId, "", payee, at)
+                    }
                     val entry = when (val r = EntryDrafts.build(draft, EntryId(UUID.randomUUID().toString()), BaseCurrency.current)) {
                         is DraftResult.Ok -> r.entry
                         is DraftResult.Problem -> return@write r.message
@@ -922,8 +964,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         ok.store.save(entry, EntryDetails(merchant = payee, note = null, source = "sms", sourceRef = sourceRef))
                         ok.inbox.confirm(id, entry.id.value)
                     }
-                    ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
-                    if (kind == DraftKind.EXPENSE) ok.captureRules.learn(PayeeGuess.of(i.body.orEmpty()), categoryId)
+                    if (treatment == "PAYMENT") ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
+                    // the account on the text's own side of a transfer is the one this bank and last four digits stand for
+                    if (treatment == "TRANSFER" && i.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), if (i.direction == "CREDIT") toId else fromId)
+                    if (treatment == "PAYMENT" && kind == DraftKind.EXPENSE) ok.captureRules.learn(PayeeGuess.of(i.body.orEmpty()), categoryId)
                     _inbox.value = inboxRows(ok)
                     refresh(ok)
                     null
