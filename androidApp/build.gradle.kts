@@ -22,11 +22,25 @@ android {
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
     }
 
+    // The release key lives outside the repository: its path and passwords are Gradle properties in ~/.gradle/gradle.properties. Without them the release
+    // build is simply unsigned, never signed with the debug key.
+    signingConfigs {
+        if (providers.gradleProperty("EXPENSES_STORE_FILE").isPresent) {
+            create("release") {
+                storeFile = file(providers.gradleProperty("EXPENSES_STORE_FILE").get())
+                storePassword = providers.gradleProperty("EXPENSES_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("EXPENSES_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("EXPENSES_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("boolean", "SEEDING_ENABLED", "true")
         }
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
