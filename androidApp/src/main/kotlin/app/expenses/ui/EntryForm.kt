@@ -91,6 +91,11 @@ fun EntryFormScreen(
     onRefund: (() -> Unit)? = null,
     onHistory: (() -> Unit)? = null,
     allTags: List<String> = emptyList(),
+    attachments: List<app.expenses.AttachmentUi> = emptyList(),
+    onAttach: (android.net.Uri) -> Unit = {},
+    onOpenAttachment: (app.expenses.AttachmentUi) -> Unit = {},
+    onRemoveAttachment: (app.expenses.AttachmentUi) -> Unit = {},
+    attachmentProblem: String? = null,
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -212,6 +217,7 @@ fun EntryFormScreen(
                 label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),
             )
             TagsEditor(draft.tags, allTags) { draft = draft.copy(tags = it) }
+            AttachmentsSection(draft.id != null, attachments, attachmentProblem, onAttach, onOpenAttachment, onRemoveAttachment)
             if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || split)) {
                 Text(built.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("form_problem"))
             }
@@ -300,5 +306,32 @@ private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: 
             TextButton(onClick = { add(typed) }, enabled = typed.isNotBlank(), modifier = Modifier.testTag("tag_add")) { Text("Add") }
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tag_problem")) }
+    }
+}
+
+/** Receipts and other files on an existing entry. They are kept on this phone only (not in a backup yet), and the section says so. */
+@Composable
+private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.AttachmentUi>, problem: String?, onAttach: (android.net.Uri) -> Unit, onOpen: (app.expenses.AttachmentUi) -> Unit, onRemove: (app.expenses.AttachmentUi) -> Unit) {
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { it?.let(onAttach) }
+    var removing by remember { mutableStateOf<app.expenses.AttachmentUi?>(null) }
+    removing?.let { a ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removing = null }, title = { Text("Remove \"${a.name}\"?") }, text = { Text("The file is deleted from this phone. The entry stays.") },
+            confirmButton = { TextButton(onClick = { onRemove(a); removing = null }, modifier = Modifier.testTag("attachment_remove_ok")) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Receipts and files", style = MaterialTheme.typography.labelMedium)
+        if (!saved) { Text("Save the entry first, then you can attach a photo or file to it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint")); return }
+        items.forEach { a ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("attachment_${a.name}")) {
+                TextButton(onClick = { onOpen(a) }, modifier = Modifier.weight(1f).testTag("attachment_open_${a.name}")) { Text("${a.name} · ${a.sizeText}", maxLines = 1) }
+                TextButton(onClick = { removing = a }, modifier = Modifier.testTag("attachment_delete_${a.name}")) { Text("Remove") }
+            }
+        }
+        problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("attachment_problem")) }
+        OutlinedButton(onClick = { picker.launch(arrayOf("image/*", "application/pdf", "*/*")) }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
+        Text("Kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

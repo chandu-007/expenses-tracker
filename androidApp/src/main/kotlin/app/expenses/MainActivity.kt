@@ -1,6 +1,7 @@
 package app.expenses
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
@@ -96,6 +97,8 @@ class MainActivity : FragmentActivity() {
 
                     val editing by viewModel.editor.collectAsStateWithLifecycle()
                     val history by viewModel.history.collectAsStateWithLifecycle()
+                    val attachmentList by viewModel.attachments.collectAsStateWithLifecycle()
+                    val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle()
 
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
@@ -120,6 +123,9 @@ class MainActivity : FragmentActivity() {
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = false,
                                     allTags = s.tags,
+                                    attachments = attachmentList, attachmentProblem = attachmentProblem, onAttach = { uri -> e.draft.id?.let { viewModel.addAttachment(it, uri) } },
+                                    onOpenAttachment = { a -> openAttachment(viewModel.attachmentUri(a.id), a.mime) },
+                                    onRemoveAttachment = { a -> e.draft.id?.let { viewModel.removeAttachment(it, a.id) } },
                                     onSave = { d, _ -> viewModel.saveEntry(d, false) },
                                     onBack = viewModel::closeEditor,
                                     refundOf = e.refundOf,
@@ -323,6 +329,11 @@ class MainActivity : FragmentActivity() {
         (application as ExpensesApp).lock.onStop(this)
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
+    }
+
+    private fun openAttachment(uri: Uri, mime: String) {
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime.ifBlank { "*/*" }).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try { startActivity(Intent.createChooser(view, "Open with")) } catch (e: android.content.ActivityNotFoundException) { android.widget.Toast.makeText(this, "No app on this phone can open that file.", android.widget.Toast.LENGTH_LONG).show() }
     }
 
     /** The activity is `singleTop`, so a shortcut or tile tap while the app is open arrives here. */

@@ -36,6 +36,7 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.ImportProfiles
 import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.core.storage.SavedSearch
@@ -95,6 +96,9 @@ val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLE
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long)
+
+/** An attachment as the editor lists it. */
+data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
 
 /** Automatic export to the user's own folder, as the Data screen shows it. [status] is the last outcome. */
 data class AutoExportUi(val frequency: AutoExportFrequency, val folderName: String?, val lastText: String?, val status: String?, val statusOk: Boolean)
@@ -446,10 +450,57 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     /** Opens the editor for an entry: the simple form, or a read-only explanation. */
     fun openEditor(entryId: String) = withStore { ok ->
         _editor.value = EntryActions(ok).editable(entryId)
+        _attachmentProblem.value = null
+        _attachments.value = attachmentsOf(ok, entryId)
     }
+
+    // ---- attachments ----
+
+    private val attachmentFiles by lazy { AttachmentFiles(getApplication()) }
+    private val _attachments = MutableStateFlow<List<AttachmentUi>>(emptyList())
+
+    private val _attachmentProblem = MutableStateFlow<String?>(null)
+
+    /** Why the last attachment was refused, shown in the editor itself (the list's message bar is hidden behind it). */
+    val attachmentProblem: StateFlow<String?> get() = _attachmentProblem
+
+    /** The attachments of the entry being edited. */
+    val attachments: StateFlow<List<AttachmentUi>> get() = _attachments
+
+    private fun attachmentsOf(ok: AppContainer.Opened.Ok, entryId: String) = ok.attachments.list(entryId).map { AttachmentUi(it.id, it.name, AttachmentRules.sizeText(it.sizeBytes), it.mime) }
+
+    /** Copies a picked photo or file in and attaches it to [entryId]. A refusal is shown as a message and leaves nothing behind. */
+    fun addAttachment(entryId: String, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = UUID.randomUUID().toString()
+            _attachmentProblem.value = null
+            try {
+                val mime = getApplication<Application>().contentResolver.getType(uri).orEmpty()
+                val name = getApplication<Application>().contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                val copied = attachmentFiles.copyIn(id, uri)
+                container.write { ok ->
+                    ok.attachments.add(id, entryId, name ?: uri.lastPathSegment ?: "attachment", mime, copied.sizeBytes, copied.sha256)
+                    _attachments.value = attachmentsOf(ok, entryId)
+                }
+            } catch (e: Exception) { // any failure: the copy is removed and the reason shown, never an app crash from a background coroutine
+                attachmentFiles.delete(id)
+                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file: ${e.message ?: e::class.java.simpleName}"
+            }
+        }
+    }
+
+    fun removeAttachment(entryId: String, id: String) = withStore { ok ->
+        ok.attachments.delete(id)
+        attachmentFiles.delete(id)
+        _attachments.value = attachmentsOf(ok, entryId)
+    }
+
+    /** The address to hand to a viewer app for one attachment. */
+    fun attachmentUri(id: String): Uri = attachmentFiles.shareUri(id)
 
     fun closeEditor() {
         _editor.value = null
+        _attachments.value = emptyList()
         _history.value = null
     }
 
@@ -1400,7 +1451,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             when (val o = container.open()) {
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
-                is AppContainer.Opened.Ok -> { container.write { ok -> refresh(ok) }; StartupTrace.mark("open: first page loaded") }
+                is AppContainer.Opened.Ok -> {
+                    container.write { ok -> refresh(ok) }; StartupTrace.mark("open: first page loaded")
+                    // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
+                    container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }
+                }
                 is AppContainer.Opened.KeyLost -> _state.value = UiState.KeyLost(o.message)
             }
         }
