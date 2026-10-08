@@ -167,6 +167,38 @@ CREATE TABLE attachment (
 
 CREATE INDEX attachment_entry ON attachment(entry_id);
 
+-- Transactions found in texts or notifications, waiting for the person to confirm them. Never part of the ledger until confirmed.
+-- [body] is kept only while the item is pending, so it can be checked against what was parsed; it is cleared when the item is resolved.
+-- [fingerprint] makes capture idempotent: the same text delivered twice is one item.
+CREATE TABLE inbox (
+    id TEXT NOT NULL PRIMARY KEY,
+    source TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    issuer TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    txn_date TEXT,
+    reference TEXT,
+    account_last4 TEXT,
+    via_upi INTEGER NOT NULL DEFAULT 0,
+    confidence TEXT NOT NULL,
+    body TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    entry_id TEXT,
+    fingerprint TEXT NOT NULL UNIQUE
+);
+CREATE INDEX inbox_status ON inbox(status, received_at DESC);
+
+-- One row per text looked at, without its words: when, which header root, what was decided. Capture health reads it; it is pruned to 90 days.
+CREATE TABLE capture_event (
+    at INTEGER NOT NULL,
+    sender_root TEXT NOT NULL,
+    outcome TEXT NOT NULL
+);
+CREATE INDEX capture_event_at ON capture_event(at);
+
 -- How a credit card bills: the day the statement is cut and the day payment is due (see CardTerms in the domain).
 CREATE TABLE card_terms (
     account_id TEXT NOT NULL PRIMARY KEY,
@@ -388,6 +420,34 @@ DELETE FROM attachment WHERE id = :id;
 
 allAttachmentIds:
 SELECT id FROM attachment;
+
+insertInbox:
+INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+inboxByStatus:
+SELECT * FROM inbox WHERE status = :status ORDER BY received_at DESC, id LIMIT :limit;
+
+inboxById:
+SELECT * FROM inbox WHERE id = :id;
+
+inboxCount:
+SELECT COUNT(*) FROM inbox WHERE status = :status;
+
+resolveInbox:
+UPDATE inbox SET status = :status, entry_id = :entryId, body = NULL WHERE id = :id AND status = 'PENDING';
+
+reopenInbox:
+UPDATE inbox SET status = 'PENDING', entry_id = NULL WHERE id = :id AND status != 'PENDING';
+
+insertCaptureEvent:
+INSERT INTO capture_event(at, sender_root, outcome) VALUES (?, ?, ?);
+
+pruneCaptureEvents:
+DELETE FROM capture_event WHERE at < :before;
+
+captureEventCounts:
+SELECT sender_root, outcome, COUNT(*) AS n, MAX(at) AS last_at FROM capture_event WHERE at >= :since GROUP BY sender_root, outcome;
 
 upsertCardTerms:
 INSERT INTO card_terms(account_id, statement_day, due_day, min_due_percent, remind_days) VALUES (?, ?, ?, ?, ?)
