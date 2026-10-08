@@ -27,7 +27,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 
 ## Payload
 
-`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
+`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `captureRules`, `merchantMap`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
 
 ### `currencies`: `code`, `digits`
 
@@ -50,6 +50,10 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 ### `recurring`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`, `unit`, `every`, `startDay`, `endKind`, `endValue`, `auto`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`), `toAccountId` (the account a repeating transfer goes to)
 ### `recurringDone`: `recurringId`, `day`, `outcome`, `entryId`
 ### `cardTerms`: `accountId`, `statementDay` (1 to 28), `dueDay` (1 to 28), `minDuePercent` (0 to 100, an estimate of the minimum due), `remindDaysBefore` (0 to 10). Billing dates of a credit card. Restored only for a credit card that exists here and has none yet.
+
+### `captureRules`: `id`, `position` (the order they are tried in), `pattern` (words that must all appear in the payee or text), `categoryId`. Restored only where this phone has no rule with the same id and the category exists here.
+
+### `merchantMap`: `key` (the payee reduced to lower-case letters and digits), `categoryId`, `uses`. What the person chose for each payee. Restored only where this phone has no entry for the key.
 
 ### `savedSearches`: `id`, `name`, `text`, `minRupees`, `maxRupees`, `categoryId`, `kind` (`ANY`, `EXPENSE`, `INCOME`), `range` (`ANY`, `LAST_30_DAYS`, `THIS_PERIOD`, `THIS_YEAR`), `tag`
 ### `settings`: a map of text to text (reminder preferences and similar).

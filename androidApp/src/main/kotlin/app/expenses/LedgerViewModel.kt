@@ -39,6 +39,8 @@ import app.expenses.core.domain.AccountRules
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BaseCurrencyRules
+import app.expenses.core.domain.CategorySuggest
+import app.expenses.core.domain.SuggestionSource
 import app.expenses.core.domain.CardTerms
 import app.expenses.core.domain.CardText
 import app.expenses.core.domain.CurrencyChoices
@@ -98,7 +100,11 @@ data class AccountUi(val id: String, val name: String)
 data class InboxRowUi(
     val id: String, val issuer: String, val direction: String, val amountText: String, val dateText: String, val last4: String?, val body: String, val payee: String?,
     val accountId: String, val categoryId: String, val rememberedAccount: Boolean, val confidence: String,
+    /** Where the suggested category came from: "your rule", "what you chose last time", or empty. */
+    val categoryNote: String = "",
 )
+
+data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
 data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String)
 
@@ -839,16 +845,21 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
-        val lastCategory = ok.templates.setting(LAST_CATEGORY).orEmpty()
+        val usable = ok.categories.list().filter { !it.hidden }.map { it.id }.toSet()
+        val rules = ok.captureRules.rules()
+        val learned = ok.captureRules.learned()
         val zone = ZoneId.systemDefault()
         val fmt = DateTimeFormatter.ofPattern("d MMM")
         return ok.inbox.list().map { i ->
             val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
+            val payee = PayeeGuess.of(i.body.orEmpty())
+            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(payee, i.body.orEmpty(), rules, learned, usable) else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
-                i.accountLast4, i.body.orEmpty(), PayeeGuess.of(i.body.orEmpty()), remembered ?: accounts.firstOrNull()?.id.orEmpty(), if (i.direction == "DEBIT") lastCategory else "",
+                i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
+                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
             )
         }
     }
@@ -882,12 +893,44 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         ok.inbox.confirm(id, entry.id.value)
                     }
                     ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
+                    if (kind == DraftKind.EXPENSE) ok.captureRules.learn(PayeeGuess.of(i.body.orEmpty()), categoryId)
                     _inbox.value = inboxRows(ok)
                     refresh(ok)
                     null
                 }
             } catch (e: IllegalArgumentException) { e.message }
             withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    private val _rules = MutableStateFlow<List<CaptureRuleUi>>(emptyList())
+    val captureRules: StateFlow<List<CaptureRuleUi>> get() = _rules
+
+    private fun ruleRows(ok: AppContainer.Opened.Ok): List<CaptureRuleUi> {
+        val names = ok.categories.list().associate { it.id to it.name }
+        return ok.captureRules.rules().map { CaptureRuleUi(it.id, it.pattern, it.categoryId, names[it.categoryId] ?: "a category that was removed") }
+    }
+
+    fun loadCaptureRules() = withStore { ok -> _rules.value = ruleRows(ok) }
+
+    fun addCaptureRule(pattern: String, categoryId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok -> ok.captureRules.add(UUID.randomUUID().toString(), pattern, categoryId); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok); null }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun removeCaptureRule(id: String) = withStore { ok -> ok.captureRules.remove(id); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok) }
+
+    fun moveCaptureRule(id: String, up: Boolean) = withStore { ok -> ok.captureRules.move(id, up); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok) }
+
+    /** How many of the past entries a rule with this pattern would have caught, for the "test against history" line. */
+    fun testCaptureRule(pattern: String, onResult: (Long) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val n = container.write { ok -> ok.captureRules.matchesInHistory(pattern) } ?: 0L
+            withContext(Dispatchers.Main) { onResult(n) }
         }
     }
 

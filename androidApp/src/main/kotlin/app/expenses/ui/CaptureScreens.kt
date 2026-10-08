@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
@@ -76,7 +77,8 @@ private fun InboxCard(
         Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
         val categoryName = categories.firstOrNull { it.id == category }?.name
-        Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") else ""), style = MaterialTheme.typography.bodyMedium)
+        val why = if (category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
+        Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_goes_${r.id}"))
         if (changing) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
             if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -96,7 +98,7 @@ private fun InboxCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureSettingsScreen(
-    settings: CaptureSettingsUi, permissionGranted: Boolean, onToggle: (Boolean) -> Unit, onHeaders: (String) -> Unit, onBack: () -> Unit,
+    settings: CaptureSettingsUi, permissionGranted: Boolean, onToggle: (Boolean) -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onBack: () -> Unit,
 ) {
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
@@ -114,6 +116,53 @@ fun CaptureSettingsScreen(
             OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))
             Text("Only senders on the built-in list of banks are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { onHeaders(headers) }, modifier = Modifier.testTag("capture_headers_save")) { Text("Save names") }
+            HorizontalDivider()
+            OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
+        }
+    }
+}
+
+/** The person's own rules: "when the payee or text mentions X, use this category", tried top to bottom, tested against past entries before saving. */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun CaptureRulesScreen(
+    rules: List<app.expenses.CaptureRuleUi>, categories: List<CategoryUi>,
+    onAdd: (pattern: String, categoryId: String, done: (String?) -> Unit) -> Unit, onRemove: (String) -> Unit, onMove: (String, Boolean) -> Unit,
+    onTest: (String, (Long) -> Unit) -> Unit, onBack: () -> Unit,
+) {
+    var pattern by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("") }
+    var tested by remember { mutableStateOf<Long?>(null) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    Scaffold(topBar = { TopAppBar(title = { Text("Category rules") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("rules_back")) { Text("Back") } }) }) { pad ->
+        LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Text("When a captured payment mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            itemsIndexed(rules, key = { _, r -> r.id }) { i, r ->
+                Row(Modifier.fillMaxWidth().testTag("rule_${r.pattern}"), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) { Text("\"${r.pattern}\"", style = MaterialTheme.typography.bodyLarge); Text("→ ${r.categoryName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TextButton(onClick = { onMove(r.id, true) }, enabled = i > 0, modifier = Modifier.testTag("rule_up_${r.pattern}")) { Text("Up") }
+                    TextButton(onClick = { onMove(r.id, false) }, enabled = i < rules.lastIndex, modifier = Modifier.testTag("rule_down_${r.pattern}")) { Text("Down") }
+                    TextButton(onClick = { onRemove(r.id) }, modifier = Modifier.testTag("rule_remove_${r.pattern}")) { Text("Remove") }
+                }
+            }
+            item { HorizontalDivider() }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("New rule", style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(pattern, { pattern = it; tested = null; problem = null }, label = { Text("Payee or text contains") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rule_pattern"))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id; problem = null }, label = { Text(c.name) }, modifier = Modifier.testTag("rule_category_${c.id}")) }
+                    }
+                    tested?.let { Text(if (it == 0L) "No past entry mentions this." else "It would have matched $it of your past entries.", modifier = Modifier.testTag("rule_tested")) }
+                    problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("rule_problem")) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onTest(pattern) { tested = it } }, enabled = pattern.isNotBlank(), modifier = Modifier.testTag("rule_test")) { Text("Test on my history") }
+                        Button(onClick = { onAdd(pattern, category) { p -> if (p == null) { pattern = ""; tested = null } else problem = p } }, enabled = pattern.isNotBlank() && category.isNotEmpty(), modifier = Modifier.testTag("rule_add")) { Text("Add rule") }
+                    }
+                }
+            }
         }
     }
 }

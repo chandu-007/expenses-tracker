@@ -191,6 +191,19 @@ CREATE TABLE inbox (
 );
 CREATE INDEX inbox_status ON inbox(status, received_at DESC);
 
+-- The person's own rules for captured transactions, in the order they are tried, and what they chose for each payee last time.
+CREATE TABLE capture_rule (
+    id TEXT NOT NULL PRIMARY KEY,
+    position INTEGER NOT NULL,
+    pattern TEXT NOT NULL,
+    category_id TEXT NOT NULL
+);
+CREATE TABLE merchant_map (
+    key TEXT NOT NULL PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    uses INTEGER NOT NULL DEFAULT 1
+);
+
 -- One row per text looked at, without its words: when, which header root, what was decided. Capture health reads it; it is pruned to 90 days.
 CREATE TABLE capture_event (
     at INTEGER NOT NULL,
@@ -423,6 +436,33 @@ SELECT id FROM attachment;
 
 entryBySourceRef:
 SELECT id FROM entry WHERE source = :source AND source_ref = :sourceRef AND deleted = 0;
+
+allCaptureRules:
+SELECT * FROM capture_rule ORDER BY position, id;
+
+upsertCaptureRule:
+INSERT INTO capture_rule(id, position, pattern, category_id) VALUES (?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET position = excluded.position, pattern = excluded.pattern, category_id = excluded.category_id;
+
+deleteCaptureRule:
+DELETE FROM capture_rule WHERE id = ?;
+
+maxRulePosition:
+SELECT COALESCE(MAX(position), 0) FROM capture_rule;
+
+allMerchantMap:
+SELECT * FROM merchant_map;
+
+learnMerchant:
+INSERT INTO merchant_map(key, category_id, uses) VALUES (?, ?, 1)
+ON CONFLICT(key) DO UPDATE SET category_id = excluded.category_id, uses = CASE WHEN merchant_map.category_id = excluded.category_id THEN merchant_map.uses + 1 ELSE 1 END;
+
+forgetMerchant:
+DELETE FROM merchant_map WHERE key = ?;
+
+-- Past entries whose payee or note mentions a word (case-insensitive): what a rule would have caught, for testing it against history.
+entriesMentioning:
+SELECT COUNT(*) FROM entry WHERE deleted = 0 AND kind IN ('EXPENSE', 'INCOME') AND (merchant LIKE '%' || :word || '%' ESCAPE '\' OR note LIKE '%' || :word || '%' ESCAPE '\');
 
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)

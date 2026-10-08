@@ -81,6 +81,8 @@ class BackupStore(
             },
             savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag) },
             cardTerms = q.allCardTerms().executeAsList().map { BackupCardTerms(it.account_id, it.statement_day.toInt(), it.due_day.toInt(), it.min_due_percent.toInt(), it.remind_days.toInt()) },
+            captureRules = q.allCaptureRules().executeAsList().map { BackupCaptureRule(it.id, it.position.toInt(), it.pattern, it.category_id) },
+            merchantMap = q.allMerchantMap().executeAsList().map { BackupMerchant(it.key, it.category_id, it.uses.toInt()) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
             settings = SETTINGS.mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.let { k to it } }.toMap(),
         )
@@ -131,6 +133,11 @@ class BackupStore(
         for (d in data.recurringDone) if (q.doneRow(d.recurringId, d.day).executeAsOneOrNull() == null) q.putDone(d.recurringId, d.day, d.outcome, d.entryId)
         // Added as they are (a search with the same name as one here is kept too, rather than the restore refusing).
         for (s in data.savedSearches) if (q.savedSearchById(s.id).executeAsOneOrNull() == null) q.upsertSavedSearch(s.id, s.name, s.text, s.minRupees, s.maxRupees, s.categoryId, s.kind, s.range, s.tag)
+        // Rules and learned payees are added as they are where this phone has none with the same id or key (a restore never overrides a choice made here).
+        val haveRules = q.allCaptureRules().executeAsList().map { it.id }.toSet()
+        for (r in data.captureRules) if (r.id !in haveRules && q.categoryById(r.categoryId).executeAsOneOrNull() != null) q.upsertCaptureRule(r.id, r.position.toLong(), r.pattern, r.categoryId)
+        val haveKeys = q.allMerchantMap().executeAsList().map { it.key }.toSet()
+        for (m in data.merchantMap) if (m.key !in haveKeys && q.categoryById(m.categoryId).executeAsOneOrNull() != null) q.learnMerchant(m.key, m.categoryId)
         // Only for a card that exists here and has no terms yet; the terms of a card that was not restored have nothing to attach to.
         for (c in data.cardTerms) if (q.cardTermsOf(c.accountId).executeAsOneOrNull() == null && q.accountById(c.accountId).executeAsOneOrNull()?.let { it.deleted == 0L && it.type == "CREDIT_CARD" } == true) q.upsertCardTerms(c.accountId, c.statementDay.toLong(), c.dueDay.toLong(), c.minDuePercent.toLong(), c.remindDaysBefore.toLong())
         for ((k, v) in data.settings) if (k in SETTINGS && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
@@ -177,6 +184,6 @@ class BackupStore(
 
     companion object {
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
-        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency")
+        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots")
     }
 }

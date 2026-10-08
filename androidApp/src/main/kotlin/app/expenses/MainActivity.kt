@@ -31,6 +31,7 @@ import app.expenses.ui.CalendarScreen
 import app.expenses.ui.AppearanceScreen
 import app.expenses.ui.CurrencyScreen
 import app.expenses.ui.InboxScreen
+import app.expenses.ui.CaptureRulesScreen
 import app.expenses.ui.CaptureSettingsScreen
 import app.expenses.ui.CategoriesScreen
 import app.expenses.ui.HomeLayoutScreen
@@ -81,6 +82,8 @@ class MainActivity : FragmentActivity() {
                     var currencyOpen by rememberSaveable { mutableStateOf(false) }
                     var inboxOpen by rememberSaveable { mutableStateOf(false) }
                     var captureOpen by rememberSaveable { mutableStateOf(false) }
+                    var rulesOpen by rememberSaveable { mutableStateOf(false) }
+                    val captureRules by viewModel.captureRules.collectAsStateWithLifecycle()
                     val inboxRows by viewModel.inbox.collectAsStateWithLifecycle()
                     val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle()
                     var smsPermission by androidx.compose.runtime.remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
@@ -166,12 +169,16 @@ class MainActivity : FragmentActivity() {
                                 BackHandler { inboxOpen = false }
                                 InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = viewModel::confirmCapture, onDismiss = viewModel::dismissCapture, onBack = { inboxOpen = false })
                             }
+                            rulesOpen -> {
+                                BackHandler { rulesOpen = false }
+                                CaptureRulesScreen(captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false })
+                            }
                             captureOpen -> {
                                 BackHandler { captureOpen = false }
                                 CaptureSettingsScreen(
                                     captureSettings, smsPermission,
                                     onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS) },
-                                    onHeaders = viewModel::setExtraHeaders, onBack = { captureOpen = false },
+                                    onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onBack = { captureOpen = false },
                                 )
                             }
                             currencyOpen -> {

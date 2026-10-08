@@ -23,6 +23,8 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS saved_search (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', min_rupees TEXT NOT NULL DEFAULT '', max_rupees TEXT NOT NULL DEFAULT '', category_id TEXT, kind TEXT NOT NULL DEFAULT 'ANY', range_kind TEXT NOT NULL DEFAULT 'ANY', tag TEXT, deleted INTEGER NOT NULL DEFAULT 0)")
         run(driver, "CREATE TABLE IF NOT EXISTS inbox (id TEXT NOT NULL PRIMARY KEY, source TEXT NOT NULL, sender TEXT NOT NULL, issuer TEXT NOT NULL, received_at INTEGER NOT NULL, direction TEXT NOT NULL, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL, txn_date TEXT, reference TEXT, account_last4 TEXT, via_upi INTEGER NOT NULL DEFAULT 0, confidence TEXT NOT NULL, body TEXT, status TEXT NOT NULL DEFAULT 'PENDING', entry_id TEXT, fingerprint TEXT NOT NULL UNIQUE)")
         run(driver, "CREATE INDEX IF NOT EXISTS inbox_status ON inbox(status, received_at DESC)")
+        run(driver, "CREATE TABLE IF NOT EXISTS capture_rule (id TEXT NOT NULL PRIMARY KEY, position INTEGER NOT NULL, pattern TEXT NOT NULL, category_id TEXT NOT NULL)")
+        run(driver, "CREATE TABLE IF NOT EXISTS merchant_map (key TEXT NOT NULL PRIMARY KEY, category_id TEXT NOT NULL, uses INTEGER NOT NULL DEFAULT 1)")
         run(driver, "CREATE TABLE IF NOT EXISTS capture_event (at INTEGER NOT NULL, sender_root TEXT NOT NULL, outcome TEXT NOT NULL)")
         run(driver, "CREATE INDEX IF NOT EXISTS capture_event_at ON capture_event(at)")
         run(driver, "CREATE TABLE IF NOT EXISTS card_terms (account_id TEXT NOT NULL PRIMARY KEY, statement_day INTEGER NOT NULL, due_day INTEGER NOT NULL, min_due_percent INTEGER NOT NULL DEFAULT 5, remind_days INTEGER NOT NULL DEFAULT 3)")
