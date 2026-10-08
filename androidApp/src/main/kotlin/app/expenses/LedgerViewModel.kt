@@ -1159,8 +1159,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** How long the last save (the write plus the whole refresh behind it) took, in milliseconds. Read by the timing gate. */
+    /** How long the last save took until the new entry and the period total were on screen (the write plus the quick update), in milliseconds. Read by the timing gate. */
     @Volatile var lastSaveMillis: Double = 0.0
+        internal set
+
+    /** How long the rebuild that follows a save took after the new entry was already on screen, in milliseconds. Read by the timing gate. */
+    @Volatile var lastSettleMillis: Double = 0.0
         internal set
 
     // Formatted list rows by the stored row they came from: an unchanged entry is not formatted again after every save, and an edited one is a
@@ -1189,7 +1193,11 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val period = ok.budgets.period().containing(kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth))
         val spent = ok.store.spendByCategory(inr, from = period.startMillis(zone), until = period.endMillis(zone)).values.fold(Money.zero(inr)) { a, m -> a + m }
         _state.value = current.copy(rows = rowsOf(loaded), periodSpend = spent.formatted(), endReached = endReached, undo = undo)
-        viewModelScope.launch(Dispatchers.IO) { container.write { ok2 -> refresh(ok2, undo = (_state.value as? UiState.Ready)?.undo) } }
+        val quickDone = System.nanoTime()
+        viewModelScope.launch(Dispatchers.IO) {
+            container.write { ok2 -> refresh(ok2, undo = (_state.value as? UiState.Ready)?.undo) }
+            lastSettleMillis = (System.nanoTime() - quickDone) / 1e6
+        }
     }
 
     private fun refresh(ok: AppContainer.Opened.Ok, undo: UndoUi? = null) {
