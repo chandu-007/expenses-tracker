@@ -41,6 +41,7 @@ fun DataScreen(
     state: DataUi,
     onBack: () -> Unit,
     onExportCsv: (Uri) -> Unit,
+    onExportXlsx: (Uri) -> Unit = {},
     onBackup: (Uri, String?) -> Unit,
     onOpenBackup: (Uri) -> Unit,
     onImportStatement: (Uri) -> Unit,
@@ -59,6 +60,7 @@ fun DataScreen(
         else -> null
     }
     val today = LocalDate.now()
+    val xlsxPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { it?.let(onExportXlsx) }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { it?.let(onExportCsv) }
     val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { it?.let { uri -> onBackup(uri, pass.ifEmpty { null }) } }
     val openPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(onOpenBackup) }
@@ -103,7 +105,8 @@ fun DataScreen(
             }
 
             Text("Spreadsheet", style = MaterialTheme.typography.titleMedium)
-            Text("Every entry as a CSV file you can open in Excel or Google Sheets. Free, always.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Every entry as an Excel workbook (amounts are numbers, so they add up) or a plain CSV file. Free, always. For moving to another phone use a backup: a spreadsheet leaves things out.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { xlsxPicker.launch("expenses-$today.xlsx") }, enabled = !state.busy, modifier = Modifier.testTag("export_xlsx")) { Text("Export as Excel (.xlsx)") }
             OutlinedButton(onClick = { csvPicker.launch("expenses-$today.csv") }, enabled = !state.busy, modifier = Modifier.testTag("export_csv")) { Text("Export as CSV") }
             HorizontalDivider()
 

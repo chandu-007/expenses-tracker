@@ -36,6 +36,13 @@ class DataActions(private val context: Context, private val container: AppContai
         return bytes.decodeToString().lines().count { it.isNotEmpty() } - 1
     }
 
+    /** Writes every entry as an Excel workbook. Returns the number of entries. */
+    suspend fun exportXlsx(uri: Uri): Int {
+        val (bytes, count) = container.write { ok -> ok.csv.xlsx(TimeZone.currentSystemDefault()) to ok.db.schemaQueries.entryCount().executeAsOne() } ?: throw BackupException("The data is not available.")
+        writeAndVerify(uri, bytes)
+        return count.toInt()
+    }
+
     /** Writes a full backup, encrypted when [passphrase] is not null. */
     suspend fun backup(uri: Uri, passphrase: String?): Saved {
         val (plain, counts) = container.write { ok ->

@@ -20,7 +20,17 @@ import kotlinx.datetime.toLocalDateTime
 class CsvExport(private val db: ExpensesDb) {
     fun bytes(zone: TimeZone): ByteArray = BOM + build(zone).encodeToByteArray()
 
-    fun build(zone: TimeZone): String {
+    /** The same table as an Excel workbook: Amount and Your share are numbers (so they add up and sort), the rest is text. */
+    fun xlsx(zone: TimeZone): ByteArray = XlsxExport.build(rows(zone, guardFormulas = false), numericColumns = setOf(3, 5))
+
+    fun build(zone: TimeZone): String = encode(rows(zone, guardFormulas = true))
+
+    /**
+     * The table behind both exports: a header row, then one row per live entry, oldest first. [guardFormulas] prefixes text that a spreadsheet
+     * would run as a formula (needed for CSV, where the reader decides the cell type; not for XLSX, where text cells are always text).
+     */
+    fun rows(zone: TimeZone, guardFormulas: Boolean): List<List<String>> {
+        fun text(cell: String) = if (guardFormulas) Companion.text(cell) else cell
         val q = db.schemaQueries
         val digits = q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() }
         val categories = q.allCategories().executeAsList().associate { it.id to it.name }
@@ -49,7 +59,7 @@ class CsvExport(private val db: ExpensesDb) {
                 text(e.person_id.orEmpty()), text(e.merchant.orEmpty()), text(e.note.orEmpty()), text(tags[e.id].orEmpty().joinToString(", ")), text(e.source),
             )
         }
-        return encode(rows)
+        return rows
     }
 
     companion object {

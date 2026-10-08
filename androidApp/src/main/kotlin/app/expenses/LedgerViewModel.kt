@@ -1014,6 +1014,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun exportXlsx(uri: Uri) = dataAction { "Exported ${actions.exportXlsx(uri)} entries as an Excel workbook." }
     fun exportCsv(uri: Uri) = dataAction { "Exported ${actions.exportCsv(uri)} entries as a spreadsheet file." }
 
     fun createBackup(uri: Uri, passphrase: String?) = dataAction {

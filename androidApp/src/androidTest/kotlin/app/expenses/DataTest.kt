@@ -184,6 +184,19 @@ class DataTest {
     }
 
     @Test
+    fun theExcelExportIsAValidWorkbookWithNumericAmountsAndOneRowPerEntry() {
+        populate()
+        val uri = file("out.xlsx")
+        assertEquals(5, runBlocking { actions.exportXlsx(uri) })
+        val parts = java.util.zip.ZipInputStream(File(uri.path!!).inputStream()).use { z -> generateSequence { z.nextEntry }.associate { e -> e.name to z.readBytes().decodeToString() } }
+        assertTrue("xl/worksheets/sheet1.xml" in parts && "xl/workbook.xml" in parts)
+        val sheet = parts.getValue("xl/worksheets/sheet1.xml")
+        assertEquals(6, Regex("<row ").findAll(sheet).count(), "a header and five entries")
+        assertTrue(Regex("<c r=\"D2\"><v>[0-9.]+</v></c>").containsMatchIn(sheet), "the amount is a number cell")
+        assertTrue(sheet.contains("Shop, 3"), "text with a comma is intact")
+    }
+
+    @Test
     fun theCsvExportHasTheHeaderTheEntriesAndTheByteOrderMark() {
         populate()
         val uri = file("out.csv")
