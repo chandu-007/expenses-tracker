@@ -78,6 +78,7 @@ fun ImportScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (state.busy) CircularProgressIndicator(Modifier.testTag("import_busy"))
+            state.profileNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("import_profile_note")) }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import_error")) }
             state.result?.let { r ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("import_result")) {

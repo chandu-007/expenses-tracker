@@ -216,6 +216,52 @@ class ImportUiTest {
         waitText("import_error", "exported from this app")
     }
 
+    private fun workbook(rows: List<List<String>>) = app.expenses.core.storage.XlsxExport.build(rows, setOf(1, 2))
+
+    @Test
+    fun anExcelStatementIsReadLikeACsvOneAndImported() {
+        openData()
+        start(file("bank.xlsx", workbook(listOf(
+            listOf("Date", "Narration", "Withdrawal Amt.", "Deposit Amt."),
+            listOf("01/10/2026", "UPI-SWIGGY", "1250.50", ""), listOf("02/10/2026", "SALARY", "", "50000"),
+        ))))
+        waitText("import_summary", "2 transactions: spending ₹1,250.50, income ₹50,000.00")
+        compose.onNodeWithTag("import_confirm").performClick(); waitAnyText("Imported 2 transactions")
+        assertEquals(listOf("UPI-SWIGGY", "SALARY"), runBlocking { container.write { it.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().map { r -> r.merchant } } }!!)
+    }
+
+    @Test
+    fun theWayAFileWasReadIsRememberedForTheNextFileWithTheSameColumnTitles() {
+        openData()
+        // Titles the detector cannot place: it is told which columns are which, once.
+        start(file("a.csv", "When,What,Out,In\n01/10/2026,Cafe,100.00,\n02/10/2026,Pay,,900.00\n"))
+        viewModel().changeImportMapping { it.copy(headerRows = 1, dateColumn = 0, descriptionColumn = 1, layout = app.expenses.core.domain.AmountLayout.SEPARATE_DEBIT_CREDIT, debitColumn = 2, creditColumn = 3, dateOrder = app.expenses.core.domain.DateOrder.MDY) }
+        compose.waitUntil(10_000) { viewModel().statement.value.mapping?.dateOrder == app.expenses.core.domain.DateOrder.MDY }
+        waitFor("import_confirm"); compose.onNodeWithTag("import_confirm").performClick(); waitAnyText("Imported 2 transactions")
+        compose.onNodeWithTag("import_close").performClick(); waitFor("import_statement")
+        // a different file with the same titles: read the remembered way (month first), and the note says so
+        start(file("b.csv", "When,What,Out,In\n03/10/2026,Tea,50.00,\n"))
+        assertEquals(app.expenses.core.domain.DateOrder.MDY, viewModel().statement.value.mapping!!.dateOrder)
+        waitFor("import_profile_note")
+        // different titles get no note and are guessed afresh
+        compose.onNodeWithTag("import_close").performClick(); waitFor("import_statement")
+        start(file("c.csv", "Date,Narration,Debit,Credit\n03/10/2026,Tea,50.00,\n"))
+        assertTrue(compose.onAllNodes(hasTestTag("import_profile_note"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aRememberedLayoutIsFoundEvenWhenTheHeaderIsBelowAPreambleThatDiffersEachMonth() {
+        openData()
+        start(file("p1.csv", "Statement for Sep 2026,,,\nWhen,What,Out,In\n01/09/2026,Cafe,100.00,\n"))
+        viewModel().changeImportMapping { it.copy(headerRows = 2, dateColumn = 0, descriptionColumn = 1, layout = app.expenses.core.domain.AmountLayout.SEPARATE_DEBIT_CREDIT, debitColumn = 2, creditColumn = 3, dateOrder = app.expenses.core.domain.DateOrder.MDY) }
+        compose.waitUntil(10_000) { viewModel().statement.value.mapping?.dateOrder == app.expenses.core.domain.DateOrder.MDY }
+        waitFor("import_confirm"); compose.onNodeWithTag("import_confirm").performClick(); waitAnyText("Imported 1 transaction")
+        compose.onNodeWithTag("import_close").performClick(); waitFor("import_statement")
+        start(file("p2.csv", "Statement for Oct 2026,,,\nCustomer 99,,,\nWhen,What,Out,In\n03/10/2026,Tea,50.00,\n"))
+        assertEquals(app.expenses.core.domain.DateOrder.MDY, viewModel().statement.value.mapping!!.dateOrder)
+        waitFor("import_profile_note")
+    }
+
     // ---- reading the bytes ----
 
     @Test

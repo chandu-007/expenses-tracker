@@ -36,6 +36,7 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.ImportProfiles
 import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.core.storage.SavedSearch
 import app.expenses.core.storage.resolveCategory
@@ -189,6 +190,8 @@ data class ImportUi(
     val problemCount: Int = 0,
     val ignoredRows: Int = 0,
     val mappingProblem: String? = null,
+    /** Set when the layout was not guessed but remembered from an earlier file with the same column titles. */
+    val profileNote: String? = null,
     val result: ImportResultUi? = null,
 )
 
@@ -325,6 +328,7 @@ val DEFAULT_CATEGORIES = CategoryStore.DEFAULTS
 private const val PAGE = 50L
 private const val SEARCH_LIMIT = 100L
 private const val TAG_SUGGESTIONS = 40L
+private const val PROFILE_SEARCH_ROWS = 15
 private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
@@ -758,14 +762,18 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("That file could not be opened.")
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
-                val table = Csv.parse(StatementText.decode(bytes))
+                val table = if (XlsxReader.looksLikeZip(bytes)) app.expenses.core.domain.CsvTable(XlsxReader.read(bytes), ',', false) else Csv.parse(StatementText.decode(bytes))
                 require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }
                 require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
                 require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
                 importTable = table
                 val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList().filter { a -> a.archived == 0L } }.orEmpty()
                 val account = (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()
-                recomputeImport(StatementDetector.detect(table.rows), account)
+                val guessed = StatementDetector.detect(table.rows)
+                // The header may not be where the detector thinks (it cannot place unusual titles), so every one of the first rows is tried.
+                val width = table.rows.maxOf { r -> r.size }
+                val saved = container.write { ok -> table.rows.take(PROFILE_SEARCH_ROWS).firstNotNullOfOrNull { row -> ImportProfiles.signature(row)?.let { sig -> ImportProfiles.decode(ok.templates.setting(sig), width) } } }
+                recomputeImport(saved ?: guessed, account, profileNote = if (saved != null) "Read the way you set it up for the last file with these column titles. Change anything below if it is wrong." else null)
             } catch (e: IllegalArgumentException) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
@@ -783,7 +791,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         _import.update { it.copy(accountId = id) }
     }
 
-    private fun recomputeImport(mapping: StatementMapping, accountId: String) {
+    private fun recomputeImport(mapping: StatementMapping, accountId: String, profileNote: String? = null) {
         val table = importTable ?: return
         val names = StatementDetector.columnNames(table.rows, mapping.headerRows)
         val missing = mapping.missing()
@@ -799,7 +807,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             }.orEmpty(),
             txnCount = parsed?.txns?.size ?: 0, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
             problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
-            ignoredRows = parsed?.ignoredRows ?: 0, mappingProblem = missing,
+            ignoredRows = parsed?.ignoredRows ?: 0, mappingProblem = missing, profileNote = profileNote,
         )
     }
 
@@ -813,6 +821,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 container.write { ok ->
                     val r = ok.statements.import(parsed.txns, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    // Remember how this bank's file was read, now that it is known to have worked, for the next one with the same column titles.
+                    val mapping = _import.value.mapping
+                    val signature = mapping?.takeIf { it.headerRows > 0 }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
+                    if (mapping != null && signature != null) ok.templates.putSettingIfChanged(signature, ImportProfiles.encode(mapping))
                     refresh(ok)
                     _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted())) }
                 }
