@@ -28,8 +28,14 @@ object PermissionNotes {
 
     fun canUseInternet(context: Context) = declared(context).contains(Manifest.permission.INTERNET)
 
+    /** Notification access is not a manifest permission but a setting the person turns on for an app; shown with the others because it is as sensitive. */
+    fun notificationAccessRow(context: Context) = PermissionRow(
+        "Notification access", NotificationCaptureService.accessGranted(context),
+        "Lets the app see notifications. It reads only Google Pay, PhonePe, Paytm and BHIM, only if you turn on payment app capture, and ignores every other app's without reading it. Nothing is sent anywhere.",
+    )
+
     fun rows(context: Context): List<PermissionRow> = declared(context).map { perm ->
         val (name, why) = NOTES[perm] ?: (perm.substringAfterLast('.') to "No description has been written for this permission.")
         PermissionRow(name, ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED, why)
-    }
+    } + notificationAccessRow(context)
 }

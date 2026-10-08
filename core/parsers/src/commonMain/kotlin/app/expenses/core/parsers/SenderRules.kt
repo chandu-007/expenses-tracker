@@ -29,6 +29,8 @@ object SenderRules {
         "PNBSMS" to "Punjab National Bank", "BOBSMS" to "Bank of Baroda", "BOIIND" to "Bank of India", "CANBNK" to "Canara Bank", "UNIONB" to "Union Bank of India",
         "IDBIBK" to "IDBI Bank", "FEDBNK" to "Federal Bank", "RBLBNK" to "RBL Bank", "AUBANK" to "AU Small Finance Bank", "BANDHN" to "Bandhan Bank",
         "SCBANK" to "Standard Chartered", "HSBCIN" to "HSBC", "AMEXIN" to "American Express", "CITIBK" to "Citibank", "INDBNK" to "Indian Bank",
+        // Payment apps, for notification capture (FR-CAP-06): not text headers, but the same list decides which sources are read.
+        "GPAY" to "Google Pay", "PHONEPE" to "PhonePe", "PAYTM" to "Paytm", "BHIM" to "BHIM",
         "ONECRD" to "OneCard", "SLCEIT" to "slice", "JUPITR" to "Jupiter", "PAYTMB" to "Paytm Payments Bank", "AIRBNK" to "Airtel Payments Bank",
     )
 }

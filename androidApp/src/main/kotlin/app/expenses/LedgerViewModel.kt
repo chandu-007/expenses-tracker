@@ -127,7 +127,7 @@ data class InboxRowUi(
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
-data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String)
+data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false)
 
 /**
  * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
@@ -853,13 +853,18 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     fun loadInbox() = withStore { ok -> _inbox.value = inboxRows(ok) }
 
     fun loadCaptureSettings() = withStore { ok ->
-        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(Capture.SETTING_SMS_ON) == "1", ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty())
+        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(Capture.SETTING_SMS_ON) == "1", ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty(), ok.templates.setting(Capture.SETTING_NOTIF_ON) == "1")
     }
 
     fun setSmsCapture(on: Boolean) = withStore { ok ->
         ok.templates.putSetting(Capture.SETTING_SMS_ON, if (on) "1" else "0")
         _captureSettings.value = _captureSettings.value.copy(smsOn = on)
         refresh(ok)
+    }
+
+    fun setNotificationCapture(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(Capture.SETTING_NOTIF_ON, if (on) "1" else "0")
+        _captureSettings.value = _captureSettings.value.copy(notifOn = on)
     }
 
     fun setExtraHeaders(text: String) = withStore { ok ->

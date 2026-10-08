@@ -120,7 +120,7 @@ private fun InboxCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureSettingsScreen(
-    settings: CaptureSettingsUi, permissionGranted: Boolean, onToggle: (Boolean) -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
+    settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
 ) {
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
@@ -134,6 +134,15 @@ fun CaptureSettingsScreen(
             Text("What it does not do", style = MaterialTheme.typography.labelMedium)
             Text("Texts from people, one-time passwords and anything from a sender that is not a bank are ignored without being read. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
             if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Read payment app notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = settings.notifOn && notifAccess, onCheckedChange = onToggleNotif, modifier = Modifier.testTag("capture_notif_switch"))
+            }
+            Text("Reads the notification a payment app shows after a payment (Google Pay, PhonePe, Paytm, BHIM) and puts it in To review. Notifications from every other app are never read. This needs the phone's Notification access, which you turn on in its settings.", style = MaterialTheme.typography.bodyMedium)
+            if (settings.notifOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_notif_access_missing"))
+            OutlinedButton(onClick = onOpenAccessSettings, modifier = Modifier.testTag("capture_notif_settings")) { Text("Open notification access settings") }
+            HorizontalDivider()
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))
             Text("Only senders on the built-in list of banks are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

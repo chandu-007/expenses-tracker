@@ -189,8 +189,10 @@ class MainActivity : FragmentActivity() {
                             captureOpen -> {
                                 BackHandler { captureOpen = false }
                                 CaptureSettingsScreen(
-                                    captureSettings, smsPermission,
+                                    captureSettings, smsPermission, NotificationCaptureService.accessGranted(this@MainActivity),
                                     onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS) },
+                                    onToggleNotif = { on -> viewModel.setNotificationCapture(on); if (on && !NotificationCaptureService.accessGranted(this@MainActivity)) startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+                                    onOpenAccessSettings = { startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
                                     onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                                 )
                             }
