@@ -2,6 +2,8 @@ package app.expenses.core.storage
 
 import app.expenses.core.domain.BillDue
 import app.expenses.core.domain.CardDue
+import app.expenses.core.domain.RecapDue
+import app.expenses.core.domain.WeeklyRecap
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.BudgetStanding
 import app.expenses.core.domain.Currency
@@ -29,6 +31,7 @@ class NotificationService(
     private val recurring: RecurringStore,
     private val budgets: BudgetStore,
     private val cards: CardStore,
+    private val reports: ReportStore,
 ) {
     private val q get() = db.schemaQueries
 
@@ -39,7 +42,7 @@ class NotificationService(
         return runCatching {
             NotificationPrefs(
                 bills = flag(BILLS, d.bills), budgets = flag(BUDGETS, d.budgets), quietEnabled = flag(QUIET_ON, d.quietEnabled),
-                quietStartMinute = int(QUIET_START, d.quietStartMinute), quietEndMinute = int(QUIET_END, d.quietEndMinute), billHour = int(BILL_HOUR, d.billHour),
+                quietStartMinute = int(QUIET_START, d.quietStartMinute), quietEndMinute = int(QUIET_END, d.quietEndMinute), billHour = int(BILL_HOUR, d.billHour), recap = flag(RECAP, d.recap),
             )
         }.getOrDefault(d) // a damaged value falls back to the defaults rather than blocking the app
     }
@@ -52,6 +55,7 @@ class NotificationService(
             q.putSetting(QUIET_START, p.quietStartMinute.toString())
             q.putSetting(QUIET_END, p.quietEndMinute.toString())
             q.putSetting(BILL_HOUR, p.billHour.toString())
+            q.putSetting(RECAP, if (p.recap) "1" else "0")
         }
     }
 
@@ -65,7 +69,18 @@ class NotificationService(
             val left = if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left of ${it.limit.formatted()}" else "${app.expenses.core.domain.Money(-it.remaining.minorUnits, currency).formatted()} over ${it.limit.formatted()}"
             BudgetStanding(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.state, left, status.period.start)
         }
-        return CheckResult(posted, NoticePlanner.plan(prefs(), today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone)))
+        val prefs = prefs()
+        return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null))
+    }
+
+    /** The recap of the last finished week, or null when there is nothing to say. Computed only when the recap is switched on. */
+    private fun recapDue(today: LocalDate, zone: TimeZone, currency: Currency): RecapDue? {
+        val week = WeeklyRecap.recappedWeek(today)
+        val spent = reports.spent(week, zone, currency)
+        val previous = reports.spent(WeeklyRecap.previousWeek(week), zone, currency)
+        val top = reports.breakdown(week, zone, currency).maxByOrNull { it.total.minorUnits }?.takeIf { it.total.minorUnits > 0 }?.let { it.name to it.share }
+        val (title, text) = WeeklyRecap.compose(week, spent, previous, top) { it.formatted() } ?: return null
+        return RecapDue(week.start, title, text)
     }
 
     /** Credit cards with billing dates that still have something to pay on their latest statement. */
@@ -85,6 +100,7 @@ class NotificationService(
     private fun sent(): Set<String> = q.settingValue(SENT).executeAsOneOrNull()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
 
     companion object {
+        private const val RECAP = "notif_recap"
         private const val BILLS = "notif_bills"
         private const val BUDGETS = "notif_budgets"
         private const val QUIET_ON = "notif_quiet_on"

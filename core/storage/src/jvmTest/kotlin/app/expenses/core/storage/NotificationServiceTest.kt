@@ -35,7 +35,7 @@ class NotificationServiceTest {
     private val ledger = LedgerStore(db, clock, { 1L })
     private val recurring = RecurringStore(db, clock, { 1L }, ledger)
     private val budgets = BudgetStore(db, clock, { 1L }, ledger, recurring)
-    private val service = NotificationService(db, recurring, budgets, CardStore(db, clock) { 1L })
+    private val service = NotificationService(db, recurring, budgets, CardStore(db, clock) { 1L }, ReportStore(db, ledger))
     private val bank = Account(AccountId("bank"), "Bank", AccountType.BANK, inr)
     private val noon = 12 * 60
 

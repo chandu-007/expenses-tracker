@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -64,6 +65,8 @@ class NotificationsTest {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
         }
+        // The app schedules its own background check when the process starts; it could run in the middle of a test and show a notice first, so these tests drive the check themselves.
+        androidx.work.WorkManager.getInstance(context).cancelAllWork().result.get()
         resetApp()
     }
 
@@ -196,11 +199,30 @@ class NotificationsTest {
             }
         }
         assertEquals(1, check())
+        // the system posts asynchronously: wait for it instead of reading the shade once
+        val deadline = System.currentTimeMillis() + 10_000
+        while (manager.activeNotifications.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(100)
         val shown = manager.activeNotifications.single()
         assertTrue(shown.notification.extras.getCharSequence("android.title").toString().startsWith("Amex bill"), shown.notification.extras.getCharSequence("android.title").toString())
         assertEquals(Notifier.channelOf(app.expenses.core.domain.NoticeKind.BILL_DUE), shown.notification.channelId, "with the bill reminders, not the budget alerts")
         manager.cancelAll()
         runBlocking { container.write { it.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), AccountId("amex"), Money(40_000, inr))) } }
         assertEquals(0, check(), "paid in full: nothing to remind")
+    }
+
+    @Test
+    fun theWeeklyRecapIsOffByDefaultTurnsOnFromTheSettingsAndIsShownOnceInItsOwnChannel() {
+        launch(); openFromMenu("open_notifications"); waitFor("notif_recap")
+        assertEquals(false, prefs().recap, "off until the person turns it on")
+        compose.onNodeWithTag("notif_recap").performScrollTo().performClick()
+        compose.waitUntil(10_000) { prefs().recap }
+        runBlocking { container.write { it.notifications.setPrefs(NotificationPrefs(quietEnabled = false, billHour = 0, recap = true)) } }
+        val lastWeek = app.expenses.core.domain.WeeklyRecap.recappedWeek(kotlinx.datetime.LocalDate(today.year, today.month, today.day))
+        val at = java.time.LocalDate.of(lastWeek.start.year, lastWeek.start.monthNumber, lastWeek.start.dayOfMonth).plusDays(2).atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        runBlocking { container.write { ok -> ok.store.save(Expense(EntryId("w"), at, AccountId("bank"), Money(123_400, inr), listOf(CategorySplit(CategoryId("Food"), Money(123_400, inr)))), EntryDetails(merchant = "Dinner")) } }
+        assertEquals(1, check())
+        assertShade("Last week: ₹1,234.00 spent") // waits for the shade, so the read below is safe
+        assertEquals(Notifier.CHANNEL_RECAP, manager.activeNotifications.single().notification.channelId, "its own channel, so it can be muted on its own")
+        assertEquals(0, check(), "once for that week")
     }
 }

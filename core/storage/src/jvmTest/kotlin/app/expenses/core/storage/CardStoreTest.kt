@@ -33,7 +33,7 @@ class CardStoreTest {
     private val recurring = RecurringStore(db, clock, { 1L }, ledger)
     private val budgets = BudgetStore(db, clock, { 1L }, ledger, recurring)
     private val cards = CardStore(db, clock) { 2L }
-    private val service = NotificationService(db, recurring, budgets, cards)
+    private val service = NotificationService(db, recurring, budgets, cards, ReportStore(db, ledger))
     private val card = AccountId("card")
     private val bank = AccountId("bank")
     private val terms = CardTerms("card", statementDay = 15, dueDay = 5, minDuePercent = 5, remindDaysBefore = 3)

@@ -95,6 +95,8 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
             HorizontalDivider()
             SwitchRow("Budget alerts", "Once when a budget reaches 80% of its limit, and once when it goes over", prefs.budgets, "notif_budgets") { on -> onChange { p -> p.copy(budgets = on) } }
             HorizontalDivider()
+            SwitchRow("Weekly recap", "Once a week, early in the week, from the hour above: how much you spent last week, against the week before, and where most of it went. Off until you turn it on", prefs.recap, "notif_recap") { on -> onChange { p -> p.copy(recap = on) } }
+            HorizontalDivider()
             SwitchRow("Quiet hours", "Nothing is shown in this window; it arrives when it ends", prefs.quietEnabled, "notif_quiet") { on -> onChange { p -> p.copy(quietEnabled = on) } }
             TimeRow("From", prefs.quietStartMinute, "notif_quiet_start", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietStartMinute = shiftHours(p.quietStartMinute, d)) } }
             TimeRow("Until", prefs.quietEndMinute, "notif_quiet_end", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietEndMinute = shiftHours(p.quietEndMinute, d)) } }

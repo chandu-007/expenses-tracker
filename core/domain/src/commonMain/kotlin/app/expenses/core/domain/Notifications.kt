@@ -2,7 +2,7 @@ package app.expenses.core.domain
 
 import kotlinx.datetime.LocalDate
 
-enum class NoticeKind { BILL_DUE, CARD_DUE, BUDGET_NEAR, BUDGET_OVER }
+enum class NoticeKind { BILL_DUE, CARD_DUE, BUDGET_NEAR, BUDGET_OVER, WEEKLY_RECAP }
 
 /**
  * What the user chose about notifications. Bill reminders and budget alerts are separate switches; nothing else is ever sent.
@@ -16,6 +16,8 @@ data class NotificationPrefs(
     val quietStartMinute: Int = 22 * 60,
     val quietEndMinute: Int = 7 * 60,
     val billHour: Int = 9,
+    /** The weekly summary of spending. Off until the person turns it on. */
+    val recap: Boolean = false,
 ) {
     init {
         require(quietStartMinute in 0 until MINUTES_PER_DAY && quietEndMinute in 0 until MINUTES_PER_DAY) { "Quiet hours must be within a day" }
@@ -61,6 +63,7 @@ object NoticePlanner {
         budgets: List<BudgetStanding>,
         alreadySent: Set<String>,
         cards: List<CardDue> = emptyList(),
+        recap: RecapDue? = null,
     ): List<Notice> {
         if (prefs.isQuiet(minuteOfDay)) return emptyList()
         val out = mutableListOf<Notice>()
@@ -84,6 +87,11 @@ object NoticePlanner {
                     daysLeft <= c.remindDaysBefore -> out += Notice(key, NoticeKind.CARD_DUE, "${c.name} bill due ${if (daysLeft == 1) "tomorrow" else "in $daysLeft days"}", message)
                 }
             }
+        }
+        if (prefs.recap && recap != null && minuteOfDay >= prefs.billHour * 60) {
+            // Once for each finished week, from the hour set for reminders on any day of the week after it.
+            val key = WeeklyRecap.key(recap.weekStart)
+            if (key !in alreadySent) out += Notice(key, NoticeKind.WEEKLY_RECAP, recap.title, recap.text)
         }
         if (prefs.budgets) {
             for (s in budgets) {

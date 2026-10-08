@@ -119,7 +119,7 @@ class AppContainer(private val context: Context) {
         val recurring = RecurringStore(db, clock, System::currentTimeMillis, store)
         val cardStore = CardStore(db, clock, System::currentTimeMillis)
         val budgets = BudgetStore(db, clock, System::currentTimeMillis, store, recurring)
-        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets, cardStore), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, System::currentTimeMillis), AttachmentStore(db, clock, System::currentTimeMillis), currency, cardStore, InboxStore(db), CaptureRuleStore(db))
+        Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, System::currentTimeMillis), budgets, recurring, NotificationService(db, recurring, budgets, cardStore, ReportStore(db, store)), BackupStore(db, clock, System::currentTimeMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, System::currentTimeMillis), AttachmentStore(db, clock, System::currentTimeMillis), currency, cardStore, InboxStore(db), CaptureRuleStore(db))
     } catch (e: DatabaseKeyUnavailableException) {
         Opened.KeyLost(e.message ?: "The database key is unavailable")
     }

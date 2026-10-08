@@ -20,12 +20,14 @@ import app.expenses.core.domain.NoticeKind
  * (permission or channel off) is offered again later instead of being lost.
  */
 object Notifier {
+    const val CHANNEL_RECAP = "recap"
     const val CHANNEL_BILLS = "bills"
     const val CHANNEL_BUDGETS = "budgets"
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL_BILLS, "Bill reminders", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "A repeating expense or a credit card bill that is due" })
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_RECAP, "Weekly recap", NotificationManager.IMPORTANCE_LOW).apply { description = "A short summary of last week's spending" })
         manager.createNotificationChannel(NotificationChannel(CHANNEL_BUDGETS, "Budget alerts", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "A budget that is near or over its limit" })
     }
 
@@ -38,6 +40,7 @@ object Notifier {
     internal fun channelOf(kind: NoticeKind) = when (kind) {
         NoticeKind.BILL_DUE, NoticeKind.CARD_DUE -> CHANNEL_BILLS
         NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> CHANNEL_BUDGETS
+        NoticeKind.WEEKLY_RECAP -> CHANNEL_RECAP
     }
 
     /** Shows each notice that can be shown and returns those that were. */
