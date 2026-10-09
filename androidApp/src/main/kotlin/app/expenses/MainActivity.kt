@@ -138,7 +138,7 @@ class MainActivity : FragmentActivity() {
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                             customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding,
-                        ).indexOf(true)
+                        ).indexOf(true).let { if (it == 1 || it == 21) -1 else it } // the add and edit form open at once: quick entry is the app's promise
                         app.expenses.ui.ScreenEnter(screenKey) { when {
                             history != null -> {
                                 val h = history!!
