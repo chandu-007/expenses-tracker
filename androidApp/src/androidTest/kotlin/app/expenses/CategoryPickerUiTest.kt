@@ -11,7 +11,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.expenses.core.storage.EncryptedDriver
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -28,7 +27,7 @@ class CategoryPickerUiTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    private fun resetApp() { runBlocking { container.startFresh() } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 

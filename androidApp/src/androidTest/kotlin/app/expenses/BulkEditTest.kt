@@ -22,7 +22,6 @@ import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.Income
 import app.expenses.core.domain.ledger.Refund
 import app.expenses.core.domain.ledger.Transfer
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -42,7 +41,7 @@ class BulkEditTest {
     private var scenario: ActivityScenario<MainActivity>? = null
     private var t = System.currentTimeMillis() - 100_000
 
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    private fun resetApp() { runBlocking { container.startFresh() } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 

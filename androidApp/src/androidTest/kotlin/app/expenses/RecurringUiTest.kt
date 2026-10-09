@@ -24,7 +24,6 @@ import app.expenses.core.domain.Schedule
 import app.expenses.core.domain.ScheduleEnd
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
-import app.expenses.core.storage.EncryptedDriver
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import org.junit.After
@@ -45,8 +44,7 @@ class RecurringUiTest {
     private val today: LocalDate = java.time.LocalDate.now().let { LocalDate(it.year, it.monthValue, it.dayOfMonth) }
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     /** The less frequent places are in the "More" menu on the list. */

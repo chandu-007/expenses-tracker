@@ -492,6 +492,9 @@ entriesLikeStatementRow:
 SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount
   AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
 
+flipInboxDirection:
+UPDATE inbox SET direction = CASE direction WHEN 'DEBIT' THEN 'CREDIT' WHEN 'CREDIT' THEN 'DEBIT' ELSE direction END WHERE id = ? AND status = 'PENDING';
+
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

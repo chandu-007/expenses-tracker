@@ -2,7 +2,6 @@ package app.expenses
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.search
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -19,8 +18,7 @@ class MaintenanceTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() = resetApp()

@@ -163,6 +163,9 @@ fun EntryListScreen(
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
         )
     }
+    var moreOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = moreOpen && selected.isEmpty()) { moreOpen = false }
+    val closeMore = { moreOpen = false }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
@@ -177,49 +180,47 @@ fun EntryListScreen(
                 onCancel = { selected = emptyList() },
             )
             else HomeBar(
-                onSearch = onOpenSearch, onReports = onOpenReports,
-                more = { open, dismiss ->
-                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-                        DropdownMenu(
-                            expanded = open, onDismissRequest = dismiss, shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 6.dp,
-                        ) {
-                            // two tiles to a row, so all fourteen places fit on a phone screen without scrolling
-                            Column(Modifier.width(332.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                MenuGroup("Inbox") {
-                                    MenuTile("📥", "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { dismiss(); onOpenInbox() }
-                                    MenuTile("📱", "Capture from texts", "open_capture") { dismiss(); onOpenCapture() }
-                                }
-                                MenuGroup("Money") {
-                                    MenuTile("🏦", "Accounts", "manage_accounts") { dismiss(); onManageAccounts() }
-                                    MenuTile("🏷", "Categories", "manage_categories") { dismiss(); onManageCategories() }
-                                    MenuTile("🔁", "Repeating expenses", "open_recurring") { dismiss(); onOpenRecurring() }
-                                    MenuTile("📅", "Calendar", "open_calendar") { dismiss(); onOpenCalendar() }
-                                }
-                                MenuGroup("Make it yours") {
-                                    MenuTile("🎨", "Appearance", "open_appearance") { dismiss(); onOpenAppearance() }
-                                    MenuTile("🏠", "Customise home", "open_home_layout") { dismiss(); onCustomiseHome() }
-                                    MenuTile("💱", "Currency", "open_currency") { dismiss(); onOpenCurrency() }
-                                    MenuTile("🔔", "Notifications", "open_notifications") { dismiss(); onOpenNotifications() }
-                                }
-                                MenuGroup("Privacy and data") {
-                                    MenuTile("👁", if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { dismiss(); onToggleHideAmounts() }
-                                    MenuTile("🔒", "App lock", "open_security") { dismiss(); onOpenSecurity() }
-                                    MenuTile("🔍", "Privacy: what this app can see", "open_privacy") { dismiss(); onOpenPrivacy() }
-                                    MenuTile("💾", "Your data: export and backup", "open_data") { dismiss(); onOpenData() }
-                                }
-                            }
-                        }
-                    }
-                },
+                selected = if (moreOpen) "More" else "Home",
+                onHome = { moreOpen = false }, onSearch = { moreOpen = false; onOpenSearch() }, onReports = { moreOpen = false; onOpenReports() },
+                onMore = { moreOpen = !moreOpen },
             )
         },
         floatingActionButton = {
+            if (!moreOpen) {
             // shrinks to a round button while the list is scrolled, and opens up again at the top
             val expanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
             androidx.compose.material3.ExtendedFloatingActionButton(onClick = onAdd, expanded = expanded, icon = { Text("+", style = MaterialTheme.typography.headlineMedium) }, text = { Text("Add") }, modifier = Modifier.testTag("add"))
+            }
         },
     ) { padding ->
+        if (moreOpen) {
+            // a page of its own (not a pop-up over the list): everything the app can do, grouped, in as many columns as the screen is wide enough for
+            MorePage(Modifier.padding(padding)) {
+                                MenuGroup("Inbox") {
+                                    MenuTile("📥", "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
+                                    MenuTile("📱", "Capture from texts", "open_capture") { closeMore(); onOpenCapture() }
+                                }
+                                MenuGroup("Money") {
+                                    MenuTile("🏦", "Accounts", "manage_accounts") { closeMore(); onManageAccounts() }
+                                    MenuTile("🏷", "Categories", "manage_categories") { closeMore(); onManageCategories() }
+                                    MenuTile("🔁", "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
+                                    MenuTile("📅", "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
+                                }
+                                MenuGroup("Make it yours") {
+                                    MenuTile("🎨", "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
+                                    MenuTile("🏠", "Customise home", "open_home_layout") { closeMore(); onCustomiseHome() }
+                                    MenuTile("💱", "Currency", "open_currency") { closeMore(); onOpenCurrency() }
+                                    MenuTile("🔔", "Notifications", "open_notifications") { closeMore(); onOpenNotifications() }
+                                }
+                                MenuGroup("Privacy and data") {
+                                    MenuTile("👁", if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { closeMore(); onToggleHideAmounts() }
+                                    MenuTile("🔒", "App lock", "open_security") { closeMore(); onOpenSecurity() }
+                                    MenuTile("🔍", "Privacy: what this app can see", "open_privacy") { closeMore(); onOpenPrivacy() }
+                                    MenuTile("💾", "Your data: export and backup", "open_data") { closeMore(); onOpenData() }
+                                }
+            }
+            return@Scaffold
+        }
         Column(Modifier.fillMaxSize().padding(padding)) {
             val onHero = MaterialTheme.colorScheme.onPrimary
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground()) {

@@ -23,12 +23,15 @@ class DuplicatesTest {
     }
 
     @Test
-    fun aDifferentReferenceDoesNotPreventALikelyMatchButABlankOneIsIgnored() {
-        assertEquals(DupStrength.LIKELY, Duplicates.best(100, "R9", listOf(e("a", 100, "R1")))!!.strength, "entered by hand with another number, still worth a look")
+    fun aDifferentReferenceMeansADifferentPaymentButABlankOneIsIgnored() {
+        assertNull(Duplicates.best(100, "R9", listOf(e("a", 100, "R1"))), "same amount, same day, but the bank gave two different numbers: two payments")
+        assertEquals("b", Duplicates.best(100, "R9", listOf(e("a", 100, "R1"), e("b", 99, "r9")))!!.entry.id, "the same number still wins")
+        assertEquals(DupStrength.LIKELY, Duplicates.best(100, "R9", listOf(e("a", 100, null)))!!.strength, "an entry with no number can still be the same payment")
         assertEquals(DupStrength.LIKELY, Duplicates.best(100, "  ", listOf(e("a", 100, "  ")))!!.strength)
+        assertEquals(DupStrength.LIKELY, Duplicates.best(100, "R9", listOf(e("a", 100, "  ")))!!.strength, "a blank number on the entry is no number")
     }
 
-    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT") = PendingKey(id, dir, amount, at, ref)
+    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT", sender: String = id) = PendingKey(id, dir, amount, at, ref, sender)
 
     @Test
     fun aSecondTextForTheSamePaymentPointsAtTheFirstWithinTenMinutes() {
@@ -47,5 +50,13 @@ class DuplicatesTest {
         assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1"), p("b", 1000, null))))
         // three texts: each points at the nearest earlier one, so the chain is visible
         assertEquals(mapOf("b" to "a", "c" to "b"), Duplicates.repeatsOfPending(listOf(p("a", 0), p("b", 1000), p("c", 2000))))
+    }
+
+    @Test
+    fun twoPaymentsOfTheSameAmountFromOneSenderAreTwoPaymentsUnlessTheyShareAReference() {
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "HDFCBK"), p("b", 20_000, sender = "HDFCBK"))), "100 and 100 a few seconds apart, no references")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK"), p("b", 20_000, null, sender = "HDFCBK"))), "one has no reference: still two payments")
+        assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK"), p("b", 20_000, "r1", sender = "HDFCBK"))), "the same number from the same sender is a repeat")
+        assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "HDFCBK"), p("b", 20_000, sender = "PHONEPE"))), "a bank alert and an app alert are the same payment")
     }
 }

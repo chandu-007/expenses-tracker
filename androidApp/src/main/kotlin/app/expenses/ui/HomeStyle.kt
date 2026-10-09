@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.blur
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 
 /** The hero card's background: the accent, fading to a slightly deeper (or, in dark mode where the accent is light, lighter) tone of itself, so the text on it keeps its contrast at both ends. */
@@ -111,21 +113,20 @@ fun BoxScope.HeroGlow(color: Color) {
 }
 
 /**
- * The bar along the bottom of the home screen: Home (where you are), Search, Reports and More. A slightly see-through surface with a fine top edge.
- * [more] draws the menu that opens from the last item. The tags are the ones the actions had in the header, so nothing that looked for them changes.
+ * The bar along the bottom of the home screen: Home, Search, Reports and More, equal in width so they fit any screen, each label on one line (it shrinks
+ * rather than wrap). [selected] is "Home" or "More". A slightly see-through surface with a fine top edge. The tags are the ones the actions had before.
  */
 @Composable
-fun HomeBar(onSearch: () -> Unit, onReports: () -> Unit, more: @Composable (open: Boolean, dismiss: () -> Unit) -> Unit) {
-    var open by remember { mutableStateOf(false) }
+fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit) {
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                BarItem("Home", true, {}, Modifier.testTag("nav_home"))
-                BarItem("Search", false, onSearch, Modifier.testTag("open_search"))
-                BarItem("Reports", false, onReports, Modifier.testTag("open_reports"))
-                Box { BarItem("More", false, { open = true }, Modifier.testTag("more_menu")); more(open) { open = false } }
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                BarItem("Home", selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
+                BarItem("Search", false, onSearch, Modifier.weight(1f).testTag("open_search"))
+                BarItem("Reports", false, onReports, Modifier.weight(1f).testTag("open_reports"))
+                BarItem("More", selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"))
             }
         }
     }
@@ -135,10 +136,36 @@ fun HomeBar(onSearch: () -> Unit, onReports: () -> Unit, more: @Composable (open
 private fun BarItem(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent
     Box(
-        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 22.dp, vertical = 10.dp),
+        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) }
+    ) {
+        androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
+            // the label shrinks to fit its quarter of the bar (a narrow screen or a big system font) instead of being cut or wrapped
+            label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 14.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        )
+    }
 }
+
+/** How many tiles go side by side on the More page: two on a phone, three where the screen is wide (a tablet or a phone on its side). */
+val LocalMoreColumns = androidx.compose.runtime.compositionLocalOf { 2 }
+
+/** The More page: a title and the groups of tiles, scrolling if the screen is short, with as many columns as the width allows. */
+@Composable
+fun MorePage(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
+        val cols = if (maxWidth >= 600.dp) 3 else 2
+        androidx.compose.runtime.CompositionLocalProvider(LocalMoreColumns provides cols) {
+            Column(Modifier.fillMaxSize().androidxVerticalScroll().padding(horizontal = 16.dp, vertical = 12.dp).testTag("more_page")) {
+                Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun Modifier.androidxVerticalScroll(): Modifier = this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
 
 /** Whether money went out, came in, or only moved between your own accounts. */
 enum class Flow3 { OUT, IN, MOVE }
@@ -180,14 +207,14 @@ fun MenuHeading(text: String) {
 @Composable
 fun MenuGroup(heading: String, tiles: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
     MenuHeading(heading)
-    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = 2, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = tiles)
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = LocalMoreColumns.current, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = tiles)
 }
 
 /** One place in the More menu: a tinted round badge with a symbol and the name (up to three lines), and optionally a count. Keeps the tag the plain item had. */
 @Composable
 fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(symbol: String, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+        Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {

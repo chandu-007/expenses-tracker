@@ -25,7 +25,6 @@ import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.storage.BackupException
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -51,8 +50,7 @@ class DataTest {
     private val files = mutableListOf<File>()
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     /** The less frequent places are in the "More" menu on the list. */

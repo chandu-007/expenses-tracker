@@ -14,7 +14,6 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -36,8 +35,7 @@ class RecreateStressTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() = resetApp()

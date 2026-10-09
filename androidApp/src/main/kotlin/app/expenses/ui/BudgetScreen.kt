@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -71,33 +75,43 @@ fun BudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
     )
 }
 
-/** The short budget summary under the spending total on the list. Tapping it opens the budget screen. */
+/** The budget as a card under the spending total. Tapping it opens the budget screen. */
 @Composable
 fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit) {
     val overall = budget.overall
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp).testTag("budget_summary"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (overall.limit == null) {
-            Text("Set a budget for ${budget.periodName}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("budget_set_prompt"))
-        } else {
-            BudgetBar(overall)
-            Row(Modifier.fillMaxWidth()) {
+    val tint = if (overall.limit == null) MaterialTheme.colorScheme.primary else stateColor(overall.state)
+    androidx.compose.material3.Card(
+        onClick = onOpen,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("budget_summary"),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (overall.limit == null) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Set a budget for ${budget.periodName}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).testTag("budget_set_prompt"))
+                    Text("Set", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 8.dp))
+                }
+                Text("Pick a limit and see what is left, and what you can spend a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
                 Text(
                     overall.note + " of " + overall.limit,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f).testTag("budget_overall_note"),
+                    modifier = Modifier.testTag("budget_overall_note"),
                 )
+                BudgetBar(overall, Modifier.height(10.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
                 if (budget.perDay != null && !budget.billsUseItAll) {
                     Text("about ${budget.perDay} a day", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day"))
                 } else if (budget.billsUseItAll) {
                     Text("bills use it all", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
                 }
-            }
-            if (budget.categoriesNeedingAttention > 0) {
-                Text(
-                    if (budget.categoriesNeedingAttention == 1) "1 category budget is near or over its limit" else "${budget.categoriesNeedingAttention} category budgets are near or over their limit",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (budget.categoriesNeedingAttention > 0) {
+                    Text(
+                        if (budget.categoriesNeedingAttention == 1) "1 category budget is near or over its limit" else "${budget.categoriesNeedingAttention} category budgets are near or over their limit",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

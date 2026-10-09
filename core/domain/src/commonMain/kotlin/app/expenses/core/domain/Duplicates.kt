@@ -14,7 +14,7 @@ enum class DupStrength {
 data class DupMatch(val entry: DupEntry, val strength: DupStrength)
 
 /** A pending item as far as matching two pending items goes. */
-data class PendingKey(val id: String, val direction: String, val amountMinor: Long, val receivedAt: Long, val reference: String?)
+data class PendingKey(val id: String, val direction: String, val amountMinor: Long, val receivedAt: Long, val reference: String?, val sender: String = id)
 
 object Duplicates {
     /** How far apart (in days) two dates may be and still count as the same day's payment: banks date a transaction when it posts, people enter it when it happens. */
@@ -30,12 +30,14 @@ object Duplicates {
     fun best(day: Long, reference: String?, entries: List<DupEntry>): DupMatch? {
         val ref = reference?.trim()?.takeIf { it.isNotEmpty() }
         if (ref != null) entries.filter { it.reference.equals(ref, ignoreCase = true) }.minByOrNull { it.id }?.let { return DupMatch(it, DupStrength.SAME_REFERENCE) }
-        return entries.filter { kotlin.math.abs(it.day - day) <= DAY_WINDOW }.minWithOrNull(compareBy<DupEntry>({ kotlin.math.abs(it.day - day) }, { it.id }))?.let { DupMatch(it, DupStrength.LIKELY) }
+        // two different bank references are two payments: the same amount a minute apart is not a repeat of the first
+        return entries.filter { kotlin.math.abs(it.day - day) <= DAY_WINDOW && !(ref != null && it.reference?.trim()?.isNotEmpty() == true && !it.reference.trim().equals(ref, ignoreCase = true)) }.minWithOrNull(compareBy<DupEntry>({ kotlin.math.abs(it.day - day) }, { it.id }))?.let { DupMatch(it, DupStrength.LIKELY) }
     }
 
     /**
      * For each pending item, the older pending item it probably repeats: same direction and amount, received within [PENDING_WINDOW_MS], and not a
-     * different bank reference (two payments of the same amount with different references are two payments). The older item is the original.
+     * different bank reference (two payments of the same amount with different references are two payments) and not from the same sender unless the
+     * reference is the same: one bank rarely texts twice about one payment, but a person often pays the same amount twice. The older item is the original.
      */
     fun repeatsOfPending(items: List<PendingKey>): Map<String, String> {
         val out = HashMap<String, String>()
@@ -43,7 +45,8 @@ object Duplicates {
         for ((i, later) in sorted.withIndex()) {
             val earlier = sorted.subList(0, i).lastOrNull { e ->
                 e.direction == later.direction && e.amountMinor == later.amountMinor && later.receivedAt - e.receivedAt <= PENDING_WINDOW_MS &&
-                    !(e.reference != null && later.reference != null && !e.reference.equals(later.reference, ignoreCase = true))
+                    !(e.reference != null && later.reference != null && !e.reference.equals(later.reference, ignoreCase = true)) &&
+                    (e.sender != later.sender || (e.reference != null && later.reference != null))
             }
             if (earlier != null) out[later.id] = earlier.id
         }

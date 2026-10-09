@@ -9,7 +9,6 @@ import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.storage.BackupFile
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -42,8 +41,8 @@ class AutoExportTest {
     private val day = 86_400_000L
     private val t0 = 1_900_000_000_000L
 
-    @Before fun fresh() { runBlocking { container.close() }; EncryptedDriver.reset(context); dir.deleteRecursively(); dir.mkdirs() }
-    @After fun cleanUp() { runBlocking { container.close() }; EncryptedDriver.reset(context); dir.deleteRecursively() }
+    @Before fun fresh() { runBlocking { container.startFresh() }; dir.deleteRecursively(); dir.mkdirs() }
+    @After fun cleanUp() { runBlocking { container.startFresh() }; dir.deleteRecursively() }
 
     private fun setup(freq: AutoExportFrequency, folder: String? = "content://tree/x") = runBlocking {
         container.write { ok ->

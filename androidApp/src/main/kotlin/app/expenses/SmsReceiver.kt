@@ -2,6 +2,8 @@ package app.expenses
 
 import android.content.BroadcastReceiver
 import android.content.Context
+import app.expenses.core.parsers.SmsPart
+import app.expenses.core.parsers.SmsParts
 import android.content.Intent
 import android.provider.Telephony
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +19,10 @@ class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
         val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
-        val texts = parts.filterNotNull().groupBy { it.originatingAddress.orEmpty() }.map { (sender, p) -> Triple(sender, p.joinToString("") { it.messageBody.orEmpty() }, p.first().timestampMillis) }
+        // pieces of one long text are joined, but two separate alerts that arrive together stay two (see SmsParts)
+        val texts = parts.filterNotNull().groupBy { it.originatingAddress.orEmpty() }.flatMap { (sender, p) ->
+            SmsParts.messages(p.map { SmsPart(it.messageBody.orEmpty(), it.timestampMillis) }).map { Triple(sender, it.body, it.at) }
+        }
         if (texts.isEmpty()) return
         val container = (context.applicationContext as ExpensesApp).container
         val pending = goAsync()

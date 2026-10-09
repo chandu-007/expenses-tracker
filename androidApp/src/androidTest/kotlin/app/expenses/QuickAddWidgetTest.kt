@@ -18,7 +18,6 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.CategoryId
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.widget.LAST_AT
 import app.expenses.widget.LAST_ID
 import app.expenses.widget.LAST_TEXT
@@ -52,8 +51,7 @@ class QuickAddWidgetTest {
     private val glanceId = AppWidgetId(4242)
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() = resetApp()

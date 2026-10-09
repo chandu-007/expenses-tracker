@@ -21,7 +21,6 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -65,8 +64,7 @@ class AppLockTest {
     private fun clearLockPrefs() = context.getSharedPreferences("app_lock", Context.MODE_PRIVATE).edit().clear().commit()
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() {

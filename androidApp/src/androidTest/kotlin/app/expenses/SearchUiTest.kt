@@ -19,7 +19,6 @@ import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.Income
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -38,8 +37,7 @@ class SearchUiTest {
     private val day = 86_400_000L
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() = resetApp()

@@ -8,7 +8,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.bulkLoad
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -29,8 +28,8 @@ class RefreshBudgetTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    @Before fun fresh() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
-    @After fun cleanUp() { scenario?.close(); runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    @Before fun fresh() { runBlocking { container.startFresh() } }
+    @After fun cleanUp() { scenario?.close(); runBlocking { container.startFresh() } }
 
     @Test
     fun savingOneExpenseShowsTheNewRowAndTotalWithin50msPhoneBudgetAndTheRestSettlesWithin200ms() {

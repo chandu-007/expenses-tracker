@@ -12,7 +12,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.InboxStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -31,7 +30,7 @@ class InboxUiTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    private fun resetApp() { runBlocking { container.startFresh() } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
@@ -58,6 +57,18 @@ class InboxUiTest {
         assertEquals(125_000, e.amount_minor); assertEquals("EXPENSE", e.kind); assertEquals("shop@okhdfc", e.merchant); assertEquals("sms", e.source); assertEquals("628374659283", e.source_ref)
         val item = runBlocking { container.write { it.inbox.get(id) } }!!
         assertEquals(InboxStatus.CONFIRMED, item.status); assertEquals(e.id, item.entryId); assertEquals(null, item.body)
+    }
+
+    @Test
+    fun aTextReadTheWrongWayRoundCanBeTurnedBeforeItIsAddedAndThenBecomesIncome() {
+        ingest(debit, 5_000); launch(); openInbox()
+        val id = runBlocking { container.write { it.inbox.list().single().id } }!!
+        waitFor("inbox_$id"); assertTrue(has("inbox_flip_$id"))
+        tap("inbox_flip_$id")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("inbox_amount_$id") and androidx.compose.ui.test.hasText("+", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        val e = entries().single()
+        assertEquals("INCOME", e.kind); assertEquals(125_000, e.amount_minor)
     }
 
     @Test

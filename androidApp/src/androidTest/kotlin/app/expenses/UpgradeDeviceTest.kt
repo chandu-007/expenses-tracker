@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class UpgradeDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val container get() = (context.applicationContext as ExpensesApp).container
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    private fun resetApp() { runBlocking { container.startFresh() } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() = resetApp()
 

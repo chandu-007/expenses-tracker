@@ -6,7 +6,6 @@ import android.content.Context
 import androidx.core.app.NotificationCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.expenses.core.storage.EncryptedDriver
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -30,7 +29,7 @@ class NotificationCaptureTest {
     private var before: String? = null
 
     private fun shell(cmd: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).use { it.readBytes().toString(Charsets.UTF_8) }
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
+    private fun resetApp() { runBlocking { container.startFresh() } }
 
     @Before fun setUp() {
         resetApp()

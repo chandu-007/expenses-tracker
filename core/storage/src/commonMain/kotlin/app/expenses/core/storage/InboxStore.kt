@@ -49,6 +49,9 @@ class InboxStore(private val db: ExpensesDb) {
         before != null && before.status == InboxStatus.PENDING.name
     }
 
+    /** Turns a pending item's direction, debit to credit or back: for a text that was read the wrong way round. A resolved item is left alone. */
+    fun flipDirection(id: String) { q.flipInboxDirection(id) }
+
     fun recordEvent(at: Long, senderRoot: String?, outcome: CaptureEventOutcome) {
         db.transaction {
             q.insertCaptureEvent(at, senderRoot ?: "", outcome.name)

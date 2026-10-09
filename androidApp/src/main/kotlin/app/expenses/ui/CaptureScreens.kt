@@ -42,7 +42,7 @@ import app.expenses.InboxRowUi
 @Composable
 fun InboxScreen(
     rows: List<InboxRowUi>, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onBack: () -> Unit,
+    onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onBack: () -> Unit,
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
         if (rows.isEmpty()) {
@@ -51,7 +51,7 @@ fun InboxScreen(
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list")) {
-            items(rows, key = { it.id }) { InboxCard(it, accounts, categories, onConfirm, onDismiss); HorizontalDivider() }
+            items(rows, key = { it.id }) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip); HorizontalDivider() }
         }
     }
 }
@@ -60,7 +60,7 @@ fun InboxScreen(
 @Composable
 private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit,
+    onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit,
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
@@ -104,7 +104,8 @@ private fun InboxCard(
         r.relatedNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_related_${r.id}")) }
         r.duplicateNote?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_duplicate_${r.id}")) }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // wraps onto a second line on a narrow screen instead of running off the edge
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (r.duplicateNote != null) OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
             Button(
                 onClick = { onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } }, enabled = account.isNotEmpty(),
@@ -113,6 +114,7 @@ private fun InboxCard(
             OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
             if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
             TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
+            TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
         }
     }
 }

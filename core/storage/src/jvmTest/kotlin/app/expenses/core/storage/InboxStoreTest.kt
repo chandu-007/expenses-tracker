@@ -46,6 +46,18 @@ class InboxStoreTest {
     }
 
     @Test
+    fun flippingTurnsAPendingItemBothWaysAndLeavesAResolvedOneAlone() {
+        store.add(item("a"), "1"); store.add(item("b"), "2")
+        store.flipDirection("a")
+        assertEquals("CREDIT", store.get("a")!!.direction); assertEquals("DEBIT", store.get("b")!!.direction, "only the one asked for")
+        store.flipDirection("a")
+        assertEquals("DEBIT", store.get("a")!!.direction, "flipping twice is the original")
+        store.confirm("b", "e1"); store.flipDirection("b")
+        assertEquals("DEBIT", store.get("b")!!.direction, "an item already added is not rewritten")
+        store.flipDirection("missing") // no such item: nothing happens
+    }
+
+    @Test
     fun dismissingKeepsNoTextAndUnknownIdsAreRefused() {
         store.add(item("a"), "1"); assertTrue(store.dismiss("a")); assertNull(store.get("a")!!.body)
         assertFalse(store.dismiss("nope")); assertFalse(store.confirm("nope", "e"))

@@ -17,7 +17,6 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -39,7 +38,7 @@ class AttachmentsTest {
     private val made = mutableListOf<File>()
     private val files = AttachmentFiles(context)
 
-    private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context); File(context.filesDir, "attachments").deleteRecursively() }
+    private fun resetApp() { runBlocking { container.startFresh() }; File(context.filesDir, "attachments").deleteRecursively() }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp(); made.forEach { it.delete() } }
 

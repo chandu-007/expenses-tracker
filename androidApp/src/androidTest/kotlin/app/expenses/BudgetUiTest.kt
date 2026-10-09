@@ -24,7 +24,6 @@ import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
-import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -44,8 +43,7 @@ class BudgetUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     private fun resetApp() {
-        runBlocking { container.close() }
-        EncryptedDriver.reset(context)
+        runBlocking { container.startFresh() }
     }
 
     @Before fun fresh() = resetApp()

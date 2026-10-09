@@ -46,6 +46,8 @@ object GenericAlertParser {
     private val balanceContext = Regex("""(?i)(?:bal|avl|avail|limit|due|outstanding|minimum)[a-z .:]*$""")
     private val declined = Regex("""(?i)\b(?:declined|unsuccessful|insufficient\s+funds?)\b|\b(?:txn|transaction|payment)\b[^.]{0,40}\bfailed\b|\bfailed\b[^.]{0,20}\b(?:txn|transaction)\b""")
     private val creditWords = Regex("""(?i)\b(?:credited|received|deposited|refund(?:ed)?|reversed|reversal|added|earned)\b|\bCr\b\.?""")
+    /** "sent by RAVI", "paid by RAVI": the other person did it, so the money came in. The words are taken out before the direction is read. */
+    private val doneByOther = Regex("""(?i)\b(?:sent|paid|transferred)\s+by\b""")
     private val debitWords = Regex("""(?i)\b(?:debited|spent|sent|paid|withdrawn|purchase|transferred|deducted|used|redeemed)\b|\bDr\b\.?""")
     /** "credited to the beneficiary account" describes an outgoing payment seen from the sender's bank. */
     private val outgoingCreditPhrase = Regex("""(?i)\bbeneficiary\b""")
@@ -72,11 +74,13 @@ object GenericAlertParser {
         if (dueNotice.containsMatchIn(text) && !creditWords.containsMatchIn(text) && !debitWords.containsMatchIn(text)) {
             return ParseResult.NotATransaction("due notice")
         }
+        val directional = doneByOther.replace(text, " by ")
         val direction = when {
             declined.containsMatchIn(text) -> Direction.DECLINED
             else -> {
                 val c = creditWords.find(text)?.range?.first
-                val d = debitWords.find(text)?.range?.first
+                // the passive wording only settles a text that also has a credit word: "paid by your card at X" alone is still a debit
+                val d = (if (c != null) debitWords.find(directional) else debitWords.find(text))?.range?.first
                 when {
                     c == null && d == null -> return ParseResult.NotATransaction("no direction")
                     c != null && outgoingCreditPhrase.containsMatchIn(text) -> Direction.DEBIT

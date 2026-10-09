@@ -94,4 +94,20 @@ class GenericAlertParserTest {
         assertEquals("1234", a.accountLast4)
         assertTrue(a.viaUpi)
     }
+
+    @Test
+    fun aCreditWordedWithAPassiveDebitWordIsStillACredit() {
+        fun dir(t: String) = (GenericAlertParser.parse(t) as ParseResult.Parsed).alert.direction
+        assertEquals(Direction.CREDIT, dir("Sent by RAVI KUMAR via UPI: Rs.200.00 received in your account. Ref 123456789012"))
+        assertEquals(Direction.CREDIT, dir("Paid by SWIGGY: INR 500 credited to A/c XX1234. UPI Ref 123456789012"))
+        assertEquals(Direction.CREDIT, dir("Transferred by AMIT from HDFC: Rs 75 deposited. Ref 987654321098"))
+    }
+
+    @Test
+    fun aDebitThatSaysPaidByYourCardIsStillADebit() {
+        fun dir(t: String) = (GenericAlertParser.parse(t) as ParseResult.Parsed).alert.direction
+        assertEquals(Direction.DEBIT, dir("Rs.499.00 paid by your card ending 4321 at AMAZON on 05-10-26"))
+        assertEquals(Direction.DEBIT, dir("Rs.499.00 sent by you to RAVI via UPI Ref 123456789012"), "no credit word: unchanged")
+        assertEquals(Direction.DEBIT, dir("Rs.100 debited from A/c XX1 and sent to shop, credited to the beneficiary account"), "beneficiary rule intact")
+    }
 }

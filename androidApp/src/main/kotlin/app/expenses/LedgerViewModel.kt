@@ -894,7 +894,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val zone = ZoneId.systemDefault()
         val fmt = DateTimeFormatter.ofPattern("d MMM")
         val items = ok.inbox.list()
-        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference) })
+        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase()) })
         val byId = items.associateBy { it.id }
         val dayMs = 86_400_000L
         return items.map { i ->
@@ -1067,6 +1067,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val extra = ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
         _health.value = CaptureHealth.report(counts, now, ok.templates.setting(Capture.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN + extra)
     }
+
+    /** The text was read the wrong way round (money out as in, or the reverse): turns it, which also re-works the account, category and pairing suggestions. */
+    fun flipCaptureDirection(id: String) = withStore { ok -> ok.inbox.flipDirection(id); _inbox.value = inboxRows(ok) }
 
     fun dismissCapture(id: String) = withStore { ok -> ok.inbox.dismiss(id); _inbox.value = inboxRows(ok); refresh(ok) }
 

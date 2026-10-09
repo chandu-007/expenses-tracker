@@ -14,7 +14,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.expenses.core.storage.EncryptedDriver
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -29,8 +28,7 @@ class QuickEntryTest {
 
     /** The database is shared by the whole app process, so close it before deleting its files. */
     private fun resetApp() {
-        kotlinx.coroutines.runBlocking { (context.applicationContext as ExpensesApp).container.close() }
-        EncryptedDriver.reset(context)
+        kotlinx.coroutines.runBlocking { (context.applicationContext as ExpensesApp).container.startFresh() }
     }
     private var scenario: ActivityScenario<MainActivity>? = null
 
