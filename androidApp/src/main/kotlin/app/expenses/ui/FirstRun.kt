@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -40,7 +41,11 @@ fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> 
 /** A single dismissible reminder, shown only when [BackupNudge] says so. */
 @Composable
 fun BackupNudgeCard(onBackUp: () -> Unit, onLater: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("backup_nudge")) {
+    Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("backup_nudge"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Back up your expenses", style = MaterialTheme.typography.titleSmall)
             Text("They live only on this phone. A backup is one file you can keep in your drive or send to yourself.", style = MaterialTheme.typography.bodySmall)

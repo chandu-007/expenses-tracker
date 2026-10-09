@@ -60,6 +60,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -172,6 +173,29 @@ fun EntryListScreen(
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
             )
+            else HomeBar(
+                onSearch = onOpenSearch, onReports = onOpenReports,
+                more = { open, dismiss ->
+                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+                        DropdownMenu(expanded = open, onDismissRequest = dismiss) {
+                            DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { dismiss(); onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
+                            DropdownMenuItem(text = { Text("To review" + if (state.inboxPending > 0) " (${state.inboxPending})" else "") }, onClick = { dismiss(); onOpenInbox() }, modifier = Modifier.testTag("open_inbox"))
+                            DropdownMenuItem(text = { Text("Capture from texts") }, onClick = { dismiss(); onOpenCapture() }, modifier = Modifier.testTag("open_capture"))
+                            DropdownMenuItem(text = { Text("Privacy: what this app can see") }, onClick = { dismiss(); onOpenPrivacy() }, modifier = Modifier.testTag("open_privacy"))
+                            DropdownMenuItem(text = { Text("Currency") }, onClick = { dismiss(); onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
+                            DropdownMenuItem(text = { Text("Appearance") }, onClick = { dismiss(); onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
+                            DropdownMenuItem(text = { Text("Customise home") }, onClick = { dismiss(); onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
+                            DropdownMenuItem(text = { Text("Calendar") }, onClick = { dismiss(); onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
+                            DropdownMenuItem(text = { Text("Accounts") }, onClick = { dismiss(); onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
+                            DropdownMenuItem(text = { Text("Categories") }, onClick = { dismiss(); onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
+                            DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { dismiss(); onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
+                            DropdownMenuItem(text = { Text("Notifications") }, onClick = { dismiss(); onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
+                            DropdownMenuItem(text = { Text("App lock") }, onClick = { dismiss(); onOpenSecurity() }, modifier = Modifier.testTag("open_security"))
+                            DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { dismiss(); onOpenData() }, modifier = Modifier.testTag("open_data"))
+                        }
+                    }
+                },
+            )
         },
         floatingActionButton = {
             // shrinks to a round button while the list is scrolled, and opens up again at the top
@@ -181,40 +205,18 @@ fun EntryListScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             val onHero = MaterialTheme.colorScheme.onPrimary
-            val heroButtons = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = onHero)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 22.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), modifier = Modifier.weight(1f), maxLines = 1)
-                    // frosted pill: a translucent fill with a fine edge, so the actions read as one control on the card
-                    Row(Modifier.background(onHero.copy(alpha = 0.14f), androidx.compose.foundation.shape.RoundedCornerShape(50)).border(1.dp, onHero.copy(alpha = 0.22f), androidx.compose.foundation.shape.RoundedCornerShape(50)), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onOpenSearch, colors = heroButtons, modifier = Modifier.testTag("open_search")) { Text("Search") }
-                    TextButton(onClick = onOpenReports, colors = heroButtons, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
-                    var more by remember { mutableStateOf(false) }
-                    Box {
-                        TextButton(onClick = { more = true }, colors = heroButtons, modifier = Modifier.testTag("more_menu")) { Text("More") }
-                        // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
-                        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
-                            DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
-                            DropdownMenuItem(text = { Text("To review" + if (state.inboxPending > 0) " (${state.inboxPending})" else "") }, onClick = { more = false; onOpenInbox() }, modifier = Modifier.testTag("open_inbox"))
-                            DropdownMenuItem(text = { Text("Capture from texts") }, onClick = { more = false; onOpenCapture() }, modifier = Modifier.testTag("open_capture"))
-                            DropdownMenuItem(text = { Text("Privacy: what this app can see") }, onClick = { more = false; onOpenPrivacy() }, modifier = Modifier.testTag("open_privacy"))
-                            DropdownMenuItem(text = { Text("Currency") }, onClick = { more = false; onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
-                            DropdownMenuItem(text = { Text("Appearance") }, onClick = { more = false; onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
-                            DropdownMenuItem(text = { Text("Customise home") }, onClick = { more = false; onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
-                            DropdownMenuItem(text = { Text("Calendar") }, onClick = { more = false; onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
-                            DropdownMenuItem(text = { Text("Accounts") }, onClick = { more = false; onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
-                            DropdownMenuItem(text = { Text("Categories") }, onClick = { more = false; onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
-                            DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { more = false; onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
-                            DropdownMenuItem(text = { Text("Notifications") }, onClick = { more = false; onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
-                            DropdownMenuItem(text = { Text("App lock") }, onClick = { more = false; onOpenSecurity() }, modifier = Modifier.testTag("open_security"))
-                            DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { more = false; onOpenData() }, modifier = Modifier.testTag("open_data"))
-                        }
-                    }
-                    }
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground()) {
+                if (android.os.Build.VERSION.SDK_INT >= 31) HeroGlow(onHero) // Android 12 and later: two softly blurred lights behind the figures
+                Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
+                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
+                Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp).testTag("month_spend"))
                 }
-                Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp, end = 12.dp).testTag("month_spend"))
             }
-            if (state.inboxPending > 0) androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpenInbox).testTag("inbox_banner")) {
+            if (state.inboxPending > 0) androidx.compose.material3.Card(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpenInbox).testTag("inbox_banner"),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
+            ) {
                 Text("${state.inboxPending} to review: transactions found in your texts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp))
             }
             if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
