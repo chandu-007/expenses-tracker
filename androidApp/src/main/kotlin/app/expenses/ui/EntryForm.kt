@@ -156,8 +156,9 @@ fun EntryFormScreen(
         topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } }) },
         // Pinned above the keyboard so Save is always reachable, however small the screen.
         bottomBar = {
+            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             Button(
-                onClick = { if (built is DraftResult.Ok) onSave(draft, saveAsTemplate) },
+                onClick = { if (built is DraftResult.Ok) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onSave(draft, saveAsTemplate) } },
                 enabled = built is DraftResult.Ok,
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("save"),
             ) { Text("Save") }

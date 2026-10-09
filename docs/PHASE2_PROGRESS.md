@@ -190,3 +190,10 @@ Tests: store query (edges of the window, source, sender, words), ingest at 3 s, 
 **Withdrawn:** the `SmsParts` splitting from slice 50 is removed. Android delivers one broadcast per logical message, so two separate texts do not arrive in one delivery, I had no evidence for it, and it could cut a real two-part alert into two items. The duplicate-label changes in slice 50 stay.
 
 **Verification:** 760 host/JVM tests (both targets counted), 264 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files (host count is lower than slice 50 because the five `SmsParts` tests were removed, net of the new ones).
+
+## Slice 52: motion
+**Added:** press feedback (tabs and More tiles shrink to 95% while pressed and spring back, with a light haptic tick on tabs); a confirm haptic on Save and on the review "Add"; the More page fades and rises in over 180 ms; a row that was just added glows in the accent colour and settles over about a second (seen on the emulator, screenshot on the Desktop); review cards collapse and the rest slide up when one is added or skipped (`animateItem`). Compose follows the phone's animation-scale setting, so with animations off these snap; I did not test that setting.
+**Not done:** counting numbers up on the hero, a skeleton while loading, real icons, a fade on leaving More (only on entering), chart animation.
+**Not measured:** scroll and startup after these changes. I tried `measure_perf.py --skip-seed` with the machine load at 10 to 19 and the 100k-entry database already wiped by the test run, and it produced no data. The last good numbers (scroll 0.3% janky, add screen 18 ms) predate the bottom bar, the cards and this slice. The haptics and press animation were not heard or felt on a real phone.
+
+**Verification:** 760 host/JVM tests (both targets counted), 264 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.

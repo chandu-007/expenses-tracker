@@ -278,7 +278,7 @@ fun EntryListScreen(
                         if (item is RowUi) SwipeableRow(
                             item, onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
                             onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
-                            modifier = Modifier.animateItem(),
+                            modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
                         ) else DayHeader(item as Long)
                     }
                 }
@@ -289,12 +289,15 @@ fun EntryListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, fresh: Boolean = false, modifier: Modifier = Modifier) {
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
         },
     )
+    // a row that has just been added glows in the accent colour and settles over a second, so the eye finds it
+    val flash = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(fresh) { if (fresh) { flash.snapTo(1f); flash.animateTo(0f, androidx.compose.animation.core.tween(1100)) } }
     SwipeToDismissBox(
         state = dismiss,
         enableDismissFromStartToEnd = false,
@@ -308,6 +311,7 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
     ) {
         Row(
             Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
                 .combinedClickable(onClick = { if (selecting) onToggle() else onOpen(row) }, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,

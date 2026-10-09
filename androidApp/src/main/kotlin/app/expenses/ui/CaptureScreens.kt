@@ -51,7 +51,7 @@ fun InboxScreen(
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list")) {
-            items(rows, key = { it.id }) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip); HorizontalDivider() }
+            items(rows, key = { it.id }) { Column(Modifier.animateItem()) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip); HorizontalDivider() } }
         }
     }
 }
@@ -70,6 +70,7 @@ private fun InboxCard(
     var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val credit = r.direction == "CREDIT"
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("inbox_${r.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -109,7 +110,7 @@ private fun InboxCard(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (r.duplicateNote != null) OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
             Button(
-                onClick = { onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } }, enabled = account.isNotEmpty(),
+                onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } }, enabled = account.isNotEmpty(),
                 modifier = Modifier.testTag("inbox_add_${r.id}"),
             ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
             OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }

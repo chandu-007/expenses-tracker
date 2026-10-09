@@ -12,6 +12,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.composed
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -136,7 +138,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
 private fun BarItem(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent
     Box(
-        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 10.dp),
+        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
@@ -156,10 +158,10 @@ fun MorePage(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
         val cols = if (maxWidth >= 600.dp) 3 else 2
         androidx.compose.runtime.CompositionLocalProvider(LocalMoreColumns provides cols) {
-            Column(Modifier.fillMaxSize().androidxVerticalScroll().padding(horizontal = 16.dp, vertical = 12.dp).testTag("more_page")) {
+            FadeIn { Column(Modifier.fillMaxSize().androidxVerticalScroll().padding(horizontal = 16.dp, vertical = 12.dp).testTag("more_page")) {
                 Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
                 content()
-            }
+            } }
         }
     }
 }
@@ -215,7 +217,7 @@ fun MenuGroup(heading: String, tiles: @Composable androidx.compose.foundation.la
 fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(symbol: String, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
+            .pressScale(onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
@@ -224,4 +226,21 @@ fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(symbol: String, lab
         Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 3, modifier = Modifier.weight(1f).padding(start = 8.dp))
         if (badge != null) Box(Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 7.dp, vertical = 1.dp)) { Text(badge, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium) }
     }
+}
+
+/** Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. */
+fun Modifier.pressScale(onClick: () -> Unit, haptic: androidx.compose.ui.hapticfeedback.HapticFeedbackType? = null): Modifier = composed {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 600f), label = "press")
+    val feedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { haptic?.let { feedback.performHapticFeedback(it) }; onClick() }
+}
+
+/** A short rise-and-fade for the More page. */
+@Composable
+fun FadeIn(content: @Composable () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = 180)) }
+    Box(Modifier.graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 12.dp.toPx() }) { content() }
 }
