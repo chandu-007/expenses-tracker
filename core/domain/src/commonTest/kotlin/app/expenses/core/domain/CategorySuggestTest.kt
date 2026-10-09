@@ -49,4 +49,39 @@ class CategorySuggestTest {
         assertEquals(CategorySuggestion("Transport", SuggestionSource.RULE), CategorySuggest.suggest("uber cab", "x", rules, emptyMap(), usable), "the dead rule is skipped, the next one applies")
         assertNull(CategorySuggest.suggest("Uber", "x", listOf(rule("1", "uber", "Deleted")), mapOf("uber" to "Deleted"), usable))
     }
+
+    private val names = mapOf("food" to "F", "groceries" to "G", "transport" to "T", "bills" to "B", "shopping" to "S", "other" to "O")
+    private val allUsable = names.values.toSet()
+    private fun starter(payee: String?, body: String = "", rules: List<CaptureRule> = emptyList(), learned: Map<String, String> = emptyMap(), person: Boolean = false, used: Set<String> = allUsable, by: Map<String, String> = names) =
+        CategorySuggest.suggest(payee, body, rules, learned, used, by, person)
+
+    @Test
+    fun aCommonMerchantGetsItsStarterCategoryWholeWordsOnly() {
+        assertEquals(CategorySuggestion("F", SuggestionSource.STARTER), starter("swiggy@icici"))
+        assertEquals(CategorySuggestion("F", SuggestionSource.STARTER), starter("SWIGGY"))
+        assertEquals(CategorySuggestion("G", SuggestionSource.STARTER), starter("Big Basket"))
+        assertEquals(CategorySuggestion("T", SuggestionSource.STARTER), starter("OLA"))
+        assertEquals(CategorySuggestion("T", SuggestionSource.STARTER), starter("ola@paytm"))
+        assertNull(starter("Coca Cola Stall"), "ola inside cola is not Ola")
+        assertNull(starter("Olaf Traders"), "a word that only starts like Ola is not Ola")
+        assertNull(starter("Chandu"))
+        assertNull(starter(null))
+    }
+
+    @Test
+    fun theStarterListSitsBelowTheOwnRulesAndWhatWasLearnedAndNeverUsesTheBodyOrAMissingCategory() {
+        assertEquals(CategorySuggestion("S", SuggestionSource.RULE), starter("swiggy", rules = listOf(CaptureRule("r", "swiggy", "S"))))
+        assertEquals(CategorySuggestion("G", SuggestionSource.LEARNED), starter("swiggy", learned = mapOf("swiggy" to "G")))
+        assertEquals(null, starter("9704849321@yescred", body = "Rs.100 paid to 9704849321@yescred via Airtel Payments Bank swiggy"), "only the payee is looked at, not the footer")
+        assertNull(starter("swiggy", used = allUsable - "F"), "a hidden or deleted category is not suggested")
+        assertNull(starter("swiggy", by = names - "food"), "no category with that name: no suggestion")
+    }
+
+    @Test
+    fun aPaymentToAPersonSuggestsOtherOnlyWhenNothingElseApplies() {
+        assertEquals(CategorySuggestion("O", SuggestionSource.PERSON), starter("9704849321@yescred", person = true))
+        assertNull(starter("9704849321@yescred", person = false))
+        assertEquals(CategorySuggestion("T", SuggestionSource.LEARNED), starter("9704849321@yescred", learned = mapOf("9704849321" to "T"), person = true), "what was chosen for this person wins")
+        assertNull(starter("9704849321@yescred", person = true, by = names - "other"))
+    }
 }

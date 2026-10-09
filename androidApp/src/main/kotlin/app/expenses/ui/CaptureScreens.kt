@@ -42,7 +42,7 @@ import app.expenses.InboxRowUi
 @Composable
 fun InboxScreen(
     rows: List<InboxRowUi>, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onBack: () -> Unit,
+    onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit, onBack: () -> Unit,
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
         if (rows.isEmpty()) {
@@ -51,7 +51,7 @@ fun InboxScreen(
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list")) {
-            items(rows, key = { it.id }) { Column(Modifier.animateItem()) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip); HorizontalDivider() } }
+            items(rows, key = { it.id }) { Column(Modifier.animateItem()) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip, onName); HorizontalDivider() } }
         }
     }
 }
@@ -60,7 +60,7 @@ fun InboxScreen(
 @Composable
 private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
-    onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit,
+    onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit,
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
@@ -69,6 +69,7 @@ private fun InboxCard(
     var account by rememberSaveable(r.id) { mutableStateOf(r.accountId) }
     var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
+    var naming by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val credit = r.direction == "CREDIT"
@@ -116,7 +117,16 @@ private fun InboxCard(
             OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
             if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
             TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
+            if (r.nameable) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
             TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
+        }
+        if (naming && r.nameable) {
+            var nameText by rememberSaveable(r.id) { mutableStateOf("") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(nameText, { nameText = it }, label = { Text(r.payee?.let { "A name for $it" } ?: "A name for this payee") }, singleLine = true, modifier = Modifier.weight(1f).testTag("inbox_name_${r.id}"))
+                Button(onClick = { onName(r.id, nameText); naming = false }, modifier = Modifier.testTag("inbox_name_ok_${r.id}")) { Text("Save") }
+            }
+            Text("Every later payment to or from the same address shows this name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -19,7 +19,7 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
     }
 }
 
-enum class SuggestionSource { RULE, LEARNED }
+enum class SuggestionSource { RULE, LEARNED, STARTER, PERSON }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -38,10 +38,19 @@ object CategorySuggest {
      * A category that no longer exists or is hidden (it is not in [usable]) is never suggested, so a deleted category cannot come back through a rule.
      * Null when nothing applies, which is better than a wrong guess the person might not notice.
      */
-    fun suggest(payee: String?, body: String, rules: List<CaptureRule>, learned: Map<String, String>, usable: Set<String>): CategorySuggestion? {
+    fun suggest(
+        payee: String?, body: String, rules: List<CaptureRule>, learned: Map<String, String>, usable: Set<String>,
+        /** Category name to id, for the visible categories: lets the starter list and the person default find a category by its name. */
+        byName: Map<String, String> = emptyMap(), toAPerson: Boolean = false,
+    ): CategorySuggestion? {
         val text = listOfNotNull(payee, body).joinToString(" ")
         rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
-        val key = payee?.let(::merchantKey)?.takeIf { it.length >= 2 } ?: return null
-        return learned[key]?.takeIf { it in usable }?.let { CategorySuggestion(it, SuggestionSource.LEARNED) }
+        val key = payee?.let(::merchantKey)?.takeIf { it.length >= 2 }
+        key?.let { learned[it] }?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        // below the person's own choices: a common merchant, then "a payment to a person" (no merchant to go by, so the catch-all)
+        // the payee only, never the whole text: a bank's own name or footer ("Airtel Payments Bank") must not pick a category
+        payee?.let { DefaultRules.categoryNameFor(it) }?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.STARTER) } }
+        if (toAPerson) byName["other"]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.PERSON) }
+        return null
     }
 }

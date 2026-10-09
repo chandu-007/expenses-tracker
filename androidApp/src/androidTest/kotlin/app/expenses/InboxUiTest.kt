@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -57,6 +60,36 @@ class InboxUiTest {
         assertEquals(125_000, e.amount_minor); assertEquals("EXPENSE", e.kind); assertEquals("shop@okhdfc", e.merchant); assertEquals("sms", e.source); assertEquals("628374659283", e.source_ref)
         val item = runBlocking { container.write { it.inbox.get(id) } }!!
         assertEquals(InboxStatus.CONFIRMED, item.status); assertEquals(e.id, item.entryId); assertEquals(null, item.body)
+    }
+
+    private fun to(vpa: String, ref: String) = "Rs.200.00 debited from A/c XX1234 on 05-10-26 to VPA $vpa (UPI Ref $ref). Not you? Call 18002586161"
+    private fun idAt(at: Long) = runBlocking { container.write { ok -> ok.inbox.list().first { it.receivedAt == at }.id } }!!
+    private fun goes(id: String) = compose.onNodeWithTag("inbox_goes_$id", useUnmergedTree = true)
+
+    @Test
+    fun aCommonMerchantAndAPaymentToAPersonGetSuggestedCategoriesWithTheirReason() {
+        ingest(to("swiggy@icici", "100000000001"), 1_000); ingest(to("9704849321@yescred", "100000000002"), 2_000); ingest(to("randomshop@okaxis", "100000000003"), 3_000)
+        launch(); openInbox()
+        val shop = idAt(1_000); val person = idAt(2_000); val other = idAt(3_000)
+        waitFor("inbox_goes_$shop")
+        goes(shop).assertTextContains("Food", substring = true).assertTextContains("a common merchant", substring = true)
+        goes(person).assertTextContains("Other", substring = true).assertTextContains("a payment to a person", substring = true)
+        goes(other).assertTextContains("no category", substring = true)
+    }
+
+    @Test
+    fun aPayeeNamedOnceIsShownByThatNameOnLaterTextsAndOnTheEntry() {
+        ingest(to("9704849321@yescred", "100000000004"), 1_000)
+        launch(); openInbox()
+        val first = idAt(1_000)
+        waitFor("inbox_$first"); tap("inbox_name_btn_$first")
+        compose.onNodeWithTag("inbox_name_$first", useUnmergedTree = true).performTextInput("Chandu"); tap("inbox_name_ok_$first")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Chandu"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        tap("inbox_add_$first"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals("Chandu", entries().single().merchant)
+        ingest(to("9704849321@yescred", "100000000005"), 9_000_000)
+        tap("inbox_back"); openInbox()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Chandu"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

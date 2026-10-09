@@ -135,6 +135,8 @@ data class InboxRowUi(
     val refundOfEntry: String = "",
     /** "person" or "business" when the payee's UPI address says so, else empty. */
     val payeeKind: String = "",
+    /** Whether the person can give this payee a name of their own (there is an address or name in the text to attach it to). */
+    val nameable: Boolean = false,
 )
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
@@ -944,21 +946,26 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
-            val payee = PayeeGuess.of(i.body.orEmpty())
-            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(payee, i.body.orEmpty(), rules, learned, usable) else null
+            val rawPayee = PayeeGuess.of(i.body.orEmpty())
+            val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
+            val payee = named ?: rawPayee
+            val byName = ok.categories.list().filter { !it.hidden }.associate { it.name.lowercase() to it.id }
+            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON) else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
                 duplicateNote = note.takeIf { reverses == null }, relatedNote = note.takeIf { reverses != null }, duplicateOfEntry = match?.entry?.id,
-                payeeKind = when (PayeeKinds.of(payee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
+                nameable = rawPayee != null,
+                payeeKind = when (PayeeKinds.of(rawPayee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
-                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
+                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; null -> "" },
             )
         }
     }
 
     private fun accountKey(issuer: String, last4: String?) = "capture_acct:$issuer:${last4.orEmpty()}"
+    private fun payeeNameKey(raw: String) = "payee_name:" + app.expenses.core.domain.CategorySuggest.merchantKey(raw)
 
     /**
      * Turns a pending captured transaction into an entry in [accountId] (and [categoryId] for a debit). [onDone] gets null on success, otherwise
@@ -976,7 +983,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     if (i.currency != BaseCurrency.current.code) return@write "This is in ${i.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
                     val kind = if (i.direction == "CREDIT") DraftKind.INCOME else DraftKind.EXPENSE
                     val at = app.expenses.core.domain.CaptureTime.entryTime(i.txnDate?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }, i.receivedAt, kotlinx.datetime.TimeZone.currentSystemDefault())
-                    val payee = PayeeGuess.of(i.body.orEmpty()) ?: i.issuer
+                    val rawPayee = PayeeGuess.of(i.body.orEmpty())
+                    val payee = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() } ?: rawPayee ?: i.issuer
                     val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
                     val draft = when (treatment) {
                         "TRANSFER" -> EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), fromId, toId, payee, at)
@@ -1066,6 +1074,13 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
         val extra = ok.templates.setting(Capture.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
         _health.value = CaptureHealth.report(counts, now, ok.templates.setting(Capture.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN + extra)
+    }
+
+    /** Gives the payee in this text a name of your own ("Chandu" for a phone-number address); every later text for the same address shows it. A blank name takes it off. */
+    fun namePayee(id: String, name: String) = withStore { ok ->
+        val raw = ok.inbox.get(id)?.body?.let { PayeeGuess.of(it) } ?: return@withStore
+        ok.templates.putSetting(payeeNameKey(raw), name.trim())
+        _inbox.value = inboxRows(ok)
     }
 
     /** The text was read the wrong way round (money out as in, or the reverse): turns it, which also re-works the account, category and pairing suggestions. */

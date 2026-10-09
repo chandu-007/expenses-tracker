@@ -31,4 +31,23 @@ class PayeeGuessTest {
         assertNull(PayeeGuess.of("Rs.5,000 withdrawn at ATM 12345 on 05-10-26"), "digits are not a name")
         assertNull(PayeeGuess.of(""))
     }
+
+    @Test
+    fun aPaymentAppNotificationGivesThePersonsNameFromItsTitleOrLeadingSentence() {
+        assertEquals("Chandu", PayeeGuess.of("Chandu: Chandu. sent ₹10 to you."), "the owner's real PhonePe wording")
+        assertEquals("Ravi Kumar", PayeeGuess.of("Ravi Kumar: Received ₹250 in your account"))
+        assertEquals("Anita", PayeeGuess.of("Anita paid you ₹120 for lunch"))
+        assertEquals("Anita Rao", PayeeGuess.of("Anita Rao: paid you Rs.120"))
+    }
+
+    @Test
+    fun aHeadingOrABankIsNotTakenForAPerson() {
+        assertNull(PayeeGuess.of("Payment successful: ₹75 paid"))
+        assertNull(PayeeGuess.of("Money received: ₹75 added"))
+        assertNull(PayeeGuess.of("HDFC Bank: ₹75 debited"))
+        assertNull(PayeeGuess.of("Dear Customer: ₹75 debited"))
+        assertNull(PayeeGuess.of("Paid ₹75: to a shop"), "a title with an amount is not a name")
+        assertEquals("Chandu", PayeeGuess.of("Chandu: Rs.75 debited to VPA 9704849321@yescred"), "a person's name in the title beats a bare phone-number address")
+        assertEquals("shop@okhdfc", PayeeGuess.of("Rs.75 debited to VPA shop@okhdfc"), "with no title the address is still the name")
+    }
 }
