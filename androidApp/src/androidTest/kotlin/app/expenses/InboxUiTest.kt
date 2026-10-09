@@ -129,4 +129,13 @@ class InboxUiTest {
         waitFor("inbox_meta_" + byTime.getValue(1_000))
         assertTrue(meta(1_000).endsWith("to a person"), meta(1_000)); assertTrue(meta(2_000_000).endsWith("to a business"), meta(2_000_000)); assertTrue(meta(4_000_000).endsWith("ending 1234"), meta(4_000_000))
     }
+
+    @Test
+    fun aTextArrivingOnTheBanksDateKeepsItsTimeOfDayOnTheEntry() {
+        val arrived = java.time.LocalDate.of(2026, 10, 5).atTime(9, 41).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        ingest(debit, arrived); launch(); openInbox()
+        val id = runBlocking { container.write { it.inbox.list().single().id } }!!
+        waitFor("inbox_$id"); tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals(arrived, entries().single().occurred_at)
+    }
 }

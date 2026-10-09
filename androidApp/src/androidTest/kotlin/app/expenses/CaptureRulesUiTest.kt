@@ -96,4 +96,21 @@ class CaptureRulesUiTest {
         id = pendingId(); waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Fun (what you chose last time)"), "the correction replaced the earlier choice: " + textOf("inbox_goes_$id"))
     }
+
+    @Test
+    fun correctingACapturedEntryLaterInTheEditorIsLearnedToo() {
+        ingest(text("dosa@okaxis", "444444444441"), 5_000)
+        launch(); openInbox()
+        var id = pendingId(); waitFor("inbox_goes_$id")
+        tap("inbox_change_$id"); tap("inbox_category_${id}_Food"); tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        runBlocking {
+            container.write { ok ->
+                val e = ok.db.schemaQueries.recentEntries(1).executeAsList().single()
+                EntryActions(ok).save(app.expenses.core.domain.EntryDraft(e.id, app.expenses.core.domain.DraftKind.EXPENSE, "1250", "Fun", emptyList(), e.account_id.orEmpty(), "", e.merchant.orEmpty(), e.occurred_at))
+            }
+        }
+        ingest(text("dosa@okaxis", "444444444442"), 6_000); tap("inbox_back"); openInbox()
+        id = pendingId(); waitFor("inbox_goes_$id")
+        assertTrue(textOf("inbox_goes_$id").contains("Fun (what you chose last time)"), textOf("inbox_goes_$id"))
+    }
 }

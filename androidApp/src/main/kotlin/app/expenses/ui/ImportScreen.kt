@@ -84,6 +84,7 @@ fun ImportScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("import_result")) {
                     Text("Imported ${r.imported} ${if (r.imported == 1) "transaction" else "transactions"}", style = MaterialTheme.typography.titleLarge)
                     Text("Spending ${r.spending}, income ${r.income}.")
+                    if (r.matchedExisting > 0) Text("${r.matchedExisting} matched entries you already have (from texts or typed by hand: same account, amount and direction within a day) and were not added again.", color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("import_matched"))
                     if (r.alreadyThere > 0) Text("${r.alreadyThere} were already in the app from an earlier import and were left as they are.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("They have no category yet. Open Reports or the list to sort them.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

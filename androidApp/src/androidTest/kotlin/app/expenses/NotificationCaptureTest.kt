@@ -25,7 +25,8 @@ class NotificationCaptureTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val container get() = (context.applicationContext as ExpensesApp).container
-    private val manager get() = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val poster = context
+    private val manager get() = poster.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private var before: String? = null
 
     private fun shell(cmd: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).use { it.readBytes().toString(Charsets.UTF_8) }
@@ -45,7 +46,7 @@ class NotificationCaptureTest {
     }
 
     private fun compose(ms: Long, cond: () -> Boolean) { val end = System.currentTimeMillis() + ms; while (!cond() && System.currentTimeMillis() < end) Thread.sleep(100) }
-    private fun post(id: Int, title: String, text: String) = manager.notify(id, NotificationCompat.Builder(context, "t").setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(text).build())
+    private fun post(id: Int, title: String, text: String) = manager.notify(id, NotificationCompat.Builder(poster, "t").setSmallIcon(R.drawable.ic_notification).addExtras(android.os.Bundle().apply { putBoolean(NotificationCaptureService.TEST_EXTRA, true) }).setContentTitle(title).setContentText(text).build())
     private fun pending() = runBlocking { container.write { it.inbox.list() } }!!
     private fun switchOn(on: Boolean) = runBlocking { container.write { it.templates.putSetting(Capture.SETTING_NOTIF_ON, if (on) "1" else "0") } }
 
@@ -90,11 +91,22 @@ class NotificationCaptureTest {
     @Test
     fun aGroupSummaryNotificationIsNotReadSoABundleOfPaymentsIsNotCountedTwice() {
         switchOn(true)
-        manager.notify(7, NotificationCompat.Builder(context, "t").setSmallIcon(R.drawable.ic_notification).setContentTitle("Paid ₹90").setContentText("to Metro").setGroup("g").setGroupSummary(true).build())
+        manager.notify(7, NotificationCompat.Builder(poster, "t").setSmallIcon(R.drawable.ic_notification).addExtras(android.os.Bundle().apply { putBoolean(NotificationCaptureService.TEST_EXTRA, true) }).setContentTitle("Paid ₹90").setContentText("to Metro").setGroup("g").setGroupSummary(true).build())
         Thread.sleep(2_500)
         assertEquals(emptyList(), pending())
         post(8, "Paid ₹91", "to Metro")
         compose(10_000) { pending().isNotEmpty() }
         assertEquals(9_100L, pending().single().amountMinor)
+    }
+
+    @Test
+    fun theAppsOwnNotificationsAreNeverReadEvenWithAnAmountInThem() {
+        switchOn(true)
+        val own = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        own.createNotificationChannel(NotificationChannel("own", "own", NotificationManager.IMPORTANCE_DEFAULT))
+        own.notify(9, NotificationCompat.Builder(context, "own").setSmallIcon(R.drawable.ic_notification).setContentTitle("Rent due today").setContentText("Paid ₹15,000 to Landlord is due").build())
+        Thread.sleep(2_500)
+        assertEquals(emptyList(), pending())
+        own.cancelAll()
     }
 }

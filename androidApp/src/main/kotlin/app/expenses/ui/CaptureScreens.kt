@@ -101,6 +101,7 @@ private fun InboxCard(
                 categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
             }
         }
+        r.relatedNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_related_${r.id}")) }
         r.duplicateNote?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_duplicate_${r.id}")) }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

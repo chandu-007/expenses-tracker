@@ -118,6 +118,8 @@ data class InboxRowUi(
     /** Set when this looks like something already in the ledger (or the same payment as another text): what to tell the person. */
     val duplicateNote: String? = null,
     val duplicateOfEntry: String? = null,
+    /** A note that is not a duplicate warning (a refund that carries the original payment's reference): shown, with Add staying the main action. */
+    val relatedNote: String? = null,
     /** How the ledger should record it: "PAYMENT" (an expense or income), "TRANSFER" (between the person's own accounts) or "REFUND" (of an earlier expense). */
     val treatment: String = "PAYMENT",
     /** What the treatment is, in words ("cash withdrawal", "credit card payment", "refund of Cafe"). */
@@ -230,7 +232,7 @@ data class UndoUi(
 data class ImportRowUi(val text: String, val amount: String, val spending: Boolean)
 
 /** What an import did, for the screen. */
-data class ImportResultUi(val imported: Int, val alreadyThere: Int, val spending: String, val income: String)
+data class ImportResultUi(val imported: Int, val alreadyThere: Int, val spending: String, val income: String, val matchedExisting: Int = 0)
 
 /** State of the statement import. [mapping] is null until a file is chosen. Nothing is saved until the user confirms. */
 data class ImportUi(
@@ -894,12 +896,18 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             fun dup(id: String, at: Long, ref: String?, merchant: String?) = DupEntry(id, i.amountMinor, Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay(), ref, merchant ?: "an entry")
             val near = if (i.direction == "CREDIT") ok.db.schemaQueries.entriesNearCredit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
                 else ok.db.schemaQueries.entriesNearDebit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
-            val sameRef = i.reference?.let { r -> ok.db.schemaQueries.entriesWithReference(r).executeAsList().filter { it.amount_minor == i.amountMinor }.map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) } }.orEmpty()
-            val match = Duplicates.best(day.toEpochDay(), i.reference, (near + sameRef).distinctBy { it.id })
+            // A bank reference ties two texts to one transaction only when they point the same way: a reversal or refund text carries the reference of the
+            // payment it undoes, and calling that a duplicate would have the person skip money coming back.
+            val sameRefAll = i.reference?.let { r -> ok.db.schemaQueries.entriesWithReference(r).executeAsList().filter { it.amount_minor == i.amountMinor } }.orEmpty()
+            val isCredit = i.direction == "CREDIT"
+            val (alike, opposite) = sameRefAll.partition { e -> e.kind == "TRANSFER" || (e.kind == "INCOME" || e.kind == "REFUND") == isCredit }
+            val match = Duplicates.best(day.toEpochDay(), i.reference, (near + alike.map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }).distinctBy { it.id })
+            val reverses = if (match == null) opposite.firstOrNull() else null
             val first = repeats[i.id]?.let { byId[it] }
             val note = when {
                 match != null -> (if (match.strength == DupStrength.SAME_REFERENCE) "Already in your ledger: " else "Looks like one you already added: ") + "${match.entry.label} on ${fmt.format(LocalDate.ofEpochDay(match.entry.day))}"
                 first != null -> "Probably the same payment as the text from ${first.issuer} above"
+                reverses != null -> "Carries the reference of ${if (isCredit) "the payment" else "the money received"} \"${reverses.merchant ?: "an entry"}\" on ${fmt.format(Instant.ofEpochMilli(reverses.occurred_at).atZone(zone).toLocalDate())}: looks like its refund or reversal, not a repeat"
                 else -> null
             }
             val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
@@ -913,6 +921,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 kind == MessageKind.CARD_PAYMENT && cards.isNotEmpty() && ownBank != null -> {
                     treatment = "TRANSFER"; treatmentLabel = "credit card payment"
                     toAcct = (remembered?.takeIf { id -> cards.any { it.id == id } } ?: cards.first().id); fromAcct = ownBank.id
+                }
+                // money into a credit card is almost always a payment of the bill (a refund is caught above): not income, which would inflate the reports
+                kind == MessageKind.PAYMENT && i.direction == "CREDIT" && remembered != null && cards.any { it.id == remembered } && accounts.any { it.type == "BANK" } -> {
+                    treatment = "TRANSFER"; treatmentLabel = "payment received on the card"; toAcct = remembered; fromAcct = accounts.first { it.type == "BANK" }.id
                 }
                 kind == MessageKind.REFUND -> {
                     val day = (i.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(i.receivedAt).atZone(zone).toLocalDate())
@@ -930,7 +942,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
-                duplicateNote = note, duplicateOfEntry = match?.entry?.id,
+                duplicateNote = note.takeIf { reverses == null }, relatedNote = note.takeIf { reverses != null }, duplicateOfEntry = match?.entry?.id,
                 payeeKind = when (PayeeKinds.of(payee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
                 categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; null -> "" },
@@ -955,7 +967,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     if (i.status != InboxStatus.PENDING) return@write "That item was already handled."
                     if (i.currency != BaseCurrency.current.code) return@write "This is in ${i.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
                     val kind = if (i.direction == "CREDIT") DraftKind.INCOME else DraftKind.EXPENSE
-                    val at = i.txnDate?.let { runCatching { LocalDate.parse(it).atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() } ?: i.receivedAt
+                    val at = app.expenses.core.domain.CaptureTime.entryTime(i.txnDate?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }, i.receivedAt, kotlinx.datetime.TimeZone.currentSystemDefault())
                     val payee = PayeeGuess.of(i.body.orEmpty()) ?: i.issuer
                     val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
                     val draft = when (treatment) {
@@ -967,7 +979,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         is DraftResult.Ok -> r.entry
                         is DraftResult.Problem -> return@write r.message
                     }
-                    val sourceRef = i.reference ?: i.id
+                    var sourceRef = i.reference ?: i.id
+                    // the same reference on an entry that points the other way is the payment this one undoes: it gets its own key, not a refusal
+                    ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
+                        val opposite = existing.kind != "TRANSFER" && (existing.kind == "INCOME" || existing.kind == "REFUND") != (i.direction == "CREDIT")
+                        if (opposite) sourceRef = "$sourceRef/reversal"
+                    }
                     // the unique index on (source, reference) covers deleted entries too: say why instead of failing on it
                     ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
                         return@write if (existing.deleted == 1L) "You deleted an entry from this message earlier, so it is not added again. Skip this one."
@@ -1207,7 +1224,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     val signature = mapping?.takeIf { it.headerRows > 0 }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
                     if (mapping != null && signature != null) ok.templates.putSettingIfChanged(signature, ImportProfiles.encode(mapping))
                     refresh(ok)
-                    _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted())) }
+                    _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting)) }
                 }
             } catch (e: Exception) {
                 _import.update { it.copy(busy = false, error = "Nothing was imported: ${e.message ?: e::class.java.simpleName}") }

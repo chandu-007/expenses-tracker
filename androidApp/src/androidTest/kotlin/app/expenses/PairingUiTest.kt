@@ -127,4 +127,15 @@ class PairingUiTest {
         launch(); openInbox(); val id = idAt(5_000); waitFor("inbox_$id")
         assertTrue(!has("inbox_pair_$id"), "nothing left to refund on that purchase")
     }
+
+    @Test
+    fun aPlainCreditOnACreditCardIsOfferedAsAPaymentOnTheCardNotAsIncome() {
+        card()
+        runBlocking { container.write { it.templates.putSetting("capture_acct:Axis Bank:0000", "amex") } }
+        ingest("AX-AXISBK-S", "INR 4,000.00 credited to your Axis Bank Card XX0000 on 05-10-26. Avl limit INR 50,000", 5_000)
+        launch(); openInbox(); val id = idAt(5_000); waitFor("inbox_pair_$id")
+        assertTrue(textOf("inbox_pair_$id").contains("payment received on the card: from Bank to Amex"), textOf("inbox_pair_$id"))
+        tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals("TRANSFER", entries().single().kind)
+    }
 }

@@ -153,6 +153,8 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
         }
         val text = draft.note.trim().ifEmpty { null }
         ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, tags = draft.tags))
+        // Correcting a captured entry later, in the ordinary editor, teaches the same lesson as choosing in the inbox: next time that payee starts there.
+        if (existing?.source == "sms" && draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft) && draft.category.isNotEmpty()) ok.captureRules.learn(text, draft.category)
         if (draft.kind == DraftKind.EXPENSE) {
             val category = if (EntryDrafts.isSplit(draft)) "" else draft.category
             if (category.isNotEmpty()) {

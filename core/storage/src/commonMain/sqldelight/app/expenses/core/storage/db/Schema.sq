@@ -435,7 +435,7 @@ allAttachmentIds:
 SELECT id FROM attachment;
 
 entryBySourceRef:
-SELECT id, deleted FROM entry WHERE source = :source AND source_ref = :sourceRef;
+SELECT id, deleted, kind FROM entry WHERE source = :source AND source_ref = :sourceRef;
 
 allCaptureRules:
 SELECT * FROM capture_rule ORDER BY position, id;
@@ -479,13 +479,18 @@ WHERE deleted = 0 AND kind = 'TRANSFER' AND to_amount_minor = :amount AND occurr
 
 -- The entries carrying a bank reference, whatever their date and amount: the same reference is the same transaction.
 entriesWithReference:
-SELECT id, occurred_at, source_ref, merchant, amount_minor FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
+SELECT id, occurred_at, source_ref, merchant, amount_minor, kind FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
 
 -- Expenses a refund of :amount could be for: at least that much, in a window before it, best amount match first, then nearest.
 refundCandidates:
 SELECT id, merchant, note, amount_minor, occurred_at FROM entry
 WHERE deleted = 0 AND kind = 'EXPENSE' AND amount_minor >= :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 ORDER BY (amount_minor = :amount) DESC, occurred_at DESC LIMIT 8;
+
+-- Entries from another source (a text, a notification, typed by hand) that a statement row might be: same account, kind and amount, in a window.
+entriesLikeStatementRow:
+SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
 
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)

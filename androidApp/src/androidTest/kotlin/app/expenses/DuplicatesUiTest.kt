@@ -117,4 +117,15 @@ class DuplicatesUiTest {
         launch(); openInbox(); val id = ids().getValue(5_000); waitFor("inbox_$id")
         assertTrue(!has("inbox_duplicate_$id"))
     }
+
+    @Test
+    fun aCreditCarryingTheReferenceOfTheDebitItUndoesIsNotCalledADuplicateAndCanBeAdded() {
+        save { it.store.save(Expense(EntryId("pay"), oct5, AccountId("bank"), Money(125_000, Currency.INR)), EntryDetails(merchant = "Shop", source = "sms", sourceRef = "888888888888")) }
+        ingest("AX-HDFCBK-S", "Rs.1,250.00 credited to A/c XX1234 on 05-10-26 as reversal of UPI Ref 888888888888 (failed payment).", 5_000)
+        launch(); openInbox(); val id = ids().getValue(5_000); waitFor("inbox_related_$id")
+        assertTrue(!has("inbox_duplicate_$id") && !has("inbox_same_$id"), "no 'same one' warning")
+        assertTrue(textOf("inbox_related_$id").contains("refund or reversal"), textOf("inbox_related_$id"))
+        tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals(2, entryCount())
+    }
 }

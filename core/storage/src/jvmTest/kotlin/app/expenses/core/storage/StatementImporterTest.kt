@@ -173,4 +173,29 @@ class StatementImporterTest {
         assertTrue(seconds < 30, "5,000 rows took $seconds s")
         println("IMPORT 5000 rows: ${"%.2f".format(seconds)} s")
     }
+
+    @Test
+    fun aRowMatchingAnEntryFromAnotherSourceIsNotAddedAgainAndIsCountedAndEachEntryAnswersForOneRow() {
+        fun at(day: Int, hour: Int = 15) = d(day).atStartOfDayIn(zone).toEpochMilliseconds() + hour * 3_600_000L
+        ledger.save(Expense(EntryId("sms1"), at(3), bank, Money(25_000, inr)), EntryDetails(merchant = "from a text", source = "sms", sourceRef = "R1"))
+        ledger.save(Expense(EntryId("hand"), at(5), bank, Money(40_000, inr)), EntryDetails(merchant = "typed"))
+        ledger.save(app.expenses.core.domain.ledger.Income(EntryId("sal"), at(6), bank, Money(900_000, inr)), EntryDetails(merchant = "salary text", source = "sms", sourceRef = "R2"))
+        ledger.save(Expense(EntryId("two"), at(12), bank, Money(77_000, inr)), EntryDetails(merchant = "two days before the row", source = "sms", sourceRef = "R3"))
+        ledger.saveAccount(Account(AccountId("other"), "Other", AccountType.BANK, inr))
+        ledger.save(Expense(EntryId("elsewhere"), at(20), AccountId("other"), Money(55_000, inr)), EntryDetails(merchant = "other account", source = "sms", sourceRef = "R4"))
+        val rows = listOf(
+            spend(14, 77_000, "TWO DAYS ON", row = 7),   // two days from the nearest entry: a different payment
+            spend(20, 55_000, "OTHER ACCOUNT ROW", row = 8), // an entry of the same amount exists, in another account
+            spend(3, 25_000, "SHOP A", row = 1),   // the text's entry, same day
+            spend(4, 40_000, "SHOP B", row = 2),   // the typed one, a day off
+            income(6, 900_000, "SALARY", row = 3),
+            spend(3, 25_000, "SHOP A AGAIN", row = 4), // a second same-amount purchase: the one entry cannot answer for both
+            spend(9, 25_000, "OTHER", row = 5),   // too far from any entry
+            income(3, 25_000, "REFUND-ISH", row = 6), // same amount, other direction
+        )
+        val r = importer.import(rows, bank, inr, zone)
+        assertEquals(3, r.matchedExisting); assertEquals(5, r.imported)
+        assertEquals(setOf("SHOP A AGAIN", "OTHER", "REFUND-ISH", "TWO DAYS ON", "OTHER ACCOUNT ROW"), db.schemaQueries.recentEntries(50).executeAsList().filter { it.source == "csv" }.map { it.merchant }.toSet())
+        assertEquals(5, importer.import(rows, bank, inr, zone).let { it.alreadyThere }, "the rows that were added are recognised on a second run, and the matched ones match again")
+    }
 }

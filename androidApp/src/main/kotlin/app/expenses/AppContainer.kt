@@ -62,11 +62,11 @@ class AppContainer(private val context: Context) {
      * for long, and the work stops after [budgetMillis] or when nothing is left. Returns the steps performed.
      */
     suspend fun maintain(budgetMillis: Long = 2_000): Int {
-        val ok = open() as? Opened.Ok ?: return 0
         val deadline = System.nanoTime() + budgetMillis * 1_000_000
         var steps = 0
         while (System.nanoTime() < deadline) {
-            val more = writeLock.withLock { withContext(Dispatchers.IO) { FtsTuning.mergeStep(ok.driver) } }
+            // the database is resolved after the write lock is held, so a close in between cannot hand this a shut driver
+            val more = writeLock.withLock { val ok = open() as? Opened.Ok ?: return 0; withContext(Dispatchers.IO) { FtsTuning.mergeStep(ok.driver) } }
             if (!more) break
             steps++
         }
@@ -79,22 +79,30 @@ class AppContainer(private val context: Context) {
      * thread-safe. Returns null if the database key is lost.
      */
     suspend fun <T> write(block: (Opened.Ok) -> T): T? {
-        val ok = open() as? Opened.Ok ?: return null
-        return writeLock.withLock { withContext(Dispatchers.IO) { block(ok) } }
+        // Lock order everywhere: the write lock first, then the open mutex. The database is resolved only once the write lock is held, so [close] and
+        // [startFresh] (which hold it too) can never shut the driver between this block getting it and running.
+        return writeLock.withLock {
+            val ok = open() as? Opened.Ok ?: return@withLock null
+            withContext(Dispatchers.IO) { block(ok) }
+        }
     }
 
     /** Closes the database and forgets it, so the next [open] opens it again from disk. Used when tearing the app down in tests. */
-    suspend fun close() = mutex.withLock {
-        withContext(Dispatchers.IO) { (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } } }
-        opened = null
+    suspend fun close() = writeLock.withLock {
+        mutex.withLock {
+            withContext(Dispatchers.IO) { (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } } }
+            opened = null
+        }
     }
 
     /** Deletes everything and starts an empty ledger. Only after the user has confirmed on screen. */
-    suspend fun startFresh(): Opened = mutex.withLock {
-        withContext(Dispatchers.IO) {
-            (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } }
-            EncryptedDriver.reset(context)
-            doOpen().also { opened = it }
+    suspend fun startFresh(): Opened = writeLock.withLock {
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } }
+                EncryptedDriver.reset(context)
+                doOpen().also { opened = it }
+            }
         }
     }
 
