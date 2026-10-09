@@ -30,7 +30,7 @@ class AaaFirstLaunchTest {
 
     private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
     @Before fun fresh() = resetApp()
-    @After fun cleanUp() { scenario?.close(); resetApp() }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
     @Test
     fun theFirstLaunchAfterANewBuildShowsTheHomeScreenWithinAMinuteAndItsTimeIsReported() {

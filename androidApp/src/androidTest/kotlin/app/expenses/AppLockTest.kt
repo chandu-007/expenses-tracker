@@ -76,7 +76,7 @@ class AppLockTest {
     }
 
     @After fun cleanUp() {
-        scenario?.close()
+        compose.waitForIdle(); scenario?.close()
         clearLockPrefs()
         app.lock = AppLock(context) // back to the real authenticator and clock, off
         resetApp()

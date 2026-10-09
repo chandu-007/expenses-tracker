@@ -49,9 +49,9 @@ class CalendarUiTest {
 
     private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
     @Before fun fresh() = resetApp()
-    @After fun cleanUp() { scenario?.close(); resetApp() }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
-    private fun launch() { scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
+    private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitText(s: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(s, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }

@@ -38,13 +38,13 @@ class PairingUiTest {
 
     private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
     @Before fun fresh() = resetApp()
-    @After fun cleanUp() { scenario?.close(); resetApp() }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
     private val zone = ZoneId.systemDefault()
     private fun at(y: Int, m: Int, d: Int) = LocalDate.of(y, m, d).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
     private fun ingest(sender: String, body: String, at: Long) = runBlocking { Capture.ingest(container, Capture.SMS, sender, body, at) }
     private fun card() = runBlocking { container.write { it.store.saveAccount(Account(AccountId("amex"), "Amex", AccountType.CREDIT_CARD, Currency.INR)) } }
-    private fun launch() { scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
+    private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }

@@ -43,7 +43,7 @@ class RecreateStressTest {
     @Before fun fresh() = resetApp()
 
     @After fun cleanUp() {
-        scenario?.close()
+        compose.waitForIdle(); scenario?.close()
         resetApp()
     }
 

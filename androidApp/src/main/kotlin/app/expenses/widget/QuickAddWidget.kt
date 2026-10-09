@@ -79,12 +79,10 @@ class QuickAddWidget : GlanceAppWidget() {
 
     private suspend fun loadButtons(context: Context): List<WidgetButton>? {
         val container = (context.applicationContext as ExpensesApp).container
-        return when (val o = container.open()) {
-            is AppContainer.Opened.KeyLost -> null
-            is AppContainer.Opened.Ok -> withContext(Dispatchers.IO) {
-                o.templates.list().filter { it.amount != null }.take(MAX_BUTTONS)
-                    .map { WidgetButton(it.id, "${it.name} ${it.amount!!.formatted()}") }
-            }
+        // through the write lock like every other read of the database, so a close or a fresh start cannot shut it underneath this
+        return container.write { ok ->
+            ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS)
+                .map { WidgetButton(it.id, "${it.name} ${it.amount!!.formatted()}") }
         }
     }
 

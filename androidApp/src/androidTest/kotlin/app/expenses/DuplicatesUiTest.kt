@@ -38,7 +38,7 @@ class DuplicatesUiTest {
 
     private fun resetApp() { runBlocking { container.close() }; EncryptedDriver.reset(context) }
     @Before fun fresh() = resetApp()
-    @After fun cleanUp() { scenario?.close(); resetApp() }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
     private val zone = ZoneId.systemDefault()
     private fun at(y: Int, m: Int, d: Int, h: Int = 14) = LocalDate.of(y, m, d).atTime(h, 0).atZone(zone).toInstant().toEpochMilli()
@@ -47,7 +47,7 @@ class DuplicatesUiTest {
     private fun credit(ref: String) = "Rs.1,250.00 credited to A/c XX1234 on 05-10-26 by VPA ravi@ybl (UPI Ref $ref)."
     private fun ingest(sender: String, body: String, at: Long) = runBlocking { Capture.ingest(container, Capture.SMS, sender, body, at) }
     private fun save(block: (AppContainer.Opened.Ok) -> Unit) = runBlocking { container.write { block(it) } }
-    private fun launch() { scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
+    private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
@@ -126,6 +126,22 @@ class DuplicatesUiTest {
         assertTrue(!has("inbox_duplicate_$id") && !has("inbox_same_$id"), "no 'same one' warning")
         assertTrue(textOf("inbox_related_$id").contains("refund or reversal"), textOf("inbox_related_$id"))
         tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals(2, entryCount())
+    }
+
+    @Test
+    fun aReversalTextDeliveredAgainAfterItWasAddedIsAlreadyInTheLedgerAndAddingItAgainIsRefusedWithoutACrash() {
+        val debitText = "Rs.1,250.00 debited from A/c XX1234 on 05-10-26 to VPA shop@okhdfc (UPI Ref 999999999999)."
+        val reversal = "Rs.1,250.00 credited to A/c XX1234 on 05-10-26 as reversal of UPI Ref 999999999999 (failed payment)."
+        ingest("AX-HDFCBK-S", debitText, 1_000); ingest("AX-HDFCBK-S", reversal, 2_000)
+        launch(); openInbox()
+        val first = ids().getValue(1_000); val second = ids().getValue(2_000)
+        waitFor("inbox_$first"); tap("inbox_add_$first"); compose.waitUntil(10_000) { !has("inbox_$first") }
+        tap("inbox_add_$second"); compose.waitUntil(10_000) { has("inbox_empty") }
+        ingest("AX-HDFCBK-S", reversal, 3_000_000) // the same words again, stamped later: another delivery
+        tap("inbox_back"); openInbox(); val again = ids().getValue(3_000_000); waitFor("inbox_duplicate_$again")
+        assertTrue(textOf("inbox_duplicate_$again").startsWith("Already in your ledger"), textOf("inbox_duplicate_$again"))
+        tap("inbox_add_$again"); waitFor("inbox_problem_$again")
         assertEquals(2, entryCount())
     }
 }

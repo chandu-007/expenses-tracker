@@ -893,12 +893,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val day = (i.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(i.receivedAt).atZone(zone).toLocalDate())
             val dayStart = { d: LocalDate -> d.atStartOfDay(zone).toInstant().toEpochMilli() }
             val from = dayStart(day.minusDays(Duplicates.DAY_WINDOW)); val until = dayStart(day.plusDays(Duplicates.DAY_WINDOW + 1))
-            fun dup(id: String, at: Long, ref: String?, merchant: String?) = DupEntry(id, i.amountMinor, Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay(), ref, merchant ?: "an entry")
+            fun dup(id: String, at: Long, ref: String?, merchant: String?) = DupEntry(id, i.amountMinor, Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay(), ref?.removeSuffix("/reversal"), merchant ?: "an entry")
             val near = if (i.direction == "CREDIT") ok.db.schemaQueries.entriesNearCredit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
                 else ok.db.schemaQueries.entriesNearDebit(i.amountMinor, from, until).executeAsList().map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }
             // A bank reference ties two texts to one transaction only when they point the same way: a reversal or refund text carries the reference of the
             // payment it undoes, and calling that a duplicate would have the person skip money coming back.
-            val sameRefAll = i.reference?.let { r -> ok.db.schemaQueries.entriesWithReference(r).executeAsList().filter { it.amount_minor == i.amountMinor } }.orEmpty()
+            val sameRefAll = i.reference?.let { r -> (ok.db.schemaQueries.entriesWithReference(r).executeAsList() + ok.db.schemaQueries.entriesWithReference("$r/reversal").executeAsList()).filter { it.amount_minor == i.amountMinor } }.orEmpty()
             val isCredit = i.direction == "CREDIT"
             val (alike, opposite) = sameRefAll.partition { e -> e.kind == "TRANSFER" || (e.kind == "INCOME" || e.kind == "REFUND") == isCredit }
             val match = Duplicates.best(day.toEpochDay(), i.reference, (near + alike.map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }).distinctBy { it.id })
