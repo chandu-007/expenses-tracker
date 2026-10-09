@@ -60,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -168,17 +169,23 @@ fun EntryListScreen(
                 onCancel = { selected = emptyList() },
             )
         },
-        floatingActionButton = { FloatingActionButton(onClick = onAdd, modifier = Modifier.testTag("add")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
+        floatingActionButton = {
+            // shrinks to a round button while the list is scrolled, and opens up again at the top
+            val expanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+            androidx.compose.material3.ExtendedFloatingActionButton(onClick = onAdd, expanded = expanded, icon = { Text("+", style = MaterialTheme.typography.headlineMedium) }, text = { Text("Add") }, modifier = Modifier.testTag("add"))
+        },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
+            val onHero = MaterialTheme.colorScheme.onPrimary
+            val heroButtons = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = onHero)
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 22.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
-                    TextButton(onClick = onOpenSearch, modifier = Modifier.testTag("open_search")) { Text("Search") }
-                    TextButton(onClick = onOpenReports, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
+                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), modifier = Modifier.weight(1f), maxLines = 1)
+                    TextButton(onClick = onOpenSearch, colors = heroButtons, modifier = Modifier.testTag("open_search")) { Text("Search") }
+                    TextButton(onClick = onOpenReports, colors = heroButtons, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
                     var more by remember { mutableStateOf(false) }
                     Box {
-                        TextButton(onClick = { more = true }, modifier = Modifier.testTag("more_menu")) { Text("More") }
+                        TextButton(onClick = { more = true }, colors = heroButtons, modifier = Modifier.testTag("more_menu")) { Text("More") }
                         // The less frequent places: kept in a menu so the header never has to squeeze or scroll.
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { more = false; onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
@@ -198,7 +205,7 @@ fun EntryListScreen(
                         }
                     }
                 }
-                Text(state.periodSpend, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("month_spend"))
+                Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp, end = 12.dp).testTag("month_spend"))
             }
             if (state.inboxPending > 0) androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpenInbox).testTag("inbox_banner")) {
                 Text("${state.inboxPending} to review: transactions found in your texts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp))
@@ -229,8 +236,7 @@ fun EntryListScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
             if (state.rows.isEmpty()) {
                 if (state.showWelcome) {
                     WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
@@ -240,12 +246,15 @@ fun EntryListScreen(
                     }
                 }
             } else {
+                // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
+                val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
-                    items(state.rows, key = { it.seq }, contentType = { "row" }) { row ->
-                        SwipeableRow(
-                            row, onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = row.id in selected,
-                            onLongPress = { selected = selected.toggled(row.id) }, onToggle = { selected = selected.toggled(row.id) },
-                        )
+                    items(listItems, key = { if (it is RowUi) it.seq else "day$it" }, contentType = { if (it is RowUi) "row" else "day" }) { item ->
+                        if (item is RowUi) SwipeableRow(
+                            item, onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
+                            onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
+                            modifier = Modifier.animateItem(),
+                        ) else DayHeader(item as Long)
                     }
                 }
             }
@@ -255,7 +264,7 @@ fun EntryListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit) {
+private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
@@ -270,7 +279,7 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
                 Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
             }
         },
-        modifier = Modifier.testTag("row_${row.title}"),
+        modifier = modifier.testTag("row_${row.title}"),
     ) {
         Row(
             Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
@@ -278,12 +287,12 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = 14.dp))
             Column(Modifier.weight(1f)) {
                 Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                 Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Text(if (row.inflow) "+${row.amount}" else row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.inflow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            Text(if (row.inflow) "+${row.amount}" else row.amount, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = if (row.inflow) androidx.compose.ui.graphics.Color(0xFF1E8E5A) else MaterialTheme.colorScheme.onSurface)
         }
     }
 }

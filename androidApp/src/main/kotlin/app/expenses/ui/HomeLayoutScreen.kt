@@ -56,11 +56,15 @@ fun BalancesStrip(accounts: List<AccountRowUi>, onOpen: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         accounts.forEach { a ->
-            androidx.compose.material3.AssistChip(
-                onClick = onOpen,
-                label = { Text(a.name + "  " + a.balanceText + if (a.owed) " owed" else "", maxLines = 1) },
+            androidx.compose.material3.Surface(
+                onClick = onOpen, shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp), color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.testTag("balance_chip_${a.name}"),
-            )
+            ) {
+                androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Text(a.name + if (a.owed) " · owed" else "", style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(a.balanceText, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                }
+            }
         }
     }
 }

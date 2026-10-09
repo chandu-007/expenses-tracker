@@ -106,6 +106,10 @@ import java.util.UUID
 data class RowUi(val seq: Long, val id: String, val title: String, val subtitle: String, val amount: String,
     /** Money coming in (income, a refund): shown with a plus sign so it is not mistaken for spending. */
     val inflow: Boolean,
+    /** The local day of the entry, as an epoch-day number, so the list can be grouped by day. */
+    val day: Long = 0,
+    /** The category's name, or empty, for the coloured initial beside the row. */
+    val category: String = "",
 )
 data class AccountUi(val id: String, val name: String)
 
@@ -1800,6 +1804,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
         inflow = e.kind == "INCOME" || e.kind == "REFUND",
+        day = Instant.ofEpochMilli(e.occurred_at).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay(),
+        category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
     )
 
     // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it

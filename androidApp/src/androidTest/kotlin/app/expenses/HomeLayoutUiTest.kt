@@ -57,12 +57,15 @@ class HomeLayoutUiTest {
         ok.templates.save(app.expenses.core.domain.Template("t", "Chai", Money(2_000, Currency.INR), CategoryId("Food"), AccountId("cash"), null))
     }
 
+    /** What a balance card says: its name line, then its amount. */
+    private fun chip(name: String): String = compose.onNodeWithTag("balance_chip_$name").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString(" ") { it.text }
+
     @Test
     fun everyBlockIsShownByDefaultAndBalancesListEachActiveAccountWithItsBalance() {
         seed(); launch()
         waitFor("budget_summary"); waitFor("templates"); waitFor("balances")
         waitFor("balance_chip_Cash"); waitFor("balance_chip_Bank")
-        compose.onAllNodes(hasText("Cash  -₹100.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(1, it.size) }
+        assertEquals("Cash -₹100.00", chip("Cash"))
     }
 
     @Test
@@ -70,7 +73,7 @@ class HomeLayoutUiTest {
         launch(); waitFor("balance_chip_Bank")
         tap("add"); waitFor("amount"); compose.onNodeWithTag("amount").performTextInput("400"); tap("save"); waitFor("add")
         // the entry is on the list at once; the balances catch up within a couple of seconds
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Bank  -₹400.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { chip("Bank") == "Bank -₹400.00" }
     }
 
     @Test
@@ -81,7 +84,7 @@ class HomeLayoutUiTest {
         }
         launch(); waitFor("balance_chip_Amex")
         assertTrue(!has("balance_chip_OldCard"), "archived accounts are not shown")
-        compose.onAllNodes(hasText("Amex  -₹2,500.00 owed", substring = true), useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(1, it.size) }
+        assertEquals("Amex · owed -₹2,500.00", chip("Amex"))
     }
 
     @Test
