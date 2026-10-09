@@ -198,7 +198,8 @@ fun SearchScreen(
                                     Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                                     Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                 }
-                                Text(if (row.inflow) "+${row.amount}" else row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.inflow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                val flow = flowOf(row.kind, row.inflow)
+                                Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, color = amountColor(flow))
                             }
                             HorizontalDivider()
                         }

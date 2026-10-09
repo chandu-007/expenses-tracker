@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -177,21 +180,35 @@ fun EntryListScreen(
                 onSearch = onOpenSearch, onReports = onOpenReports,
                 more = { open, dismiss ->
                     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-                        DropdownMenu(expanded = open, onDismissRequest = dismiss) {
-                            DropdownMenuItem(text = { Text(if (state.hideAmounts) "Show amounts" else "Hide amounts") }, onClick = { dismiss(); onToggleHideAmounts() }, modifier = Modifier.testTag("toggle_privacy"))
-                            DropdownMenuItem(text = { Text("To review" + if (state.inboxPending > 0) " (${state.inboxPending})" else "") }, onClick = { dismiss(); onOpenInbox() }, modifier = Modifier.testTag("open_inbox"))
-                            DropdownMenuItem(text = { Text("Capture from texts") }, onClick = { dismiss(); onOpenCapture() }, modifier = Modifier.testTag("open_capture"))
-                            DropdownMenuItem(text = { Text("Privacy: what this app can see") }, onClick = { dismiss(); onOpenPrivacy() }, modifier = Modifier.testTag("open_privacy"))
-                            DropdownMenuItem(text = { Text("Currency") }, onClick = { dismiss(); onOpenCurrency() }, modifier = Modifier.testTag("open_currency"))
-                            DropdownMenuItem(text = { Text("Appearance") }, onClick = { dismiss(); onOpenAppearance() }, modifier = Modifier.testTag("open_appearance"))
-                            DropdownMenuItem(text = { Text("Customise home") }, onClick = { dismiss(); onCustomiseHome() }, modifier = Modifier.testTag("open_home_layout"))
-                            DropdownMenuItem(text = { Text("Calendar") }, onClick = { dismiss(); onOpenCalendar() }, modifier = Modifier.testTag("open_calendar"))
-                            DropdownMenuItem(text = { Text("Accounts") }, onClick = { dismiss(); onManageAccounts() }, modifier = Modifier.testTag("manage_accounts"))
-                            DropdownMenuItem(text = { Text("Categories") }, onClick = { dismiss(); onManageCategories() }, modifier = Modifier.testTag("manage_categories"))
-                            DropdownMenuItem(text = { Text("Repeating expenses") }, onClick = { dismiss(); onOpenRecurring() }, modifier = Modifier.testTag("open_recurring"))
-                            DropdownMenuItem(text = { Text("Notifications") }, onClick = { dismiss(); onOpenNotifications() }, modifier = Modifier.testTag("open_notifications"))
-                            DropdownMenuItem(text = { Text("App lock") }, onClick = { dismiss(); onOpenSecurity() }, modifier = Modifier.testTag("open_security"))
-                            DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { dismiss(); onOpenData() }, modifier = Modifier.testTag("open_data"))
+                        DropdownMenu(
+                            expanded = open, onDismissRequest = dismiss, shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 6.dp,
+                        ) {
+                            // two tiles to a row, so all fourteen places fit on a phone screen without scrolling
+                            Column(Modifier.width(332.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                MenuGroup("Inbox") {
+                                    MenuTile("📥", "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { dismiss(); onOpenInbox() }
+                                    MenuTile("📱", "Capture from texts", "open_capture") { dismiss(); onOpenCapture() }
+                                }
+                                MenuGroup("Money") {
+                                    MenuTile("🏦", "Accounts", "manage_accounts") { dismiss(); onManageAccounts() }
+                                    MenuTile("🏷", "Categories", "manage_categories") { dismiss(); onManageCategories() }
+                                    MenuTile("🔁", "Repeating expenses", "open_recurring") { dismiss(); onOpenRecurring() }
+                                    MenuTile("📅", "Calendar", "open_calendar") { dismiss(); onOpenCalendar() }
+                                }
+                                MenuGroup("Make it yours") {
+                                    MenuTile("🎨", "Appearance", "open_appearance") { dismiss(); onOpenAppearance() }
+                                    MenuTile("🏠", "Customise home", "open_home_layout") { dismiss(); onCustomiseHome() }
+                                    MenuTile("💱", "Currency", "open_currency") { dismiss(); onOpenCurrency() }
+                                    MenuTile("🔔", "Notifications", "open_notifications") { dismiss(); onOpenNotifications() }
+                                }
+                                MenuGroup("Privacy and data") {
+                                    MenuTile("👁", if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { dismiss(); onToggleHideAmounts() }
+                                    MenuTile("🔒", "App lock", "open_security") { dismiss(); onOpenSecurity() }
+                                    MenuTile("🔍", "Privacy: what this app can see", "open_privacy") { dismiss(); onOpenPrivacy() }
+                                    MenuTile("💾", "Your data: export and backup", "open_data") { dismiss(); onOpenData() }
+                                }
+                            }
                         }
                     }
                 },
@@ -299,7 +316,8 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
                 Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                 Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Text(if (row.inflow) "+${row.amount}" else row.amount, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = if (row.inflow) androidx.compose.ui.graphics.Color(0xFF1E8E5A) else MaterialTheme.colorScheme.onSurface)
+            val flow = flowOf(row.kind, row.inflow)
+            Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
         }
     }
 }

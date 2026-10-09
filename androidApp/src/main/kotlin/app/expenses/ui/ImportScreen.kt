@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -70,7 +71,7 @@ fun ImportScreen(
         topBar = { TopAppBar(title = { Text("Import a statement") }, navigationIcon = { TextButton(onClick = onClose, modifier = Modifier.testTag("import_close")) { Text(if (state.result != null) "Done" else "Cancel") } }) },
         bottomBar = {
             if (state.result == null && state.mapping != null) {
-                Button(onClick = onImport, enabled = !state.busy && state.txnCount > 0 && state.accountId.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("import_confirm")) {
+                Button(onClick = onImport, enabled = !state.busy && state.txnCount > 0 && state.accountId.isNotEmpty(), modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("import_confirm")) {
                     Text(if (state.txnCount == 1) "Import 1 transaction" else "Import ${state.txnCount} transactions")
                 }
             }

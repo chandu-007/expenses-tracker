@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
@@ -119,7 +120,8 @@ fun HomeBar(onSearch: () -> Unit, onReports: () -> Unit, more: @Composable (open
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 BarItem("Home", true, {}, Modifier.testTag("nav_home"))
                 BarItem("Search", false, onSearch, Modifier.testTag("open_search"))
                 BarItem("Reports", false, onReports, Modifier.testTag("open_reports"))
@@ -136,4 +138,63 @@ private fun BarItem(label: String, selected: Boolean, onClick: () -> Unit, modif
         modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 22.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) { Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) }
+}
+
+/** Whether money went out, came in, or only moved between your own accounts. */
+enum class Flow3 { OUT, IN, MOVE }
+
+fun flowOf(kind: String, inflow: Boolean): Flow3 = when {
+    kind == "TRANSFER" -> Flow3.MOVE
+    inflow -> Flow3.IN
+    else -> Flow3.OUT
+}
+
+/**
+ * The colour of an amount: red for money out, green for money in, the ordinary text colour for a transfer. The shades are chosen per theme so each reads at
+ * 4.5:1 or better on that theme's background (the light ones are darker, the dark ones lighter than the plain red and green).
+ */
+@Composable
+fun amountColor(flow: Flow3): Color {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return when (flow) {
+        Flow3.OUT -> if (dark) Color(0xFFFF8A80) else Color(0xFFB3261E)
+        Flow3.IN -> if (dark) Color(0xFF6FD3A0) else Color(0xFF17744A)
+        Flow3.MOVE -> MaterialTheme.colorScheme.onSurface
+    }
+}
+
+/** The amount with its sign: "-" for money out, "+" for money in, none for a transfer. [amount] is the plain formatted figure. */
+fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
+    Flow3.OUT -> "-" + amount.removePrefix("-")
+    Flow3.IN -> "+" + amount.removePrefix("+")
+    Flow3.MOVE -> amount
+}
+
+@Composable
+fun MenuHeading(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 2.dp))
+}
+
+/** A group of tiles under a small heading, two to a row. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun MenuGroup(heading: String, tiles: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
+    MenuHeading(heading)
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = 2, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = tiles)
+}
+
+/** One place in the More menu: a tinted round badge with a symbol and the name (up to three lines), and optionally a count. Keeps the tag the plain item had. */
+@Composable
+fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(symbol: String, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.Text(symbol, fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp))
+        }
+        Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 3, modifier = Modifier.weight(1f).padding(start = 8.dp))
+        if (badge != null) Box(Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 7.dp, vertical = 1.dp)) { Text(badge, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium) }
+    }
 }

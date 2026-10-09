@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +57,7 @@ fun BulkBar(
     }
     var menu by remember { mutableStateOf<String?>(null) }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag("bulk_bar")) {
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("$count selected", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(end = 8.dp).testTag("bulk_count"))
             Box {
                 TextButton(onClick = { menu = "category" }, modifier = Modifier.testTag("bulk_category")) { Text("Category") }

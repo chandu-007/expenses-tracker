@@ -110,6 +110,8 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val day: Long = 0,
     /** The category's name, or empty, for the coloured initial beside the row. */
     val category: String = "",
+    /** The entry's kind (EXPENSE, INCOME, TRANSFER, REFUND ...): a transfer between your own accounts is neither money in nor out. */
+    val kind: String = "",
 )
 data class AccountUi(val id: String, val name: String)
 
@@ -1806,6 +1808,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         inflow = e.kind == "INCOME" || e.kind == "REFUND",
         day = Instant.ofEpochMilli(e.occurred_at).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay(),
         category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
+        kind = e.kind,
     )
 
     // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it

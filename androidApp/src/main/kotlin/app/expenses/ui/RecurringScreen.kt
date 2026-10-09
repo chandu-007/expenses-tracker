@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -278,7 +279,7 @@ private fun RecurringEditor(
                     onSave(name.trim(), amount, category, account, start?.merchant.orEmpty(), Schedule(unit, every, startDate, end), auto && amount != null, kind, toAccount)
                 },
                 enabled = canSave,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("rec_save"),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("rec_save"),
             ) { Text("Save") }
         },
     ) { padding ->

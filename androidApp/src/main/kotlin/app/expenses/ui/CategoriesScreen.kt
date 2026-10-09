@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -235,7 +236,7 @@ private fun CategoryEditorScreen(
             Button(
                 onClick = { onSave(name, color, hidden, parentId) },
                 enabled = nameError == null && parentError == null,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("cat_save"),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("cat_save"),
             ) { Text("Save") }
         },
     ) { padding ->
