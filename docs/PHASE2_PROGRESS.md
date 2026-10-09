@@ -155,3 +155,9 @@ Each shows what it will do in words, lets you change the from and to accounts, a
 **Not done, said plainly:** the bottom bar has **text labels only, no icons** (the Material icon set is not a dependency and unicode glyphs are not reliable on Android 8), so it looks plainer than a typical bar; the bar is on the home screen only; real blur is on the hero only and nowhere near a scrolling list; **no exit animation** or shared-element motion between screens.
 
 **Verification:** 750 host/JVM tests (both targets counted), 259 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.
+
+### Step three, checked on a real Android 17 image
+The Android 12+ blur was never seen on the Android 8 emulator, so I booted the Pixel_7 image (Android 17) and looked. **Two real faults only that image showed, both fixed:** (1) the blurred lights were sized to fill the whole screen, stretching the hero card over everything and drawing hard-edged squares: they now take the card's size (`matchParentSize`) and use an unbounded blur edge; (2) on Android 15 and later the app draws under the system bars and the clock and battery were **white on a pale screen** (invisible): the bars' icon colour now follows light/dark. A first version of that fix touched the window from a worker thread under the test harness's clock and failed one test with `CalledFromWrongThreadException`; it is now posted to the view's own thread (this is the same family as the unexplained Compose crash, a recomposition running on a worker under the test clock).
+Screenshots of Android 8 and Android 17, light and dark, are on the Desktop. The second emulator was shut down before the tests, which would otherwise have run on both.
+
+**Verification:** 750 host/JVM tests (both targets counted), 259 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.

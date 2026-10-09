@@ -100,10 +100,12 @@ fun ScreenEnter(key: Int, content: @Composable () -> Unit) {
 
 /** Two softly blurred lights behind the hero's figures. Only called on Android 12 and later, where blur exists; before that the corner light from [heroBackground] is all there is. */
 @Composable
-fun HeroGlow(color: Color) {
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.align(Alignment.TopEnd).offset(x = 40.dp, y = (-30).dp).size(150.dp).blur(48.dp).background(color.copy(alpha = 0.34f), CircleShape))
-        Box(Modifier.align(Alignment.BottomStart).offset(x = (-30).dp, y = 36.dp).size(120.dp).blur(40.dp).background(color.copy(alpha = 0.20f), CircleShape))
+fun BoxScope.HeroGlow(color: Color) {
+    // matchParentSize: the lights take the card's size and never decide it (a fill-the-screen box here once stretched the card over the whole screen);
+    // the unbounded edge lets each blur fade out past its own square instead of being cut off as a hard-edged block
+    Box(Modifier.matchParentSize()) {
+        Box(Modifier.align(Alignment.TopEnd).offset(x = 40.dp, y = (-30).dp).size(150.dp).blur(48.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).background(color.copy(alpha = 0.34f), CircleShape))
+        Box(Modifier.align(Alignment.BottomStart).offset(x = (-30).dp, y = 36.dp).size(120.dp).blur(40.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).background(color.copy(alpha = 0.20f), CircleShape))
     }
 }
 

@@ -70,6 +70,15 @@ class MainActivity : FragmentActivity() {
             val themeState by viewModel.state.collectAsStateWithLifecycle()
             val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
             val dark = Appearances.isDark(look.mode, isSystemInDarkTheme())
+            // On Android 15 and later the app draws under the system bars, which keep light icons unless told otherwise: white clock and battery on a pale screen.
+            val hostView = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.SideEffect {
+                // posted to the view's own thread: a side effect normally runs on the main thread, but under the test harness's clock it has run on a worker, and touching the window from there throws
+                hostView.post {
+                    val bars = androidx.core.view.WindowCompat.getInsetsController(window, hostView)
+                    bars.isAppearanceLightStatusBars = !dark; bars.isAppearanceLightNavigationBars = !dark
+                }
+            }
             MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
               androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT)) {
                 Surface {
