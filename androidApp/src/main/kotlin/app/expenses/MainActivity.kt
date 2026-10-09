@@ -134,7 +134,12 @@ class MainActivity : FragmentActivity() {
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                        is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) { when {
+                        is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) {
+                        val screenKey = listOf(
+                            history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
+                            customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding,
+                        ).indexOf(true)
+                        app.expenses.ui.ScreenEnter(screenKey) { when {
                             history != null -> {
                                 val h = history!!
                                 BackHandler { viewModel.closeHistory() }
@@ -381,7 +386,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenPrivacy = { privacyOpen = true },
                             )
                         }
-                        }
+                        } }
                     }
                 }
               }

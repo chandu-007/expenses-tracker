@@ -188,6 +188,8 @@ fun EntryFormScreen(
                     else if (draft.kind == DraftKind.REFUND) Text("Up to ${Money(draft.refundableMinor, currency).formatted()} can still be refunded")
                 },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.testTag("amount"),
             )
@@ -205,7 +207,8 @@ fun EntryFormScreen(
                             selected = c.id == draft.category,
                             onClick = { draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && c.id == draft.category) "" else c.id) },
                             label = { Text(displayName(categories, c)) },
-                            leadingIcon = c.colorArgb?.let { col -> { ColorDot(col) } },
+                            leadingIcon = { CategoryAvatar(c.name, c.name, size = 24.dp) },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                             modifier = Modifier.testTag("category_chip_${c.id}"),
                         )
                     }

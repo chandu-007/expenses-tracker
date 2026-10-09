@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -133,9 +134,12 @@ fun EntryListScreen(
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
-    LaunchedEffect(listState, state.rows.size) {
+    // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
+    val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
+    LaunchedEffect(listState, listItems) {
+        // the position counts the day headings too, so count the entries up to it: more is loaded when one of the last ten entries is on screen
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { last -> if (last >= state.rows.size - 10) onLoadMore() }
+            .collect { last -> if (listItems.take(last + 1).count { it is RowUi } >= state.rows.size - 10) onLoadMore() }
     }
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(it) else it); onMessageShown() }
@@ -181,6 +185,8 @@ fun EntryListScreen(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 22.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), modifier = Modifier.weight(1f), maxLines = 1)
+                    // frosted pill: a translucent fill with a fine edge, so the actions read as one control on the card
+                    Row(Modifier.background(onHero.copy(alpha = 0.14f), androidx.compose.foundation.shape.RoundedCornerShape(50)).border(1.dp, onHero.copy(alpha = 0.22f), androidx.compose.foundation.shape.RoundedCornerShape(50)), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onOpenSearch, colors = heroButtons, modifier = Modifier.testTag("open_search")) { Text("Search") }
                     TextButton(onClick = onOpenReports, colors = heroButtons, modifier = Modifier.testTag("open_reports")) { Text("Reports") }
                     var more by remember { mutableStateOf(false) }
@@ -203,6 +209,7 @@ fun EntryListScreen(
                             DropdownMenuItem(text = { Text("App lock") }, onClick = { more = false; onOpenSecurity() }, modifier = Modifier.testTag("open_security"))
                             DropdownMenuItem(text = { Text("Your data: export and backup") }, onClick = { more = false; onOpenData() }, modifier = Modifier.testTag("open_data"))
                         }
+                    }
                     }
                 }
                 Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp, end = 12.dp).testTag("month_spend"))
@@ -246,8 +253,6 @@ fun EntryListScreen(
                     }
                 }
             } else {
-                // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
-                val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
                     items(listItems, key = { if (it is RowUi) it.seq else "day$it" }, contentType = { if (it is RowUi) "row" else "day" }) { item ->
                         if (item is RowUi) SwipeableRow(
