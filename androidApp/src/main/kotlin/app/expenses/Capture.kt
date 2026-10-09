@@ -30,6 +30,9 @@ object Capture {
         return MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
+    /** A payment app often posts one notification twice a moment apart; the same words from the same app within this long are that repost, not a second payment. */
+    const val REPOST_WINDOW_MS = 10_000L
+
     suspend fun ingest(container: AppContainer, source: String, sender: String, body: String, receivedAt: Long): CaptureEventOutcome =
         container.write { ok ->
             val extra = ok.templates.setting(SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
@@ -52,7 +55,8 @@ object Capture {
                         UUID.randomUUID().toString(), source, sender.trim(), r.issuer, receivedAt, a.direction.name, a.amountMinor, a.currency, a.date?.toString(), a.reference,
                         a.accountLast4, a.viaUpi, a.confidence.name, body.replace(Regex("\\s+"), " ").trim().take(600), InboxStatus.PENDING, null,
                     )
-                    val added = ok.inbox.add(item, fingerprint(source, sender, receivedAt, body))
+                    val repost = source == NOTIFICATION && item.body?.let { ok.inbox.hasSameTextNear(source, item.sender, it, receivedAt, REPOST_WINDOW_MS) } == true
+                    val added = !repost && ok.inbox.add(item, fingerprint(source, sender, receivedAt, body))
                     if (added) CaptureEventOutcome.CAPTURED else CaptureEventOutcome.DUPLICATE
                 }
             }

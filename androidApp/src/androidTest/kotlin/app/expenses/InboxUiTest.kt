@@ -64,6 +64,7 @@ class InboxUiTest {
         ingest(debit, 5_000); launch(); openInbox()
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
         waitFor("inbox_$id"); assertTrue(has("inbox_flip_$id"))
+        assertTrue(compose.onAllNodes(hasTestTag("inbox_amount_$id") and androidx.compose.ui.test.hasText("-₹1,250.00"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "money out shows its minus before it is turned")
         tap("inbox_flip_$id")
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("inbox_amount_$id") and androidx.compose.ui.test.hasText("+", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }

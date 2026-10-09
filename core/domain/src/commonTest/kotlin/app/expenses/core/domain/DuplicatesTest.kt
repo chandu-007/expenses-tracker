@@ -31,7 +31,7 @@ class DuplicatesTest {
         assertEquals(DupStrength.LIKELY, Duplicates.best(100, "R9", listOf(e("a", 100, "  ")))!!.strength, "a blank number on the entry is no number")
     }
 
-    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT", sender: String = id) = PendingKey(id, dir, amount, at, ref, sender)
+    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT", sender: String = id, fromApp: Boolean = false) = PendingKey(id, dir, amount, at, ref, sender, fromApp)
 
     @Test
     fun aSecondTextForTheSamePaymentPointsAtTheFirstWithinTenMinutes() {
@@ -58,5 +58,12 @@ class DuplicatesTest {
         assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK"), p("b", 20_000, null, sender = "HDFCBK"))), "one has no reference: still two payments")
         assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK"), p("b", 20_000, "r1", sender = "HDFCBK"))), "the same number from the same sender is a repeat")
         assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "HDFCBK"), p("b", 20_000, sender = "PHONEPE"))), "a bank alert and an app alert are the same payment")
+    }
+
+    @Test
+    fun anAppPostingTheSameNotificationTwiceIsARepeatEvenFromTheSameSender() {
+        assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "PHONEPE", fromApp = true), p("b", 20_000, sender = "PHONEPE", fromApp = true))))
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "PHONEPE", fromApp = true), p("b", 20_000, "R2", sender = "PHONEPE", fromApp = true))), "two different references are still two payments")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "PHONEPE", fromApp = true), p("b", 20_000, sender = "PHONEPE", fromApp = false))), "a text and a notification from one sender name: the same-sender rule stands")
     }
 }

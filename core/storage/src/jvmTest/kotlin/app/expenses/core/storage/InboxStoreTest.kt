@@ -46,6 +46,17 @@ class InboxStoreTest {
     }
 
     @Test
+    fun sameTextNearIsFalseOutsideTheWindowOrForAnotherSourceSenderOrWords() {
+        store.add(item("a", at = 100_000, body = "Rs.100 debited"), "1")
+        fun near(source: String = "SMS", sender: String = "AX-HDFCBK-S", body: String = "Rs.100 debited", at: Long = 100_000, window: Long = 10_000) = store.hasSameTextNear(source, sender, body, at, window)
+        assertTrue(near()); assertTrue(near(at = 110_000), "the edge of the window counts"); assertTrue(near(at = 90_000))
+        assertFalse(near(at = 110_001)); assertFalse(near(at = 89_999))
+        assertFalse(near(source = "NOTIFICATION")); assertFalse(near(sender = "OTHER")); assertFalse(near(body = "Rs.101 debited"))
+        store.confirm("a", "e1")
+        assertFalse(near(), "an item already added forgot its words, so it cannot be matched by them")
+    }
+
+    @Test
     fun flippingTurnsAPendingItemBothWaysAndLeavesAResolvedOneAlone() {
         store.add(item("a"), "1"); store.add(item("b"), "2")
         store.flipDirection("a")

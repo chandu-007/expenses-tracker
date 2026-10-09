@@ -49,6 +49,10 @@ class InboxStore(private val db: ExpensesDb) {
         before != null && before.status == InboxStatus.PENDING.name
     }
 
+    /** Whether an item from the same source and sender with exactly these words arrived within [windowMs] of [at], in any state: a repost of one notification. */
+    fun hasSameTextNear(source: String, sender: String, body: String, at: Long, windowMs: Long): Boolean =
+        q.inboxSameTextNear(source, sender, body, at - windowMs, at + windowMs).executeAsOne() > 0
+
     /** Turns a pending item's direction, debit to credit or back: for a text that was read the wrong way round. A resolved item is left alone. */
     fun flipDirection(id: String) { q.flipInboxDirection(id) }
 

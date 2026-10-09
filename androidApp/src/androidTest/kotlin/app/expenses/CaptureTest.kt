@@ -45,6 +45,26 @@ class CaptureTest {
     }
 
     @Test
+    fun aPaymentAppPostingTheSameNotificationAgainWithinSecondsIsOnePaymentButLaterOrOtherWordsAreAnother() {
+        fun notify(body: String, at: Long) = runBlocking { Capture.ingest(container, Capture.NOTIFICATION, "PHONEPE", body, at) }
+        val words = "Chandu: Chandu. sent ₹10 to you."
+        assertEquals(CaptureEventOutcome.CAPTURED, notify(words, 100_000))
+        assertEquals(CaptureEventOutcome.DUPLICATE, notify(words, 103_000), "the same words 3 s later: the app posted it twice")
+        assertEquals(CaptureEventOutcome.DUPLICATE, notify("  $words ", 109_000), "spacing does not matter; 9 s is inside the window")
+        assertEquals(1, pending().size)
+        assertEquals(CaptureEventOutcome.CAPTURED, notify(words, 100_000 + Capture.REPOST_WINDOW_MS + 1), "just past the window: a second payment")
+        assertEquals(CaptureEventOutcome.CAPTURED, notify("Chandu: Chandu. sent ₹20 to you.", 101_000), "other words straight after: a different payment")
+        assertEquals(3, pending().size)
+    }
+
+    @Test
+    fun theSameBankTextTwiceWithinSecondsIsTwoPaymentsBecauseOnlyNotificationsRepost() {
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("AX-HDFCBK-S", debit, 5_000))
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("AX-HDFCBK-S", debit, 6_000))
+        assertEquals(2, pending().size)
+    }
+
+    @Test
     fun personsOtpsNoticesAndUnknownHeadersAddNothingAndLeaveOnlyCounts() {
         assertEquals(CaptureEventOutcome.PERSONAL_SENDER, ingest("+919876543210", debit))
         assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", debit))

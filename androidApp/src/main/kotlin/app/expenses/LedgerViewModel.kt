@@ -894,7 +894,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val zone = ZoneId.systemDefault()
         val fmt = DateTimeFormatter.ofPattern("d MMM")
         val items = ok.inbox.list()
-        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase()) })
+        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase(), it.source == Capture.NOTIFICATION) })
         val byId = items.associateBy { it.id }
         val dayMs = 86_400_000L
         return items.map { i ->
