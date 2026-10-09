@@ -197,3 +197,8 @@ Tests: store query (edges of the window, source, sender, words), ingest at 3 s, 
 **Not measured:** scroll and startup after these changes. I tried `measure_perf.py --skip-seed` with the machine load at 10 to 19 and the 100k-entry database already wiped by the test run, and it produced no data. The last good numbers (scroll 0.3% janky, add screen 18 ms) predate the bottom bar, the cards and this slice. The haptics and press animation were not heard or felt on a real phone.
 
 **Verification:** 760 host/JVM tests (both targets counted), 264 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.
+
+## Slice 53: real icons
+The bottom bar tabs (Home, Search, Reports, More) and the fourteen More tiles use Material outline icons instead of text-only tabs and emoji, so they look the same on every phone maker's font. New dependency: `material-icons-extended` (version from the Compose BOM); the release build strips unused icons. Tags unchanged. Checked at the default size and at 720x1520 with 130% font. Not checked: how the icons look on the owner's Samsung.
+
+**Verification:** 760 host/JVM tests (both targets counted), 264 functional device tests (1 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files.

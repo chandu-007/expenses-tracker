@@ -14,6 +14,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.CurrencyRupee
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -197,26 +213,26 @@ fun EntryListScreen(
             // a page of its own (not a pop-up over the list): everything the app can do, grouped, in as many columns as the screen is wide enough for
             MorePage(Modifier.padding(padding)) {
                                 MenuGroup("Inbox") {
-                                    MenuTile("📥", "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
-                                    MenuTile("📱", "Capture from texts", "open_capture") { closeMore(); onOpenCapture() }
+                                    MenuTile(Icons.Outlined.Inbox, "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
+                                    MenuTile(Icons.Outlined.Sms, "Capture from texts", "open_capture") { closeMore(); onOpenCapture() }
                                 }
                                 MenuGroup("Money") {
-                                    MenuTile("🏦", "Accounts", "manage_accounts") { closeMore(); onManageAccounts() }
-                                    MenuTile("🏷", "Categories", "manage_categories") { closeMore(); onManageCategories() }
-                                    MenuTile("🔁", "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
-                                    MenuTile("📅", "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
+                                    MenuTile(Icons.Outlined.AccountBalance, "Accounts", "manage_accounts") { closeMore(); onManageAccounts() }
+                                    MenuTile(Icons.Outlined.Label, "Categories", "manage_categories") { closeMore(); onManageCategories() }
+                                    MenuTile(Icons.Outlined.Repeat, "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
+                                    MenuTile(Icons.Outlined.CalendarMonth, "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
                                 }
                                 MenuGroup("Make it yours") {
-                                    MenuTile("🎨", "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
-                                    MenuTile("🏠", "Customise home", "open_home_layout") { closeMore(); onCustomiseHome() }
-                                    MenuTile("💱", "Currency", "open_currency") { closeMore(); onOpenCurrency() }
-                                    MenuTile("🔔", "Notifications", "open_notifications") { closeMore(); onOpenNotifications() }
+                                    MenuTile(Icons.Outlined.Palette, "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
+                                    MenuTile(Icons.Outlined.Dashboard, "Customise home", "open_home_layout") { closeMore(); onCustomiseHome() }
+                                    MenuTile(Icons.Outlined.CurrencyRupee, "Currency", "open_currency") { closeMore(); onOpenCurrency() }
+                                    MenuTile(Icons.Outlined.Notifications, "Notifications", "open_notifications") { closeMore(); onOpenNotifications() }
                                 }
                                 MenuGroup("Privacy and data") {
-                                    MenuTile("👁", if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { closeMore(); onToggleHideAmounts() }
-                                    MenuTile("🔒", "App lock", "open_security") { closeMore(); onOpenSecurity() }
-                                    MenuTile("🔍", "Privacy: what this app can see", "open_privacy") { closeMore(); onOpenPrivacy() }
-                                    MenuTile("💾", "Your data: export and backup", "open_data") { closeMore(); onOpenData() }
+                                    MenuTile(if (state.hideAmounts) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { closeMore(); onToggleHideAmounts() }
+                                    MenuTile(Icons.Outlined.Lock, "App lock", "open_security") { closeMore(); onOpenSecurity() }
+                                    MenuTile(Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "open_privacy") { closeMore(); onOpenPrivacy() }
+                                    MenuTile(Icons.Outlined.Backup, "Your data: export and backup", "open_data") { closeMore(); onOpenData() }
                                 }
             }
             return@Scaffold

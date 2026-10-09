@@ -12,6 +12,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.ui.composed
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -125,26 +130,28 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                BarItem("Home", selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
-                BarItem("Search", false, onSearch, Modifier.weight(1f).testTag("open_search"))
-                BarItem("Reports", false, onReports, Modifier.weight(1f).testTag("open_reports"))
-                BarItem("More", selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"))
+                BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
+                BarItem("Search", Icons.Outlined.Search, false, onSearch, Modifier.weight(1f).testTag("open_search"))
+                BarItem("Reports", Icons.Outlined.BarChart, false, onReports, Modifier.weight(1f).testTag("open_reports"))
+                BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"))
             }
         }
     }
 }
 
 @Composable
-private fun BarItem(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent
-    Box(
-        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).background(bg).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center,
+    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).background(bg).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
         androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
             // the label shrinks to fit its quarter of the bar (a narrow screen or a big system font) instead of being cut or wrapped
-            label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 14.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
+            color = tint, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         )
     }
 }
@@ -214,14 +221,14 @@ fun MenuGroup(heading: String, tiles: @Composable androidx.compose.foundation.la
 
 /** One place in the More menu: a tinted round badge with a symbol and the name (up to three lines), and optionally a count. Keeps the tag the plain item had. */
 @Composable
-fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(symbol: String, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
+fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .pressScale(onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Text(symbol, fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp))
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         }
         Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 3, modifier = Modifier.weight(1f).padding(start = 8.dp))
         if (badge != null) Box(Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 7.dp, vertical = 1.dp)) { Text(badge, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium) }
