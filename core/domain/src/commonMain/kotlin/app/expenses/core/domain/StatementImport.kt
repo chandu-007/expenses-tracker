@@ -124,15 +124,40 @@ data class StatementTxn(val row: Int, val date: LocalDate, val flow: Flow, val m
 data class StatementProblem(val row: Int, val reason: String)
 
 /** [ignoredRows] are rows that are not transactions (opening and closing balances, totals, notes) or have no amount. */
-data class ParsedStatement(val txns: List<StatementTxn>, val problems: List<StatementProblem>, val ignoredRows: Int)
+/** [repairedRows] counts rows whose description held unquoted commas and was put back together (see [StatementParser.rejoin]). */
+data class ParsedStatement(val txns: List<StatementTxn>, val problems: List<StatementProblem>, val ignoredRows: Int, val repairedRows: Int = 0)
 
 object StatementParser {
     private val DEBIT_WORDS = Regex("(?i)^(dr|d|debit|withdrawal|withdraw|out|paid out)\\b.*|^debit.*")
     private val CREDIT_WORDS = Regex("(?i)^(cr|c|credit|deposit|in|paid in)\\b.*|^credit.*")
 
+    /**
+     * Some banks (HDFC's text export is one) write the narration without quotes, so a comma inside it ("NETBANK, MUM") splits it and every column after
+     * it moves one place right: the debit then reads as a date and the row is refused. A row with more cells than the header has is put back together by
+     * folding the surplus cells into the description column; cells that are empty at the end (a trailing comma) are dropped first, since those are not
+     * part of any text. Returns the rows and how many were repaired.
+     */
+    fun rejoin(rows: List<List<String>>, m: StatementMapping): Pair<List<List<String>>, Int> {
+        val desc = m.descriptionColumn
+        if (m.headerRows == 0 || desc == null) return rows to 0
+        val width = rows[m.headerRows - 1].size
+        if (desc >= width) return rows to 0
+        var repaired = 0
+        val out = rows.mapIndexed { i, r ->
+            if (i < m.headerRows || r.size <= width) return@mapIndexed r
+            val trimmed = r.dropLastWhile { it.isBlank() }.let { if (it.size < width) it + List(width - it.size) { "" } else it }
+            if (trimmed.size <= width) return@mapIndexed trimmed
+            val surplus = trimmed.size - width
+            repaired++
+            trimmed.subList(0, desc) + trimmed.subList(desc, desc + surplus + 1).joinToString(",") + trimmed.subList(desc + surplus + 1, trimmed.size)
+        }
+        return out to repaired
+    }
+
     /** [lineOf] turns a row's position in [rows] (from 0) into the line shown to the user; by default the position plus one. */
-    fun parse(rows: List<List<String>>, m: StatementMapping, digits: Int = 2, lineOf: (Int) -> Int = { it + 1 }): ParsedStatement {
+    fun parse(inputRows: List<List<String>>, m: StatementMapping, digits: Int = 2, lineOf: (Int) -> Int = { it + 1 }): ParsedStatement {
         require(m.missing() == null) { m.missing()!! }
+        val (rows, repairedRows) = rejoin(inputRows, m)
         val txns = ArrayList<StatementTxn>()
         val problems = ArrayList<StatementProblem>()
         var ignored = 0
@@ -199,7 +224,7 @@ object StatementParser {
                 else -> txns += StatementTxn(line, date, flow!!, minor, description)
             }
         }
-        return ParsedStatement(txns, problems, ignored)
+        return ParsedStatement(txns, problems, ignored, repairedRows)
     }
 
     private const val MAX_DESCRIPTION = 200

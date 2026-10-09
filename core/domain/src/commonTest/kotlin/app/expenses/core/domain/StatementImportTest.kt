@@ -329,4 +329,34 @@ class StatementImportTest {
         assertEquals(listOf("1: Date", "2: Narration", "Column 3"), StatementDetector.columnNames(rows, 1))
         assertEquals(listOf("Column 1", "Column 2", "Column 3"), StatementDetector.columnNames(rows, 0))
     }
+
+    @Test
+    fun aDescriptionWithUnquotedCommasIsPutBackTogetherInsteadOfShiftingEveryColumn() {
+        // the shape of an HDFC text export: fixed trailing columns, a free-text narration, commas in it not quoted
+        val header = listOf("Date", "Narration", "Value Dat", "Debit Amount", "Credit Amount", "Chq/Ref Number", "Closing Balance")
+        val rows = listOf(
+            header,
+            listOf("22/04/25", "IMPS-1-NAME-BKID-X-TEST", "22/04/25", "10.00", "0.00", "0000511211134145", "1924344.94"),
+            listOf("22/04/25", "RTGS DR-BKID0005742-NAME-NETBANK", " MUM-HDFCR5-CONSULTING FEE", "22/04/25", "490000.00", "0.00", "HDFCR5", "1434344.94"),
+            listOf("23/04/25", "A", " B", " C PAYMENT", "23/04/25", "0.00", "250.00", "REF", "1434594.94", ""), // two commas, and a trailing comma too
+        )
+        val m = StatementDetector.detect(rows)
+        val p = StatementParser.parse(rows, m)
+        assertEquals(emptyList(), p.problems); assertEquals(3, p.txns.size); assertEquals(2, p.repairedRows)
+        assertEquals(49_000_000L, p.txns[1].minor); assertEquals(Flow.SPENDING, p.txns[1].flow)
+        assertEquals("RTGS DR-BKID0005742-NAME-NETBANK, MUM-HDFCR5-CONSULTING FEE", p.txns[1].description)
+        assertEquals(Flow.INCOME, p.txns[2].flow); assertEquals(25_000L, p.txns[2].minor); assertEquals("A, B, C PAYMENT", p.txns[2].description)
+        assertEquals(0, StatementParser.parse(rows.take(2), m).repairedRows, "a file with no stray commas is untouched")
+    }
+
+    @Test
+    fun aTrailingCommaAloneIsNotMistakenForAnExtraColumnAndWithoutAHeaderNothingIsRepaired() {
+        val header = listOf("Date", "Narration", "Debit", "Credit")
+        val rows = listOf(header, listOf("01/04/25", "SHOP", "50.00", "0.00", ""), listOf("02/04/25", "PAY", "0.00", "9.00", "", ""))
+        val p = StatementParser.parse(rows, StatementDetector.detect(rows))
+        assertEquals(emptyList(), p.problems); assertEquals(2, p.txns.size); assertEquals(0, p.repairedRows, "empty trailing cells are dropped, not folded into the narration")
+        assertEquals("SHOP", p.txns[0].description)
+        val none = StatementMapping(headerRows = 0, dateColumn = 0, dateOrder = DateOrder.DMY, descriptionColumn = 1, layout = AmountLayout.SEPARATE_DEBIT_CREDIT, debitColumn = 2, creditColumn = 3)
+        assertEquals(0, StatementParser.rejoin(listOf(listOf("a", "b", "c", "d", "e")), none).second)
+    }
 }

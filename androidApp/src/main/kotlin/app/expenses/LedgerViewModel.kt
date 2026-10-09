@@ -252,6 +252,8 @@ data class ImportUi(
     val problems: List<String> = emptyList(),
     val problemCount: Int = 0,
     val ignoredRows: Int = 0,
+    /** Rows whose description had unquoted commas and were put back together. */
+    val repairedRows: Int = 0,
     val mappingProblem: String? = null,
     /** Set when the layout was not guessed but remembered from an earlier file with the same column titles. */
     val profileNote: String? = null,
@@ -1205,7 +1207,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             }.orEmpty(),
             txnCount = parsed?.txns?.size ?: 0, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
             problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
-            ignoredRows = parsed?.ignoredRows ?: 0, mappingProblem = missing, profileNote = profileNote,
+            ignoredRows = parsed?.ignoredRows ?: 0, repairedRows = parsed?.repairedRows ?: 0, mappingProblem = missing, profileNote = profileNote,
         )
     }
 

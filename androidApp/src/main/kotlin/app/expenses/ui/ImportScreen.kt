@@ -103,6 +103,7 @@ fun ImportScreen(
             if (state.mappingProblem == null) {
                 Text("What I understood", style = MaterialTheme.typography.titleMedium)
                 Text("${state.txnCount} ${if (state.txnCount == 1) "transaction" else "transactions"}: spending ${state.spending}, income ${state.income}", modifier = Modifier.testTag("import_summary"))
+                if (state.repairedRows > 0) Text("${state.repairedRows} ${if (state.repairedRows == 1) "row" else "rows"} had commas inside the description (the file does not quote them) and were put back together.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("import_repaired"))
                 if (state.ignoredRows > 0) Text("${state.ignoredRows} ${if (state.ignoredRows == 1) "row" else "rows"} skipped (balances, totals or rows with no amount).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("import_ignored"))
                 state.preview.forEachIndexed { i, r ->
                     Row(Modifier.fillMaxWidth().testTag("preview_$i")) {
