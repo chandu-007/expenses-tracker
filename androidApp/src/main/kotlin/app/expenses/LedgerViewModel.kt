@@ -1256,6 +1256,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     XlsxReader.looksLikeZip(bytes) -> app.expenses.core.domain.CsvTable(XlsxReader.read(bytes), ',', false)
                     // the older Excel format (.xls), which many banks still hand out
                     app.expenses.core.domain.XlsReader.looksLikeXls(bytes) -> app.expenses.core.domain.CsvTable(app.expenses.core.domain.XlsReader.read(bytes), ',', false)
+                    app.expenses.core.domain.XlsReader.looksLikeWebPageOrXml(bytes) -> throw IllegalArgumentException(app.expenses.core.domain.XlsReader.WEB_PAGE_MESSAGE)
                     else -> Csv.parse(StatementText.decode(bytes))
                 }
                 require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }

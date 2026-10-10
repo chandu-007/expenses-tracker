@@ -68,4 +68,13 @@ class XlsReaderTest {
         val e = runCatching { XlsReader.read(scrambled) }.exceptionOrNull()
         assertTrue(e == null || e is XlsReader.Unreadable, "scrambled contents must not crash with $e")
     }
+
+    @Test
+    fun aWebPageOrXmlSavedWithAnExcelNameIsRecognisedAndPlainCsvIsNot() {
+        assertTrue(XlsReader.looksLikeWebPageOrXml("<html><table><tr><td>Date</td></tr></table></html>".encodeToByteArray()))
+        assertTrue(XlsReader.looksLikeWebPageOrXml("\n  <?xml version=\"1.0\"?><Workbook/>".encodeToByteArray()))
+        assertTrue(XlsReader.looksLikeWebPageOrXml(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "<table>".encodeToByteArray()), "with a byte order mark")
+        assertFalse(XlsReader.looksLikeWebPageOrXml("Date,Narration,Amount\n01/01/26,<b>x</b>,5".encodeToByteArray()), "a CSV that mentions a tag later is still a CSV")
+        assertFalse(XlsReader.looksLikeWebPageOrXml(ByteArray(0)))
+    }
 }

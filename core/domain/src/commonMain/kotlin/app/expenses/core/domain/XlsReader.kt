@@ -13,6 +13,16 @@ object XlsReader {
     private const val END_OF_CHAIN = -2
     private const val FREE = -1
 
+    /** Some banks save a web page or an XML sheet under an .xls name. It is text starting with `<`, not a workbook, and this reader cannot use it. */
+    fun looksLikeWebPageOrXml(bytes: ByteArray): Boolean {
+        var i = 0
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) i = 3
+        while (i < bytes.size && i < 64 && (bytes[i].toInt() == ' '.code || bytes[i].toInt() == '\n'.code || bytes[i].toInt() == '\r'.code || bytes[i].toInt() == '\t'.code)) i++
+        return i < bytes.size && bytes[i] == '<'.code.toByte()
+    }
+
+    const val WEB_PAGE_MESSAGE = "This file has an Excel name but is really a web page or XML, which the app cannot read. Open it in Excel (or a browser), save it as .xlsx or CSV, and import that."
+
     fun looksLikeXls(bytes: ByteArray): Boolean = bytes.size >= 512 && SIGNATURE.indices.all { bytes[it] == SIGNATURE[it] }
 
     fun read(bytes: ByteArray): List<List<String>> {
