@@ -113,6 +113,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
                 val refundable = refundableMinor(target, exceptRefund = entryId)
                 Editable.Form(base.copy(kind = DraftKind.REFUND, refundsEntry = target, refundableMinor = refundable), "Edit refund", refundOf = titleOf(target))
             }
+            "SETTLEMENT" -> Editable.Form(base.copy(kind = DraftKind.LOAN, personId = row.person_id.orEmpty(), gave = row.direction == "PAID_TO_PERSON", note = row.note.orEmpty()), "Edit lent or borrowed")
             else -> readOnly("This kind of entry can't be edited here yet.")
         }
     }
@@ -151,8 +152,11 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
             is DraftResult.Ok -> r.entry
             is DraftResult.Problem -> throw IllegalArgumentException(r.message)
         }
-        val text = draft.note.trim().ifEmpty { null }
-        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, tags = draft.tags))
+        // a lent or borrowed entry is titled by the person's name (so search finds it) and keeps what was typed as its note
+        val loan = draft.kind == DraftKind.LOAN
+        val text = if (loan) ok.people.get(draft.personId)?.name else draft.note.trim().ifEmpty { null }
+        val typed = draft.note.trim().ifEmpty { null }
+        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = if (loan) typed else existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, note = if (loan) typed else null, tags = draft.tags))
         // Correcting a captured entry later, in the ordinary editor, teaches the same lesson as choosing in the inbox: next time that payee starts there.
         if (existing?.source == "sms" && draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft) && draft.category.isNotEmpty()) ok.captureRules.learn(text, draft.category)
         if (draft.kind == DraftKind.EXPENSE) {

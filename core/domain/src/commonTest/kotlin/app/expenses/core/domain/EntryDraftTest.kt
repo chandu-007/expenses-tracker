@@ -8,7 +8,10 @@ import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.Income
 import app.expenses.core.domain.ledger.Ledger
+import app.expenses.core.domain.ledger.PersonId
 import app.expenses.core.domain.ledger.Refund
+import app.expenses.core.domain.ledger.Settlement
+import app.expenses.core.domain.ledger.SettlementDirection
 import app.expenses.core.domain.ledger.Transfer
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.int
@@ -109,5 +112,22 @@ class EntryDraftTest {
         assertEquals("Enter an amount like 250 or 99.50.", problem(d(DraftKind.EXPENSE, "12.345")))
         assertEquals("Enter an amount like 250 or 99.50.", problem(d(DraftKind.EXPENSE, "0")))
         assertEquals("Choose an account.", problem(d(DraftKind.EXPENSE, account = "")))
+    }
+
+    @Test
+    fun aLentOrBorrowedEntryNeedsAPersonAndBecomesASettlementThatMovesTheAccountNotSpending() {
+        fun loan(person: String, gave: Boolean) = EntryDraft(null, DraftKind.LOAN, "500", accountId = "bank", personId = person, gave = gave, occurredAt = 7)
+        assertEquals("Choose who you gave the money to.", problem(loan("", true)))
+        assertEquals("Choose who the money came from.", problem(loan("", false)))
+        val lent = ok(loan("chandu", true)) as Settlement
+        assertEquals(SettlementDirection.PAID_TO_PERSON, lent.direction); assertEquals(PersonId("chandu"), lent.person); assertEquals(m(500_00), lent.amount); assertEquals(AccountId("bank"), lent.account)
+        assertEquals(SettlementDirection.RECEIVED_FROM_PERSON, (ok(loan("chandu", false)) as Settlement).direction)
+        assertEquals("Enter an amount.", problem(loan("chandu", true).copy(amountText = "")))
+        assertEquals("Choose an account.", problem(loan("chandu", true).copy(accountId = "")))
+        // lent 500 then paid back 200: the person owes 300, and no category or spending is involved
+        val back = (ok(loan("chandu", false).copy(amountText = "200")) as Settlement).copy(id = EntryId("back"))
+        val ledger = Ledger.EMPTY.addAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, inr, 10_000_00L)).add(lent).add(back)
+        assertEquals(m(300_00), ledger.personBalance(PersonId("chandu"), inr))
+        assertEquals(m(9_700_00), ledger.balances().getValue(AccountId("bank")))
     }
 }

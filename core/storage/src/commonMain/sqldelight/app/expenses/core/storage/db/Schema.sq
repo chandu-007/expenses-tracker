@@ -130,6 +130,8 @@ CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE del
 CREATE INDEX entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0;
 CREATE INDEX entry_transfer_in ON entry(counter_account_id, to_amount_minor) WHERE kind = 'TRANSFER' AND deleted = 0;
 CREATE INDEX entry_refunds ON entry(refunds_entry) WHERE refunds_entry IS NOT NULL;
+-- What each person owes comes from this index alone, so the lent-and-borrowed screen stays cheap on a big ledger.
+CREATE INDEX entry_loans ON entry(person_id, currency, direction, amount_minor, occurred_at) WHERE kind = 'SETTLEMENT' AND deleted = 0;
 CREATE INDEX entry_deleted_ids ON entry(id) WHERE deleted = 1;
 CREATE UNIQUE INDEX entry_source_ref ON entry(source, source_ref) WHERE source_ref IS NOT NULL;
 
@@ -152,6 +154,13 @@ CREATE TABLE entry_share (
     person_id TEXT, -- null is the user
     amount_minor INTEGER NOT NULL,
     PRIMARY KEY (entry_id, position)
+);
+
+-- Someone the person lends to, borrows from or settles with. An entry refers to one by [id] (entry.person_id); the name lives only here.
+CREATE TABLE person (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0
 );
 
 -- A photo or file attached to an entry. The bytes live in a file on the phone named by id; this row says whose it is and what it is.
@@ -494,6 +503,37 @@ SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kin
 
 flipInboxDirection:
 UPDATE inbox SET direction = CASE direction WHEN 'DEBIT' THEN 'CREDIT' WHEN 'CREDIT' THEN 'DEBIT' ELSE direction END WHERE id = ? AND status = 'PENDING';
+
+livePeople:
+SELECT * FROM person WHERE deleted = 0 ORDER BY name COLLATE NOCASE, id;
+
+allPeople:
+SELECT * FROM person;
+
+personById:
+SELECT * FROM person WHERE id = ?;
+
+insertPerson:
+INSERT INTO person(id, name, deleted) VALUES (?, ?, 0);
+
+insertPersonRaw:
+INSERT OR IGNORE INTO person(id, name, deleted) VALUES (?, ?, ?);
+
+removePerson:
+UPDATE person SET deleted = 1 WHERE id = ?;
+
+personUsage:
+SELECT COUNT(*) FROM entry WHERE person_id = ?;
+
+-- What each person owes (positive) or is owed (negative), from the settlements with them: money the person gave minus money the person got.
+loanBalances:
+SELECT person_id, SUM(CASE direction WHEN 'PAID_TO_PERSON' THEN amount_minor WHEN 'RECEIVED_FROM_PERSON' THEN -amount_minor ELSE 0 END) AS balance,
+    COUNT(*) AS n, MAX(occurred_at) AS last_at
+FROM entry WHERE kind = 'SETTLEMENT' AND deleted = 0 AND currency = ? AND person_id IS NOT NULL
+GROUP BY person_id;
+
+loanEntriesOfPerson:
+SELECT * FROM entry WHERE kind = 'SETTLEMENT' AND person_id = ? AND deleted = 0 ORDER BY occurred_at DESC, seq DESC;
 
 inboxSameTextNear:
 SELECT COUNT(*) FROM inbox WHERE source = ? AND sender = ? AND body = ? AND received_at BETWEEN ? AND ?;

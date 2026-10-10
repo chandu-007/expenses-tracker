@@ -64,6 +64,8 @@ data class BackupRecurring(
 @Serializable data class BackupCardTerms(val accountId: String, val statementDay: Int, val dueDay: Int, val minDuePercent: Int = 5, val remindDaysBefore: Int = 3)
 @Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null)
 
+@Serializable data class BackupPerson(val id: String, val name: String, val deleted: Boolean = false)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -82,6 +84,8 @@ data class BackupData(
     val cardTerms: List<BackupCardTerms> = emptyList(),
     val captureRules: List<BackupCaptureRule> = emptyList(),
     val merchantMap: List<BackupMerchant> = emptyList(),
+    /** The people lent to and borrowed from. Absent in a backup made before they existed, which then restores as before. */
+    val people: List<BackupPerson> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

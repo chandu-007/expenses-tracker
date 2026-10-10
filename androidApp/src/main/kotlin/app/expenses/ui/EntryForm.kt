@@ -73,10 +73,10 @@ import java.time.format.DateTimeFormatter
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>))
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean)
     },
 )
 
@@ -106,12 +106,15 @@ fun EntryFormScreen(
     onOpenAttachment: (app.expenses.AttachmentUi) -> Unit = {},
     onRemoveAttachment: (app.expenses.AttachmentUi) -> Unit = {},
     attachmentProblem: String? = null,
+    people: List<app.expenses.PersonUi> = emptyList(),
+    onCreatePerson: (name: String, onCreated: (String) -> Unit) -> Unit = { _, _ -> },
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     var pickingDate by rememberSaveable { mutableStateOf(false) }
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
     var pickingCategory by rememberSaveable { mutableStateOf(false) }
+    var creatingPerson by rememberSaveable { mutableStateOf(false) }
     val currency = BaseCurrency.current
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
@@ -127,6 +130,15 @@ fun EntryFormScreen(
     val split = EntryDrafts.isSplit(draft)
     val activeAccounts = accounts
 
+    if (creatingPerson) {
+        var name by rememberSaveable { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { creatingPerson = false }, title = { Text("Who is it?") },
+            text = { OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.testTag("new_person_name")) },
+            confirmButton = { TextButton(onClick = { onCreatePerson(name) { id -> draft = draft.copy(personId = id) }; creatingPerson = false }, enabled = name.isNotBlank(), modifier = Modifier.testTag("new_person_ok")) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { creatingPerson = false }) { Text("Cancel") } },
+        )
+    }
     if (creatingCategory) {
         CategoryNameDialog(
             title = "New category", categories = categories, allowParent = false,
@@ -197,6 +209,19 @@ fun EntryFormScreen(
             )
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
 
+            if (draft.kind == DraftKind.LOAN) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = draft.gave, onClick = { draft = draft.copy(gave = true) }, label = { Text("I gave") }, modifier = Modifier.testTag("loan_gave"))
+                    FilterChip(selected = !draft.gave, onClick = { draft = draft.copy(gave = false) }, label = { Text("I got") }, modifier = Modifier.testTag("loan_got"))
+                }
+                Text(if (draft.gave) "Gave to (lending, or paying someone back)" else "Got from (borrowing, or being paid back)", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    people.forEach { p -> FilterChip(selected = p.id == draft.personId, onClick = { draft = draft.copy(personId = p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("person_chip_${p.name}")) }
+                    AssistChip(onClick = { creatingPerson = true }, label = { Text("+ New person") }, modifier = Modifier.testTag("new_person_chip"))
+                }
+                Text("Lending or borrowing is not spending or income. It moves your account and what this person owes you, which the Lent and borrowed page keeps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
             if (draft.kind == DraftKind.EXPENSE && !split || draft.kind == DraftKind.INCOME) {
                 Text(if (draft.kind == DraftKind.INCOME) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -224,7 +249,7 @@ fun EntryFormScreen(
 
             if (split) SplitEditor(draft, categories, currency) { draft = it }
 
-            val fromLabel = when (draft.kind) { DraftKind.TRANSFER -> "From"; DraftKind.INCOME -> "Received in"; DraftKind.REFUND -> "Refunded to"; DraftKind.EXPENSE -> "Paid from" }
+            val fromLabel = when (draft.kind) { DraftKind.TRANSFER -> "From"; DraftKind.INCOME -> "Received in"; DraftKind.REFUND -> "Refunded to"; DraftKind.EXPENSE -> "Paid from"; DraftKind.LOAN -> if (draft.gave) "Paid from" else "Received in" }
             Text(fromLabel, style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 activeAccounts.forEach { a -> FilterChip(selected = a.id == draft.accountId, onClick = { draft = draft.copy(accountId = a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("account_chip_${a.name}")) }
@@ -242,7 +267,7 @@ fun EntryFormScreen(
             )
             TagsEditor(draft.tags, allTags) { draft = draft.copy(tags = it) }
             AttachmentsSection(draft.id != null, attachments, attachmentProblem, onAttach, onOpenAttachment, onRemoveAttachment)
-            if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || split)) {
+            if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || draft.kind == DraftKind.LOAN || split)) {
                 Text(built.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("form_problem"))
             }
             if (showTemplateOption && draft.kind == DraftKind.EXPENSE && !split) {
@@ -360,13 +385,17 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
     }
 }
 
-/** Every category in a searchable list, for the ones that did not fit among the chips. */
+/**
+ * Every category in a searchable list, for the ones that did not fit among the chips. With nothing typed they are grouped under their parent (the
+ * parent first, its subcategories indented); once something is typed they are one flat list of "Parent › Child" names that match.
+ */
 @Composable
 private fun CategoryPickerDialog(categories: List<CategoryUi>, selected: String, onPick: (String) -> Unit, onClose: () -> Unit) {
     var typed by rememberSaveable { mutableStateOf("") }
     val named = remember(categories) { categories.map { it.id to displayName(categories, it) } }
     val found = remember(named, typed) { CategoryChoices.search(named, typed) }
     val nameOf = remember(named) { named.toMap() }
+    val byId = remember(categories) { categories.associateBy { it.id } }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("All categories") },
@@ -375,10 +404,14 @@ private fun CategoryPickerDialog(categories: List<CategoryUi>, selected: String,
                 OutlinedTextField(typed, { typed = it }, label = { Text("Search") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("category_search"))
                 LazyColumn(Modifier.heightIn(max = 360.dp).testTag("category_list")) {
                     items(found, key = { it }) { id ->
+                        val c = byId[id]
+                        val grouped = typed.isBlank() && c != null
+                        val child = grouped && c!!.parentId != null
                         Text(
-                            nameOf.getValue(id) + if (id == selected) "  ✓" else "",
+                            (if (grouped) c!!.name else nameOf.getValue(id)) + if (id == selected) "  ✓" else "",
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 12.dp).testTag("category_option_$id"),
+                            fontWeight = if (grouped && !child) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+                            modifier = Modifier.fillMaxWidth().clickable { onPick(id) }.padding(start = if (child) 24.dp else 0.dp, top = 12.dp, bottom = 12.dp).testTag("category_option_$id"),
                         )
                     }
                     if (found.isEmpty()) item { Text("No category matches.", modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }

@@ -7,10 +7,13 @@ import app.expenses.core.domain.ledger.Entry
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.Income
+import app.expenses.core.domain.ledger.PersonId
 import app.expenses.core.domain.ledger.Refund
+import app.expenses.core.domain.ledger.Settlement
+import app.expenses.core.domain.ledger.SettlementDirection
 import app.expenses.core.domain.ledger.Transfer
 
-enum class DraftKind(val label: String) { EXPENSE("Expense"), INCOME("Income"), TRANSFER("Transfer"), REFUND("Refund") }
+enum class DraftKind(val label: String) { EXPENSE("Expense"), INCOME("Income"), TRANSFER("Transfer"), REFUND("Refund"), LOAN("Lent or borrowed") }
 
 /** One part of a split expense, as typed. */
 data class SplitDraft(val category: String, val amountText: String)
@@ -22,6 +25,7 @@ data class SplitDraft(val category: String, val amountText: String)
  * - Expense: one [category] (empty = uncategorised), or, when [splits] has two or more parts, those parts, which must add up to the amount.
  * - Income: optional [category].
  * - Transfer: from [accountId] to [toAccountId]; covers a card bill payment, an ATM withdrawal (bank to cash) and moving savings.
+ * - Lent or borrowed: money that went to ([gave]) or came from a person ([personId]), through [accountId]. It is not spending or income: it moves the account and what the person owes.
  * - Refund: of [refundsEntry], at most [refundableMinor] (what is still refundable, counting the entry being edited as not yet refunded).
  */
 data class EntryDraft(
@@ -37,6 +41,9 @@ data class EntryDraft(
     val refundsEntry: String? = null,
     val refundableMinor: Long = 0L,
     val tags: List<String> = emptyList(),
+    val personId: String = "",
+    /** For [DraftKind.LOAN]: true when the money went to the person (lent, or paid back), false when it came from them (borrowed, or paid to you). */
+    val gave: Boolean = true,
 )
 
 sealed interface DraftResult {
@@ -69,6 +76,8 @@ object EntryDrafts {
                 d.toAccountId == d.accountId -> problem("Choose two different accounts.")
                 else -> DraftResult.Ok(Transfer(id, d.occurredAt, AccountId(d.accountId), AccountId(d.toAccountId), amount))
             }
+            DraftKind.LOAN -> if (d.personId.isEmpty()) problem(if (d.gave) "Choose who you gave the money to." else "Choose who the money came from.")
+                else DraftResult.Ok(Settlement(id, d.occurredAt, PersonId(d.personId), AccountId(d.accountId), amount, if (d.gave) SettlementDirection.PAID_TO_PERSON else SettlementDirection.RECEIVED_FROM_PERSON))
             DraftKind.REFUND -> when {
                 d.refundsEntry == null -> problem("A refund needs the expense it is for.")
                 amount.minorUnits > d.refundableMinor -> problem(

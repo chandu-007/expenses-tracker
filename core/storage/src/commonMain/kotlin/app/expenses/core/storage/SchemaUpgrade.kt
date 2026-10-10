@@ -31,6 +31,8 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS entry_tag (entry_id TEXT NOT NULL, tag TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (entry_id, tag)) WITHOUT ROWID")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_deleted_ids ON entry(id) WHERE deleted = 1")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_tag_tag ON entry_tag(tag, entry_id)")
+        run(driver, "CREATE INDEX IF NOT EXISTS entry_loans ON entry(person_id, currency, direction, amount_minor, occurred_at) WHERE kind = 'SETTLEMENT' AND deleted = 0")
+        run(driver, "CREATE TABLE IF NOT EXISTS person (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)")
     }
 
     private fun run(driver: SqlDriver, sql: String) { driver.execute(null, sql, 0) }

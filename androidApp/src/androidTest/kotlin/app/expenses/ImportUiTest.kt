@@ -216,6 +216,26 @@ class ImportUiTest {
 
     private fun workbook(rows: List<List<String>>) = app.expenses.core.storage.XlsxExport.build(rows, setOf(1, 2))
 
+    private fun asset(name: String) = InstrumentationRegistry.getInstrumentation().context.assets.open("xls/$name").readBytes()
+
+    @Test
+    fun anOldFormatExcelStatementWithABankPreambleIsReadAndEveryTransactionImported() {
+        openData()
+        start(file("Acct_Statement.xls", asset("big.xls")))
+        compose.waitUntil(10_000) { viewModel().statement.value.txnCount == 150 }
+        assertEquals(0, viewModel().statement.value.problemCount, "the asterisk row and the summary block are not problems")
+        compose.onNodeWithTag("import_confirm").performClick(); waitAnyText("Imported 150 transactions")
+        assertEquals(150, runBlocking { container.write { it.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().size } })
+    }
+
+    @Test
+    fun aFileThatIsNotAWorkbookButLooksLikeOneExplainsItself() {
+        openData()
+        viewModel().startImport(file("broken.xls", asset("big.xls").copyOf(700)))
+        compose.waitUntil(10_000) { viewModel().statement.value.error != null }
+        assertTrue(viewModel().statement.value.error!!.contains("Excel"), viewModel().statement.value.error!!)
+    }
+
     @Test
     fun anExcelStatementIsReadLikeACsvOneAndImported() {
         openData()

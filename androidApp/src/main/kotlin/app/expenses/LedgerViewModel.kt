@@ -139,6 +139,18 @@ data class InboxRowUi(
     val nameable: Boolean = false,
 )
 
+/** Someone lent to or borrowed from. */
+data class PersonUi(val id: String, val name: String)
+
+/** One person's standing: [minor] is positive when they owe you, negative when you owe them. */
+data class LoanRowUi(val id: String, val name: String, val minor: Long, val amountText: String, val state: String, val entries: Int)
+
+/** One lent or borrowed entry with a person. */
+data class LoanEntryUi(val id: String, val dateText: String, val amountText: String, val gave: Boolean, val account: String, val note: String)
+
+/** The lent-and-borrowed screen: everyone's standing, the two totals, and the history of the person picked. */
+data class LoansUi(val rows: List<LoanRowUi> = emptyList(), val owedToYou: String = "", val youOwe: String = "", val selected: LoanRowUi? = null, val history: List<LoanEntryUi> = emptyList())
+
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
 data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false)
@@ -505,7 +517,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             ok.templates.save(Template(UUID.randomUUID().toString(), name, amount, CategoryId(draft.category), AccountId(draft.accountId), draft.note.trim().ifEmpty { null }))
         }
         _editor.value = null
-        val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund" }
+        val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund"; DraftKind.LOAN -> if (draft.gave) "money given" else "money received" }
         refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
         lastSaveMillis = (System.nanoTime() - startedAt) / 1e6
     }
@@ -656,6 +668,22 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val created = ok.categories.create(name, parentId, colorArgb)
         refresh(ok)
         viewModelScope.launch(Dispatchers.Main) { onCreated(created.id) }
+    }
+
+    /** Adds the ready-made categories the person ticked ([picks]: group name to the subcategories wanted), in one step, skipping any that already exist. */
+    fun addSuggestedCategories(picks: Map<String, Set<String>>) = withStore { ok ->
+        var added = 0
+        ok.db.transaction {
+            val ids = HashMap<String, String>()
+            for (p in app.expenses.core.domain.CategoryCatalog.plan(ok.categories.list(), picks)) {
+                val parent = ids[p.parent] ?: ok.categories.list().firstOrNull { it.parentId == null && it.name.equals(p.parent, ignoreCase = true) }?.id
+                val child = p.child
+                if (child == null) { ids[p.parent] = ok.categories.create(p.parent).id; added++ }
+                else { ok.categories.create(child, parent ?: error("The group ${p.parent} was not created")); added++ }
+            }
+        }
+        refresh(ok)
+        _state.update { (it as? UiState.Ready)?.copy(message = if (added == 0) "Nothing new to add" else if (added == 1) "Added 1 category" else "Added $added categories") ?: it }
     }
 
     /** Applies all the edits of the category dialog as one change: either every part is saved or none. */
@@ -858,6 +886,43 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- capture inbox ----
 
+    private val _people = MutableStateFlow<List<PersonUi>>(emptyList())
+    val people: StateFlow<List<PersonUi>> get() = _people
+    private val _loans = MutableStateFlow(LoansUi())
+    val loans: StateFlow<LoansUi> get() = _loans
+    @Volatile private var loansWatching = false
+    @Volatile private var selectedPerson: String? = null
+
+    /** The lent-and-borrowed screen asks to be kept up to date while it is open (and only then: the figures cost a query). */
+    fun watchLoans(on: Boolean) {
+        loansWatching = on
+        if (on) withStore { loadLoans(it) } else { selectedPerson = null; _loans.value = LoansUi() }
+    }
+
+    fun selectLoanPerson(id: String?) { selectedPerson = id; withStore { loadLoans(it) } }
+
+    fun createPerson(name: String, onCreated: (String) -> Unit = {}) = withStore { ok ->
+        val p = ok.people.create(name)
+        refresh(ok)
+        viewModelScope.launch(Dispatchers.Main) { onCreated(p.id) }
+    }
+
+    fun removePerson(id: String) = withStore { ok ->
+        ok.people.remove(id); selectedPerson = null
+        refresh(ok)
+    }
+
+    private fun loadLoans(ok: AppContainer.Opened.Ok) {
+        val rows = ok.people.balances(inr.code).map { b ->
+            LoanRowUi(b.person.id, b.person.name, b.minor, Money(kotlin.math.abs(b.minor), inr).formatted(), when { b.minor > 0 -> "owes you"; b.minor < 0 -> "you owe"; else -> "settled up" }, b.entries)
+        }
+        val selected = rows.firstOrNull { it.id == selectedPerson }
+        val history = selected?.let { s -> ok.db.schemaQueries.loanEntriesOfPerson(s.id).executeAsList().map { e ->
+            LoanEntryUi(e.id, dateFormat.format(Instant.ofEpochMilli(e.occurred_at)), Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), e.direction == "PAID_TO_PERSON", e.account_id?.let { accountNames[it] }.orEmpty(), e.note.orEmpty())
+        } }.orEmpty()
+        _loans.value = LoansUi(rows, Money(rows.filter { it.minor > 0 }.sumOf { it.minor }, inr).formatted(), Money(rows.filter { it.minor < 0 }.sumOf { -it.minor }, inr).formatted(), selected, history)
+    }
+
     private val _inbox = MutableStateFlow<List<InboxRowUi>>(emptyList())
 
     /** Pending captured transactions, newest first. Loaded when the inbox opens and kept current while it is open. */
@@ -949,7 +1014,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val rawPayee = PayeeGuess.of(i.body.orEmpty())
             val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
             val payee = named ?: rawPayee
-            val byName = ok.categories.list().filter { !it.hidden }.associate { it.name.lowercase() to it.id }
+            // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
+            val byName = ok.categories.list().filter { !it.hidden && it.parentId == null }.associate { it.name.lowercase() to it.id }
             val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON) else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
@@ -1186,7 +1252,12 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("That file could not be opened.")
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
-                val table = if (XlsxReader.looksLikeZip(bytes)) app.expenses.core.domain.CsvTable(XlsxReader.read(bytes), ',', false) else Csv.parse(StatementText.decode(bytes))
+                val table = when {
+                    XlsxReader.looksLikeZip(bytes) -> app.expenses.core.domain.CsvTable(XlsxReader.read(bytes), ',', false)
+                    // the older Excel format (.xls), which many banks still hand out
+                    app.expenses.core.domain.XlsReader.looksLikeXls(bytes) -> app.expenses.core.domain.CsvTable(app.expenses.core.domain.XlsReader.read(bytes), ',', false)
+                    else -> Csv.parse(StatementText.decode(bytes))
+                }
                 require(!OwnExport.matches(table.rows)) { OwnExport.MESSAGE }
                 require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
                 require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
@@ -1199,6 +1270,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 val saved = container.write { ok -> table.rows.take(PROFILE_SEARCH_ROWS).firstNotNullOfOrNull { row -> ImportProfiles.signature(row)?.let { sig -> ImportProfiles.decode(ok.templates.setting(sig), width) } } }
                 recomputeImport(saved ?: guessed, account, profileNote = if (saved != null) "Read the way you set it up for the last file with these column titles. Change anything below if it is wrong." else null)
             } catch (e: IllegalArgumentException) {
+                _import.value = ImportUi(active = true, error = e.message)
+            } catch (e: app.expenses.core.domain.XlsReader.Unreadable) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
                 _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.java.simpleName}")
@@ -1678,6 +1751,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun refresh(ok: AppContainer.Opened.Ok, undo: UndoUi? = null) {
         rowCache.clear() // names (accounts, categories) may have changed since the rows were formatted
+        _people.value = ok.people.list().map { PersonUi(it.id, it.name) }
+        if (loansWatching) loadLoans(ok)
         val q = ok.db.schemaQueries
         val accounts = q.selectAccounts().executeAsList()
         accountNames = accounts.associate { it.id to it.name }
@@ -1821,9 +1896,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
         subtitle = dateFormat.format(Instant.ofEpochMilli(e.occurred_at)) +
             (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
-            ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: ""),
+            (if (e.kind == "SETTLEMENT") " · " + (if (e.direction == "PAID_TO_PERSON") "Gave" else "Got") else ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: "")),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
-        inflow = e.kind == "INCOME" || e.kind == "REFUND",
+        inflow = e.kind == "INCOME" || e.kind == "REFUND" || (e.kind == "SETTLEMENT" && e.direction == "RECEIVED_FROM_PERSON"),
         day = Instant.ofEpochMilli(e.occurred_at).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay(),
         category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
         kind = e.kind,

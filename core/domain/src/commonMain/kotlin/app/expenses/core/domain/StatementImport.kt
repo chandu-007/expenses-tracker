@@ -218,7 +218,8 @@ object StatementParser {
             val date = if (dateText.isEmpty()) null else StatementDates.parse(dateText, m.dateOrder)
             when {
                 blank -> ignored++ // a balance line, a total, a note: no amount, so not a transaction
-                reason != null -> if (dateText.isEmpty() && description.isEmpty()) ignored++ else problems += StatementProblem(line, reason)
+                // no usable amount and no usable date: a row of asterisks, a summary line, a footer. With a real date it is a transaction that went wrong, and is reported.
+                reason != null -> if ((dateText.isEmpty() && description.isEmpty()) || date == null) ignored++ else problems += StatementProblem(line, reason)
                 dateText.isEmpty() -> problems += StatementProblem(line, "The date is missing.")
                 date == null -> problems += StatementProblem(line, "The date '$dateText' is not a date in the chosen format.")
                 else -> txns += StatementTxn(line, date, flow!!, minor, description)

@@ -21,6 +21,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.BudgetScreen
+import app.expenses.ui.LoansScreen
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.Density
@@ -108,6 +111,11 @@ class MainActivity : FragmentActivity() {
                     val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle()
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
+                    var loansOpen by rememberSaveable { mutableStateOf(false) }
+                    // "personId|gave|amount" when the add form is opened from the lent-and-borrowed pages
+                    var prefillLoan by rememberSaveable { mutableStateOf<String?>(null) }
+                    val loans by viewModel.loans.collectAsStateWithLifecycle()
+                    val people by viewModel.people.collectAsStateWithLifecycle()
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
                     var yourData by rememberSaveable { mutableStateOf(false) }
@@ -146,7 +154,7 @@ class MainActivity : FragmentActivity() {
                         is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) {
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                            customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding,
+                            customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen,
                         ).indexOf(true).let { if (it == 1 || it == 21) -1 else it } // the add and edit form open at once: quick entry is the app's promise
                         app.expenses.ui.ScreenEnter(screenKey) { when {
                             history != null -> {
@@ -171,6 +179,7 @@ class MainActivity : FragmentActivity() {
                                     attachments = attachmentList, attachmentProblem = attachmentProblem, onAttach = { uri -> e.draft.id?.let { viewModel.addAttachment(it, uri) } },
                                     onOpenAttachment = { a -> openAttachment(viewModel.attachmentUri(a.id), a.mime) },
                                     onRemoveAttachment = { a -> e.draft.id?.let { viewModel.removeAttachment(it, a.id) } },
+                                    people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
                                     onSave = { d, _ -> viewModel.saveEntry(d, false) },
                                     onBack = viewModel::closeEditor,
                                     refundOf = e.refundOf,
@@ -240,6 +249,7 @@ class MainActivity : FragmentActivity() {
                                     onMove = viewModel::moveCategory,
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
+                                    onAddSuggested = viewModel::addSuggestedCategories,
                                 )
                             }
                             securing -> {
@@ -342,15 +352,27 @@ class MainActivity : FragmentActivity() {
                                 BackHandler { adding = false }
                                 EntryFormScreen(
                                     title = "Add",
-                                    start = EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, System.currentTimeMillis()),
-                                    kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER),
+                                    start = prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", System.currentTimeMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, System.currentTimeMillis()),
+                                    kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
                                     accounts = s.accounts,
                                     categories = s.categories,
                                     onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
                                     showTemplateOption = true,
                                     allTags = s.tags,
-                                    onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false },
-                                    onBack = { adding = false },
+                                    people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
+                                    onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null },
+                                    onBack = { adding = false; prefillLoan = null },
+                                )
+                            }
+                            loansOpen -> {
+                                BackHandler { if (loans.selected != null) viewModel.selectLoanPerson(null) else { loansOpen = false; viewModel.watchLoans(false) } }
+                                LoansScreen(
+                                    ui = loans,
+                                    onBack = { loansOpen = false; viewModel.watchLoans(false) },
+                                    onSelect = viewModel::selectLoanPerson,
+                                    onNew = { person, gave, amount -> prefillLoan = listOf(person.orEmpty(), if (gave) "1" else "0", if (amount > 0) app.expenses.core.domain.Money(amount, BaseCurrency.current).toPlainString() else "").joinToString("|"); adding = true },
+                                    onOpenEntry = { viewModel.openEditor(it) },
+                                    onRemove = viewModel::removePerson,
                                 )
                             }
                             else -> EntryListScreen(
@@ -375,6 +397,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenData = { yourData = true },
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
+                                onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                                 onCustomiseHome = { customisingHome = true },
                                 onOpenAppearance = { appearing = true },
                                 onOpenSearch = { searching = true },

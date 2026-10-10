@@ -359,4 +359,21 @@ class StatementImportTest {
         val none = StatementMapping(headerRows = 0, dateColumn = 0, dateOrder = DateOrder.DMY, descriptionColumn = 1, layout = AmountLayout.SEPARATE_DEBIT_CREDIT, debitColumn = 2, creditColumn = 3)
         assertEquals(0, StatementParser.rejoin(listOf(listOf("a", "b", "c", "d", "e")), none).second)
     }
+
+    @Test
+    fun aRowWithNeitherADateNorAnAmountIsANoteAndAWronglyFilledTransactionIsStillReported() {
+        val m = StatementMapping(headerRows = 1, dateColumn = 0, dateOrder = DateOrder.DMY, descriptionColumn = 1, layout = AmountLayout.SEPARATE_DEBIT_CREDIT, debitColumn = 2, creditColumn = 3)
+        val rows = listOf(
+            listOf("Date", "Narration", "Withdrawal", "Deposit"),
+            listOf("********", "*********", "*********", "*********"),   // a separator: neither a date nor an amount
+            listOf("Opening Balance", "", "Debits", "Credits"),          // a summary header
+            listOf("05/01/26", "Tea", "abc", ""),                        // a real date, a bad amount: reported
+            listOf("not a date", "Tea", "10.00", ""),                    // a good amount, a bad date: reported
+            listOf("06/01/26", "Tea", "10.00", ""),                      // fine
+        )
+        val parsed = StatementParser.parse(rows, m, 2)
+        assertEquals(1, parsed.txns.size)
+        assertEquals(listOf(4, 5), parsed.problems.map { it.row })
+        assertEquals(2, parsed.ignoredRows)
+    }
 }

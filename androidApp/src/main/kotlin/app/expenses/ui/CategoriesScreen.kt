@@ -80,9 +80,16 @@ fun CategoriesScreen(
     onMove: (id: String, direction: Int) -> Unit,
     onMerge: (fromId: String, intoId: String) -> Unit,
     onDelete: (id: String) -> Unit,
+    onAddSuggested: (Map<String, Set<String>>) -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
+    var suggesting by rememberSaveable { mutableStateOf(false) }
+    if (suggesting) {
+        androidx.activity.compose.BackHandler { suggesting = false }
+        SuggestedCategoriesScreen(categories, onAdd = { onAddSuggested(it); suggesting = false }, onBack = { suggesting = false })
+        return
+    }
     val domain = categories.asDomain()
 
     val editedCategory = categories.firstOrNull { it.id == editing }
@@ -108,7 +115,13 @@ fun CategoriesScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Categories") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("categories_back")) { Text("Back") } }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Categories") },
+                navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("categories_back")) { Text("Back") } },
+                actions = { TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
+            )
+        },
         floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 88.dp)) {

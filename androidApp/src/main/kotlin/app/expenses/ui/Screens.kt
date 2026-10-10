@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
@@ -128,6 +129,7 @@ fun EntryListScreen(
     onOpenData: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onOpenLoans: () -> Unit,
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -221,6 +223,7 @@ fun EntryListScreen(
                                     MenuTile(Icons.Outlined.Label, "Categories", "manage_categories") { closeMore(); onManageCategories() }
                                     MenuTile(Icons.Outlined.Repeat, "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
                                     MenuTile(Icons.Outlined.CalendarMonth, "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
+                                    MenuTile(Icons.Outlined.SwapHoriz, "Lent and borrowed", "open_loans") { closeMore(); onOpenLoans() }
                                 }
                                 MenuGroup("Make it yours") {
                                     MenuTile(Icons.Outlined.Palette, "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
