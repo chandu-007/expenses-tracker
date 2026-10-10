@@ -750,8 +750,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 Triple(nudge, rows, usage)
             } ?: return@launch
             nudgeCache = figures.first; accountRowsCache = figures.second; categoryUsageCache = figures.third; figuresReady = true
-            _state.update { st ->
-                (st as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first, categories = st.categories.map { c -> c.copy(usage = figures.third[c.id] ?: c.usage) }) ?: st
+            withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
+                _state.update { st ->
+                    (st as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first, categories = st.categories.map { c -> c.copy(usage = figures.third[c.id] ?: c.usage) }) ?: st
+                }
             }
         }
     }
@@ -1352,7 +1354,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         _search.update { it.copy(searching = true, hasConditions = true, problem = null) }
         searchJob = viewModelScope.launch(BACKGROUND) {
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
-            container.write { ok -> _search.value = runSearch(ok, input, min, max) }
+            // the result is published on the main thread: a state write from the database thread woke the screen's collector off the main thread,
+            // which under the test clock killed the process (CalledFromWrongThreadException, then the slot-table crash)
+            val result = container.write { ok -> runSearch(ok, input, min, max) }
+            if (result != null) withContext(Dispatchers.Main) { _search.value = result }
         }
     }
 

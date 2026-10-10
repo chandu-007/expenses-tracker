@@ -5,7 +5,7 @@ package app.expenses.core.parsers
  * to check**, never an input to the books: a wrong guess shows as a wrong name the person can correct, a missing one shows the bank.
  */
 object PayeeGuess {
-    private val vpa = Regex("""(?i)\b(?:to|from|by)\s+(?:vpa\s+)?([a-z0-9][\w.\-]{1,}@[a-z][\w.\-]*)""")
+    private val vpa = Regex("""(?i)\b(?:to|from|by|at)\s+(?:vpa\s+)?([a-z0-9][\w.\-]{1,}@[a-z][\w.\-]*)""")
     private val upiPath = Regex("""(?i)upi/(?:p2[am]|[a-z]+)/\d{6,}/([A-Za-z][A-Za-z0-9 &.\-]{1,30})""")
     private val atName = Regex("""(?i)\b(?:at|to|from|towards)\s+([A-Za-z][A-Za-z0-9&'.\-]*(?:\s+[A-Za-z0-9&'.\-]+){0,3}?)(?=\s+(?:on|via|ref|upi|using|through|txn|trf|avl|bal|available|\(|\.|,|;|$))""")
     private val notNames = setOf("your", "you", "a/c", "ac", "account", "vpa", "card", "bank", "self", "the", "us", "me", "info", "credit", "debit", "upi", "rs", "inr")
