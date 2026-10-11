@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,7 +94,7 @@ fun ReportsScreen(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("Loading…") }
             return@Scaffold
         }
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = report.mode == ReportMode.PERIOD, onClick = { onMode(ReportMode.PERIOD) }, label = { Text("By period") }, modifier = Modifier.testTag("mode_period"))
@@ -115,27 +117,18 @@ fun ReportsScreen(
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(1) }, enabled = report.canGoNext, modifier = Modifier.testTag("report_next").semantics { contentDescription = "Later" }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                 }
             }
+            item { ReportSummary(report, onSpent = { onDrill(DrillTarget.All, null, null, null) }, onIncome = { onDrill(DrillTarget.Income, null, null, null) }) }
+            item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             item {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Column(Modifier.fillMaxWidth().clickable { onDrill(DrillTarget.All, null, null, null) }.testTag("report_spent_card")) {
-                        Text("Spent", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(report.spent, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("report_spent"))
-                        report.comparison?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("report_comparison")) }
-                    }
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Column(Modifier.weight(1f).clickable { onDrill(DrillTarget.Income, null, null, null) }.testTag("report_income_card")) {
-                            Text("Income", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(report.income, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("report_income"))
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("Income minus spending", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(report.net, style = MaterialTheme.typography.titleMedium, color = if (report.netPositive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error, modifier = Modifier.testTag("report_net"))
-                        }
+                val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.mapIndexed { i, r ->
+                    Slice(r.categoryId ?: "none", r.name, r.share, reportColor(r.colorArgb, i)) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
+                } else report.groupRows.filter { !it.negative }.mapIndexed { i, r ->
+                    Slice(r.key ?: "none", r.name, r.share, reportColor(null, i)) {
+                        onDrill(when (report.group) { ReportGroup.ACCOUNT -> DrillTarget.InAccount(r.key!!); ReportGroup.TAG -> r.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged; else -> DrillTarget.AtMerchant(r.key.orEmpty()) }, null, null, r.name)
                     }
                 }
-                HorizontalDivider(Modifier.padding(top = 8.dp))
+                BreakdownRing(slices, report.spent, "Spent")
             }
-            item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             item {
                 HorizontalDivider()
                 Text("By ${report.group.name.lowercase()}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp).testTag("report_group_title"))
@@ -144,8 +137,8 @@ fun ReportsScreen(
                 if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) Text("Nothing spent in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
             }
-            if (report.group != ReportGroup.CATEGORY) items(report.groupRows, key = { it.key ?: "\u0000none" }) { row ->
-                GroupReportRow(row) {
+            if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { i, row ->
+                GroupReportRow(row, reportColor(null, i)) {
                     val target = when (report.group) {
                         ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
                         ReportGroup.TAG -> row.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged
@@ -155,9 +148,9 @@ fun ReportsScreen(
                 }
                 HorizontalDivider()
             }
-            if (report.group == ReportGroup.CATEGORY) items(report.rows, key = { it.categoryId ?: "" }) { row ->
-                CategoryReportRow(row, indent = false, onDrill = onDrill)
-                row.children.forEach { child -> CategoryReportRow(child, indent = true, onDrill = onDrill) }
+            if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows, key = { _, r -> r.categoryId ?: "" }) { i, row ->
+                CategoryReportRow(row, indent = false, color = reportColor(row.colorArgb, i), onDrill = onDrill)
+                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = reportColor(row.colorArgb, i).copy(alpha = 0.7f), onDrill = onDrill) }
                 HorizontalDivider()
             }
         }
@@ -165,31 +158,7 @@ fun ReportsScreen(
 }
 
 @Composable
-private fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
-    val hide = LocalHideAmounts.current
-    Column(Modifier.fillMaxWidth().padding(16.dp).testTag("trend")) {
-        Text(if (report.mode == ReportMode.PERIOD) "Last six periods" else "Spending by month", style = MaterialTheme.typography.labelMedium)
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-            report.trend.forEachIndexed { i, bar ->
-                Column(
-                    Modifier.weight(1f).clickable { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(Modifier.height(88.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                        Box(
-                            Modifier.fillMaxWidth().height((88 * bar.fraction).dp.coerceAtLeast(if (bar.fraction > 0f) 3.dp else 1.dp))
-                                .background(if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
-                        )
-                    }
-                    Text(bar.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, onDrill: (DrillTarget, Long?, Long?, String?) -> Unit) {
+private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, onDrill: (DrillTarget, Long?, Long?, String?) -> Unit) {
     val target = if (row.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(row.categoryId)
     Column(
         Modifier.fillMaxWidth().clickable { onDrill(target, null, null, null) }.padding(start = if (indent) 44.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
@@ -197,12 +166,12 @@ private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, onDrill: (Drill
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).background(row.colorArgb?.let { Color(it) } ?: Color.Transparent, CircleShape))
+            Box(Modifier.size(10.dp).background(color, CircleShape))
             Text(row.name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
             Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
             Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).size(width = 40.dp, height = 18.dp))
         }
-        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth(), color = row.colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.primary)
+        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }
 }
 
@@ -241,13 +210,13 @@ private fun DrillRow(line: DrillLineUi, onOpen: (String) -> Unit) {
 private fun dayLabel(epochDay: Long): String = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").format(java.time.LocalDate.ofEpochDay(epochDay))
 
 @Composable
-private fun GroupReportRow(row: GroupRowUi, onClick: () -> Unit) {
+private fun GroupReportRow(row: GroupRowUi, color: Color, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("report_group_row_${row.key ?: "none"}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
             Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
             Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).size(width = 40.dp, height = 18.dp))
         }
-        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }
 }

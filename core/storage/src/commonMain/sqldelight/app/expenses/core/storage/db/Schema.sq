@@ -542,6 +542,10 @@ insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+inboxPendingTotals:
+SELECT COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN 0 ELSE amount_minor END), 0) AS money_out, COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount_minor ELSE 0 END), 0) AS money_in
+FROM inbox WHERE status = 'PENDING';
+
 inboxByStatus:
 SELECT * FROM inbox WHERE status = :status ORDER BY received_at DESC, id LIMIT :limit;
 

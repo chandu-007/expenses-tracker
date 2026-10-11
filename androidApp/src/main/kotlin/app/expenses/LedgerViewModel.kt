@@ -964,18 +964,21 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The first three waiting items by name and amount, and the totals, for the home banner. Nothing is done when nothing is waiting. */
     private fun inboxPeek(ok: AppContainer.Opened.Ok): InboxPeekUi {
-        val waiting = ok.inbox.list()
+        // three rows and one sum, not the whole backlog: this runs after every save
+        val waiting = ok.inbox.list(app.expenses.core.storage.InboxStatus.PENDING, 3)
         if (waiting.isEmpty()) return InboxPeekUi()
+        val (out, `in`) = ok.inbox.pendingTotals()
+        val count = ok.inbox.pendingCount().toInt()
         fun title(i: app.expenses.core.storage.InboxItem): String {
             val raw = PayeeGuess.of(i.body.orEmpty())
             return raw?.let { ok.templates.setting(payeeNameKey(it))?.takeIf { n -> n.isNotBlank() } } ?: raw ?: i.issuer
         }
         fun money(minor: Long) = Money(minor, inr).formatted()
         return InboxPeekUi(
-            rows = waiting.take(3).map { InboxPeekRow(title(it), money(it.amountMinor), it.direction == "CREDIT") },
-            more = (waiting.size - 3).coerceAtLeast(0),
-            outText = money(waiting.filter { it.direction != "CREDIT" }.sumOf { it.amountMinor }),
-            inText = money(waiting.filter { it.direction == "CREDIT" }.sumOf { it.amountMinor }),
+            rows = waiting.map { InboxPeekRow(title(it), money(it.amountMinor), it.direction == "CREDIT") },
+            more = (count - waiting.size).coerceAtLeast(0),
+            outText = money(out),
+            inText = money(`in`),
         )
     }
 

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -65,7 +66,12 @@ class ReportsUiTest {
         waitFor("report_spent")
     }
 
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    // the page is a lazy list and the rows are below the summary, the ring and the chart: scroll to a row before waiting for it
+    private fun waitFor(tag: String) = compose.waitUntil(10_000) {
+        if (compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() && compose.onAllNodes(hasTestTag("report_list"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            runCatching { compose.onNodeWithTag("report_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+        compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     private fun waitText(tag: String, text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag) and hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
@@ -77,6 +83,21 @@ class ReportsUiTest {
 
     private fun noonOf(d: LocalDate) = d.atStartOfDayIn(zone).toEpochMilliseconds() + 12 * 3_600_000L
     private fun previousPeriodNoon() = noonOf(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1).start)
+
+    @Test
+    fun theRingNamesTheBiggestSlicesWithTheirSharesGroupsTheRestAndEachSliceOpensItsEntries() {
+        // seven categories: the ring shows the five biggest and "Others"; shares are of the 2,100 spent (1,000 + 400 + 300 + 200 + 100 + 60 + 40), rounded down
+        listOf("Food" to 1000L, "Groceries" to 400L, "Transport" to 300L, "Bills" to 200L, "Shopping" to 100L, "Health" to 60L, "Fun" to 40L).forEachIndexed { i, (c, r) -> spend("r$i", r, c) }
+        openReports()
+        waitFor("breakdown_Food")
+        fun hasShare(tag: String, text: String) = compose.onAllNodes(hasText(text) and androidx.compose.ui.test.hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        assertTrue(hasShare("breakdown_Food", "47%"), "1000 of 2100, rounded down like every share")
+        assertTrue(hasShare("breakdown_others", "7%"), "what the five biggest (47 + 19 + 14 + 9 + 4) leave of 100")
+        assertTrue(compose.onAllNodes(hasTestTag("breakdown_Fun"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the smallest are inside Others, not slices of their own")
+        compose.onNodeWithTag("breakdown_Food", useUnmergedTree = true).performClick()
+        waitFor("drill_total")
+        compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹1,000.00")
+    }
 
     @Test
     fun theTotalsAndCategoryRowsAreRightAndEveryRowOpensIntoEntriesThatAddUpToIt() {

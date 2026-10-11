@@ -33,6 +33,9 @@ class InboxStore(private val db: ExpensesDb) {
 
     fun get(id: String): InboxItem? = q.inboxById(id).executeAsOneOrNull()?.let(::of)
 
+    /** What the pending items add up to, as (money out, money in) in minor units: one query, no rows loaded. */
+    fun pendingTotals(): Pair<Long, Long> = q.inboxPendingTotals().executeAsOne().let { it.money_out to it.money_in }
+
     fun pendingCount(): Long = q.inboxCount(InboxStatus.PENDING.name).executeAsOne()
 
     /** Marks a pending item confirmed (with the entry it became) and forgets its text. False when it was not pending. */

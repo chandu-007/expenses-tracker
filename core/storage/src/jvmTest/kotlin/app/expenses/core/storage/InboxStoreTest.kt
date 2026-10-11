@@ -57,6 +57,15 @@ class InboxStoreTest {
     }
 
     @Test
+    fun pendingTotalsSplitMoneyOutFromMoneyInAndLeaveOutWhatIsAlreadyHandled() {
+        assertEquals(0L to 0L, store.pendingTotals())
+        store.add(item("a"), "1"); store.add(item("b"), "2"); store.add(item("c").copy(direction = "CREDIT", amountMinor = 25_000), "3"); store.add(item("d"), "4")
+        assertEquals(30_000L to 25_000L, store.pendingTotals(), "three debits of 100 and a credit of 250")
+        store.confirm("a", "e1"); store.dismiss("c")
+        assertEquals(20_000L to 0L, store.pendingTotals(), "an added or skipped item is no longer waiting")
+    }
+
+    @Test
     fun flippingTurnsAPendingItemBothWaysAndLeavesAResolvedOneAlone() {
         store.add(item("a"), "1"); store.add(item("b"), "2")
         store.flipDirection("a")
