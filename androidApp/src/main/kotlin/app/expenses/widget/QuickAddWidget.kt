@@ -106,11 +106,16 @@ class QuickAddWidget : GlanceAppWidget() {
             val first = java.time.LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
             val currency = BaseCurrency.current
             val spent = ok.store.spendByCategory(currency, from = first).values.fold(Money.zero(currency)) { a, m -> a + m }
-            buttons to shown(spent.formatted())
+            // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
+            val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
+            buttons to monthFigure(spent.formatted(), hide, locked)
         }
     }
 
     companion object {
+        /** The month's total as the widget may show it: masked when amounts are hidden, and also when the App lock is on, since anyone holding the unlocked phone can read the home screen. */
+        fun monthFigure(spent: String, hide: Boolean, locked: Boolean): String = if (hide || locked) AmountMask.mask(spent) else spent
+
         /** Builds what to draw. The undo line is shown only while it is still allowed to work. */
         fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null): WidgetModel {
             val id = prefs[LAST_ID]
@@ -124,6 +129,11 @@ class QuickAddWidget : GlanceAppWidget() {
 class QuickAddReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = QuickAddWidget()
 }
+
+// The same widget offered at four starting sizes, so the picker lists each; every one can still be resized, and the layout follows whatever size it ends up.
+class QuickAddSmallReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = QuickAddWidget() }
+class QuickAddWideReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = QuickAddWidget() }
+class QuickAddLargeReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = QuickAddWidget() }
 
 // the same values as res/values/widget_colors.xml and its night version, which the shapes use (Glance's resource colour provider is not public API)
 private val textColor = ColorProvider(day = Color(0xFF1C1B1F), night = Color(0xFFE6E1E5))

@@ -174,6 +174,23 @@ class QuickAddWidgetTest {
         assertTrue(hidden.first.single().detail.none { it.isDigit() }, hidden.first.single().detail)
     }
 
+    @Test
+    fun theMonthTotalIsMaskedWhenAmountsAreHiddenOrTheAppLockIsOn() {
+        assertEquals("₹1,234.00", QuickAddWidget.monthFigure("₹1,234.00", hide = false, locked = false))
+        for ((h, l) in listOf(true to false, false to true, true to true)) assertTrue(QuickAddWidget.monthFigure("₹1,234.00", h, l).none { it.isDigit() }, "hide=$h locked=$l")
+    }
+
+    @Test
+    fun theFourStartingSizesAreAllListedAndTheirTargetCellsAreRightOnNewerAndroid() {
+        val manager = AppWidgetManager.getInstance(context)
+        val names = manager.getInstalledProvidersForPackage(context.packageName, null).map { it.provider.className.substringAfterLast('.') }.toSet()
+        assertTrue(names.containsAll(setOf("QuickAddReceiver", "QuickAddSmallReceiver", "QuickAddWideReceiver", "QuickAddLargeReceiver")), names.toString())
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val cells = manager.getInstalledProvidersForPackage(context.packageName, null).associate { it.provider.className.substringAfterLast('.') to (it.targetCellWidth to it.targetCellHeight) }
+            assertEquals(listOf(2 to 1, 4 to 1, 4 to 2, 4 to 4), listOf("QuickAddSmallReceiver", "QuickAddWideReceiver", "QuickAddReceiver", "QuickAddLargeReceiver").map { cells.getValue(it) })
+        }
+    }
+
     // ---- what a tap does, against the real encrypted database ----
 
     @Test
