@@ -70,7 +70,7 @@ class MainActivity : FragmentActivity() {
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
         setContent {
-            val themeState by viewModel.state.collectAsStateWithLifecycle()
+            val themeState by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
             val dark = Appearances.isDark(look.mode, isSystemInDarkTheme())
             // On Android 15 and later the app draws under the system bars, which keep light icons unless told otherwise: white clock and battery on a pale screen.
@@ -85,7 +85,7 @@ class MainActivity : FragmentActivity() {
             MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
               androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT)) {
                 Surface {
-                    val state by viewModel.state.collectAsStateWithLifecycle()
+                    val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
                     var adding by rememberSaveable { mutableStateOf(false) }
                     var managingCategories by rememberSaveable { mutableStateOf(false) }
@@ -99,23 +99,23 @@ class MainActivity : FragmentActivity() {
                     var rulesOpen by rememberSaveable { mutableStateOf(false) }
                     var healthOpen by rememberSaveable { mutableStateOf(false) }
                     var privacyOpen by rememberSaveable { mutableStateOf(false) }
-                    val health by viewModel.captureHealth.collectAsStateWithLifecycle()
-                    val captureRules by viewModel.captureRules.collectAsStateWithLifecycle()
-                    val inboxRows by viewModel.inbox.collectAsStateWithLifecycle()
-                    val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle()
+                    val health by viewModel.captureHealth.collectAsStateWithLifecycle(context = MAIN)
+                    val captureRules by viewModel.captureRules.collectAsStateWithLifecycle(context = MAIN)
+                    val inboxRows by viewModel.inbox.collectAsStateWithLifecycle(context = MAIN)
+                    val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle(context = MAIN)
                     var smsPermission by androidx.compose.runtime.remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
                     val smsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
                         smsPermission = granted
                         viewModel.setSmsCapture(granted)
                     }
-                    val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle()
+                    val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle(context = MAIN)
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var loansOpen by rememberSaveable { mutableStateOf(false) }
                     // "personId|gave|amount" when the add form is opened from the lent-and-borrowed pages
                     var prefillLoan by rememberSaveable { mutableStateOf<String?>(null) }
-                    val loans by viewModel.loans.collectAsStateWithLifecycle()
-                    val people by viewModel.people.collectAsStateWithLifecycle()
+                    val loans by viewModel.loans.collectAsStateWithLifecycle(context = MAIN)
+                    val people by viewModel.people.collectAsStateWithLifecycle(context = MAIN)
                     var repeating by rememberSaveable { mutableStateOf(false) }
                     var alerts by rememberSaveable { mutableStateOf(false) }
                     var yourData by rememberSaveable { mutableStateOf(false) }
@@ -124,9 +124,9 @@ class MainActivity : FragmentActivity() {
                     var searching by rememberSaveable { mutableStateOf(false) }
                     var securing by rememberSaveable { mutableStateOf(false) }
                     val lock = (application as ExpensesApp).lock
-                    val locked by lock.locked.collectAsStateWithLifecycle()
-                    val lockSettings by lock.settings.collectAsStateWithLifecycle()
-                    val lockMessage by lock.message.collectAsStateWithLifecycle()
+                    val locked by lock.locked.collectAsStateWithLifecycle(context = MAIN)
+                    val lockSettings by lock.settings.collectAsStateWithLifecycle(context = MAIN)
+                    val lockMessage by lock.message.collectAsStateWithLifecycle(context = MAIN)
                     // While the lock is on, the app is hidden from the recent-apps view and from screenshots.
                     LaunchedEffect(lockSettings.enabled) {
                         if (lockSettings.enabled) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -143,10 +143,10 @@ class MainActivity : FragmentActivity() {
                         if (requests > handledRequests) { handledRequests = requests; prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
                     }
 
-                    val editing by viewModel.editor.collectAsStateWithLifecycle()
-                    val history by viewModel.history.collectAsStateWithLifecycle()
-                    val attachmentList by viewModel.attachments.collectAsStateWithLifecycle()
-                    val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle()
+                    val editing by viewModel.editor.collectAsStateWithLifecycle(context = MAIN)
+                    val history by viewModel.history.collectAsStateWithLifecycle(context = MAIN)
+                    val attachmentList by viewModel.attachments.collectAsStateWithLifecycle(context = MAIN)
+                    val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle(context = MAIN)
 
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
@@ -262,7 +262,7 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
                             searching -> {
-                                val found by viewModel.search.collectAsStateWithLifecycle()
+                                val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
                                 BackHandler { searching = false; viewModel.closeSearch() }
                                 SearchScreen(
                                     state = found, categories = s.categories,
@@ -277,7 +277,7 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
                             calendaring -> {
-                                val cal by viewModel.calendar.collectAsStateWithLifecycle()
+                                val cal by viewModel.calendar.collectAsStateWithLifecycle(context = MAIN)
                                 BackHandler { calendaring = false; viewModel.closeCalendar() }
                                 CalendarScreen(
                                     state = cal, onBack = { calendaring = false; viewModel.closeCalendar() },
@@ -285,7 +285,7 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
                             reporting -> {
-                                val report by viewModel.report.collectAsStateWithLifecycle()
+                                val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
                                 // Back leaves the entry list first, then the report.
                                 BackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
                                 ReportsScreen(
@@ -299,8 +299,8 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
                             yourData -> {
-                                val dataState by viewModel.data.collectAsStateWithLifecycle()
-                                val statement by viewModel.statement.collectAsStateWithLifecycle()
+                                val dataState by viewModel.data.collectAsStateWithLifecycle(context = MAIN)
+                                val statement by viewModel.statement.collectAsStateWithLifecycle(context = MAIN)
                                 if (statement.active) {
                                     BackHandler { viewModel.closeImport() }
                                     ImportScreen(
@@ -465,3 +465,10 @@ class MainActivity : FragmentActivity() {
         const val ACTION_ADD_EXPENSE = "app.expenses.action.ADD_EXPENSE"
     }
 }
+
+/**
+ * Where the screen's collectors resume when a flow changes. The real main dispatcher, so a state change made on the database thread wakes the screen on the
+ * main thread. Left to the default, the Compose test harness resumes the collector on the writing thread and recomposes there, which killed test runs with
+ * "Only the original thread that created a view hierarchy can touch its views". On a phone the default is the main thread anyway, so nothing changes there.
+ */
+private val MAIN = kotlinx.coroutines.Dispatchers.Main.immediate

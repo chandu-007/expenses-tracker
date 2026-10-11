@@ -123,6 +123,7 @@ class GenericAlertParserTest {
         assertEquals(Direction.DEBIT, a.direction); assertEquals(2000, a.amountMinor); assertEquals("0862", a.accountLast4); assertEquals("664912339598", a.reference)
         assertEquals("paytm.s2x4b6x@pty", PayeeGuess.of(hdfcCardText))
         assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify("AX-HDFCBK-S", hdfcCardText))
+        assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify("VM-HDFCBN-S", hdfcCardText), "HDFC's other header")
     }
 
     @Test

@@ -151,6 +151,12 @@ data class LoanEntryUi(val id: String, val dateText: String, val amountText: Str
 /** The lent-and-borrowed screen: everyone's standing, the two totals, and the history of the person picked. */
 data class LoansUi(val rows: List<LoanRowUi> = emptyList(), val owedToYou: String = "", val youOwe: String = "", val selected: LoanRowUi? = null, val history: List<LoanEntryUi> = emptyList())
 
+/** One of the first few items waiting in To review, for the home banner. */
+data class InboxPeekRow(val title: String, val amountText: String, val credit: Boolean)
+
+/** What the home banner shows about To review: the first few items, the rest as a count, and what is waiting in total. */
+data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int = 0, val outText: String = "", val inText: String = "")
+
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
 data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false)
@@ -394,6 +400,7 @@ sealed interface UiState {
         val appearance: Appearance,
         val baseCurrency: Currency,
         val inboxPending: Int,
+        val inboxPeek: InboxPeekUi = InboxPeekUi(),
         val smsCapture: Boolean,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
@@ -953,6 +960,23 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     fun setExtraHeaders(text: String) = withStore { ok ->
         ok.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, text.trim())
         _captureSettings.value = _captureSettings.value.copy(extraHeaders = text.trim())
+    }
+
+    /** The first three waiting items by name and amount, and the totals, for the home banner. Nothing is done when nothing is waiting. */
+    private fun inboxPeek(ok: AppContainer.Opened.Ok): InboxPeekUi {
+        val waiting = ok.inbox.list()
+        if (waiting.isEmpty()) return InboxPeekUi()
+        fun title(i: app.expenses.core.storage.InboxItem): String {
+            val raw = PayeeGuess.of(i.body.orEmpty())
+            return raw?.let { ok.templates.setting(payeeNameKey(it))?.takeIf { n -> n.isNotBlank() } } ?: raw ?: i.issuer
+        }
+        fun money(minor: Long) = Money(minor, inr).formatted()
+        return InboxPeekUi(
+            rows = waiting.take(3).map { InboxPeekRow(title(it), money(it.amountMinor), it.direction == "CREDIT") },
+            more = (waiting.size - 3).coerceAtLeast(0),
+            outText = money(waiting.filter { it.direction != "CREDIT" }.sumOf { it.amountMinor }),
+            inText = money(waiting.filter { it.direction == "CREDIT" }.sumOf { it.amountMinor }),
+        )
     }
 
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
@@ -1807,6 +1831,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             baseCurrency = BaseCurrency.current,
             inboxPending = ok.inbox.pendingCount().toInt(),
+            inboxPeek = inboxPeek(ok),
             smsCapture = ok.templates.setting(Capture.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),

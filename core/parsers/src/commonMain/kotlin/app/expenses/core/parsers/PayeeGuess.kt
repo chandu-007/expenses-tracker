@@ -16,6 +16,9 @@ object PayeeGuess {
     /** "Chandu. sent ₹10 to you", "Chandu paid you ₹10": the name leads the sentence. */
     private val leadingName = Regex("""(?:^|:\s)([A-Za-z][A-Za-z .'\-]{1,30}?)\.?\s+(?:sent|paid)\s+(?:you\s+)?(?:₹|rs\.?|inr)""", RegexOption.IGNORE_CASE)
 
+    /** "Sent by RAVI KUMAR via UPI": a credit text names who paid in. */
+    private val sentBy = Regex("""\b(?:sent|paid|transferred)\s+by\s+([A-Za-z][A-Za-z .'\-]{1,30}?)(?=\s+(?:via|on|ref|upi|using|through|from|to)\b|[.,;]|$)""", RegexOption.IGNORE_CASE)
+
     /** Words that make a title or lead-in a heading rather than a person's name ("Payment successful", "Dear Customer", "Money received"). */
     private val headingWords = setOf(
         "payment", "payments", "successful", "success", "received", "money", "paid", "sent", "transaction", "credited", "debited", "alert", "dear", "customer",
@@ -30,6 +33,7 @@ object PayeeGuess {
 
     fun of(body: String): String? {
         val text = body.replace(Regex("\\s+"), " ").trim()
+        sentBy.find(text)?.groupValues?.get(1)?.takeIf(::looksLikeName)?.let { return it.trim().trimEnd('.', '-') }
         // a payment app puts the person's name first; try the leading sentence, then the title, before the "to / from / at" wording
         leadingName.find(text)?.groupValues?.get(1)?.takeIf(::looksLikeName)?.let { return it.trim().trimEnd('.', '-') }
         titleName.find(text)?.groupValues?.get(1)?.takeIf(::looksLikeName)?.let { return it.trim() }

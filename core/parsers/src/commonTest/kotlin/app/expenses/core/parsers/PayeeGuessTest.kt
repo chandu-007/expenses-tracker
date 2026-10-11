@@ -50,4 +50,12 @@ class PayeeGuessTest {
         assertEquals("Chandu", PayeeGuess.of("Chandu: Rs.75 debited to VPA 9704849321@yescred"), "a person's name in the title beats a bare phone-number address")
         assertEquals("shop@okhdfc", PayeeGuess.of("Rs.75 debited to VPA shop@okhdfc"), "with no title the address is still the name")
     }
+
+    @Test
+    fun aCreditTextThatSaysSentByNamesTheSender() {
+        assertEquals("RAVI KUMAR", PayeeGuess.of("Rs.250.00 received in A/c XX1234 on 10-10-26. Sent by RAVI KUMAR via UPI Ref 628374659001"))
+        assertEquals("Anita Rao", PayeeGuess.of("Rs 75 credited. Transferred by Anita Rao on 05-10-26"))
+        assertNull(PayeeGuess.of("Rs.499.00 paid by your card on 05-10-26"), "\"paid by your card\" is not a person")
+        assertNull(PayeeGuess.of("Rs.100 credited. Sent by 9876543210 via UPI"), "a number is not a name")
+    }
 }

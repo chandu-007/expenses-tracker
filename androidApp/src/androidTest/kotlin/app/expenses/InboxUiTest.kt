@@ -119,6 +119,19 @@ class InboxUiTest {
     }
 
     @Test
+    fun theHomeBannerShowsTheCountTheTotalsTheFirstThreeAndHowManyMore() {
+        ingest(to("swiggy@icici", "100000000031"), 1_000); ingest(to("9704849321@yescred", "100000000032"), 2_000); ingest(credit, 3_000); ingest(debit, 4_000)
+        launch(); waitFor("inbox_banner")
+        fun banner() = compose.onNodeWithTag("inbox_banner", useUnmergedTree = false).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString(" ") { it.text }
+        compose.waitUntil(10_000) { banner().contains("4 to review") }
+        val text = banner()
+        assertTrue(text.contains("₹1,650.00 out") && text.contains("₹5,000.00 in"), text)   // 200 + 200 + 1,250 out; the 5,000 credit in
+        assertTrue(text.contains("and 1 more"), "four items, three shown: $text")
+        assertTrue(text.contains("-₹1,250.00") || text.contains("-₹200.00"), "amounts are listed with their sign: $text")
+        tap("inbox_banner"); waitFor("inbox_back")
+    }
+
+    @Test
     fun addAllIsOfferedOnlyWhenThereAreAtLeastTwoClearOnes() {
         runBlocking { container.write { it.templates.putSetting("capture_acct:HDFC Bank:1234", "bank") } }
         ingest(to("swiggy@icici", "100000000021"), 1_000)

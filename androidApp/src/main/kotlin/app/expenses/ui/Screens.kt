@@ -81,6 +81,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -249,13 +250,7 @@ fun EntryListScreen(
                 Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp).testTag("month_spend"))
                 }
             }
-            if (state.inboxPending > 0) androidx.compose.material3.Card(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpenInbox).testTag("inbox_banner"),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
-            ) {
-                Text("${state.inboxPending} to review: transactions found in your texts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp))
-            }
+            if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
             if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
             state.homeLayout.visible().forEach { section ->
                 when (section) {
@@ -382,6 +377,38 @@ fun KeyLostScreen(message: String, onStartFresh: () -> Unit) {
                 TextButton(onClick = { confirm = false }) { Text("Keep it") }
                 Button(onClick = onStartFresh) { Text("Delete and start fresh") }
             }
+        }
+    }
+}
+
+/**
+ * What is waiting in To review, at a glance: how many, how much goes out and comes in, the first few by name, and one button. The whole card opens the list.
+ */
+@Composable
+private fun InboxBanner(state: UiState.Ready, onOpen: () -> Unit) {
+    val peek = state.inboxPeek
+    androidx.compose.material3.Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("inbox_banner"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${state.inboxPending} to review", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_banner_title"))
+                    if (peek.outText.isNotEmpty()) Text("${peek.outText} out · ${peek.inText} in, found in your texts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text("Review", color = MaterialTheme.colorScheme.onTertiary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.tertiary).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            peek.rows.forEach { r ->
+                val flow = if (r.credit) Flow3.IN else Flow3.OUT
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CategoryAvatar(r.title, r.title, Modifier.padding(end = 10.dp), size = 28.dp)
+                    Text(r.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
