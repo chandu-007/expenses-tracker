@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.glance.appwidget.updateAll
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
 import app.expenses.core.domain.BaseCurrency
@@ -436,6 +437,9 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         (application as ExpensesApp).lock.onStop(this)
+        // the widget shows this month's spending: bring it up to date when the person leaves the app
+        val appContext = applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { app.expenses.widget.QuickAddWidget().updateAll(appContext) } }
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
     }

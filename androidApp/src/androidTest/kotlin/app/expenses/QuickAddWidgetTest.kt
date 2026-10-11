@@ -65,21 +65,53 @@ class QuickAddWidgetTest {
 
     // ---- what the widget shows ----
 
+    private val chai = WidgetButton("a", "Chai", "₹20.00")
+    private val auto = WidgetButton("b", "Auto", "₹50.00")
+    private val many = listOf(chai, auto, WidgetButton("c", "Lunch", "₹120.00"), WidgetButton("d", "Metro", "₹30.00"), WidgetButton("e", "Coffee", "₹90.00"), WidgetButton("f", "Parking", "₹40.00"))
+
     @Test
-    fun showsOneButtonPerQuickEntryAndThePlusButtonWithNoUndoLine() = runGlanceAppWidgetUnitTest {
+    fun theDefaultSizeShowsThisMonthsSpendingTheAddPillAndTheFirstChipsWithNoUndoLine() = runGlanceAppWidgetUnitTest {
         setAppWidgetSize(DpSize(250.dp, 110.dp))
-        provideComposable { WidgetContent(WidgetModel(listOf(WidgetButton("a", "Chai ₹20.00"), WidgetButton("b", "Auto ₹50.00")), null, needsApp = false)) }
-        onNode(hasText("Quick add")).assertExists()
-        onNode(hasText("+")).assertExists()
-        onNode(hasText("Chai ₹20.00")).assertExists()
-        onNode(hasText("Auto ₹50.00")).assertExists()
+        provideComposable { WidgetContent(WidgetModel(listOf(chai, auto), null, needsApp = false, monthSpend = "₹12,345.00")) }
+        onNode(hasText("Spent this month")).assertExists()
+        onNode(hasText("₹12,345.00")).assertExists()
+        onNode(hasText("+ Add")).assertExists()
+        onNode(hasText("Chai")).assertExists(); onNode(hasText("₹20.00")).assertExists()
+        onNode(hasText("Auto")).assertExists()
         onNode(hasText("Undo")).assertDoesNotExist()
     }
 
     @Test
-    fun showsTheUndoLineAfterATap() = runGlanceAppWidgetUnitTest {
-        setAppWidgetSize(DpSize(250.dp, 110.dp))
-        provideComposable { WidgetContent(WidgetModel(listOf(WidgetButton("a", "Chai ₹20.00")), WidgetUndo("e1", "Added Chai ₹20.00"), needsApp = false)) }
+    fun aLargerWidgetShowsMoreChipsAndASmallerOneFewerOrNone() = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(250.dp, 250.dp))
+        provideComposable { WidgetContent(WidgetModel(many, null, needsApp = false, monthSpend = "₹1.00")) }
+        for (n in listOf("Chai", "Auto", "Lunch", "Metro", "Coffee", "Parking")) onNode(hasText(n)).assertExists()
+    }
+
+    @Test
+    fun aSmallWidgetKeepsTheSpendingAndAShortAddButtonAndDropsTheChips() = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(110.dp, 60.dp))
+        provideComposable { WidgetContent(WidgetModel(many, WidgetUndo("e1", "Added Chai"), needsApp = false, monthSpend = "₹500.00")) }
+        onNode(hasText("₹500")).assertExists()   // no ".00" at this size
+        onNode(hasText("+")).assertExists()
+        onNode(hasText("Chai")).assertDoesNotExist()
+        onNode(hasText("Undo")).assertDoesNotExist()
+    }
+
+    @Test
+    fun aWideShortWidgetKeepsTheSpendingAndPutsOneChipAndTheAddPillInTheRow() = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(250.dp, 60.dp))
+        provideComposable { WidgetContent(WidgetModel(many, null, needsApp = false, monthSpend = "₹500.00")) }
+        onNode(hasText("₹500.00")).assertExists(); onNode(hasText("+ Add")).assertExists()
+        onNode(hasText("Chai")).assertExists()
+        onNode(hasText("₹20.00")).assertDoesNotExist()   // the chip is the name only here, so the spending keeps its room
+        onNode(hasText("Auto")).assertDoesNotExist()
+    }
+
+    @Test
+    fun showsTheUndoLineAfterATapWhenThereIsRoom() = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(250.dp, 250.dp))
+        provideComposable { WidgetContent(WidgetModel(listOf(chai), WidgetUndo("e1", "Added Chai ₹20.00"), needsApp = false, monthSpend = "₹20.00")) }
         onNode(hasText("Added Chai ₹20.00")).assertExists()
         onNode(hasText("Undo")).assertExists()
     }
@@ -87,7 +119,7 @@ class QuickAddWidgetTest {
     @Test
     fun explainsAnEmptyWidget() = runGlanceAppWidgetUnitTest {
         setAppWidgetSize(DpSize(250.dp, 110.dp))
-        provideComposable { WidgetContent(WidgetModel(emptyList(), null, needsApp = false)) }
+        provideComposable { WidgetContent(WidgetModel(emptyList(), null, needsApp = false, monthSpend = "₹0.00")) }
         onNode(hasText("Save a quick entry in the app to see it here")).assertExists()
     }
 
@@ -99,6 +131,17 @@ class QuickAddWidgetTest {
     }
 
     @Test
+    fun theLayoutRulesFollowTheSizeAndNeverShowMoreChipsThanThereAreOrRoomFor() {
+        fun l(w: Int, h: Int, chips: Int, undo: Boolean = false) = app.expenses.widget.WidgetLayout.of(DpSize(w.dp, h.dp), chips, undo)
+        assertEquals(0, l(110, 60, 6).showChips); assertEquals(false, l(110, 60, 6).showUndo); assertEquals(0, l(170, 60, 6).showChips, "narrower than about four cells is the small layout")
+        assertEquals(1, l(250, 60, 6).showChips); assertEquals(true, l(250, 60, 6).chipsInHeader); assertEquals(2, l(360, 60, 6).showChips, "two chips only when the width allows"); assertEquals(1, l(360, 60, 1).showChips)
+        assertEquals(2, l(250, 110, 6).showChips, "one row of two fits the default size"); assertEquals(false, l(250, 110, 6).chipsInHeader)
+        assertEquals(6, l(250, 250, 6).showChips); assertEquals(3, l(250, 250, 3).showChips)
+        assertEquals(6, l(250, 200, 6).showChips); assertEquals(4, l(250, 200, 6, undo = true).showChips, "the undo line takes a row's room")
+        assertEquals(true, l(250, 250, 0).showHint); assertEquals(false, l(250, 250, 2).showHint)
+    }
+
+    @Test
     fun theUndoLineIsOfferedOnlyInsideTheUndoWindow() {
         val buttons = listOf(WidgetButton("a", "Chai"))
         val prefs = mutablePreferencesOf(LAST_ID to "e1", LAST_TEXT to "Added Chai", LAST_AT to 1_000_000L)
@@ -107,6 +150,28 @@ class QuickAddWidgetTest {
         assertNull(QuickAddWidget.model(buttons, prefs, 999_999L).undo, "a clock that went backwards must not resurrect an old undo")
         assertNull(QuickAddWidget.model(buttons, mutablePreferencesOf(), 1_000_000L).undo)
         assertTrue(QuickAddWidget.model(null, prefs, 0).needsApp)
+    }
+
+    // ---- what the widget reads ----
+
+    @Test
+    fun theMonthFigureCountsOnlyThisCalendarMonthAndFollowsHideAmounts() {
+        saveChai()
+        val now = System.currentTimeMillis()
+        val lastMonth = java.time.LocalDate.now().withDayOfMonth(1).minusDays(3).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        runBlocking {
+            container.write { ok ->
+                ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("now"), now, AccountId("cash"), Money(123_400, inr), emptyList()))
+                ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("old"), lastMonth, AccountId("cash"), Money(999_900, inr), emptyList()))
+            }
+        }
+        val shown = runBlocking { QuickAddWidget().load(context) }!!
+        assertEquals("₹1,234.00", shown.second, "this month's 1,234 only, not last month's 9,999")
+        assertEquals(listOf(WidgetButton("chai", "Chai", "₹20.00")), shown.first)
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        val hidden = runBlocking { QuickAddWidget().load(context) }!!
+        assertTrue(!hidden.second!!.any { it.isDigit() }, "amounts are hidden on the home screen too: ${hidden.second}")
+        assertTrue(hidden.first.single().detail.none { it.isDigit() }, hidden.first.single().detail)
     }
 
     // ---- what a tap does, against the real encrypted database ----
