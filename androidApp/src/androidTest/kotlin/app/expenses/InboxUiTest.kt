@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertTextContains
@@ -64,14 +65,18 @@ class InboxUiTest {
 
     private fun to(vpa: String, ref: String) = "Rs.200.00 debited from A/c XX1234 on 05-10-26 to VPA $vpa (UPI Ref $ref). Not you? Call 18002586161"
     private fun idAt(at: Long) = runBlocking { container.write { ok -> ok.inbox.list().first { it.receivedAt == at }.id } }!!
-    private fun goes(id: String) = compose.onNodeWithTag("inbox_goes_$id", useUnmergedTree = true)
+    // the list is lazy: a card below the screen is not there until it is scrolled to
+    private fun goes(id: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_goes_$id"))
+        return compose.onNodeWithTag("inbox_goes_$id", useUnmergedTree = true)
+    }
 
     @Test
     fun aCommonMerchantAndAPaymentToAPersonGetSuggestedCategoriesWithTheirReason() {
         ingest(to("swiggy@icici", "100000000001"), 1_000); ingest(to("9704849321@yescred", "100000000002"), 2_000); ingest(to("randomshop@okaxis", "100000000003"), 3_000)
         launch(); openInbox()
         val shop = idAt(1_000); val person = idAt(2_000); val other = idAt(3_000)
-        waitFor("inbox_goes_$shop")
+        waitFor("inbox_list")
         goes(shop).assertTextContains("Food", substring = true).assertTextContains("a common merchant", substring = true)
         goes(person).assertTextContains("Other", substring = true).assertTextContains("a payment to a person", substring = true)
         goes(other).assertTextContains("no category", substring = true)
@@ -90,6 +95,47 @@ class InboxUiTest {
         ingest(to("9704849321@yescred", "100000000005"), 9_000_000)
         tap("inbox_back"); openInbox()
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Chandu"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theTopSaysHowMuchIsWaitingAndAddAllTakesOnlyTheClearOnesAfterConfirming() {
+        // the account for this bank card is known (used before): those are clear. A text for another card is not, and is left for the person to place.
+        runBlocking { container.write { it.templates.putSetting("capture_acct:HDFC Bank:1234", "bank") } }
+        ingest(to("swiggy@icici", "100000000011"), 1_000); ingest(to("randomshop@okaxis", "100000000012"), 2_000); ingest(credit, 3_000)
+        // a repeat of an entry already in the ledger needs a look, so it is not among the clear ones
+        runBlocking { container.write { ok -> ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("old"), java.time.LocalDate.of(2026, 10, 5).atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), app.expenses.core.domain.ledger.AccountId("bank"), app.expenses.core.domain.Money(125_000, app.expenses.core.domain.Currency.INR))) } }
+        ingest(debit, 4_000)
+        ingest("Rs.300.00 debited from A/c XX9999 on 05-10-26 to VPA other@okhdfc (UPI Ref 628374650000).", 5_000)
+        launch(); openInbox()
+        waitFor("inbox_count")
+        compose.onNodeWithTag("inbox_count", useUnmergedTree = true).assertTextContains("5 to review")
+        tap("inbox_add_all"); waitFor("inbox_add_all_ok"); tap("inbox_add_all_ok")
+        compose.waitUntil(10_000) { entries().size == 4 }  // three new entries and the old one
+        // 3 added (two payments and the credit) plus the old one: the repeat and the text for the unknown card are still waiting
+        val repeatId = idAt(4_000); val strangerId = idAt(5_000)
+        waitFor("inbox_list"); assertEquals(2, runBlocking { container.write { it.inbox.list().size } })
+        assertEquals(setOf(repeatId, strangerId), runBlocking { container.write { it.inbox.list().map { i -> i.id }.toSet() } })
+        assertTrue(!has("inbox_add_all"), "two left, both need a look: nothing to add together")
+    }
+
+    @Test
+    fun addAllIsOfferedOnlyWhenThereAreAtLeastTwoClearOnes() {
+        runBlocking { container.write { it.templates.putSetting("capture_acct:HDFC Bank:1234", "bank") } }
+        ingest(to("swiggy@icici", "100000000021"), 1_000)
+        launch(); openInbox(); waitFor("inbox_count")
+        assertTrue(!has("inbox_add_all"), "a single clear item is just added with its own button")
+        ingest(to("randomshop@okaxis", "100000000022"), 2_000)
+        tap("inbox_back"); openInbox(); waitFor("inbox_add_all")
+    }
+
+    @Test
+    fun theMessageIsOneStepAwayAndShowsOnlyWhenAsked() {
+        ingest(debit, 5_000); launch(); openInbox()
+        val id = runBlocking { container.write { it.inbox.list().single().id } }!!
+        waitFor("inbox_$id")
+        assertTrue(!has("inbox_text_$id"), "the original text is hidden at first")
+        tap("inbox_text_toggle_$id"); waitFor("inbox_text_$id")
+        compose.onNodeWithTag("inbox_text_$id", useUnmergedTree = true).assertTextContains("debited from A/c XX1234", substring = true)
     }
 
     @Test
@@ -170,8 +216,8 @@ class InboxUiTest {
         ingest(text("9876543210@ybl", "100000000001"), 1_000); ingest(text("q123456789@ybl", "100000000002"), 2_000_000); ingest(text("shop@okhdfc", "100000000003"), 4_000_000)
         launch(); openInbox()
         val byTime = runBlocking { container.write { it.inbox.list().associate { i -> i.receivedAt to i.id } } }!!
-        val meta = { t: Long -> compose.onNodeWithTag("inbox_meta_" + byTime.getValue(t), useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } }
-        waitFor("inbox_meta_" + byTime.getValue(1_000))
+        val meta = { t: Long -> compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_meta_" + byTime.getValue(t))); compose.onNodeWithTag("inbox_meta_" + byTime.getValue(t), useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } }
+        waitFor("inbox_list")
         assertTrue(meta(1_000).endsWith("to a person"), meta(1_000)); assertTrue(meta(2_000_000).endsWith("to a business"), meta(2_000_000)); assertTrue(meta(4_000_000).endsWith("ending 1234"), meta(4_000_000))
     }
 

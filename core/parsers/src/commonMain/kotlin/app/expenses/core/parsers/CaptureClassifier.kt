@@ -18,7 +18,7 @@ object CaptureClassifier {
     fun classify(sender: String, body: String, extraRoots: Set<String> = emptySet()): CaptureOutcome {
         val root = SenderRules.headerRoot(sender) ?: return CaptureOutcome.Ignored(IgnoreReason.PERSONAL_SENDER, null)
         val issuer = SenderRules.BUILT_IN[root] ?: if (root in extraRoots.map { it.uppercase() }) root else return CaptureOutcome.Ignored(IgnoreReason.NOT_ALLOWLISTED, root)
-        return when (val r = GenericAlertParser.parse(body)) {
+        return when (val r = GenericAlertParser.parse(body, root)) {
             is ParseResult.NotATransaction -> CaptureOutcome.Ignored(if (r.reason == "otp") IgnoreReason.OTP else IgnoreReason.NOT_A_TRANSACTION, root)
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)
         }

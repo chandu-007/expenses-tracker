@@ -117,7 +117,7 @@ data class AccountUi(val id: String, val name: String)
 
 /** A captured transaction waiting for review. [accountId] and [categoryId] are the suggestions the row starts with. */
 data class InboxRowUi(
-    val id: String, val issuer: String, val direction: String, val amountText: String, val dateText: String, val last4: String?, val body: String, val payee: String?,
+    val id: String, val issuer: String, val direction: String, val amountText: String, val amountMinor: Long, val dateText: String, val last4: String?, val body: String, val payee: String?,
     val accountId: String, val categoryId: String, val rememberedAccount: Boolean, val confidence: String,
     /** Where the suggested category came from: "your rule", "what you chose last time", or empty. */
     val categoryNote: String = "",
@@ -1020,7 +1020,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val byName = ok.categories.list().filter { !it.hidden && it.parentId == null }.associate { it.name.lowercase() to it.id }
             val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON) else null
             InboxRowUi(
-                i.id, i.issuer, i.direction, money.formatted(), i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
+                i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
                 duplicateNote = note.takeIf { reverses == null }, relatedNote = note.takeIf { reverses != null }, duplicateOfEntry = match?.entry?.id,

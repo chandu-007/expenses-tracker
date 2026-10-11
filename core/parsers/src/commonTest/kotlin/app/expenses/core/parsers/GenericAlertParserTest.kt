@@ -86,6 +86,9 @@ class GenericAlertParserTest {
         // text showed is how a card purchase is worded; it is read as money out and, like every generic result, still waits in the review inbox.
         assertEquals("no direction", notTx("Txn Rs.100.00 pending with your branch ref 000000000000 on 23-05"))
         assertEquals("no direction", notTx("Rs.100.00 UPI 000000000000 On 23-05 shop"))
+        // an OTP, a decline and a reversal in the same wording are not turned into expenses even for HDFC
+        for (t in listOf("OTP 123456 for Txn Rs.20.00 On HDFC Bank Card 0862 At shop", "Txn Rs.20.00 On HDFC Bank Card 0862 At shop was declined", "Txn Rs.20.00 On HDFC Bank Card 0862 At shop reversed"))
+            assertTrue((GenericAlertParser.parse(t, "HDFCBK") as? ParseResult.Parsed)?.alert?.direction != Direction.DEBIT, t)
     }
 
     @Test
@@ -112,18 +115,26 @@ class GenericAlertParserTest {
         assertEquals(Direction.DEBIT, dir("Rs.100 debited from A/c XX1 and sent to shop, credited to the beneficiary account"), "beneficiary rule intact")
     }
 
+    private val hdfcCardText = "Txn Rs.20.00\nOn HDFC Bank Card 0862\nAt paytm.s2x4b6x@pty\nby UPI 664912339598\nOn 10-10\nNot You?\nCall 18002586161/SMS BLOCK CC 0862 to 7308080808"
+
     @Test
     fun anHdfcCardTxnAlertWithNoDebitWordIsAnExpenseWithItsCardDigitsReferenceAndMerchant() {
-        val body = "Txn Rs.20.00\nOn HDFC Bank Card 0862\nAt paytm.s2x4b6x@pty\nby UPI 664912339598\nOn 10-10\nNot You?\nCall 18002586161/SMS BLOCK CC 0862 to 7308080808"
-        val a = (GenericAlertParser.parse(body) as ParseResult.Parsed).alert
+        val a = (GenericAlertParser.parse(hdfcCardText, "HDFCBK") as ParseResult.Parsed).alert
         assertEquals(Direction.DEBIT, a.direction); assertEquals(2000, a.amountMinor); assertEquals("0862", a.accountLast4); assertEquals("664912339598", a.reference)
-        assertEquals("paytm.s2x4b6x@pty", PayeeGuess.of(body))
-        assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify("AX-HDFCBK-S", body))
+        assertEquals("paytm.s2x4b6x@pty", PayeeGuess.of(hdfcCardText))
+        assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify("AX-HDFCBK-S", hdfcCardText))
+    }
+
+    @Test
+    fun theSameWordingFromAnotherBankOrWithNoBankIsStillNotGuessed() {
+        assertEquals("no direction", notTx(hdfcCardText), "no sender given")
+        assertEquals("no direction", (GenericAlertParser.parse(hdfcCardText, "ICICIB") as ParseResult.NotATransaction).reason)
+        assertIs<CaptureOutcome.Ignored>(CaptureClassifier.classify("AX-ICICIB-S", hdfcCardText))
     }
 
     @Test
     fun aTxnTextThatIsNotACardUseOrHasACreditWordIsNotTurnedIntoAnExpense() {
-        assertIs<ParseResult.NotATransaction>(GenericAlertParser.parse("Txn Rs.20.00 pending at your branch. Visit us"), "no card: still no direction")
-        assertEquals(Direction.CREDIT, (GenericAlertParser.parse("Txn Rs.500.00 credited to your HDFC Bank Card 0862 at 10-10") as ParseResult.Parsed).alert.direction, "a credit word still decides")
+        assertIs<ParseResult.NotATransaction>(GenericAlertParser.parse("Txn Rs.20.00 pending at your branch. Visit us", "HDFCBK"), "no card: still no direction")
+        assertEquals(Direction.CREDIT, (GenericAlertParser.parse("Txn Rs.500.00 credited to your HDFC Bank Card 0862 at 10-10", "HDFCBK") as ParseResult.Parsed).alert.direction, "a credit word still decides")
     }
 }

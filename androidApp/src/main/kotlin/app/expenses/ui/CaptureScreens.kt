@@ -13,6 +13,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import app.expenses.core.domain.formatted
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -37,21 +41,46 @@ import app.expenses.CaptureSettingsUi
 import app.expenses.CategoryUi
 import app.expenses.InboxRowUi
 
-/** Transactions found in texts, waiting to be added to the ledger or skipped. Nothing here counts anywhere until it is added. */
+/**
+ * Transactions found in texts, waiting to be added to the ledger or skipped. Nothing here counts anywhere until it is added.
+ * The top says how much is waiting and offers "Add all" for the items that need no decision; each card leads with who, how much and where it will go,
+ * so the usual answer is one tap, and everything else (the original message, flipping the direction, naming the payee) is one step further in.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InboxScreen(
     rows: List<InboxRowUi>, accounts: List<AccountUi>, categories: List<CategoryUi>,
     onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit, onBack: () -> Unit,
 ) {
+    var confirmingAll by rememberSaveable { mutableStateOf(false) }
+    // those that need no decision: not a repeat, not a related entry, an account the person has used for this bank card before (or the only account there is),
+    // and an ordinary payment (a transfer or refund asks to be looked at)
+    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" }
+    val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val cur = app.expenses.core.domain.BaseCurrency.current
+    fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit }.sumOf { it.amountMinor }, cur).formatted()
+    if (confirmingAll) AlertDialog(
+        onDismissRequest = { confirmingAll = false }, title = { Text("Add ${easy.size} items?") },
+        text = { Text("Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, or whose account is not yet known, are left for you to check.") },
+        confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
+        dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
+    )
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
         if (rows.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list")) {
-            items(rows, key = { it.id }) { Column(Modifier.animateItem()) { InboxCard(it, accounts, categories, onConfirm, onDismiss, onFlip, onName); HorizontalDivider() } }
+        } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+            item(key = "summary") {
+                Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${rows.size} to review", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_count"))
+                    Text("${total(rows, false)} out · ${total(rows, true)} in. Check each one, or add the clear ones together.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (refused.isNotEmpty()) Text("${refused.size} could not be added: ${refused.first()}", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_add_all_problem"))
+                    if (easy.size >= 2) Button(onClick = { confirmingAll = true }, modifier = Modifier.testTag("inbox_add_all")) { Text("Add all ${easy.size} clear ones") }
+                }
+            }
+            items(rows, key = { it.id }) { r -> InboxCard(r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem()) }
         }
     }
 }
@@ -61,6 +90,7 @@ fun InboxScreen(
 private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
     onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
@@ -70,65 +100,100 @@ private fun InboxCard(
     var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
     var naming by rememberSaveable(r.id) { mutableStateOf(false) }
+    var showText by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val credit = r.direction == "CREDIT"
-    Column(Modifier.fillMaxWidth().padding(16.dp).testTag("inbox_${r.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(r.payee ?: r.issuer, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            val flow = if (credit) Flow3.IN else Flow3.OUT
-            Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleMedium, color = amountColor(flow), modifier = Modifier.testTag("inbox_amount_${r.id}"))
-        }
-        Text("${if (credit) "Money in" else "Money out"} · ${r.dateText} · ${r.issuer}" + (r.last4?.let { " · ending $it" } ?: "") + when (r.payeeKind) { "person" -> " · ${if (credit) "from" else "to"} a person"; "business" -> " · ${if (credit) "from" else "to"} a business"; else -> "" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_meta_${r.id}"))
-        Text(r.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
-        Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (paired && r.treatment == "TRANSFER") {
-            val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose" }
-            Text("Recorded as a ${r.treatmentLabel}: from ${nameOf(fromAcct)} to ${nameOf(toAcct)}. It moves money between your own accounts, so it is not spending.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
-            if (changing) {
-                Text("From", style = MaterialTheme.typography.labelSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == fromAcct, onClick = { fromAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_from_${r.id}_${a.id}")) } }
-                Text("To", style = MaterialTheme.typography.labelSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == toAcct, onClick = { toAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_to_${r.id}_${a.id}")) } }
+    val flow = if (credit) Flow3.IN else Flow3.OUT
+    androidx.compose.material3.Card(
+        modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // who, how much
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                CategoryAvatar(r.payee ?: r.issuer, r.payee ?: r.issuer, Modifier.padding(end = 12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(r.payee ?: r.issuer, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(
+                        "${if (credit) "Money in" else "Money out"} · ${r.dateText} · ${r.issuer}" + (r.last4?.let { " · ending $it" } ?: "") + when (r.payeeKind) { "person" -> " · ${if (credit) "from" else "to"} a person"; "business" -> " · ${if (credit) "from" else "to"} a business"; else -> "" },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_meta_${r.id}"),
+                    )
+                }
+                Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = amountColor(flow), modifier = Modifier.padding(start = 8.dp).testTag("inbox_amount_${r.id}"))
             }
-        } else if (paired && r.treatment == "REFUND") {
-            Text("Recorded as a ${r.treatmentLabel}, so the original expense is reduced instead of this counting as income.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
-        }
-        val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
-        val categoryName = categories.firstOrNull { it.id == category }?.name
-        val why = if (category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
-        if (!paired) Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_goes_${r.id}"))
-        if (changing && !paired) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
-            if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+            // warnings first: a repeat or a related entry changes what the right action is
+            r.relatedNote?.let { Callout(it, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_related_${r.id}")) }
+            r.duplicateNote?.let { Callout(it, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_duplicate_${r.id}")) }
+            // where it will go: the decision, with its own Change next to it
+            Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (paired && r.treatment == "TRANSFER") {
+                    val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose" }
+                    Text("Recorded as a ${r.treatmentLabel}: from ${nameOf(fromAcct)} to ${nameOf(toAcct)}. It moves money between your own accounts, so it is not spending.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+                    if (changing) {
+                        Text("From", style = MaterialTheme.typography.labelSmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == fromAcct, onClick = { fromAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_from_${r.id}_${a.id}")) } }
+                        Text("To", style = MaterialTheme.typography.labelSmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == toAcct, onClick = { toAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_to_${r.id}_${a.id}")) } }
+                    }
+                } else if (paired && r.treatment == "REFUND") {
+                    Text("Recorded as a ${r.treatmentLabel}, so the original expense is reduced instead of this counting as income.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+                } else {
+                    val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
+                    val categoryName = categories.firstOrNull { it.id == category }?.name
+                    val why = if (category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f).testTag("inbox_goes_${r.id}"))
+                        TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
+                    }
+                    if (changing) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
+                        if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+                        }
+                    }
+                }
+                if (paired) TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
             }
-        }
-        r.relatedNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_related_${r.id}")) }
-        r.duplicateNote?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_duplicate_${r.id}")) }
-        problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
-        // wraps onto a second line on a narrow screen instead of running off the edge
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (r.duplicateNote != null) OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
-            Button(
-                onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } }, enabled = account.isNotEmpty(),
-                modifier = Modifier.testTag("inbox_add_${r.id}"),
-            ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
-            OutlinedButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
-            if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
-            TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
-            if (r.nameable) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
-            TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
-        }
-        if (naming && r.nameable) {
-            var nameText by rememberSaveable(r.id) { mutableStateOf("") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                androidx.compose.material3.OutlinedTextField(nameText, { nameText = it }, label = { Text(r.payee?.let { "A name for $it" } ?: "A name for this payee") }, singleLine = true, modifier = Modifier.weight(1f).testTag("inbox_name_${r.id}"))
-                Button(onClick = { onName(r.id, nameText); naming = false }, modifier = Modifier.testTag("inbox_name_ok_${r.id}")) { Text("Save") }
+            problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
+            // the answer: one big Add (the label says what it will do) and Skip
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
+                    enabled = account.isNotEmpty() || (paired && r.treatment != "PAYMENT"), modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
+                ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
+                OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
             }
-            Text("Every later payment to or from the same address shows this name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // everything less usual, in small buttons that wrap on a narrow screen
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (r.duplicateNote != null) TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
+                if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
+                TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
+                if (r.nameable) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
+                TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("inbox_text_toggle_${r.id}")) { Text(if (showText) "Hide message" else "Show message") }
+            }
+            if (naming && r.nameable) {
+                var nameText by rememberSaveable(r.id) { mutableStateOf("") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    androidx.compose.material3.OutlinedTextField(nameText, { nameText = it }, label = { Text(r.payee?.let { "A name for $it" } ?: "A name for this payee") }, singleLine = true, modifier = Modifier.weight(1f).testTag("inbox_name_${r.id}"))
+                    Button(onClick = { onName(r.id, nameText); naming = false }, modifier = Modifier.testTag("inbox_name_ok_${r.id}")) { Text("Save") }
+                }
+                Text("Every later payment to or from the same address shows this name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (showText) {
+                Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(r.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_text_${r.id}"))
+                    Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
+}
+
+/** A note with a coloured edge, for the things that change what the right action is (a likely repeat, a related entry). */
+@Composable
+private fun Callout(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.12f)).padding(12.dp))
 }
 
 /** Turning SMS capture on or off, and what it does and does not do, before Android asks for the permission. */
