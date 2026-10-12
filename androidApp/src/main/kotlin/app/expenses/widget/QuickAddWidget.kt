@@ -24,6 +24,9 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.ImageProvider
+import androidx.glance.layout.size
+import androidx.glance.ColorFilter
+import androidx.glance.Image
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.SizeMode
@@ -64,7 +67,17 @@ data class WidgetButton(val templateId: String, val label: String, val detail: S
 data class WidgetUndo(val entryId: String, val text: String)
 
 /** Everything the widget draws. Kept separate from Glance so it can be built and tested without a launcher. [monthSpend] is what has been spent this calendar month, already masked when amounts are hidden. */
-data class WidgetModel(val buttons: List<WidgetButton>, val undo: WidgetUndo?, val needsApp: Boolean, val monthSpend: String? = null)
+data class WidgetModel(
+    val buttons: List<WidgetButton>, val undo: WidgetUndo?, val needsApp: Boolean, val monthSpend: String? = null,
+    /** Whether the total is shown in full; false when it is masked. [canToggle] is false when the app's own Hide amounts or the App lock forces it masked, so the eye is not offered. */
+    val revealed: Boolean = false, val canToggle: Boolean = false,
+)
+
+/** What the widget reads from the database. */
+data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean)
+
+/** The widget's own switch for showing the month's total. Off unless the person turns it on from the widget: not everyone wants spending on the home screen. */
+internal const val SETTING_WIDGET_SHOW_TOTAL = "widget_show_total"
 
 /** How long after a tap the widget will still undo it. */
 const val UNDO_WINDOW_MILLIS = 120_000L
@@ -91,12 +104,12 @@ class QuickAddWidget : GlanceAppWidget() {
         val loaded = load(context)
         provideContent {
             val prefs = currentState<Preferences>()
-            WidgetContent(model(loaded?.first, prefs, System.currentTimeMillis(), loaded?.second))
+            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false))
         }
     }
 
     /** The quick entries and this month's spending, read through the write lock like every other read of the database. Null when the data is not available. */
-    internal suspend fun load(context: Context): Pair<List<WidgetButton>, String?>? {
+    internal suspend fun load(context: Context): WidgetData? {
         val container = (context.applicationContext as ExpensesApp).container
         return container.write { ok ->
             val hide = ok.templates.setting("hide_amounts") == "1"
@@ -108,20 +121,22 @@ class QuickAddWidget : GlanceAppWidget() {
             val spent = ok.store.spendByCategory(currency, from = first).values.fold(Money.zero(currency)) { a, m -> a + m }
             // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
             val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
-            buttons to monthFigure(spent.formatted(), hide, locked)
+            val canToggle = !hide && !locked
+            val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
+            WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle)
         }
     }
 
     companion object {
         /** The month's total as the widget may show it: masked when amounts are hidden, and also when the App lock is on, since anyone holding the unlocked phone can read the home screen. */
-        fun monthFigure(spent: String, hide: Boolean, locked: Boolean): String = if (hide || locked) AmountMask.mask(spent) else spent
+        fun monthFigure(spent: String, hide: Boolean, locked: Boolean, revealed: Boolean = true): String = if (hide || locked || !revealed) AmountMask.mask(spent) else spent
 
         /** Builds what to draw. The undo line is shown only while it is still allowed to work. */
-        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null): WidgetModel {
+        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false): WidgetModel {
             val id = prefs[LAST_ID]
             val at = prefs[LAST_AT]
             val undo = if (id != null && at != null && now - at in 0..UNDO_WINDOW_MILLIS) WidgetUndo(id, prefs[LAST_TEXT] ?: "Added") else null
-            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend)
+            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle)
         }
     }
 }
@@ -189,7 +204,16 @@ private fun Header(model: WidgetModel, layout: WidgetLayout, size: DpSize) {
         Column(GlanceModifier.defaultWeight().clickable(actionStartActivity(openIntent()))) {
             val tiny = size.width < 180.dp
             // the smallest size has room for the figure only: no caption, and no ".00" so a five-digit amount still fits
-            if (!tiny) Text(if (model.monthSpend == null) "Expenses" else "Spent this month", style = TextStyle(color = mutedColor, fontSize = 11.sp), maxLines = 1)
+            if (!tiny) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (model.monthSpend == null) "Expenses" else "Spent this month", style = TextStyle(color = mutedColor, fontSize = 11.sp), maxLines = 1)
+                // the eye shows or hides the total; it is offered only when the app's own settings do not already force it hidden
+                if (model.monthSpend != null && model.canToggle) Image(
+                    ImageProvider(if (model.revealed) R.drawable.ic_widget_eye_off else R.drawable.ic_widget_eye),
+                    contentDescription = if (model.revealed) "Hide the amount" else "Show the amount",
+                    colorFilter = ColorFilter.tint(mutedColor),
+                    modifier = GlanceModifier.padding(start = 8.dp).size(20.dp).clickable(actionRunCallback<ToggleTotalAction>()),
+                )
+            }
             Text(
                 (model.monthSpend ?: "Quick add").let { if (tiny) it.removeSuffix(".00") else it },
                 style = TextStyle(color = textColor, fontSize = if (tiny) 13.sp else if (layout.compactHeader) 17.sp else 22.sp, fontWeight = FontWeight.Bold), maxLines = 1,
@@ -248,6 +272,15 @@ class QuickAddAction : ActionCallback {
 
 /** How long the widget may spend merging the search index after a tap. */
 const val WIDGET_MAINTENANCE_MILLIS = 300L
+
+/** Tap on the eye: flips whether the month's total is shown, for every copy of the widget, and redraws them. */
+class ToggleTotalAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val container = (context.applicationContext as ExpensesApp).container
+        container.write { ok -> ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1") "0" else "1") }
+        QuickAddWidget().updateAll(context)
+    }
+}
 
 /** Tap on Undo: takes back the last widget entry, but only within [UNDO_WINDOW_MILLIS]. */
 class UndoAction : ActionCallback {

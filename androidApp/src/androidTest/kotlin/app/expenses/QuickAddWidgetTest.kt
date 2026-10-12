@@ -165,19 +165,72 @@ class QuickAddWidgetTest {
                 ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("old"), lastMonth, AccountId("cash"), Money(999_900, inr), emptyList()))
             }
         }
+        val fresh = runBlocking { QuickAddWidget().load(context) }!!
+        assertTrue(fresh.monthSpend.none { it.isDigit() } && !fresh.revealed && fresh.canToggle, "the total is hidden until the person shows it from the widget: ${fresh.monthSpend}")
+        runBlocking { container.write { it.templates.putSetting("widget_show_total", "1") } }
         val shown = runBlocking { QuickAddWidget().load(context) }!!
-        assertEquals("₹1,234.00", shown.second, "this month's 1,234 only, not last month's 9,999")
-        assertEquals(listOf(WidgetButton("chai", "Chai", "₹20.00")), shown.first)
+        assertEquals("₹1,234.00", shown.monthSpend, "this month's 1,234 only, not last month's 9,999")
+        assertTrue(shown.revealed)
+        assertEquals(listOf(WidgetButton("chai", "Chai", "₹20.00")), shown.buttons)
         runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
         val hidden = runBlocking { QuickAddWidget().load(context) }!!
-        assertTrue(!hidden.second!!.any { it.isDigit() }, "amounts are hidden on the home screen too: ${hidden.second}")
-        assertTrue(hidden.first.single().detail.none { it.isDigit() }, hidden.first.single().detail)
+        assertTrue(!hidden.monthSpend.any { it.isDigit() }, "the app's Hide amounts wins over the widget's switch: ${hidden.monthSpend}")
+        assertTrue(!hidden.canToggle && !hidden.revealed, "no eye is offered when the app forces it hidden")
+        assertTrue(hidden.buttons.single().detail.none { it.isDigit() }, hidden.buttons.single().detail)
     }
 
     @Test
     fun theMonthTotalIsMaskedWhenAmountsAreHiddenOrTheAppLockIsOn() {
-        assertEquals("₹1,234.00", QuickAddWidget.monthFigure("₹1,234.00", hide = false, locked = false))
-        for ((h, l) in listOf(true to false, false to true, true to true)) assertTrue(QuickAddWidget.monthFigure("₹1,234.00", h, l).none { it.isDigit() }, "hide=$h locked=$l")
+        assertEquals("₹1,234.00", QuickAddWidget.monthFigure("₹1,234.00", hide = false, locked = false, revealed = true))
+        for ((h, l) in listOf(true to false, false to true, true to true)) assertTrue(QuickAddWidget.monthFigure("₹1,234.00", h, l, revealed = true).none { it.isDigit() }, "hide=$h locked=$l")
+        assertTrue(QuickAddWidget.monthFigure("₹1,234.00", hide = false, locked = false, revealed = false).none { it.isDigit() }, "not shown until the person shows it")
+    }
+
+    @Test
+    fun theEyeOnTheWidgetFlipsTheTotalForEveryCopyAndPersists() {
+        saveChai()
+        runBlocking { container.write { ok -> ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("now"), System.currentTimeMillis(), AccountId("cash"), Money(50_000, inr), emptyList())) } }
+        assertTrue(runBlocking { QuickAddWidget().load(context) }!!.monthSpend.none { it.isDigit() })
+        runBlocking { app.expenses.widget.ToggleTotalAction().onAction(context, glanceId, actionParametersOf()) }
+        assertEquals("₹500.00", runBlocking { QuickAddWidget().load(context) }!!.monthSpend)
+        runBlocking { app.expenses.widget.ToggleTotalAction().onAction(context, glanceId, actionParametersOf()) }
+        assertTrue(runBlocking { QuickAddWidget().load(context) }!!.monthSpend.none { it.isDigit() }, "a second tap hides it again")
+    }
+
+    private fun eyeCase(model: WidgetModel, present: String, absent: String? = null) = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(250.dp, 110.dp))
+        provideComposable { WidgetContent(model) }
+        if (absent == null) onNode(androidx.glance.testing.unit.hasContentDescription(present)).assertExists() else onNode(androidx.glance.testing.unit.hasContentDescription(present)).assertDoesNotExist()
+    }
+
+    @Test fun theEyeOffersToShowAHiddenTotal() = eyeCase(WidgetModel(listOf(chai), null, needsApp = false, monthSpend = "₹••••", revealed = false, canToggle = true), "Show the amount")
+    @Test fun theEyeOffersToHideAShownTotal() = eyeCase(WidgetModel(listOf(chai), null, needsApp = false, monthSpend = "₹500.00", revealed = true, canToggle = true), "Hide the amount")
+    @Test fun noEyeIsDrawnWhenTheAppForcesTheTotalHidden() = eyeCase(WidgetModel(listOf(chai), null, needsApp = false, monthSpend = "₹••••", revealed = false, canToggle = false), "Show the amount", absent = "yes")
+
+    @Test
+    fun aWidgetPlacedFromEachPickerEntryIsFoundWhenTheWidgetIsUpdated() {
+        val manager = AppWidgetManager.getInstance(context)
+        val host = AppWidgetHost(context, 4244)
+        val ids = ArrayList<Int>()
+        try {
+            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+            val receivers = listOf(QuickAddReceiver::class.java, app.expenses.widget.QuickAddSmallReceiver::class.java, app.expenses.widget.QuickAddWideReceiver::class.java, app.expenses.widget.QuickAddLargeReceiver::class.java)
+            var allBound = true
+            for (r in receivers) {
+                val id = host.allocateAppWidgetId(); ids += id
+                val bound = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    automation.adoptShellPermissionIdentity(android.Manifest.permission.BIND_APPWIDGET)
+                    try { manager.bindAppWidgetIdIfAllowed(id, ComponentName(context, r)) } finally { automation.dropShellPermissionIdentity() }
+                } else {
+                    java.io.FileInputStream(automation.executeShellCommand("cmd appwidget grantbind --package ${context.packageName} --user 0").fileDescriptor).use { it.readBytes() }
+                    manager.bindAppWidgetIdIfAllowed(id, ComponentName(context, r))
+                }
+                allBound = allBound && bound
+            }
+            assumeTrue("binding was not allowed on this device", allBound)
+            val found = runBlocking { GlanceAppWidgetManager(context).getGlanceIds(QuickAddWidget::class.java) }.map { (it as AppWidgetId).appWidgetId }
+            assertTrue(found.containsAll(ids), "an update of the widget must reach every copy, whichever picker entry it came from: placed $ids, found $found")
+        } finally { ids.forEach { host.deleteAppWidgetId(it) } }
     }
 
     @Test
