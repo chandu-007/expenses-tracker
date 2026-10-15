@@ -89,17 +89,42 @@ class BillStoreTest {
     }
 
     @Test
-    fun aBillPaidByAnEntryThatIsLaterDeletedIsTrackedAgainButOneWithNoEntryOrALiveEntryStaysPaid() {
+    fun aBillPaidByAnEntryThatIsDeletedIsTrackedAgainAndPaidAgainWhenTheEntryComesBackUnlessThePersonUnpaidIt() {
         val inr = app.expenses.core.domain.Currency.INR
         val ledger = app.expenses.core.storage.LedgerStore(db, app.expenses.core.domain.sync.HlcClock("n1")) { 1L }
         ledger.saveAccount(app.expenses.core.domain.ledger.Account(app.expenses.core.domain.ledger.AccountId("bank"), "Bank", app.expenses.core.domain.ledger.AccountType.BANK, inr))
         for (id in listOf("live", "gone")) ledger.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId(id), 1_000, app.expenses.core.domain.ledger.AccountId("bank"), app.expenses.core.domain.Money(100, inr)))
         listOf("a", "b", "c").forEach { store.add(bill(it)); store.track(it) }
         store.markPaid("a", "live", 5); store.markPaid("b", "gone", 5); store.markPaid("c", null, 5)
-        assertFalse(store.releaseForRemovedEntries(), "nothing deleted yet")
+        assertFalse(store.reconcileWithEntries(), "nothing deleted yet")
         ledger.delete(app.expenses.core.domain.ledger.EntryId("gone"))
-        assertTrue(store.releaseForRemovedEntries())
-        assertEquals(BillStatus.TRACKED, store.get("b")!!.status); assertNull(store.get("b")!!.entryId); assertNull(store.get("b")!!.paidAt)
+        assertTrue(store.reconcileWithEntries())
+        assertEquals(BillStatus.TRACKED, store.get("b")!!.status); assertEquals("gone", store.get("b")!!.entryId, "the link is kept so that undo can re-pay")
         assertEquals(BillStatus.PAID, store.get("a")!!.status); assertEquals(BillStatus.PAID, store.get("c")!!.status, "marked paid with no entry stays paid")
+        ledger.restore(app.expenses.core.domain.ledger.EntryId("gone"))
+        assertTrue(store.reconcileWithEntries()); assertEquals(BillStatus.PAID, store.get("b")!!.status, "the entry is back (undo, or a restore from sync)")
+        store.unpay("b")
+        assertFalse(store.reconcileWithEntries(), "not paid after all cuts the link, so a live entry does not pay it again")
+        assertEquals(BillStatus.TRACKED, store.get("b")!!.status); assertNull(store.get("b")!!.entryId)
+    }
+
+    private fun ledgerWithEntry(id: String): app.expenses.core.storage.LedgerStore {
+        val inr = app.expenses.core.domain.Currency.INR
+        val ledger = app.expenses.core.storage.LedgerStore(db, app.expenses.core.domain.sync.HlcClock("n1")) { 1L }
+        ledger.saveAccount(app.expenses.core.domain.ledger.Account(app.expenses.core.domain.ledger.AccountId("bank"), "Bank", app.expenses.core.domain.ledger.AccountType.BANK, inr))
+        ledger.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId(id), 1_000, app.expenses.core.domain.ledger.AccountId("bank"), app.expenses.core.domain.Money(100, inr)))
+        return ledger
+    }
+
+    @Test
+    fun aLoneBillWhosePaymentWasDeletedIsReleasedAndAloneBillWhosePaymentIsBackIsPaid() {
+        val ledger = ledgerWithEntry("e")
+        store.add(bill("a")); store.track("a"); store.markPaid("a", "e", 5)
+        assertFalse(store.reconcileWithEntries(), "in step: nothing to do")
+        ledger.delete(app.expenses.core.domain.ledger.EntryId("e"))
+        assertTrue(store.reconcileWithEntries()); assertEquals(BillStatus.TRACKED, store.get("a")!!.status)
+        assertFalse(store.reconcileWithEntries(), "already released: nothing more to do")
+        ledger.restore(app.expenses.core.domain.ledger.EntryId("e"))
+        assertTrue(store.reconcileWithEntries()); assertEquals(BillStatus.PAID, store.get("a")!!.status)
     }
 }

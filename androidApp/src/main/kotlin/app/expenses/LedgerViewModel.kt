@@ -1034,8 +1034,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    private fun billsUi(ok: AppContainer.Opened.Ok, release: Boolean = true): BillsUi {
-        if (release) ok.bills.releaseForRemovedEntries() // a payment that was deleted no longer pays its bill
+    private fun billsUi(ok: AppContainer.Opened.Ok): BillsUi {
+        ok.bills.reconcileWithEntries()
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val today = LocalDate.now()
         fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
@@ -1043,9 +1043,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** What the home banner shows: three small queries, whatever the size of the history. */
-    /** [release] is false while an undo is on offer: a deleted payment that may be brought back must keep its bill paid. */
-    private fun billPeek(ok: AppContainer.Opened.Ok, release: Boolean = true): BillPeekUi {
-        if (release) ok.bills.releaseForRemovedEntries() // a payment that was deleted no longer pays its bill
+    private fun billPeek(ok: AppContainer.Opened.Ok): BillPeekUi {
+        ok.bills.reconcileWithEntries()
         val fresh = ok.bills.count(app.expenses.core.storage.BillStatus.FOUND).toInt()
         val tracked = ok.bills.count(app.expenses.core.storage.BillStatus.TRACKED).toInt()
         if (fresh + tracked == 0) return BillPeekUi()
@@ -1926,7 +1925,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         rowCache.clear() // names (accounts, categories) may have changed since the rows were formatted
         _people.value = ok.people.list().map { PersonUi(it.id, it.name) }
         if (loansWatching) loadLoans(ok)
-        if (billsWatching) _bills.value = billsUi(ok, release = undo == null)
+        if (billsWatching) _bills.value = billsUi(ok)
         val q = ok.db.schemaQueries
         val accounts = q.selectAccounts().executeAsList()
         accountNames = accounts.associate { it.id to it.name }
@@ -1976,7 +1975,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             baseCurrency = BaseCurrency.current,
             inboxPending = ok.inbox.pendingCount().toInt(),
             inboxPeek = inboxPeek(ok),
-            billPeek = billPeek(ok, release = undo == null),
+            billPeek = billPeek(ok),
             smsCapture = ok.templates.setting(Capture.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),

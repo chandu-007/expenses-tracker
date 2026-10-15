@@ -593,10 +593,22 @@ UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL
 unpayBill:
 UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL WHERE id = ? AND status = 'PAID';
 
--- A bill marked paid by an entry that has since been deleted is not paid: back to being tracked.
+-- A bill paid by an entry that has since been deleted is not paid: back to being tracked. The link to the entry is kept, so bringing the entry
+-- back (undo, or a restore arriving from another device) pays the bill again; only "not paid after all" (unpayBill) cuts the link.
 releaseBillsOfRemovedEntries:
-UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL
+UPDATE bill SET status = 'TRACKED'
 WHERE status = 'PAID' AND entry_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entry WHERE entry.id = bill.entry_id AND entry.deleted = 0);
+
+-- A read, so the common case (no bill out of step) costs no write: run on every refresh of the home screen.
+billsOutOfStep:
+SELECT EXISTS (
+  SELECT 1 FROM bill WHERE entry_id IS NOT NULL AND status IN ('PAID', 'TRACKED')
+    AND ((status = 'PAID') = (NOT EXISTS (SELECT 1 FROM entry WHERE entry.id = bill.entry_id AND entry.deleted = 0)))
+);
+
+repayBillsOfRestoredEntries:
+UPDATE bill SET status = 'PAID'
+WHERE status = 'TRACKED' AND entry_id IS NOT NULL AND EXISTS (SELECT 1 FROM entry WHERE entry.id = bill.entry_id AND entry.deleted = 0);
 
 setBillDue:
 UPDATE bill SET due_date = :due WHERE id = :id AND status IN ('FOUND', 'TRACKED');

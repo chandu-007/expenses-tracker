@@ -56,11 +56,18 @@ class BillStore(private val db: ExpensesDb) {
     /** PAID back to TRACKED. The entry that was made stays; deleting it is the person's call. */
     fun unpay(id: String) { q.unpayBill(id) }
 
-    /** Puts back to tracked any paid bill whose settling entry was deleted or undone; true when one was. */
-    fun releaseForRemovedEntries(): Boolean = db.transactionWithResult {
+    /**
+     * Keeps paid bills in step with the entries that paid them: a bill whose entry was deleted goes back to tracked, and one whose entry is live again
+     * (undone, restored, or arrived by sync) is paid again. The link is kept either way. True when any bill changed.
+     */
+    fun reconcileWithEntries(): Boolean {
+        if (!q.billsOutOfStep().executeAsOne()) return false // the usual case: one read, no write
+        return db.transactionWithResult {
         val before = q.billCount(BillStatus.PAID.name).executeAsOne()
         q.releaseBillsOfRemovedEntries()
+        q.repayBillsOfRestoredEntries()
         q.billCount(BillStatus.PAID.name).executeAsOne() != before
+        }
     }
 
     fun setDueDate(id: String, isoDate: String?) { q.setBillDue(isoDate, id) }

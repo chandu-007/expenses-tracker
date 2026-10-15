@@ -62,7 +62,7 @@ class NotificationService(
 
     /** Posts what is set to post by itself, then works out which notices are due. Records nothing as shown. */
     fun check(today: LocalDate, minuteOfDay: Int, zone: TimeZone, currency: Currency = app.expenses.core.domain.BaseCurrency.current): CheckResult {
-        bills?.releaseForRemovedEntries() // a payment that was deleted no longer pays its bill
+        bills?.reconcileWithEntries()
         val posted = recurring.autoPost(today, zone).map { it.first }
         val bills = recurring.due(today).map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
         val status = budgets.status(today, zone, currency)

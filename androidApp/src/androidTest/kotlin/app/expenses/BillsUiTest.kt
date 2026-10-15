@@ -203,7 +203,7 @@ class BillsUiTest {
     }
 
     @Test
-    fun aPaymentDeletedWithAnUndoOfferedKeepsTheBillPaidAndOnceItIsGoneForGoodTheBillIsTrackedAgain() {
+    fun aDeletedPaymentUnpaysItsBillAndUndoPaysItAgainButAPaymentGoneForGoodLeavesItTracked() {
         ingest(electricity); val id = bills(BillStatus.FOUND).single().id
         runBlocking { container.write { ok ->
             ok.store.save(Expense(EntryId("pay"), System.currentTimeMillis() - 5_000, AccountId("cash"), Money(184_250, Currency.INR)), EntryDetails(merchant = "Light"))
@@ -213,10 +213,11 @@ class BillsUiTest {
         fun live() = runBlocking { container.write { it.db.schemaQueries.entryById("pay").executeAsOne().deleted == 0L } }!!
         launch(); compose.onNodeWithTag("row_Light", useUnmergedTree = true).performTouchInput { longClick() }; tap("bulk_delete")
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Deleted", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        assertTrue(!live()); assertEquals(BillStatus.PAID, status(), "the undo is on offer, so the bill is still paid")
+        assertTrue(!live())
+        compose.waitUntil(10_000) { status() == BillStatus.TRACKED } // whichever refresh runs first, the bill is not shown as paid by a deleted entry
         compose.onAllNodes(hasText("Undo"), useUnmergedTree = true)[0].performClick()
         compose.waitUntil(10_000) { live() }
-        assertEquals(BillStatus.PAID, status(), "undo brought the payment back and the bill was never un-paid")
+        compose.waitUntil(10_000) { status() == BillStatus.PAID } // undo brings the payment back, and with it the bill's paid state
         runBlocking { container.write { it.store.delete(EntryId("pay")) } } // deleted with nothing to undo it
         openBills(); tap("bill_pay_$id")
         assertEquals(BillStatus.TRACKED, status())
