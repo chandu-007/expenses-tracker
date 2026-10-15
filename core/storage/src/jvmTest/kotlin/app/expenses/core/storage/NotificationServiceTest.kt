@@ -195,4 +195,28 @@ class NotificationServiceTest {
         billStore.add(found("b1", due = "2026-10-25")); billStore.track("b1")
         assertTrue(withBills.check(day, noon, zone).notices.any { it.kind == app.expenses.core.domain.NoticeKind.CARD_DUE })
     }
+
+    private fun secondCardDueTheSameDay() {
+        ledger.saveAccount(Account(AccountId("card2"), "Visa", AccountType.CREDIT_CARD, inr))
+        CardStore(db, clock) { 1L }.save(app.expenses.core.domain.CardTerms("card2", 25, 12))
+        ledger.save(Expense(EntryId("big2"), LocalDate(2026, 9, 2).atStartOfDayIn(zone).toEpochMilliseconds(), AccountId("card2"), m(300_000)))
+    }
+
+    private fun dueCards(day: LocalDate) = withBills.check(day, noon, zone).notices.filter { it.kind == app.expenses.core.domain.NoticeKind.CARD_DUE }.map { it.title }
+
+    @Test
+    fun withTwoCardsDueTogetherAndNoWayToTellWhichTheBillIsForBothStillGetTheirOwnReminder() {
+        val day = cardWithStatementDue(); secondCardDueTheSameDay()
+        billStore.add(found("b1", due = "2026-10-12")); billStore.track("b1")
+        assertEquals(2, dueCards(day).size, "a repeated reminder is cheaper than a missing one")
+    }
+
+    @Test
+    fun whenTheBillsCardIsKnownOnlyThatCardIsSilencedAndTheOtherStillReminds() {
+        val day = cardWithStatementDue(); secondCardDueTheSameDay()
+        billStore.add(found("b1", due = "2026-10-12")); billStore.track("b1")
+        db.schemaQueries.putSetting(CaptureAccounts.key("HDFC Bank", "0862"), "card")
+        val left = dueCards(day)
+        assertEquals(1, left.size); assertTrue(left.single().contains("Visa"), left.toString())
+    }
 }

@@ -12,10 +12,17 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.hasText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.expenses.core.domain.Currency
+import app.expenses.core.domain.Money
+import app.expenses.core.domain.ledger.EntryId
+import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.storage.EntryDetails
 import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
@@ -193,6 +200,26 @@ class BillsUiTest {
         runBlocking { container.write { it.bills.dismiss(b.id); it.bills.add(b.copy(id = "usd", currency = "USD", status = BillStatus.TRACKED, dedupeKey = "usd")) } }
         settleFromReview("Payment of Rs 12,345.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.")
         assertEquals(emptyList(), bills(BillStatus.PAID))
+    }
+
+    @Test
+    fun aPaymentDeletedWithAnUndoOfferedKeepsTheBillPaidAndOnceItIsGoneForGoodTheBillIsTrackedAgain() {
+        ingest(electricity); val id = bills(BillStatus.FOUND).single().id
+        runBlocking { container.write { ok ->
+            ok.store.save(Expense(EntryId("pay"), System.currentTimeMillis() - 5_000, AccountId("cash"), Money(184_250, Currency.INR)), EntryDetails(merchant = "Light"))
+            ok.bills.track(id); ok.bills.markPaid(id, "pay", 5)
+        } }
+        fun status() = runBlocking { container.write { it.bills.get(id)!!.status } }!!
+        fun live() = runBlocking { container.write { it.db.schemaQueries.entryById("pay").executeAsOne().deleted == 0L } }!!
+        launch(); compose.onNodeWithTag("row_Light", useUnmergedTree = true).performTouchInput { longClick() }; tap("bulk_delete")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Deleted", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(!live()); assertEquals(BillStatus.PAID, status(), "the undo is on offer, so the bill is still paid")
+        compose.onAllNodes(hasText("Undo"), useUnmergedTree = true)[0].performClick()
+        compose.waitUntil(10_000) { live() }
+        assertEquals(BillStatus.PAID, status(), "undo brought the payment back and the bill was never un-paid")
+        runBlocking { container.write { it.store.delete(EntryId("pay")) } } // deleted with nothing to undo it
+        openBills(); tap("bill_pay_$id")
+        assertEquals(BillStatus.TRACKED, status())
     }
 
     @Test

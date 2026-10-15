@@ -62,6 +62,7 @@ class NotificationService(
 
     /** Posts what is set to post by itself, then works out which notices are due. Records nothing as shown. */
     fun check(today: LocalDate, minuteOfDay: Int, zone: TimeZone, currency: Currency = app.expenses.core.domain.BaseCurrency.current): CheckResult {
+        bills?.releaseForRemovedEntries() // a payment that was deleted no longer pays its bill
         val posted = recurring.autoPost(today, zone).map { it.first }
         val bills = recurring.due(today).map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
         val status = budgets.status(today, zone, currency)
@@ -109,15 +110,21 @@ class NotificationService(
     private fun cardsDue(today: LocalDate, zone: TimeZone): List<CardDue> = withoutTracked(cardsDueAll(today, zone))
 
     /**
-     * A card whose statement is already a tracked bill (same due date, give or take two days) is reminded by that bill, not twice. Each tracked card bill covers
-     * one card, so two cards due the same day are not both silenced by one bill.
+     * A card whose statement is already a tracked bill (due dates within two days) is reminded by that bill, not twice. The bill must be known to be for that
+     * card: the account remembered for its issuer and last four digits, or, with none remembered, the only card due in that window. With two or more
+     * possible cards and nothing to tell them apart, both reminders are sent: a repeated reminder costs less than a missing one.
      */
     private fun withoutTracked(due: List<CardDue>): List<CardDue> {
-        val covered = bills?.list(BillStatus.TRACKED)?.filter { it.kind == "CREDIT_CARD" }?.mapNotNull { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } }?.toMutableList() ?: return due
-        return due.filter { c ->
-            val i = covered.indexOfFirst { kotlin.math.abs(it.toEpochDays() - c.dueDate.toEpochDays()) <= 2 }
-            if (i >= 0) { covered.removeAt(i); false } else true
+        val tracked = bills?.list(BillStatus.TRACKED)?.filter { it.kind == "CREDIT_CARD" } ?: return due
+        val silenced = mutableSetOf<String>()
+        for (b in tracked) {
+            val day = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
+            val near = due.filter { it.accountId !in silenced && kotlin.math.abs(it.dueDate.toEpochDays() - day.toEpochDays()) <= 2 }
+            val mapped = q.settingValue(CaptureAccounts.key(b.issuer, b.accountLast4)).executeAsOneOrNull()
+            val hit = if (mapped != null) near.firstOrNull { it.accountId == mapped } else near.singleOrNull()
+            if (hit != null) silenced += hit.accountId
         }
+        return due.filter { it.accountId !in silenced }
     }
 
     private fun cardsDueAll(today: LocalDate, zone: TimeZone): List<CardDue> = cards.all().mapNotNull { terms ->
