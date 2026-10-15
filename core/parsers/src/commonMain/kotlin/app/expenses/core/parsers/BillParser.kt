@@ -102,6 +102,9 @@ object BillParser {
     }
 
     /** True when [body] is a message about something to pay. Cheap; the same checks as [parse] without reading the details. */
+    /** True for a debit that is only promised ("will be debited", "scheduled debit"), which is a bill, not money that moved. */
+    fun promisesDebit(body: String): Boolean = futureDebit.containsMatchIn(body)
+
     fun looksLikeBill(body: String): Boolean = parse(body, null, LocalDate(2000, 1, 1)) != null
 
     /**

@@ -593,6 +593,11 @@ UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL
 unpayBill:
 UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL WHERE id = ? AND status = 'PAID';
 
+-- A bill marked paid by an entry that has since been deleted is not paid: back to being tracked.
+releaseBillsOfRemovedEntries:
+UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL
+WHERE status = 'PAID' AND entry_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entry WHERE entry.id = bill.entry_id AND entry.deleted = 0);
+
 setBillDue:
 UPDATE bill SET due_date = :due WHERE id = :id AND status IN ('FOUND', 'TRACKED');
 

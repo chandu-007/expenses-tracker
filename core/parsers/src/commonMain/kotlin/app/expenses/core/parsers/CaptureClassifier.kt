@@ -26,9 +26,12 @@ object CaptureClassifier {
     fun classify(sender: String, body: String, extraRoots: Set<String> = emptySet(), today: LocalDate = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date): CaptureOutcome {
         val root = SenderRules.headerRoot(sender) ?: return CaptureOutcome.Ignored(IgnoreReason.PERSONAL_SENDER, null)
         val issuer = SenderRules.BUILT_IN[root] ?: if (root in extraRoots.map { it.uppercase() }) root else return CaptureOutcome.Ignored(IgnoreReason.NOT_ALLOWLISTED, root)
-        // a message that says something is due is read as a bill first; a payment that was made carries no such wording and is read as a transaction
-        BillParser.parse(body, root, today)?.let { return CaptureOutcome.Bill(issuer, root, it) }
-        return when (val r = GenericAlertParser.parse(body, root)) {
+        val parsed = GenericAlertParser.parse(body, root)
+        // money that moved is a transaction even when the same text also quotes what is due: losing a real payment is worse than showing a bill as a transaction.
+        // Only a debit that is merely promised ("will be debited") is read as a bill instead.
+        val moved = parsed is ParseResult.Parsed && !BillParser.promisesDebit(body)
+        if (!moved) BillParser.parse(body, root, today)?.let { return CaptureOutcome.Bill(issuer, root, it) }
+        return when (val r = parsed) {
             is ParseResult.NotATransaction -> CaptureOutcome.Ignored(if (r.reason == "otp") IgnoreReason.OTP else IgnoreReason.NOT_A_TRANSACTION, root)
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)
         }

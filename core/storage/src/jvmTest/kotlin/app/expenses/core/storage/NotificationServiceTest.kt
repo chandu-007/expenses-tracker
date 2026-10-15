@@ -172,4 +172,27 @@ class NotificationServiceTest {
         repeat(8) { billStore.add(found("b$it").copy(dedupeKey = "k$it", dueDate = "2026-10-2${it}")) }
         assertEquals(5, withBills.check(today, noon, zone).notices.count { it.kind == app.expenses.core.domain.NoticeKind.BILL_FOUND })
     }
+
+    private fun cardWithStatementDue(): LocalDate {
+        ledger.saveAccount(Account(AccountId("card"), "Amex", AccountType.CREDIT_CARD, inr))
+        CardStore(db, clock) { 1L }.save(app.expenses.core.domain.CardTerms("card", 25, 12))
+        ledger.save(Expense(EntryId("big"), LocalDate(2026, 9, 1).atStartOfDayIn(zone).toEpochMilliseconds(), AccountId("card"), m(500_000)))
+        return LocalDate(2026, 10, 10) // statement cut 25 Sep, due 12 Oct, reminders from 9 Oct
+    }
+
+    @Test
+    fun aCardWhoseStatementIsATrackedBillIsRemindedOnceByTheBillNotAlsoByItsBillingDates() {
+        val day = cardWithStatementDue()
+        assertTrue(withBills.check(day, noon, zone).notices.any { it.kind == app.expenses.core.domain.NoticeKind.CARD_DUE }, "with no bill, the card reminds by itself")
+        billStore.add(found("b1", due = "2026-10-12")); billStore.track("b1")
+        val kinds = withBills.check(day, noon, zone).notices.map { it.kind }
+        assertTrue(app.expenses.core.domain.NoticeKind.BILL_TRACKED in kinds); assertTrue(app.expenses.core.domain.NoticeKind.CARD_DUE !in kinds, "$kinds")
+    }
+
+    @Test
+    fun aTrackedBillForAnotherDueDateDoesNotSilenceTheCard() {
+        val day = cardWithStatementDue()
+        billStore.add(found("b1", due = "2026-10-25")); billStore.track("b1")
+        assertTrue(withBills.check(day, noon, zone).notices.any { it.kind == app.expenses.core.domain.NoticeKind.CARD_DUE })
+    }
 }

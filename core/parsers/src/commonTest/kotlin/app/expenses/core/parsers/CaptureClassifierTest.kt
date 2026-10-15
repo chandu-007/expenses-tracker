@@ -59,4 +59,18 @@ class CaptureClassifierTest {
     fun everyBuiltInRootIsAValidUpperCaseHeaderWithAName() {
         for ((root, name) in SenderRules.BUILT_IN) { assertEquals(root, SenderRules.headerRoot("AX-$root-S")); assertTrue(name.isNotBlank()) }
     }
+
+    @Test
+    fun moneyThatMovedStaysATransactionEvenWhenTheTextAlsoQuotesWhatIsDue() {
+        val credited = "Rs.10,000.00 credited to your HDFC Bank Credit Card ending 1234 on 15-10-26. Total Amt Due Rs 5,000, Due Date 25-10-26."
+        assertTrue(CaptureClassifier.classify("AX-HDFCBK-S", credited, today = kotlinx.datetime.LocalDate(2026, 10, 15)) is CaptureOutcome.Transaction)
+        val spent = "Rs.900.00 spent on your HDFC Bank Credit Card ending 1234 at SHOP on 15-10-26. Total Amt Due Rs 5,000, Due Date 25-10-26."
+        assertTrue(CaptureClassifier.classify("AX-HDFCBK-S", spent, today = kotlinx.datetime.LocalDate(2026, 10, 15)) is CaptureOutcome.Transaction)
+    }
+
+    @Test
+    fun aPromisedDebitIsStillABill() {
+        val emi = "Rs.5,400.00 will be debited from your A/c XX1234 on 14-11-26 towards loan EMI."
+        assertTrue(CaptureClassifier.classify("AX-HDFCBK-S", emi, today = kotlinx.datetime.LocalDate(2026, 10, 15)) is CaptureOutcome.Bill)
+    }
 }

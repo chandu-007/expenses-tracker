@@ -1035,6 +1035,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun billsUi(ok: AppContainer.Opened.Ok): BillsUi {
+        ok.bills.releaseForRemovedEntries() // a payment that was deleted or undone no longer pays its bill
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val today = LocalDate.now()
         fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
@@ -1043,6 +1044,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** What the home banner shows: three small queries, whatever the size of the history. */
     private fun billPeek(ok: AppContainer.Opened.Ok): BillPeekUi {
+        ok.bills.releaseForRemovedEntries() // a payment that was deleted or undone no longer pays its bill
         val fresh = ok.bills.count(app.expenses.core.storage.BillStatus.FOUND).toInt()
         val tracked = ok.bills.count(app.expenses.core.storage.BillStatus.TRACKED).toInt()
         if (fresh + tracked == 0) return BillPeekUi()

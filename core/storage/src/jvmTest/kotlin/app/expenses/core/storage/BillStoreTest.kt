@@ -87,4 +87,19 @@ class BillStoreTest {
         assertNull(restored.get("t")!!.body)
         assertFalse(restored.add(bill("t2", key = "kt")), "a restored bill still stops its own reminder from coming back")
     }
+
+    @Test
+    fun aBillPaidByAnEntryThatIsLaterDeletedIsTrackedAgainButOneWithNoEntryOrALiveEntryStaysPaid() {
+        val inr = app.expenses.core.domain.Currency.INR
+        val ledger = app.expenses.core.storage.LedgerStore(db, app.expenses.core.domain.sync.HlcClock("n1")) { 1L }
+        ledger.saveAccount(app.expenses.core.domain.ledger.Account(app.expenses.core.domain.ledger.AccountId("bank"), "Bank", app.expenses.core.domain.ledger.AccountType.BANK, inr))
+        for (id in listOf("live", "gone")) ledger.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId(id), 1_000, app.expenses.core.domain.ledger.AccountId("bank"), app.expenses.core.domain.Money(100, inr)))
+        listOf("a", "b", "c").forEach { store.add(bill(it)); store.track(it) }
+        store.markPaid("a", "live", 5); store.markPaid("b", "gone", 5); store.markPaid("c", null, 5)
+        assertFalse(store.releaseForRemovedEntries(), "nothing deleted yet")
+        ledger.delete(app.expenses.core.domain.ledger.EntryId("gone"))
+        assertTrue(store.releaseForRemovedEntries())
+        assertEquals(BillStatus.TRACKED, store.get("b")!!.status); assertNull(store.get("b")!!.entryId); assertNull(store.get("b")!!.paidAt)
+        assertEquals(BillStatus.PAID, store.get("a")!!.status); assertEquals(BillStatus.PAID, store.get("c")!!.status, "marked paid with no entry stays paid")
+    }
 }

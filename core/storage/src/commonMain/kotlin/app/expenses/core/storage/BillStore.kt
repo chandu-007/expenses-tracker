@@ -56,6 +56,13 @@ class BillStore(private val db: ExpensesDb) {
     /** PAID back to TRACKED. The entry that was made stays; deleting it is the person's call. */
     fun unpay(id: String) { q.unpayBill(id) }
 
+    /** Puts back to tracked any paid bill whose settling entry was deleted or undone; true when one was. */
+    fun releaseForRemovedEntries(): Boolean = db.transactionWithResult {
+        val before = q.billCount(BillStatus.PAID.name).executeAsOne()
+        q.releaseBillsOfRemovedEntries()
+        q.billCount(BillStatus.PAID.name).executeAsOne() != before
+    }
+
     fun setDueDate(id: String, isoDate: String?) { q.setBillDue(isoDate, id) }
 
     /** Puts a bill back exactly as a backup held it; one already here is left alone. */

@@ -106,7 +106,21 @@ class NotificationService(
     }
 
     /** Credit cards with billing dates that still have something to pay on their latest statement. */
-    private fun cardsDue(today: LocalDate, zone: TimeZone): List<CardDue> = cards.all().mapNotNull { terms ->
+    private fun cardsDue(today: LocalDate, zone: TimeZone): List<CardDue> = withoutTracked(cardsDueAll(today, zone))
+
+    /**
+     * A card whose statement is already a tracked bill (same due date, give or take two days) is reminded by that bill, not twice. Each tracked card bill covers
+     * one card, so two cards due the same day are not both silenced by one bill.
+     */
+    private fun withoutTracked(due: List<CardDue>): List<CardDue> {
+        val covered = bills?.list(BillStatus.TRACKED)?.filter { it.kind == "CREDIT_CARD" }?.mapNotNull { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } }?.toMutableList() ?: return due
+        return due.filter { c ->
+            val i = covered.indexOfFirst { kotlin.math.abs(it.toEpochDays() - c.dueDate.toEpochDays()) <= 2 }
+            if (i >= 0) { covered.removeAt(i); false } else true
+        }
+    }
+
+    private fun cardsDueAll(today: LocalDate, zone: TimeZone): List<CardDue> = cards.all().mapNotNull { terms ->
         val account = q.accountById(terms.accountId).executeAsOneOrNull() ?: return@mapNotNull null
         val standing = cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 } ?: return@mapNotNull null
         val currency = app.expenses.core.domain.Currency(account.currency, q.selectCurrencies().executeAsList().first { it.code == account.currency }.digits.toInt())

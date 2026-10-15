@@ -210,9 +210,9 @@ fun CaptureSettingsScreen(
                 Switch(checked = settings.smsOn && permissionGranted, onCheckedChange = onToggle, modifier = Modifier.testTag("capture_sms_switch"))
             }
             Text("What this does", style = MaterialTheme.typography.labelMedium)
-            Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. You decide whether to add it.", style = MaterialTheme.typography.bodyMedium)
+            Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. If it says a bill is due (a card statement, electricity, water, gas, mobile, broadband, an EMI, an insurance premium), it is shown on the Bills page and you are told. You decide whether to add either.", style = MaterialTheme.typography.bodyMedium)
             Text("What it does not do", style = MaterialTheme.typography.labelMedium)
-            Text("Texts from people, one-time passwords and anything from a sender that is not a bank are ignored without being read. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
+            Text("Texts from people, one-time passwords and anything from a sender that is not on the list below are ignored without being read; the sender is checked first. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
             if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -225,7 +225,7 @@ fun CaptureSettingsScreen(
             HorizontalDivider()
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))
-            Text("Only senders on the built-in list of banks are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { onHeaders(headers) }, modifier = Modifier.testTag("capture_headers_save")) { Text("Save names") }
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
