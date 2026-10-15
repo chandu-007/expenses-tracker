@@ -46,7 +46,7 @@ fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> U
             Text(advice, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("health_advice"))
             HorizontalDivider()
             Text("Last 30 days", style = MaterialTheme.typography.labelMedium)
-            listOf("Found as transactions" to report.captured, "Same text seen again" to report.duplicates, "One-time passwords ignored" to report.otps, "Texts from people ignored" to report.personal,
+            listOf("Found as transactions" to report.captured, "Found as bills" to report.bills, "Same text seen again" to report.duplicates, "One-time passwords ignored" to report.otps, "Texts from people ignored" to report.personal,
                 "Bank notices ignored (not a payment)" to report.notices, "Declined payments ignored" to report.declined).forEach { (label, n) ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label); Text(n.toString(), modifier = Modifier.testTag("health_count_$label")) }
             }

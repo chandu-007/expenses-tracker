@@ -24,7 +24,11 @@ class SmsReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val on = container.write { it.templates.setting(Capture.SETTING_SMS_ON) == "1" } == true
-                if (on) texts.forEach { (sender, body, at) -> Capture.ingest(container, Capture.SMS, sender, body, at) }
+                if (on) {
+                    val found = texts.map { (sender, body, at) -> Capture.ingest(container, Capture.SMS, sender, body, at) }
+                    // a bill is told about at once, not at the next hourly check
+                    if (found.any { it == app.expenses.core.storage.CaptureEventOutcome.BILL }) NotificationWork.checkNow(context.applicationContext, container)
+                }
             } finally {
                 pending.finish()
             }

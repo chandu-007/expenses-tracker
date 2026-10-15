@@ -12,7 +12,7 @@ data class InboxItem(
 )
 
 /** What capture decided about one text, for [InboxStore.recordEvent]. The text itself is never recorded. */
-enum class CaptureEventOutcome { CAPTURED, DUPLICATE, PERSONAL_SENDER, NOT_ALLOWLISTED, OTP, NOT_A_TRANSACTION, DECLINED }
+enum class CaptureEventOutcome { CAPTURED, DUPLICATE, PERSONAL_SENDER, NOT_ALLOWLISTED, OTP, NOT_A_TRANSACTION, DECLINED, BILL }
 
 /**
  * Transactions found in texts and notifications, held until confirmed or dismissed. Nothing here is in the ledger. Capture is idempotent

@@ -200,6 +200,32 @@ CREATE TABLE inbox (
 );
 CREATE INDEX inbox_status ON inbox(status, received_at DESC);
 
+-- Bills found in texts and notifications (a card statement, an electricity bill, an EMI falling due). FOUND waits for the person to add it, TRACKED is being watched
+-- until it is paid, PAID is done, DISMISSED was skipped. The text is kept only while FOUND, like the inbox. [dedupe_key] makes capture idempotent: the same bill
+-- reminded again (same biller, card or consumer, due date and amount) is one row in any state, so a bill the person skipped does not come back.
+CREATE TABLE bill (
+    id TEXT NOT NULL PRIMARY KEY,
+    source TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    issuer TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    min_due_minor INTEGER,
+    currency TEXT NOT NULL,
+    due_date TEXT,
+    account_last4 TEXT,
+    reference TEXT,
+    auto_debit INTEGER NOT NULL DEFAULT 0,
+    received_at INTEGER NOT NULL,
+    body TEXT,
+    status TEXT NOT NULL DEFAULT 'FOUND',
+    entry_id TEXT,
+    paid_at INTEGER,
+    dedupe_key TEXT NOT NULL UNIQUE
+);
+CREATE INDEX bill_status ON bill(status, due_date);
+
 -- The person's own rules for captured transactions, in the order they are tried, and what they chose for each payee last time.
 CREATE TABLE capture_rule (
     id TEXT NOT NULL PRIMARY KEY,
@@ -541,6 +567,34 @@ SELECT COUNT(*) FROM inbox WHERE source = ? AND sender = ? AND body = ? AND rece
 insertInbox:
 INSERT OR IGNORE INTO inbox(id, source, sender, issuer, received_at, direction, amount_minor, currency, txn_date, reference, account_last4, via_upi, confidence, body, fingerprint)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+insertBill:
+INSERT OR IGNORE INTO bill(id, source, sender, issuer, kind, title, amount_minor, min_due_minor, currency, due_date, account_last4, reference, auto_debit, received_at, body, status, entry_id, paid_at, dedupe_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+billById:
+SELECT * FROM bill WHERE id = ?;
+
+billsByStatus:
+SELECT * FROM bill WHERE status = :status ORDER BY due_date IS NULL, due_date, received_at DESC, id LIMIT :limit;
+
+billCount:
+SELECT COUNT(*) FROM bill WHERE status = ?;
+
+allBills:
+SELECT * FROM bill;
+
+moveBill:
+UPDATE bill SET status = :to, body = NULL WHERE id = :id AND status = :from;
+
+payBill:
+UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL WHERE id = :id AND status IN ('FOUND', 'TRACKED');
+
+unpayBill:
+UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL WHERE id = ? AND status = 'PAID';
+
+setBillDue:
+UPDATE bill SET due_date = :due WHERE id = :id AND status IN ('FOUND', 'TRACKED');
 
 inboxPendingTotals:
 SELECT COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN 0 ELSE amount_minor END), 0) AS money_out, COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount_minor ELSE 0 END), 0) AS money_in

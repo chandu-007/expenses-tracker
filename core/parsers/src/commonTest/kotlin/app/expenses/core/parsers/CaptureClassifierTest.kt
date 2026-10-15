@@ -43,7 +43,8 @@ class CaptureClassifierTest {
 
     @Test
     fun noticesAndDeclinedPaymentsAreIgnoredWithTheirOwnReason() {
-        assertEquals(CaptureOutcome.Ignored(IgnoreReason.NOT_A_TRANSACTION, "HDFCBK"), CaptureClassifier.classify("AX-HDFCBK-S", "Your HDFC Bank credit card statement is generated. Total amount due Rs. 4,500.00 by 12-11-26."))
+        // a statement used to be ignored as a due notice; it is now a bill to add (see BillParserTest)
+        assertTrue(CaptureClassifier.classify("AX-HDFCBK-S", "Your HDFC Bank credit card statement is generated. Total amount due Rs. 4,500.00 by 12-11-2026.") is CaptureOutcome.Bill)
         assertEquals(CaptureOutcome.Ignored(IgnoreReason.NOT_A_TRANSACTION, "HDFCBK"), CaptureClassifier.classify("AX-HDFCBK-S", "Dear customer, update your KYC to continue banking."))
         assertEquals(CaptureOutcome.Ignored(IgnoreReason.DECLINED, "HDFCBK"), CaptureClassifier.classify("AX-HDFCBK-S", "Transaction of Rs.500.00 on card ending 4321 was declined due to insufficient funds."))
     }

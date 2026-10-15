@@ -31,6 +31,9 @@ object SenderRules {
         "SCBANK" to "Standard Chartered", "HSBCIN" to "HSBC", "AMEXIN" to "American Express", "CITIBK" to "Citibank", "INDBNK" to "Indian Bank",
         // Payment apps, for notification capture (FR-CAP-06): not text headers, but the same list decides which sources are read.
         "GPAY" to "Google Pay", "PHONEPE" to "PhonePe", "PAYTM" to "Paytm", "BHIM" to "BHIM",
+        // Utilities, telecom and insurers that send bills. **Even more provisional than the banks above:** a handful written from memory of common headers, not checked against live
+        // traffic. Electricity, water and gas boards each use their own header; capture health lists the headers it saw and ignored, and a person can add them.
+        "BESCOM" to "BESCOM", "MSEDCL" to "MSEDCL", "TATAPW" to "Tata Power", "JIOPAY" to "Jio", "AIRTEL" to "Airtel", "LICIND" to "LIC",
         "ONECRD" to "OneCard", "SLCEIT" to "slice", "JUPITR" to "Jupiter", "PAYTMB" to "Paytm Payments Bank", "AIRBNK" to "Airtel Payments Bank",
     )
 }

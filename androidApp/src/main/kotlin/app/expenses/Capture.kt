@@ -1,6 +1,10 @@
 package app.expenses
 
 import app.expenses.core.parsers.CaptureClassifier
+import app.expenses.core.storage.BillStatus
+import app.expenses.core.storage.Bill
+import app.expenses.core.parsers.BillNotice
+import app.expenses.core.parsers.BillKind
 import app.expenses.core.parsers.CaptureOutcome
 import app.expenses.core.parsers.IgnoreReason
 import app.expenses.core.parsers.SenderRules
@@ -33,11 +37,31 @@ object Capture {
     /** A payment app often posts one notification twice a moment apart; the same words from the same app within this long are that repost, not a second payment. */
     const val REPOST_WINDOW_MS = 10_000L
 
+    /** How a bill reads: "HDFC Bank credit card 0862", "BESCOM electricity bill". */
+    fun billTitle(n: BillNotice, issuer: String): String =
+        if (n.kind == BillKind.CREDIT_CARD) "$issuer credit card" + (n.accountLast4?.let { " $it" } ?: "") else "${n.biller ?: issuer} ${n.kind.label}"
+
+    private fun billOf(r: CaptureOutcome.Bill, source: String, sender: String, receivedAt: Long, body: String, arrived: java.time.LocalDate): Bill {
+        val n = r.notice
+        // the same bill reminded again (same kind, sender, card or consumer, due date and amount) has the same key; with no date, the month it arrived stands in
+        val key = listOf(n.kind.name, r.headerRoot, n.accountLast4 ?: n.reference ?: "", n.dueDate?.toString() ?: "nodate:${arrived.year}-${arrived.monthValue}", n.amountMinor).joinToString("|")
+        return Bill(
+            UUID.randomUUID().toString(), source, sender.trim(), r.issuer, n.kind.name, billTitle(n, r.issuer), n.amountMinor, n.minDueMinor, n.currency, n.dueDate?.toString(), n.accountLast4, n.reference,
+            n.autoDebit, receivedAt, body.replace(Regex("\\s+"), " ").trim().take(600), BillStatus.FOUND, null, null, key,
+        )
+    }
+
     suspend fun ingest(container: AppContainer, source: String, sender: String, body: String, receivedAt: Long): CaptureEventOutcome =
         container.write { ok ->
             val extra = ok.templates.setting(SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
             val now = System.currentTimeMillis()
-            val outcome = when (val r = CaptureClassifier.classify(sender, body, extra)) {
+            val zone = java.time.ZoneId.systemDefault()
+            val arrived = java.time.Instant.ofEpochMilli(receivedAt).atZone(zone).toLocalDate()
+            val outcome = when (val r = CaptureClassifier.classify(sender, body, extra, kotlinx.datetime.LocalDate(arrived.year, arrived.monthValue, arrived.dayOfMonth))) {
+                is CaptureOutcome.Bill -> {
+                    val b = billOf(r, source, sender, receivedAt, body, arrived)
+                    if (ok.bills.add(b)) CaptureEventOutcome.BILL else CaptureEventOutcome.DUPLICATE
+                }
                 is CaptureOutcome.Ignored -> {
                     val event = when (r.reason) {
                         IgnoreReason.PERSONAL_SENDER -> CaptureEventOutcome.PERSONAL_SENDER
@@ -61,7 +85,7 @@ object Capture {
                 }
             }
             ok.inbox.recordEvent(now, SenderRules.headerRoot(sender), outcome)
-            if (outcome == CaptureEventOutcome.CAPTURED) changes.value += 1
+            if (outcome == CaptureEventOutcome.CAPTURED || outcome == CaptureEventOutcome.BILL) changes.value += 1
             outcome
         } ?: CaptureEventOutcome.NOT_A_TRANSACTION
 }

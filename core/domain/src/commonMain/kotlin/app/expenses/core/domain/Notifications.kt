@@ -2,7 +2,7 @@ package app.expenses.core.domain
 
 import kotlinx.datetime.LocalDate
 
-enum class NoticeKind { BILL_DUE, CARD_DUE, BUDGET_NEAR, BUDGET_OVER, WEEKLY_RECAP }
+enum class NoticeKind { BILL_DUE, CARD_DUE, BUDGET_NEAR, BUDGET_OVER, WEEKLY_RECAP, BILL_FOUND, BILL_TRACKED }
 
 /**
  * What the user chose about notifications. Bill reminders and budget alerts are separate switches; nothing else is ever sent.
@@ -42,6 +42,12 @@ data class Notice(val key: String, val kind: NoticeKind, val title: String, val 
 /** A bill waiting to be posted, as far as notifications care. */
 data class BillDue(val itemId: String, val name: String, val amountText: String?, val date: LocalDate)
 
+/** A bill just found in a message and not yet added. [dueText] is how its date reads ("due 25 Oct"), or empty. */
+data class FoundBill(val id: String, val title: String, val amountText: String?, val dueText: String)
+
+/** A bill the person is tracking. [daysLeft] is negative once it is overdue. */
+data class TrackedBill(val id: String, val title: String, val amountText: String?, val dueDate: LocalDate)
+
 /** An overall or category budget at its current state, with display text prepared by the caller. */
 data class BudgetStanding(val scope: String?, val name: String, val state: BudgetState, val remainingText: String, val periodStart: LocalDate)
 
@@ -64,9 +70,30 @@ object NoticePlanner {
         alreadySent: Set<String>,
         cards: List<CardDue> = emptyList(),
         recap: RecapDue? = null,
+        foundBills: List<FoundBill> = emptyList(),
+        trackedBills: List<TrackedBill> = emptyList(),
     ): List<Notice> {
         if (prefs.isQuiet(minuteOfDay)) return emptyList()
         val out = mutableListOf<Notice>()
+        if (prefs.bills) {
+            // a bill found in a message is told about at once (not from the reminder hour), once, unless it is quiet hours: then at the next check
+            for (b in foundBills) {
+                val key = foundKey(b.id)
+                if (key in alreadySent) continue
+                out += Notice(key, NoticeKind.BILL_FOUND, "Bill found: ${b.title}", listOfNotNull(b.amountText, b.dueText.takeIf { it.isNotEmpty() }, "Tap to add it").joinToString(" · "))
+            }
+        }
+        if (prefs.bills && minuteOfDay >= prefs.billHour * 60) {
+            // a tracked bill: a heads-up three days ahead, one on the day, and one when it is overdue, each once
+            for (b in trackedBills.sortedBy { it.dueDate }) {
+                val daysLeft = (b.dueDate.toEpochDays() - today.toEpochDays()).toInt()
+                val stage = when { daysLeft < 0 -> "overdue"; daysLeft == 0 -> "today"; daysLeft <= TRACKED_AHEAD_DAYS -> "ahead"; else -> continue }
+                val key = trackedKey(b.id, stage)
+                if (key in alreadySent) continue
+                val title = when (stage) { "overdue" -> "${b.title} is overdue"; "today" -> "${b.title} is due today"; else -> "${b.title} due ${if (daysLeft == 1) "tomorrow" else "in $daysLeft days"}" }
+                out += Notice(key, NoticeKind.BILL_TRACKED, title, listOfNotNull(b.amountText, "Open the app to mark it paid").joinToString(" · "))
+            }
+        }
         if (prefs.bills && minuteOfDay >= prefs.billHour * 60) {
             for (b in bills.filter { it.date <= today }.sortedBy { it.date }) {
                 val key = billKey(b.itemId, b.date)
@@ -108,6 +135,13 @@ object NoticePlanner {
     }
 
     fun cardKey(accountId: String, due: LocalDate, onOrAfterDue: Boolean) = "card:$accountId:${due.toEpochDays()}:${if (onOrAfterDue) "due" else "ahead"}"
+
+    /** How many days ahead a tracked bill gets its first heads-up. */
+    const val TRACKED_AHEAD_DAYS = 3
+
+    fun foundKey(id: String) = "billfound:$id"
+
+    fun trackedKey(id: String, stage: String) = "billtrack:$id:$stage"
 
     fun billKey(itemId: String, date: LocalDate) = "bill:$itemId:${date.toEpochDays()}"
 

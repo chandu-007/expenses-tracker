@@ -1,5 +1,9 @@
 package app.expenses.core.parsers
 
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
 /** Why a text was not taken as a transaction. Each one is counted by capture health, never stored with its body. */
 enum class IgnoreReason { PERSONAL_SENDER, NOT_ALLOWLISTED, OTP, NOT_A_TRANSACTION, DECLINED }
 
@@ -8,6 +12,9 @@ sealed interface CaptureOutcome {
 
     /** A transaction alert from an allowlisted sender. [issuer] is the display name, [headerRoot] what matched. */
     data class Transaction(val issuer: String, val headerRoot: String, val alert: ParsedAlert) : CaptureOutcome
+
+    /** Something to pay (a card statement, an electricity bill, an EMI falling due), not a payment that happened. [issuer] is who sent it. */
+    data class Bill(val issuer: String, val headerRoot: String, val notice: BillNotice) : CaptureOutcome
 }
 
 /**
@@ -15,9 +22,12 @@ sealed interface CaptureOutcome {
  * promise: the sender is checked **before the body is read**, so a text from a person or an unknown header is never parsed at all.
  */
 object CaptureClassifier {
-    fun classify(sender: String, body: String, extraRoots: Set<String> = emptySet()): CaptureOutcome {
+    /** [today] resolves a due date written without a year; it is the day the text arrived. */
+    fun classify(sender: String, body: String, extraRoots: Set<String> = emptySet(), today: LocalDate = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date): CaptureOutcome {
         val root = SenderRules.headerRoot(sender) ?: return CaptureOutcome.Ignored(IgnoreReason.PERSONAL_SENDER, null)
         val issuer = SenderRules.BUILT_IN[root] ?: if (root in extraRoots.map { it.uppercase() }) root else return CaptureOutcome.Ignored(IgnoreReason.NOT_ALLOWLISTED, root)
+        // a message that says something is due is read as a bill first; a payment that was made carries no such wording and is read as a transaction
+        BillParser.parse(body, root, today)?.let { return CaptureOutcome.Bill(issuer, root, it) }
         return when (val r = GenericAlertParser.parse(body, root)) {
             is ParseResult.NotATransaction -> CaptureOutcome.Ignored(if (r.reason == "otp") IgnoreReason.OTP else IgnoreReason.NOT_A_TRANSACTION, root)
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)

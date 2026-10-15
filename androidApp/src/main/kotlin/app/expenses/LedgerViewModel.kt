@@ -71,6 +71,7 @@ import app.expenses.core.domain.DraftResult
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.InboxStatus
+import app.expenses.core.parsers.BillKind
 import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.parsers.PayeeKind
 import app.expenses.core.parsers.PayeeKinds
@@ -113,7 +114,7 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     /** The entry's kind (EXPENSE, INCOME, TRANSFER, REFUND ...): a transfer between your own accounts is neither money in nor out. */
     val kind: String = "",
 )
-data class AccountUi(val id: String, val name: String)
+data class AccountUi(val id: String, val name: String, val type: String = "")
 
 /** A captured transaction waiting for review. [accountId] and [categoryId] are the suggestions the row starts with. */
 data class InboxRowUi(
@@ -156,6 +157,22 @@ data class InboxPeekRow(val title: String, val amountText: String, val credit: B
 
 /** What the home banner shows about To review: the first few items, the rest as a count, and what is waiting in total. */
 data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int = 0, val outText: String = "", val inText: String = "")
+
+/** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
+data class BillRowUi(
+    val id: String, val title: String, val kind: String, val issuer: String, val amountText: String, val amountPlain: String, val minDueText: String?, val minDuePlain: String?,
+    val dueText: String, val dueIn: String, val dueEpochDay: Long?, val overdue: Boolean, val soon: Boolean, val autoDebit: Boolean, val last4: String?,
+    val body: String, val status: String, val cardAccountId: String, val payFromId: String, val paidText: String = "",
+)
+
+/** The bills page: found in messages, being tracked (soonest first), and recently paid. */
+data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<BillRowUi> = emptyList(), val paid: List<BillRowUi> = emptyList(), val loaded: Boolean = false)
+
+/** One line of the home banner for bills. */
+data class BillPeekRow(val id: String, val title: String, val amountText: String, val dueIn: String, val isNew: Boolean, val overdue: Boolean)
+
+/** What the home banner shows about bills: how many are new, and the first few (new ones first, then the soonest being tracked). */
+data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0) { val isEmpty get() = rows.isEmpty() }
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
@@ -401,6 +418,7 @@ sealed interface UiState {
         val baseCurrency: Currency,
         val inboxPending: Int,
         val inboxPeek: InboxPeekUi = InboxPeekUi(),
+        val billPeek: BillPeekUi = BillPeekUi(),
         val smsCapture: Boolean,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
@@ -982,6 +1000,124 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    // ---- bills found in messages ----
+
+    private val _bills = MutableStateFlow(BillsUi())
+    val bills: StateFlow<BillsUi> get() = _bills
+    @Volatile private var billsWatching = false
+
+    /** The bills page asks to be kept up to date while it is open. */
+    fun watchBills(on: Boolean) {
+        billsWatching = on
+        if (on) withStore { _bills.value = billsUi(it) } else _bills.value = BillsUi()
+    }
+
+    private val billDay = DateTimeFormatter.ofPattern("EEE, d MMM")
+
+    private fun billRow(ok: AppContainer.Opened.Ok, b: app.expenses.core.storage.Bill, accounts: List<app.expenses.core.storage.db.Account>, today: LocalDate): BillRowUi {
+        val currency = Currency(b.currency, currencyDigits[b.currency] ?: 2)
+        val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val days = due?.let { it.toEpochDay() - today.toEpochDay() }
+        val dueIn = when { days == null -> ""; days == 0L -> "today"; days == 1L -> "tomorrow"; days > 1 -> "in $days days"; days == -1L -> "1 day overdue"; else -> "${-days} days overdue" }
+        val remembered = ok.templates.setting(accountKey(b.issuer, b.accountLast4))?.let { id -> accounts.firstOrNull { it.id == id } }
+        val cards = accounts.filter { it.type == "CREDIT_CARD" && it.archived == 0L }
+        val bank = accounts.firstOrNull { it.type == "BANK" && it.archived == 0L } ?: accounts.firstOrNull { it.archived == 0L }
+        val isCard = b.kind == BillKind.CREDIT_CARD.name
+        return BillRowUi(
+            b.id, b.title, b.kind, b.issuer, Money(b.amountMinor, currency).formatted(), Money(b.amountMinor, currency).toPlainString(),
+            b.minDueMinor?.let { Money(it, currency).formatted() }, b.minDueMinor?.let { Money(it, currency).toPlainString() },
+            due?.let { "Due ${billDay.format(it)}" } ?: "No due date in the message", dueIn, due?.toEpochDay(), days != null && days < 0, days != null && days in 0..3, b.autoDebit, b.accountLast4,
+            b.body.orEmpty(), b.status.name,
+            if (isCard) (remembered?.takeIf { it.type == "CREDIT_CARD" } ?: cards.singleOrNull())?.id.orEmpty() else "",
+            (if (isCard) bank else remembered?.takeIf { it.type != "CREDIT_CARD" } ?: bank)?.id.orEmpty(),
+            b.paidAt?.let { "Paid " + DateTimeFormatter.ofPattern("d MMM").format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) }.orEmpty(),
+        )
+    }
+
+    private fun billsUi(ok: AppContainer.Opened.Ok): BillsUi {
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
+        val today = LocalDate.now()
+        fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
+        return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), rows(app.expenses.core.storage.BillStatus.TRACKED, 100), rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true)
+    }
+
+    /** What the home banner shows: three small queries, whatever the size of the history. */
+    private fun billPeek(ok: AppContainer.Opened.Ok): BillPeekUi {
+        val fresh = ok.bills.count(app.expenses.core.storage.BillStatus.FOUND).toInt()
+        val tracked = ok.bills.count(app.expenses.core.storage.BillStatus.TRACKED).toInt()
+        if (fresh + tracked == 0) return BillPeekUi()
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
+        val today = LocalDate.now()
+        val soon = LocalDate.now().plusDays(14)
+        val shown = ok.bills.list(app.expenses.core.storage.BillStatus.FOUND, 3).map { it to true } +
+            ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED, 3).filter { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { !it.isAfter(soon) } == true }.map { it to false }
+        val rows = shown.take(3).map { (b, isNew) -> billRow(ok, b, accounts, today).let { BillPeekRow(it.id, it.title, it.amountText, it.dueIn, isNew, it.overdue) } }
+        if (rows.isEmpty()) return BillPeekUi(newCount = fresh)
+        return BillPeekUi(fresh, rows, more = (fresh + shown.count { !it.second } - rows.size).coerceAtLeast(0))
+    }
+
+    private fun billsChanged(ok: AppContainer.Opened.Ok, message: String? = null) {
+        refresh(ok) // also reloads the bills page when it is open
+        if (message != null) _state.update { (it as? UiState.Ready)?.copy(message = message) ?: it }
+    }
+
+    /** The person adds a found bill to the ones they track. */
+    fun trackBill(id: String) = withStore { ok -> if (ok.bills.track(id)) billsChanged(ok, "Added to your bills") }
+
+    fun dismissBill(id: String) = withStore { ok -> if (ok.bills.dismiss(id)) billsChanged(ok) }
+
+    fun setBillDue(id: String, epochDay: Long) = withStore { ok -> ok.bills.setDueDate(id, LocalDate.ofEpochDay(epochDay).toString()); billsChanged(ok) }
+
+    fun unpayBill(id: String) = withStore { ok -> ok.bills.unpay(id); billsChanged(ok, "Back in your bills") }
+
+    /**
+     * Marks a bill paid. With [record] the payment is also entered in the ledger: a transfer from [payFromId] to the card [cardAccountId] for a credit card
+     * bill, otherwise an expense in the Bills category. Without it the bill is only marked (it was recorded already, or will be from the bank's text).
+     */
+    fun payBill(id: String, payFromId: String, cardAccountId: String, amountText: String, record: Boolean, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val b = ok.bills.get(id) ?: return@write "That bill is no longer here."
+                    if (b.status == app.expenses.core.storage.BillStatus.PAID || b.status == app.expenses.core.storage.BillStatus.DISMISSED) return@write "That bill was already handled."
+                    var entryId: String? = null
+                    if (record) {
+                        if (b.currency != BaseCurrency.current.code) return@write "This bill is in ${b.currency}, but your ledger is in ${BaseCurrency.current.code}. Mark it paid without recording."
+                        val isCard = b.kind == BillKind.CREDIT_CARD.name && cardAccountId.isNotEmpty()
+                        val billsCategory = ok.categories.list().firstOrNull { it.parentId == null && !it.hidden && it.name.equals("Bills", ignoreCase = true) }?.id.orEmpty()
+                        val draft = if (isCard) EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, b.title, System.currentTimeMillis())
+                        else EntryDraft(null, DraftKind.EXPENSE, amountText, billsCategory, emptyList(), payFromId, "", b.title, System.currentTimeMillis())
+                        entryId = try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
+                    }
+                    ok.bills.markPaid(id, entryId, System.currentTimeMillis())
+                    billsChanged(ok, if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
+                    null
+                }
+            } catch (e: Exception) { e.message ?: "That could not be saved." }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /**
+     * A payment text that was just added settles the bill it is for: a tracked bill for the same amount from the same card or account, in a window around its
+     * due date. Only marks the bill; the entry the person just added is the record. Returns the bill's title when one was settled.
+     */
+    private fun settleBillFor(ok: AppContainer.Opened.Ok, item: app.expenses.core.storage.InboxItem, entryId: String): String? {
+        val today = LocalDate.now()
+        val hit = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED).firstOrNull { b ->
+            if (b.currency != item.currency) return@firstOrNull false
+            val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            if (due != null && (today.isBefore(due.minusDays(30)) || today.isAfter(due.plusDays(15)))) return@firstOrNull false
+            val sameAccount = if (b.accountLast4 != null && item.accountLast4 != null) b.accountLast4 == item.accountLast4 else b.issuer.equals(item.issuer, ignoreCase = true) && b.accountLast4 == null
+            val card = b.kind == BillKind.CREDIT_CARD.name
+            // a payment into a card may be anything from the minimum to the whole; any other bill is paid in full
+            val amountOk = if (card && item.direction == "CREDIT") item.amountMinor >= (b.minDueMinor ?: b.amountMinor) && item.amountMinor <= b.amountMinor else item.amountMinor == b.amountMinor
+            sameAccount && amountOk && (if (card) item.direction == "CREDIT" else item.direction == "DEBIT")
+        } ?: return null
+        ok.bills.markPaid(hit.id, entryId, System.currentTimeMillis())
+        return hit.title
+    }
+
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
         val usable = ok.categories.list().filter { !it.hidden }.map { it.id }.toSet()
@@ -1106,6 +1242,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                         ok.inbox.confirm(id, entry.id.value)
                     }
                     if (treatment == "PAYMENT") ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
+                    settleBillFor(ok, i, entry.id.value)?.let { title -> _state.update { st -> (st as? UiState.Ready)?.copy(message = "Marked $title as paid") ?: st } }
                     // the account on the text's own side of a transfer is the one this bank and last four digits stand for
                     if (treatment == "TRANSFER" && i.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), if (i.direction == "CREDIT") toId else fromId)
                     if (treatment == "PAYMENT" && kind == DraftKind.EXPENSE) ok.captureRules.learn(PayeeGuess.of(i.body.orEmpty()), categoryId)
@@ -1786,6 +1923,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         rowCache.clear() // names (accounts, categories) may have changed since the rows were formatted
         _people.value = ok.people.list().map { PersonUi(it.id, it.name) }
         if (loansWatching) loadLoans(ok)
+        if (billsWatching) _bills.value = billsUi(ok)
         val q = ok.db.schemaQueries
         val accounts = q.selectAccounts().executeAsList()
         accountNames = accounts.associate { it.id to it.name }
@@ -1827,14 +1965,15 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             showBackupNudge = nudgeCache,
             hiddenOlder = ok.recurring.hiddenOlder(kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)),
             recurring = recurringUi(ok, today),
-            accounts = active.map { AccountUi(it.id, it.name) },
-            allAccounts = accounts.map { AccountUi(it.id, it.name) },
+            accounts = active.map { AccountUi(it.id, it.name, it.type) },
+            allAccounts = accounts.map { AccountUi(it.id, it.name, it.type) },
             accountRows = accountRowsCache,
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             baseCurrency = BaseCurrency.current,
             inboxPending = ok.inbox.pendingCount().toInt(),
             inboxPeek = inboxPeek(ok),
+            billPeek = billPeek(ok),
             smsCapture = ok.templates.setting(Capture.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),

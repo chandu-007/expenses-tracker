@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
@@ -131,6 +132,7 @@ fun EntryListScreen(
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenLoans: () -> Unit,
+    onOpenBills: () -> Unit = {},
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -225,6 +227,7 @@ fun EntryListScreen(
                                     MenuTile(Icons.Outlined.Repeat, "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
                                     MenuTile(Icons.Outlined.CalendarMonth, "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
                                     MenuTile(Icons.Outlined.SwapHoriz, "Lent and borrowed", "open_loans") { closeMore(); onOpenLoans() }
+                                    MenuTile(Icons.Outlined.Receipt, "Bills", "open_bills", badge = state.billPeek.newCount.takeIf { it > 0 }?.toString()) { closeMore(); onOpenBills() }
                                 }
                                 MenuGroup("Make it yours") {
                                     MenuTile(Icons.Outlined.Palette, "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
@@ -250,6 +253,7 @@ fun EntryListScreen(
                 Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp).testTag("month_spend"))
                 }
             }
+            if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
             if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
             if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
             state.homeLayout.visible().forEach { section ->
@@ -406,6 +410,37 @@ private fun InboxBanner(state: UiState.Ready, onOpen: () -> Unit) {
                     CategoryAvatar(r.title, r.title, Modifier.padding(end = 10.dp), size = 28.dp)
                     Text(r.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Bills at a glance: how many are new, and the first few with when they are due. The whole card opens the bills page. */
+@Composable
+private fun BillsBanner(peek: app.expenses.BillPeekUi, onOpen: () -> Unit) {
+    androidx.compose.material3.Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("bills_banner"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else "Bills coming up", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("bills_banner_title"))
+                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(if (peek.newCount > 0) "Add" else "Open", color = MaterialTheme.colorScheme.onSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondary).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            peek.rows.forEach { r ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("bills_banner_row_${r.id}")) {
+                    CategoryAvatar(r.title, r.title, Modifier.padding(end = 10.dp), size = 28.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(r.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        if (r.dueIn.isNotEmpty()) Text("Due ${r.dueIn}", style = MaterialTheme.typography.bodySmall, color = if (r.overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(r.amountText, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
                 }
             }
             if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

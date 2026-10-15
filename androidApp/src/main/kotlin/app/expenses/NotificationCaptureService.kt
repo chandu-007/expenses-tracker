@@ -26,7 +26,7 @@ class NotificationCaptureService : NotificationListenerService() {
         val container = (applicationContext as ExpensesApp).container
         CoroutineScope(Dispatchers.IO).launch {
             val on = container.write { it.templates.setting(Capture.SETTING_NOTIF_ON) == "1" } == true
-            if (on) Capture.ingest(container, Capture.NOTIFICATION, name, words, sbn.postTime)
+            if (on && Capture.ingest(container, Capture.NOTIFICATION, name, words, sbn.postTime) == app.expenses.core.storage.CaptureEventOutcome.BILL) NotificationWork.checkNow(applicationContext, container)
         }
     }
 

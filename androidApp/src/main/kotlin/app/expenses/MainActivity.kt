@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.glance.appwidget.updateAll
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
+import app.expenses.ui.BillsScreen
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.Appearance
@@ -63,11 +64,13 @@ class MainActivity : FragmentActivity() {
 
     /** Counts requests to open the add screen from the launcher shortcut or the Quick Settings tile. */
     private val addRequests = MutableStateFlow(0)
+    private val billsRequests = MutableStateFlow(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("onCreate: begin")
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
+        if (savedInstanceState == null && intent.action == ACTION_OPEN_BILLS) billsRequests.value = 1
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
         setContent {
@@ -113,6 +116,11 @@ class MainActivity : FragmentActivity() {
                     LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
                     var budgeting by rememberSaveable { mutableStateOf(false) }
                     var loansOpen by rememberSaveable { mutableStateOf(false) }
+                    var billsOpen by rememberSaveable { mutableStateOf(false) }
+                    val billsUi by viewModel.bills.collectAsStateWithLifecycle(context = MAIN)
+                    val billAsks by billsRequests.collectAsState()
+                    var handledBillAsks by rememberSaveable { mutableIntStateOf(0) }
+                    LaunchedEffect(billAsks) { if (billAsks > handledBillAsks) { handledBillAsks = billAsks; billsOpen = true; viewModel.watchBills(true) } }
                     // "personId|gave|amount" when the add form is opened from the lent-and-borrowed pages
                     var prefillLoan by rememberSaveable { mutableStateOf<String?>(null) }
                     val loans by viewModel.loans.collectAsStateWithLifecycle(context = MAIN)
@@ -155,7 +163,7 @@ class MainActivity : FragmentActivity() {
                         is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) {
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                            customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen,
+                            customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen,
                         ).indexOf(true).let { if (it == 1 || it == 21) -1 else it } // the add and edit form open at once: quick entry is the app's promise
                         app.expenses.ui.ScreenEnter(screenKey) { when {
                             history != null -> {
@@ -365,6 +373,13 @@ class MainActivity : FragmentActivity() {
                                     onBack = { adding = false; prefillLoan = null },
                                 )
                             }
+                            billsOpen -> {
+                                BackHandler { billsOpen = false; viewModel.watchBills(false) }
+                                BillsScreen(
+                                    ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
+                                    onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
+                                )
+                            }
                             loansOpen -> {
                                 BackHandler { if (loans.selected != null) viewModel.selectLoanPerson(null) else { loansOpen = false; viewModel.watchLoans(false) } }
                                 LoansScreen(
@@ -399,6 +414,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenReports = { reporting = true; viewModel.openReports() },
                                 onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                                 onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
+                                onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
                                 onCustomiseHome = { customisingHome = true },
                                 onOpenAppearance = { appearing = true },
                                 onOpenSearch = { searching = true },
@@ -463,10 +479,13 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.action == ACTION_ADD_EXPENSE) addRequests.value += 1
+        if (intent.action == ACTION_OPEN_BILLS) billsRequests.value += 1
     }
 
     companion object {
         const val ACTION_ADD_EXPENSE = "app.expenses.action.ADD_EXPENSE"
+        /** A bill notification: open the bills page. */
+        const val ACTION_OPEN_BILLS = "app.expenses.action.OPEN_BILLS"
     }
 }
 

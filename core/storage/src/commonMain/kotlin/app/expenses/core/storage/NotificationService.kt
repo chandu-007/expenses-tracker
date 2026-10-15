@@ -32,6 +32,7 @@ class NotificationService(
     private val budgets: BudgetStore,
     private val cards: CardStore,
     private val reports: ReportStore,
+    private val bills: BillStore? = null,
 ) {
     private val q get() = db.schemaQueries
 
@@ -70,8 +71,29 @@ class NotificationService(
             BudgetStanding(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.state, left, status.period.start)
         }
         val prefs = prefs()
-        return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null))
+        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1"
+        return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide)))
     }
+
+    private fun money(minor: Long, code: String, hide: Boolean): String? {
+        if (hide) return null // with Hide amounts on, a notification does not carry the figure either
+        val digits = q.selectCurrencies().executeAsList().firstOrNull { it.code == code }?.digits?.toInt() ?: 2
+        return app.expenses.core.domain.Money(minor, app.expenses.core.domain.Currency(code, digits)).formatted()
+    }
+
+    private val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    /** Bills waiting to be added, newest first (at most [MAX_BILL_NOTICES], so a flood of reminders cannot bury the phone). */
+    private fun foundBills(hide: Boolean): List<app.expenses.core.domain.FoundBill> = bills?.list(BillStatus.FOUND, MAX_BILL_NOTICES.toLong())?.map { b ->
+        val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "due ${it.dayOfMonth} ${monthNames[it.monthNumber - 1]}" }.orEmpty()
+        app.expenses.core.domain.FoundBill(b.id, b.title, money(b.amountMinor, b.currency, hide), due)
+    }.orEmpty()
+
+    /** Bills being tracked that have a due date. */
+    private fun trackedBills(hide: Boolean): List<app.expenses.core.domain.TrackedBill> = bills?.list(BillStatus.TRACKED)?.mapNotNull { b ->
+        val date = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+        app.expenses.core.domain.TrackedBill(b.id, b.title, money(b.amountMinor, b.currency, hide), date)
+    }.orEmpty()
 
     /** The recap of the last finished week, or null when there is nothing to say. Computed only when the recap is switched on. */
     private fun recapDue(today: LocalDate, zone: TimeZone, currency: Currency): RecapDue? {
@@ -100,6 +122,7 @@ class NotificationService(
     private fun sent(): Set<String> = q.settingValue(SENT).executeAsOneOrNull()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
 
     companion object {
+        private const val MAX_BILL_NOTICES = 5
         private const val RECAP = "notif_recap"
         private const val BILLS = "notif_bills"
         private const val BUDGETS = "notif_budgets"

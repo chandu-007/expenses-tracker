@@ -132,4 +132,44 @@ class NotificationServiceTest {
         assertEquals(NotificationService.MAX_REMEMBERED, stored.size)
         assertEquals("k${NotificationService.MAX_REMEMBERED + 50}", stored.last())
     }
+
+    // ---- bills found in messages ----
+
+    private val billStore = BillStore(db)
+    private val withBills = NotificationService(db, recurring, budgets, CardStore(db, clock) { 1L }, ReportStore(db, ledger), billStore)
+    private fun found(id: String, due: String? = "2026-10-25") = Bill(id, "SMS", "AX-HDFCBK-S", "HDFC Bank", "CREDIT_CARD", "HDFC Bank credit card", 1_234_500, 61_700, "INR", due, "0862", null, false, 1_000, "text", BillStatus.FOUND, null, null, "k$id")
+
+    @Test
+    fun aFoundBillIsToldAboutWithItsAmountAndDateAndNotAgainOnceShown() {
+        billStore.add(found("b1"))
+        val first = withBills.check(today, noon, zone).notices.single { it.kind == app.expenses.core.domain.NoticeKind.BILL_FOUND }
+        assertEquals("Bill found: HDFC Bank credit card", first.title); assertEquals("₹12,345.00 · due 25 Oct · Tap to add it", first.text)
+        withBills.markShown(listOf(first))
+        assertTrue(withBills.check(today, noon, zone).notices.none { it.kind == app.expenses.core.domain.NoticeKind.BILL_FOUND })
+    }
+
+    @Test
+    fun hideAmountsKeepsTheFigureOutOfTheNotification() {
+        billStore.add(found("b1"))
+        db.schemaQueries.putSetting("hide_amounts", "1")
+        val n = withBills.check(today, noon, zone).notices.single { it.kind == app.expenses.core.domain.NoticeKind.BILL_FOUND }
+        assertEquals("due 25 Oct · Tap to add it", n.text)
+    }
+
+    @Test
+    fun aTrackedBillRemindsFromThreeDaysBeforeItsDateAndAFoundOneDoesNot() {
+        billStore.add(found("t", due = "2026-10-09")); billStore.track("t")
+        billStore.add(found("f", due = "2026-10-09"))
+        val kinds = withBills.check(today, noon, zone).notices.map { it.kind }
+        assertEquals(1, kinds.count { it == app.expenses.core.domain.NoticeKind.BILL_TRACKED }, "only the tracked one reminds")
+        assertEquals(1, kinds.count { it == app.expenses.core.domain.NoticeKind.BILL_FOUND })
+        billStore.add(found("undated", due = null)); billStore.track("undated")
+        assertEquals(1, withBills.check(today, noon, zone).notices.count { it.kind == app.expenses.core.domain.NoticeKind.BILL_TRACKED }, "a tracked bill with no date has nothing to remind about")
+    }
+
+    @Test
+    fun noMoreThanFiveFoundBillsAreToldAboutAtOnce() {
+        repeat(8) { billStore.add(found("b$it").copy(dedupeKey = "k$it", dueDate = "2026-10-2${it}")) }
+        assertEquals(5, withBills.check(today, noon, zone).notices.count { it.kind == app.expenses.core.domain.NoticeKind.BILL_FOUND })
+    }
 }

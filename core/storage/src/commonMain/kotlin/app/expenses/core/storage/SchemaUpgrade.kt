@@ -32,6 +32,8 @@ object SchemaUpgrade {
         run(driver, "CREATE INDEX IF NOT EXISTS entry_deleted_ids ON entry(id) WHERE deleted = 1")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_tag_tag ON entry_tag(tag, entry_id)")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_loans ON entry(person_id, currency, direction, amount_minor, occurred_at) WHERE kind = 'SETTLEMENT' AND deleted = 0")
+        run(driver, "CREATE TABLE IF NOT EXISTS bill (id TEXT NOT NULL PRIMARY KEY, source TEXT NOT NULL, sender TEXT NOT NULL, issuer TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, amount_minor INTEGER NOT NULL, min_due_minor INTEGER, currency TEXT NOT NULL, due_date TEXT, account_last4 TEXT, reference TEXT, auto_debit INTEGER NOT NULL DEFAULT 0, received_at INTEGER NOT NULL, body TEXT, status TEXT NOT NULL DEFAULT 'FOUND', entry_id TEXT, paid_at INTEGER, dedupe_key TEXT NOT NULL UNIQUE)")
+        run(driver, "CREATE INDEX IF NOT EXISTS bill_status ON bill(status, due_date)")
         run(driver, "CREATE TABLE IF NOT EXISTS person (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)")
     }
 

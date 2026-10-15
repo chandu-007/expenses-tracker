@@ -84,6 +84,7 @@ class BackupStore(
             captureRules = q.allCaptureRules().executeAsList().map { BackupCaptureRule(it.id, it.position.toInt(), it.pattern, it.category_id) },
             merchantMap = q.allMerchantMap().executeAsList().map { BackupMerchant(it.key, it.category_id, it.uses.toInt()) },
             people = q.allPeople().executeAsList().map { BackupPerson(it.id, it.name, it.deleted == 1L) },
+            bills = q.allBills().executeAsList().map { BackupBill(it.id, it.issuer, it.kind, it.title, it.amount_minor, it.min_due_minor, it.currency, it.due_date, it.account_last4, it.reference, it.auto_debit == 1L, it.received_at, it.status, it.paid_at, it.dedupe_key) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
             settings = SETTINGS.mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.let { k to it } }.toMap(),
         )
@@ -126,6 +127,8 @@ class BackupStore(
         }
         // people before the entries that refer to them; one already here keeps its own name
         for (p in data.people) q.insertPersonRaw(p.id, p.name, if (p.deleted) 1 else 0)
+        // a bill still waiting (FOUND) is not restored: it was never added, and its message is not in the file; a restore keeps what the person acted on
+        for (b in data.bills.filter { it.status != BillStatus.FOUND.name }) q.insertBill(b.id, "backup", "", b.issuer, b.kind, b.title, b.amountMinor, b.minDueMinor, b.currency, b.dueDate, b.accountLast4, b.reference, if (b.autoDebit) 1L else 0L, b.receivedAt, null, b.status, null, b.paidAt, b.dedupeKey)
         for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags))
         for (t in data.templates) if (q.templateById(t.id).executeAsOneOrNull() == null) {
             templates.save(Template(t.id, t.name, t.amountMinor?.let { Money(it, currency(t.currency)) }, CategoryId(t.categoryId), AccountId(t.accountId), t.merchant))

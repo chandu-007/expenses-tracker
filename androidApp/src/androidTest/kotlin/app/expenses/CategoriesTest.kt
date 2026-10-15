@@ -90,6 +90,7 @@ class CategoriesTest {
         compose.onNodeWithTag("add").performClick()
         waitFor("new_category_chip")
         compose.onNodeWithTag("new_category_chip").performScrollTo().performClick()
+        waitFor("cat_name") // the dialog opens a moment after the tap; typing before it exists failed on a busy emulator
         compose.onNodeWithTag("cat_name").performTextInput("Pets")
         compose.onNodeWithTag("cat_confirm").assertIsEnabled().performClick()
         waitForText("Pets")

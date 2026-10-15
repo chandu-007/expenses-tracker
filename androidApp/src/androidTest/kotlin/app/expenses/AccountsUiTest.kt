@@ -165,9 +165,11 @@ class AccountsUiTest {
         // refused values are explained in the dialog, which stays open
         type("card_statement_day", "31"); type("card_due_day", "5"); tap("card_save")
         waitFor("card_problem")
-        type("card_statement_day", "15"); tap("card_save")
+        // not today's date: a payment made on the statement day itself belongs to the statement before it, so on the 15th a fixed "15" made this test fail
+        val statementDay = if (java.time.LocalDate.now().dayOfMonth == 14) 13 else 14
+        type("card_statement_day", statementDay.toString()); tap("card_save")
         waitFor("card_status_Amex")
-        text("Statement on the 15th")
+        text("Statement on the ${statementDay}th")
         assertTrue(statusOf("Amex").contains("₹400.00 left · minimum about ₹20.00"), statusOf("Amex"))
         runBlocking { container.write { ok -> ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("pay"), System.currentTimeMillis(), AccountId(bankId), AccountId(cardId), Money(40_000, Currency.INR))) } }
         tap("back"); openAccounts()

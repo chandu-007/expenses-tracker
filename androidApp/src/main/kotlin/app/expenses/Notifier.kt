@@ -38,7 +38,7 @@ object Notifier {
     }
 
     internal fun channelOf(kind: NoticeKind) = when (kind) {
-        NoticeKind.BILL_DUE, NoticeKind.CARD_DUE -> CHANNEL_BILLS
+        NoticeKind.BILL_DUE, NoticeKind.CARD_DUE, NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED -> CHANNEL_BILLS
         NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> CHANNEL_BUDGETS
         NoticeKind.WEEKLY_RECAP -> CHANNEL_RECAP
     }
@@ -49,12 +49,19 @@ object Notifier {
         createChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val openBills = PendingIntent.getActivity(context, 1, Intent(context, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_BILLS).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return notices.filter { n ->
             val channel = channelOf(n.kind)
             if (manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE) return@filter false // the user turned this channel off in system settings
-            val notification = NotificationCompat.Builder(context, channel)
+            val isBill = n.kind == NoticeKind.BILL_FOUND || n.kind == NoticeKind.BILL_TRACKED
+            val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification).setContentTitle(n.title).setContentText(n.text)
-                .setContentIntent(open).setAutoCancel(true).setCategory(NotificationCompat.CATEGORY_REMINDER).build()
+                .setContentIntent(if (isBill) openBills else open).setAutoCancel(true).setCategory(NotificationCompat.CATEGORY_REMINDER)
+            // a bill's amount is not shown on a locked screen: the lock-screen version says only that there is a bill
+            if (isBill) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
+                NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_notification).setContentTitle(if (n.kind == NoticeKind.BILL_FOUND) "A bill was found" else "A bill needs attention").setContentText("Open the app to see it").build(),
+            )
+            val notification = builder.build()
             @Suppress("MissingPermission") // checked in canShow
             NotificationManagerCompat.from(context).notify(n.key.hashCode(), notification)
             true
