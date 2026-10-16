@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
@@ -133,6 +134,8 @@ fun EntryListScreen(
     onOpenCalendar: () -> Unit,
     onOpenLoans: () -> Unit,
     onOpenBills: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
+    tourMore: Boolean? = null,
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -185,6 +188,8 @@ fun EntryListScreen(
         )
     }
     var moreOpen by rememberSaveable { mutableStateOf(false) }
+    // while the tour is running it says whether the More page is open; otherwise (null) the person decides
+    androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { moreOpen = it } }
     BackHandler(enabled = moreOpen && selected.isEmpty()) { moreOpen = false }
     val closeMore = { moreOpen = false }
     Scaffold(
@@ -241,12 +246,15 @@ fun EntryListScreen(
                                     MenuTile(Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "open_privacy") { closeMore(); onOpenPrivacy() }
                                     MenuTile(Icons.Outlined.Backup, "Your data: export and backup", "open_data") { closeMore(); onOpenData() }
                                 }
+                                MenuGroup("Help") {
+                                    MenuTile(Icons.Outlined.Info, "How to use this app", "open_guide") { closeMore(); onOpenGuide() }
+                                }
             }
             return@Scaffold
         }
         Column(Modifier.fillMaxSize().padding(padding)) {
             val onHero = MaterialTheme.colorScheme.onPrimary
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heroBackground()) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
                 if (android.os.Build.VERSION.SDK_INT >= 31) HeroGlow(onHero) // Android 12 and later: two softly blurred lights behind the figures
                 Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)

@@ -12,9 +12,14 @@ MAX_WAIT="${MAX_WAIT:-600}"     # seconds to wait for it before running anyway (
 rm -rf core/*/build/test-results androidApp/build/test-results androidApp/build/outputs/androidTest-results
 
 echo "== step 1: build, host tests, release build, functional device tests"
-./gradlew check :androidApp:assembleRelease :androidApp:assembleDebug :androidApp:connectedDebugAndroidTest --rerun-tasks \
-  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest,app.expenses.RecreateStressTest > /tmp/verify-step1.log 2>&1
+# The build and the device tests are two Gradle runs, one after the other: when they were one, the Android plugin's probe of the emulator ran alongside the
+# compile and lint work and, on a machine short of memory, timed out ("Unknown API Level"), so no test ran at all. The same tasks run either way.
+./gradlew check :androidApp:assembleRelease :androidApp:assembleDebug --rerun-tasks > /tmp/verify-step1.log 2>&1
 step1=$?
+./gradlew --stop >/dev/null 2>&1
+./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest,app.expenses.RecreateStressTest >> /tmp/verify-step1.log 2>&1
+step1=$(( step1 != 0 ? step1 : $? ))
 echo "step 1 gradle exit: $step1"
 cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verify-functional.xml 2>/dev/null
 

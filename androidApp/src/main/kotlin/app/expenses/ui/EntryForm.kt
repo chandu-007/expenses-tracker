@@ -205,7 +205,7 @@ fun EntryFormScreen(
                 textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.testTag("amount"),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.tourSpot("amount").testTag("amount"),
             )
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
 

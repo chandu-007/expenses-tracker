@@ -1,0 +1,253 @@
+package app.expenses
+
+import android.content.Intent
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import app.expenses.core.domain.Currency
+import app.expenses.core.domain.Money
+import app.expenses.core.domain.ledger.Account
+import app.expenses.core.domain.ledger.AccountId
+import app.expenses.core.domain.ledger.AccountType
+import app.expenses.core.domain.ledger.CategoryId
+import app.expenses.core.domain.ledger.CategorySplit
+import app.expenses.core.domain.ledger.EntryId
+import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.storage.BillStatus
+import app.expenses.core.storage.EntryDetails
+import kotlinx.coroutines.runBlocking
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.FileInputStream
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+
+/**
+ * NOT part of the suite: copied in by tools/video/make_video.py, run once, and removed. One test per part of the app. Each starts from the same made-up ledger,
+ * records the screen, and then really uses that part (typing, tapping, swiping) while its narration plays: every line waits as long as its clip lasts, and the
+ * moment each began is written to the log (device clock) so the audio can be laid on the video afterwards.
+ */
+@RunWith(AndroidJUnit4::class)
+class DemoVideoTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private val inst = InstrumentationRegistry.getInstrumentation()
+    private val context = inst.targetContext
+    private val container get() = (context.applicationContext as ExpensesApp).container
+    private val ui = inst.uiAutomation
+    private val dir = "/sdcard/Download"
+
+    private fun sh(cmd: String): String = FileInputStream(ui.executeShellCommand(cmd).fileDescriptor).use { String(it.readBytes()) }
+    private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    private fun waitFor(tag: String) = compose.waitUntil(15_000) { has(tag) }
+    private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
+    private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick(); pause(700) }
+    private fun type(tag: String, text: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; runCatching { node(tag).performTextClearance() }; node(tag).performTextInput(text); pause(800) }
+    private fun pause(ms: Long) = Thread.sleep(ms)
+    private fun openMore(tile: String) { tap("more_menu"); pause(500); tap(tile) }
+
+    private var durations = mapOf<String, Double>()
+    private lateinit var scene: String
+
+    private fun mark(key: String) { android.util.Log.w("DEMOMARK", "$scene $key ${System.currentTimeMillis()}") }
+
+    /** Starts the line's narration, runs what the line is about while it plays, and waits out whatever is left of it. */
+    private fun line(i: Int, actions: () -> Unit = {}) {
+        val key = "${scene}_$i"
+        mark(key); val t = System.currentTimeMillis()
+        actions()
+        val left = (durations.getValue(key) * 1000).toLong() + 600 - (System.currentTimeMillis() - t)
+        if (left > 0) pause(left)
+    }
+
+    /** The same made-up ledger every time. The two texts (a bill and a bank debit) put banners above the list, so only the parts that are about them get them. */
+    private fun seed(texts: Boolean) {
+        runBlocking {
+            container.startFresh()
+            container.write { ok ->
+                ok.store.saveAccount(Account(AccountId("hdfc"), "HDFC Card", AccountType.CREDIT_CARD, Currency.INR))
+                val day = 86_400_000L; val now = System.currentTimeMillis()
+                listOf(
+                    Triple("Coffee", 180_00L, "cash" to "Food"), Triple("Auto fare", 120_00L, "cash" to "Transport"), Triple("Groceries run", 1_860_00L, "bank" to "Groceries"),
+                    Triple("Dinner with friends", 1_240_00L, "hdfc" to "Food"), Triple("Metro recharge", 500_00L, "bank" to "Transport"), Triple("Phone recharge", 299_00L, "bank" to "Bills"),
+                    Triple("Movie tickets", 700_00L, "hdfc" to "Fun"), Triple("Pharmacy", 415_00L, "bank" to "Health"), Triple("Coffee beans", 450_00L, "cash" to "Food"),
+                    Triple("New shoes", 2_499_00L, "hdfc" to "Shopping"), Triple("Electricity", 1_842_00L, "bank" to "Bills"), Triple("Groceries top-up", 640_00L, "cash" to "Groceries"),
+                ).forEachIndexed { i, (merchant, minor, where) ->
+                    val (acct, cat) = where
+                    ok.store.save(Expense(EntryId(UUID.randomUUID().toString()), now - (i * 1) * day - 3_600_000L * (i + 1), AccountId(acct), Money(minor, Currency.INR), listOf(CategorySplit(CategoryId(cat), Money(minor, Currency.INR)))), EntryDetails(merchant = merchant))
+                }
+            }
+            if (!texts) return@runBlocking
+            val due = LocalDate.now().plusDays(9).format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+            Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 4821 statement is generated. Total Amt Due Rs.8,450.00, Min Amt Due Rs.423.00, Due Date $due.", System.currentTimeMillis())
+            Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Rs.1,250.00 debited from A/c XX1234 on ${LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yy"))} to VPA bigbasket@okhdfc (UPI Ref 628374659283). Not you? Call 18002586161", System.currentTimeMillis() + 1)
+        }
+    }
+
+    /** One part of the app: the same ledger, a fresh recording, the actions, and the recording stopped. */
+    private fun part(name: String, texts: Boolean = false, open: () -> Unit = {}, body: () -> Unit) {
+        scene = name
+        durations = sh("cat $dir/narr.txt").lines().filter { it.isNotBlank() }.associate { l -> l.substringBefore(' ') to l.substringAfter(' ').trim().toDouble() }
+        sh("rm -f $dir/rec_$name.mp4")
+        seed(texts)
+        val s = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)); waitFor("add"); pause(1_200)
+        mark("REC_START")
+        ui.executeShellCommand("screenrecord --size 540x1170 --bit-rate 4000000 --time-limit 170 $dir/rec_$name.mp4")
+        pause(1_500)
+        try {
+            // the narrator names the part while the app is taken to it
+            val titleKey = "${name}_t"
+            if (durations.containsKey(titleKey)) {
+                mark(titleKey); val t = System.currentTimeMillis()
+                open()
+                val left = (durations.getValue(titleKey) * 1000).toLong() + 400 - (System.currentTimeMillis() - t)
+                if (left > 0) pause(left)
+            } else open()
+            body()
+        } finally {
+            mark("END"); pause(800)
+            sh("pkill -2 screenrecord"); pause(2_500) // finish the file properly
+            s.close()
+        }
+    }
+
+    @Test fun intro() = part("intro") { line(0); line(1) }
+
+    @Test fun add() = part("add") {
+        line(0) { tap("add"); waitFor("amount"); pause(600); type("amount", "320"); tap("category_chip_Food"); type("note", "Lunch at Saravana"); tap("save"); waitFor("add") }
+        line(1) { pause(1_500) }
+        line(2) { tap("add"); waitFor("amount"); tap("kind_INCOME"); type("amount", "45000"); tap("account_chip_Bank"); type("note", "Salary"); tap("save"); waitFor("add") }
+        line(3) { tap("add"); waitFor("amount"); tap("kind_TRANSFER"); type("amount", "2000"); tap("account_chip_Bank"); tap("to_chip_Cash"); tap("save"); waitFor("add") }
+    }
+
+    @Test fun edit() = part("edit") {
+        line(0) { tap("row_Coffee"); waitFor("amount"); type("amount", "150"); tap("save"); waitFor("add") }
+        line(1) {
+            compose.onNodeWithTag("row_Auto fare", useUnmergedTree = true).performTouchInput { swipeLeft() }
+            pause(1_800)
+            compose.onAllNodes(hasText("Undo"), useUnmergedTree = true)[0].performClick(); pause(1_500)
+        }
+    }
+
+    @Test fun search() = part("search", open = { tap("open_search"); waitFor("search_text"); pause(500) }) {
+        line(0) { type("search_text", "Coffee"); pause(2_500) }
+        line(1) { node("search_text").performTextClearance(); tap("search_category"); tap("search_cat_Groceries"); pause(2_500) }
+        tap("search_back")
+    }
+
+    @Test fun reports() = part("reports", open = { tap("open_reports"); waitFor("report_spent"); pause(500) }) {
+        line(0) { pause(2_500) }
+        line(1) {
+            runCatching { node("report_list").performScrollToNode(hasTestTag("report_row_Food")) }
+            tap("report_row_Food"); waitFor("drill_total"); pause(2_500); tap("drill_back")
+        }
+        line(2) { tap("group_MERCHANT"); pause(2_000); tap("group_CATEGORY"); tap("mode_year"); pause(1_500); tap("mode_period") }
+        tap("reports_back")
+    }
+
+    @Test fun calendar() = part("calendar", open = { openMore("open_calendar"); waitFor("cal_month"); pause(500) }) {
+        line(0) { pause(2_500) }
+        line(1) { tap("cal_day_${LocalDate.now().minusDays(2).dayOfMonth}"); pause(3_000) }
+        tap("calendar_back")
+    }
+
+    @Test fun capture() = part("capture", open = { openMore("open_capture"); waitFor("capture_sms_switch"); pause(500) }) {
+        line(0) { pause(3_000) }
+        line(1) { runCatching { node("capture_headers").performScrollTo() }; pause(3_500) }
+        tap("capture_back")
+    }
+
+    @Test fun inbox() = part("inbox", texts = true) {
+        line(0) { pause(2_500) }
+        line(1) {
+            tap("inbox_banner"); waitFor("inbox_list"); pause(2_500)
+            val id = runBlocking { container.write { it.inbox.list().first().id } }!!
+            tap("inbox_add_$id"); pause(2_500)
+        }
+    }
+
+    @Test fun bills() = part("bills", texts = true) {
+        line(0) { pause(1_500); tap("bills_banner"); waitFor("bills_list"); pause(1_500) }
+        val id = runBlocking { container.write { it.bills.list(BillStatus.FOUND).first().id } }!!
+        line(1) { tap("bill_add_$id"); pause(2_500) }
+        line(2) { tap("bill_pay_$id"); waitFor("bill_pay_amount"); pause(1_500); tap("bill_pay_min"); tap("bill_pay_card_HDFC Card"); pause(1_500); tap("bill_pay_ok"); waitFor("bills_paid_title"); pause(2_500) }
+    }
+
+    @Test fun accounts() = part("accounts", open = { openMore("manage_accounts"); waitFor("accounts_list"); pause(500) }) {
+        line(0) { pause(2_500) }
+        line(1) {
+            tap("add_account"); type("account_name", "Travel Card"); tap("type_CREDIT_CARD"); pause(800); tap("account_save"); pause(1_500)
+            tap("account_HDFC Card"); tap("card_dates"); type("card_statement_day", "15"); type("card_due_day", "5"); tap("card_save")
+            waitFor("card_status_HDFC Card"); pause(2_500)
+        }
+        tap("back")
+    }
+
+    @Test fun categories() = part("categories", open = { openMore("manage_categories"); waitFor("new_category"); pause(500) }) {
+        line(0) { pause(2_500) }
+        line(1) { tap("new_category"); type("cat_name", "Pets"); tap("cat_confirm"); pause(2_500) }
+        tap("categories_back")
+    }
+
+    @Test fun budget() = part("budget") {
+        line(0) { tap("budget_summary"); waitFor("budget_row_overall"); pause(1_000); tap("budget_row_overall"); type("limit_amount", "30000"); tap("limit_save"); pause(1_500); tap("budget_back"); waitFor("add") }
+        line(1) { pause(3_500) }
+    }
+
+    @Test fun recurring() = part("recurring", open = { openMore("open_recurring"); waitFor("new_recurring"); pause(500) }) {
+        line(0) { tap("new_recurring"); type("rec_name", "Rent"); type("rec_amount", "18000"); tap("rec_cat_Bills"); tap("rec_save"); waitFor("rec_row_Rent"); pause(1_500) }
+        line(1) {
+            val id = runBlocking { container.write { it.recurring.list().first().id } }!!
+            tap("due_post_${id}_${LocalDate.now().toEpochDay()}"); pause(2_000); tap("recurring_back"); pause(2_000)
+        }
+    }
+
+    @Test fun loans() = part("loans") {
+        line(0) { tap("add"); waitFor("amount"); tap("kind_LOAN"); type("amount", "2500"); tap("new_person_chip"); type("new_person_name", "Ravi"); tap("new_person_ok"); waitFor("person_chip_Ravi"); tap("account_chip_Bank"); tap("save"); waitFor("add") }
+        openMore("open_loans"); waitFor("loans_list"); pause(800)
+        line(1) {
+            pause(1_200); tap("loan_row_Ravi"); waitFor("loan_balance"); pause(1_500)
+            tap("loan_got_btn"); type("amount", "1000"); tap("save"); pause(2_500)
+        }
+    }
+
+    @Test fun notifications() = part("notifications", open = { openMore("open_notifications"); waitFor("notif_bills"); pause(500) }) {
+        line(0) { pause(2_500); tap("notif_recap"); pause(1_500) }
+        line(1) { tap("notif_quiet"); pause(2_500) }
+        tap("notif_back")
+    }
+
+    @Test fun privacy() = part("privacy") {
+        line(0) { openMore("toggle_privacy"); waitFor("month_spend"); pause(3_000); openMore("toggle_privacy"); pause(1_500) }
+        openMore("open_security"); waitFor("security_back"); pause(500)
+        line(1) { pause(3_000); tap("security_back") }
+        openMore("open_privacy"); waitFor("privacy_internet"); pause(500)
+        line(2) { pause(3_500); tap("privacy_back") }
+    }
+
+    @Test fun data() = part("data", open = { openMore("open_data"); waitFor("data_back"); pause(500) }) {
+        line(0) { pause(2_500) }
+        line(1) { type("backup_pass", "demo passphrase"); type("backup_pass2", "demo passphrase"); pause(2_000) }
+        line(2) { runCatching { node("import_statement").performScrollTo() }; pause(3_000) }
+        tap("data_back")
+    }
+
+    @Test fun look() = part("look", open = { openMore("open_appearance"); waitFor("theme_DARK"); pause(500) }) {
+        line(0) { pause(1_000); tap("theme_DARK"); pause(2_000) }
+        line(1) { tap("accent_green"); pause(2_000); tap("appearance_back"); pause(1_500) }
+    }
+
+    @Test fun outro() = part("outro") { line(0) }
+}

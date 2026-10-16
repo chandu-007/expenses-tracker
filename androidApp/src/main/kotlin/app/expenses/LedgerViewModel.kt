@@ -1000,6 +1000,47 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    // ---- the guide ----
+
+    private val _guide = MutableStateFlow<app.expenses.core.domain.GuidePlan?>(null)
+    /** The guide being shown, or null. Set when the app opens (first time, or after an update), or by the person from More. */
+    val guide: StateFlow<app.expenses.core.domain.GuidePlan?> get() = _guide
+
+    @Volatile private var guideDeferred = false
+
+    /**
+     * The app was opened to do something (the widget, the Quick Settings tile, a bill notification): the tour waits for a plain launch, and one that is already
+     * showing goes away without being recorded as seen. Quick entry must never land in a tour.
+     */
+    fun deferGuide() { guideDeferred = true; _guide.value = null }
+
+    /** Decides, once the store is open, whether the guide is offered now. Nothing is offered over a lock screen: the screen shows it only when unlocked. */
+    private fun offerGuide(ok: AppContainer.Opened.Ok) {
+        if (guideDeferred) return
+        val seen = ok.templates.setting(GuideSettings.SEEN)?.toIntOrNull()
+        val plan = app.expenses.core.domain.Guide.planOnOpen(seen, ok.templates.setting(GuideSettings.OFF) == "1")
+        _guide.value = plan
+        // an update that added nothing to show is not shown again either
+        if (plan == null && seen != null && seen < app.expenses.core.domain.Guide.VERSION && ok.templates.setting(GuideSettings.OFF) != "1") ok.templates.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString())
+    }
+
+    /** More, then How to use this app: every page, and nothing about it is remembered. */
+    fun openGuide() { _guide.value = app.expenses.core.domain.Guide.fullPlan() }
+
+    /** After an update the person asked for the whole guide, not just what is new. */
+    fun showWholeGuide() { _guide.update { it?.copy(steps = app.expenses.core.domain.Guide.steps) } }
+
+    /** Finished, or skipped: either way it is not offered again for this version. [neverAgain] also stops it being offered after later updates. */
+    fun finishGuide(neverAgain: Boolean) {
+        val mode = _guide.value?.mode ?: return
+        _guide.value = null
+        if (mode == app.expenses.core.domain.GuideMode.MANUAL) return
+        withStore { ok ->
+            ok.templates.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString())
+            if (neverAgain) ok.templates.putSetting(GuideSettings.OFF, "1")
+        }
+    }
+
     // ---- bills found in messages ----
 
     private val _bills = MutableStateFlow(BillsUi())
@@ -2088,7 +2129,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
                 is AppContainer.Opened.Ok -> {
-                    container.write { ok -> refresh(ok) }; StartupTrace.mark("open: first page loaded")
+                    container.write { ok -> refresh(ok); offerGuide(ok) }; StartupTrace.mark("open: first page loaded")
                     viewModelScope.launch(BACKGROUND) { Capture.changes.collect { container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) } } }
                     // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
                     container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }

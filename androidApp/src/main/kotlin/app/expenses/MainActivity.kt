@@ -24,6 +24,7 @@ import androidx.glance.appwidget.updateAll
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
 import app.expenses.ui.BillsScreen
+import app.expenses.ui.GuideScreen
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.Appearance
@@ -71,6 +72,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
         if (savedInstanceState == null && intent.action == ACTION_OPEN_BILLS) billsRequests.value = 1
+        if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS)) viewModel.deferGuide()
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
         setContent {
@@ -161,6 +163,48 @@ class MainActivity : FragmentActivity() {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
                         is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) {
+                        // the tour: the app opens each part for real, and a layer on top explains it
+                        val guide by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
+                        var tourIndex by rememberSaveable { mutableIntStateOf(0) }
+                        // back to the home screen, with nothing of the tour left open
+                        val closeEverything = {
+                            adding = false; searching = false; reporting = false; calendaring = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
+                            billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
+                            privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false
+                            viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeReports(); viewModel.cancelRestore()
+                            viewModel.closeEditor(); viewModel.closeHistory()
+                        }
+                        val tourStep = guide?.steps?.getOrNull(tourIndex.coerceAtLeast(0))
+                        androidx.compose.runtime.LaunchedEffect(guide?.steps, tourIndex) {
+                            val t = tourStep ?: return@LaunchedEffect
+                            closeEverything()
+                            when (t.target) {
+                                null, app.expenses.core.domain.GuideTarget.MORE -> {}
+                                app.expenses.core.domain.GuideTarget.ADD -> { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
+                                app.expenses.core.domain.GuideTarget.SEARCH -> searching = true
+                                app.expenses.core.domain.GuideTarget.REPORTS -> { reporting = true; viewModel.openReports() }
+                                app.expenses.core.domain.GuideTarget.INBOX -> { inboxOpen = true; viewModel.loadInbox() }
+                                app.expenses.core.domain.GuideTarget.CAPTURE -> { captureOpen = true; viewModel.loadCaptureSettings() }
+                                app.expenses.core.domain.GuideTarget.BILLS -> { billsOpen = true; viewModel.watchBills(true) }
+                                app.expenses.core.domain.GuideTarget.ACCOUNTS -> managingAccounts = true
+                                app.expenses.core.domain.GuideTarget.CATEGORIES -> managingCategories = true
+                                app.expenses.core.domain.GuideTarget.BUDGET -> budgeting = true
+                                app.expenses.core.domain.GuideTarget.RECURRING -> repeating = true
+                                app.expenses.core.domain.GuideTarget.LOANS -> { loansOpen = true; viewModel.watchLoans(true) }
+                                app.expenses.core.domain.GuideTarget.CALENDAR -> { calendaring = true; viewModel.openCalendar() }
+                                app.expenses.core.domain.GuideTarget.NOTIFICATIONS -> alerts = true
+                                app.expenses.core.domain.GuideTarget.PRIVACY -> privacyOpen = true
+                                app.expenses.core.domain.GuideTarget.DATA -> yourData = true
+                            }
+                        }
+                        guide?.let { g ->
+                            GuideScreen(
+                                g, index = tourIndex, onIndex = { tourIndex = it },
+                                onShowAll = { tourIndex = 0; viewModel.showWholeGuide() },
+                                onTryIt = { viewModel.finishGuide(false); tourIndex = 0 }, // ends the tour and stays on the screen being shown
+                                onFinish = { never -> viewModel.finishGuide(never); tourIndex = 0; closeEverything() },
+                            )
+                        }
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                             customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen,
@@ -415,6 +459,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                                 onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                                 onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
+                                onOpenGuide = viewModel::openGuide,
+                                tourMore = if (guide != null) tourStep?.target == app.expenses.core.domain.GuideTarget.MORE else null,
                                 onCustomiseHome = { customisingHome = true },
                                 onOpenAppearance = { appearing = true },
                                 onOpenSearch = { searching = true },
@@ -480,6 +526,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         if (intent.action == ACTION_ADD_EXPENSE) addRequests.value += 1
         if (intent.action == ACTION_OPEN_BILLS) billsRequests.value += 1
+        if (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS) viewModel.deferGuide()
     }
 
     companion object {

@@ -103,7 +103,8 @@ class AppContainer(private val context: Context) {
             withContext(Dispatchers.IO) {
                 (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } }
                 EncryptedDriver.reset(context)
-                doOpen().also { opened = it }
+                // someone who wipes their ledger already knows the app: the guide is for a first install and for updates, not for starting over
+                doOpen().also { opened = it; (it as? Opened.Ok)?.templates?.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString()) }
             }
         }
     }
