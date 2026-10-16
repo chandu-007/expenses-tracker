@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -70,7 +71,7 @@ class OnboardingTest {
         waitFor("welcome")
         waitAnyText("uninstalling the app deletes it") // the honest sentence about where the data lives
         val started = System.nanoTime()
-        compose.onNodeWithTag("welcome_add").performScrollTo().performClick()          // step 1
+        compose.onNodeWithTag("welcome_add").performClick()          // step 1
         waitFor("amount")
         compose.onNodeWithTag("amount").performTextInput("250")      // step 2 (the amount field already has focus)
         compose.onNodeWithTag("save").performClick()                 // step 3
@@ -85,7 +86,8 @@ class OnboardingTest {
     fun skippingHidesItForGoodEvenAfterARestartAndTheListSaysHowToAdd() {
         launch()
         waitFor("welcome")
-        compose.onNodeWithTag("welcome_skip").performScrollTo().performClick()
+        compose.onNodeWithTag("welcome_skip").assertIsDisplayed() // Skip is on the screen of a fresh install, with no scrolling
+        compose.onNodeWithTag("welcome_skip").performClick()
         waitGone("welcome")
         waitAnyText("No expenses yet")
         assertEquals("1", setting("welcome_dismissed"))
@@ -98,7 +100,7 @@ class OnboardingTest {
     fun theImportOrRestoreButtonOpensTheDataScreenWhereBothLive() {
         launch()
         waitFor("welcome")
-        compose.onNodeWithTag("welcome_import").performScrollTo().performClick()
+        compose.onNodeWithTag("welcome_import").performClick()
         waitFor("import_statement"); waitFor("open_backup")
     }
 
@@ -179,5 +181,12 @@ class OnboardingTest {
         put("backup_last_at", (System.currentTimeMillis() - 2 * day).toString())
         runBlocking { container.write { ok -> ok.templates.putSetting("backup_nudge_snoozed_at", "0") } } // an expired snooze, to prove the age is what matters
         launch(); assertTrue(!present("backup_nudge"), "many new entries but the backup is two days old")
+    }
+
+    @Test
+    fun theAccountStripWaitsBehindTheWelcomeCardAndComesBackWhenItIsSkipped() {
+        launch(); waitFor("welcome")
+        assertTrue(!present("balances"), "two empty tiles would push Skip off a new user's screen")
+        compose.onNodeWithTag("welcome_skip").performClick(); waitGone("welcome"); waitFor("balances")
     }
 }

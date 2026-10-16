@@ -89,8 +89,11 @@ class CategoriesTest {
         launch()
         compose.onNodeWithTag("add").performClick()
         waitFor("new_category_chip")
-        compose.onNodeWithTag("new_category_chip").performScrollTo().performClick()
-        waitFor("cat_name") // the dialog opens a moment after the tap; typing before it exists failed on a busy emulator
+        // The form moves as the keyboard opens, so a tap placed before it settles can miss the chip: tap again until the dialog is there.
+        compose.waitUntil(15_000) {
+            if (compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("new_category_chip").performScrollTo().performClick() }
+            compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("cat_name").performTextInput("Pets")
         compose.onNodeWithTag("cat_confirm").assertIsEnabled().performClick()
         waitForText("Pets")

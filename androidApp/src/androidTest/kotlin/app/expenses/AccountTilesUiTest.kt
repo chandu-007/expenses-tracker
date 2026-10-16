@@ -117,4 +117,16 @@ class AccountTilesUiTest {
         tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
         assertEquals("sav", entries().single().account_id, "not the default Bank account")
     }
+
+    @Test
+    fun aPastedValueKeepsItsLastFourDigitsAndAFifthKeyTypedAfterFourIsIgnored() {
+        save(Account(AccountId("b"), "Savings", AccountType.BANK, inr))
+        launch(); openAccounts(); tap("account_Savings")
+        type("account_last4", "XX 7710"); tap("account_save"); waitFor("account_Savings")
+        assertEquals("7710", look("b")?.last4, "pasted with letters and a space")
+        tap("account_Savings"); type("account_last4", "**** 4821 "); tap("account_save"); waitFor("account_Savings")
+        assertEquals("4821", look("b")?.last4)
+        tap("account_Savings"); type("account_last4", ""); for (c in "123456") node("account_last4").performTextInput(c.toString()); tap("account_save"); waitFor("account_Savings")
+        assertEquals("1234", look("b")?.last4, "typing a fifth digit does nothing")
+    }
 }

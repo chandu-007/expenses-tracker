@@ -162,7 +162,12 @@ private fun AccountDialog(
                 
                 }
                 OutlinedTextField(
-                    last4, { v -> if (v.all { it.isDigit() } && v.length <= 4) { last4 = v; problem = null } }, label = { Text("Last 4 digits (optional)") }, singleLine = true,
+                    last4, { v ->
+                        // a paste such as "XX7710" or "**** 7710" keeps its digits (the last four); a fifth key typed after four digits is ignored
+                        val digits = v.filter { it.isDigit() }
+                        last4 = if (digits.length > 4 && v.length - last4.length <= 1) last4 else digits.takeLast(4)
+                        problem = null
+                    }, label = { Text("Last 4 digits (optional)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth().testTag("account_last4"),
                 )
                 Text("Of the card or the account number, as your bank's texts show it. It lets a text or a bill find this account by itself.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -67,9 +67,12 @@ class HomeLayoutUiTest {
         assertEquals("Cash -₹100.00", chip("Cash"))
     }
 
+    /** On a brand-new ledger the strip waits behind the welcome card (so its Skip stays on screen); these tests are about the balances, not the welcome. */
+    private fun welcomeDone() { db { it.templates.putSetting("welcome_dismissed", "1") } }
+
     @Test
     fun balancesFollowAWriteAfterAMomentWithoutBeingPartOfTheWriteItself() {
-        launch(); waitFor("balance_chip_Bank")
+        welcomeDone(); launch(); waitFor("balance_chip_Bank")
         tap("add"); waitFor("amount"); compose.onNodeWithTag("amount").performTextInput("400"); tap("save"); waitFor("add")
         // the entry is on the list at once; the balances catch up within a couple of seconds
         compose.waitUntil(15_000) { chip("Bank") == "Bank -₹400.00" }
@@ -81,7 +84,7 @@ class HomeLayoutUiTest {
             ok.store.saveAccount(app.expenses.core.domain.ledger.Account(AccountId("old"), "OldCard", app.expenses.core.domain.ledger.AccountType.CREDIT_CARD, Currency.INR, -500_000, true))
             ok.store.saveAccount(app.expenses.core.domain.ledger.Account(AccountId("amex"), "Amex", app.expenses.core.domain.ledger.AccountType.CREDIT_CARD, Currency.INR, -250_000, false))
         }
-        launch(); waitFor("balance_chip_Amex")
+        welcomeDone(); launch(); waitFor("balance_chip_Amex")
         assertTrue(!has("balance_chip_OldCard"), "archived accounts are not shown")
         assertEquals("Amex · owed -₹2,500.00", chip("Amex"))
     }

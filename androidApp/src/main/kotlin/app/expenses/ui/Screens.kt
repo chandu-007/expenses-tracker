@@ -268,7 +268,8 @@ fun EntryListScreen(
                 when (section) {
                     HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
                     HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
-                    HomeSection.BALANCES -> BalancesStrip(state.accountRows.filter { !it.archived }, onManageAccounts)
+                    // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
+                    HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, onManageAccounts)
                     HomeSection.QUICK_ENTRIES -> {
                 if (state.templates.isNotEmpty()) {
                     LazyRow(
