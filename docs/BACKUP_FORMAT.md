@@ -27,7 +27,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 
 ## Payload
 
-`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `captureRules`, `merchantMap`, `people`, `bills`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
+`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `captureRules`, `merchantMap`, `people`, `bills`, `accountLooks`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
 
 ### `currencies`: `code`, `digits`
 
@@ -50,6 +50,8 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 ### `recurring`: `id`, `name`, `amountMinor`, `currency`, `categoryId`, `accountId`, `merchant`, `unit`, `every`, `startDay`, `endKind`, `endValue`, `auto`, `kind` (`EXPENSE`, `INCOME`, `TRANSFER`), `toAccountId` (the account a repeating transfer goes to)
 ### `recurringDone`: `recurringId`, `day`, `outcome`, `entryId`
 ### `cardTerms`: `accountId`, `statementDay` (1 to 28), `dueDay` (1 to 28), `minDuePercent` (0 to 100, an estimate of the minimum due), `remindDaysBefore` (0 to 10). Billing dates of a credit card. Restored only for a credit card that exists here and has none yet.
+
+### `accountLooks`: `accountId`, `network` (`VISA`, `MASTERCARD`, `RUPAY`, `AMEX` or `OTHER`), `tier` (`CLASSIC`, `PLATINUM` or `PREMIUM`), `last4` (exactly four digits). How an account's tile looks and the digits texts use to find it. Any field may be absent. Restored only for an account that exists here and has none yet; an unknown name or digits that are not four are dropped. Absent in a backup made before they existed.
 
 ### `captureRules`: `id`, `position` (the order they are tried in), `pattern` (words that must all appear in the payee or text), `categoryId`. Restored only where this phone has no rule with the same id and the category exists here.
 

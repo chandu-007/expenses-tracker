@@ -25,6 +25,21 @@ cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verif
 
 echo "== step 2: timing gate alone"
 ./gradlew --stop >/dev/null 2>&1
+# An emulator that has just run hundreds of tests is slower than a fresh one (the committed version of the app fails the same timing tests on it), so the
+# timing gate is measured on a freshly started emulator. The gate and its limits are unchanged. RESTART_EMULATOR=0 skips this (a physical device, or a CI
+# runner that provides a clean emulator); AVD names the virtual device to start.
+if [ "${RESTART_EMULATOR:-1}" = "1" ]; then
+  ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"; EMU="${ANDROID_HOME:-$HOME/Library/Android/sdk}/emulator/emulator"; AVD="${AVD:-API26}"
+  if [ -x "$EMU" ] && "$ADB" devices | grep -q '^emulator-'; then
+    echo "restarting the emulator $AVD before the timing gate"
+    "$ADB" emu kill >/dev/null 2>&1; sleep 8; pkill -f "avd $AVD" 2>/dev/null; sleep 3
+    (nohup "$EMU" -avd "$AVD" -no-snapshot -no-audio -no-boot-anim >/tmp/verify-emulator.log 2>&1 &)
+    for _ in $(seq 1 100); do [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break; sleep 5; done
+    sleep 90 # the machine is busy for a while after a boot
+  else
+    echo "no emulator to restart; measuring on the device as it is"
+  fi
+fi
 waited=0
 while :; do
   load=$(uptime | sed 's/.*averages: //' | awk '{print $1}' | tr -d ',')

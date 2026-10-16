@@ -72,6 +72,10 @@ import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.InboxStatus
 import app.expenses.core.parsers.BillKind
+import app.expenses.core.domain.CardTier
+import app.expenses.core.domain.CardNetwork
+import app.expenses.core.domain.AccountLooks
+import app.expenses.core.domain.AccountLook
 import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.parsers.PayeeKind
 import app.expenses.core.parsers.PayeeKinds
@@ -189,6 +193,8 @@ data class AccountRowUi(
     val savedItems: Long = 0,
     /** Billing dates of a credit card, when set. */
     val card: CardRowUi? = null,
+    /** What the tile looks like and the digits texts use: a [app.expenses.core.domain.CardNetwork] and [app.expenses.core.domain.CardTier] name for a credit card, and the last four digits. */
+    val network: String? = null, val tier: String? = null, val last4: String? = null,
 )
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
@@ -462,6 +468,8 @@ private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
 private const val SETTING_APPEARANCE = "appearance"
+/** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
+private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOAN")
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
@@ -785,6 +793,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
         val balances = ok.store.balances()
+        val looks = ok.looks.all().associateBy { it.accountId }
         val today = java.time.LocalDate.now().let { kotlinx.datetime.LocalDate(it.year, it.monthValue, it.dayOfMonth) }
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         return rows.map { a ->
@@ -799,15 +808,16 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 if (type != AccountType.CREDIT_CARD) null else ok.cards.terms(a.id)?.let { t ->
                     CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty())
                 },
+                looks[a.id]?.network?.name, looks[a.id]?.tier?.name, looks[a.id]?.last4,
             )
-        }.sortedWith(compareBy({ it.archived }, { it.name.lowercase() }))
+        }.sortedWith(compareBy({ it.archived }, { ACCOUNT_ORDER.indexOf(it.type).let { i -> if (i < 0) ACCOUNT_ORDER.size else i } }, { it.name.lowercase() }))
     }
 
     /**
      * Creates ([id] null) or edits an account. [openingText] is the amount held, or for a card or loan the amount owed. [onDone] gets null
      * on success, otherwise the reason it was refused (shown in the form, which stays open).
      */
-    fun saveAccount(id: String?, name: String, type: String, openingText: String, onDone: (String?) -> Unit) {
+    fun saveAccount(id: String?, name: String, type: String, openingText: String, network: String?, tier: String?, last4Text: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
@@ -815,12 +825,17 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                     val clean = AccountRules.normalizeName(name)
                     AccountRules.checkName(all.map { Account(AccountId(it.id), it.name, AccountType.valueOf(it.type), inr) }, clean, id)?.let { return@write it }
                     val kind = AccountType.valueOf(type)
+                    val digits = AccountLooks.parseLast4(last4Text).getOrElse { return@write it.message }
                     val typed = openingText.trim()
                     val opening = if (typed.isEmpty()) 0L else (parseAmount(typed, inr)?.minorUnits ?: return@write "Enter the amount as a number, like 25000 or 1250.50")
                     if (id != null && all.first { it.id == id }.type.let { AccountType.valueOf(it).isLiability } != kind.isLiability &&
                         ok.store.accountUsage(AccountId(id)) > 0) return@write "A card or loan cannot become a bank, cash or wallet account once it has entries, or the other way round."
                     val existing = id?.let { ok.db.schemaQueries.accountById(it).executeAsOneOrNull() }
-                    ok.store.saveAccount(Account(AccountId(id ?: UUID.randomUUID().toString()), clean, kind, inr, if (kind.isLiability) -opening else opening, existing?.archived == 1L))
+                    val accountId = id ?: UUID.randomUUID().toString()
+                    ok.store.saveAccount(Account(AccountId(accountId), clean, kind, inr, if (kind.isLiability) -opening else opening, existing?.archived == 1L))
+                    // the network and tier are a credit card's; the digits belong to any account
+                    val isCard = kind == AccountType.CREDIT_CARD
+                    ok.looks.save(AccountLook(accountId, if (isCard) CardNetwork.entries.firstOrNull { it.name == network } else null, if (isCard) CardTier.entries.firstOrNull { it.name == tier } else null, digits))
                     if (id != null && kind != AccountType.CREDIT_CARD) ok.cards.clear(id) // billing dates belong to a credit card only
                     refresh(ok)
                     null
@@ -1060,7 +1075,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         val days = due?.let { it.toEpochDay() - today.toEpochDay() }
         val dueIn = when { days == null -> ""; days == 0L -> "today"; days == 1L -> "tomorrow"; days > 1 -> "in $days days"; days == -1L -> "1 day overdue"; else -> "${-days} days overdue" }
-        val remembered = ok.templates.setting(accountKey(b.issuer, b.accountLast4))?.let { id -> accounts.firstOrNull { it.id == id } }
+        // the account that carries the bill's last four digits, else the one remembered for its issuer and digits
+        val byDigits = ok.looks.accountFor(b.accountLast4, preferCard = b.kind == BillKind.CREDIT_CARD.name)?.let { id -> accounts.firstOrNull { it.id == id } }
+        val remembered = byDigits ?: ok.templates.setting(accountKey(b.issuer, b.accountLast4))?.let { id -> accounts.firstOrNull { it.id == id } }
         val cards = accounts.filter { it.type == "CREDIT_CARD" && it.archived == 0L }
         val bank = accounts.firstOrNull { it.type == "BANK" && it.archived == 0L } ?: accounts.firstOrNull { it.archived == 0L }
         val isCard = b.kind == BillKind.CREDIT_CARD.name
@@ -1193,7 +1210,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 reverses != null -> "Carries the reference of ${if (isCredit) "the payment" else "the money received"} \"${reverses.merchant ?: "an entry"}\" on ${fmt.format(Instant.ofEpochMilli(reverses.occurred_at).atZone(zone).toLocalDate())}: looks like its refund or reversal, not a repeat"
                 else -> null
             }
-            val remembered = ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
+            // the account that carries the text's last four digits (a card when the text says card), else the one remembered for this bank and digits
+            val byDigits = ok.looks.accountFor(i.accountLast4, preferCard = i.body.orEmpty().contains("card", ignoreCase = true))?.takeIf { id -> accounts.any { it.id == id } }
+            val remembered = byDigits ?: ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
             val kind = KindRules.of(i.body.orEmpty(), if (i.direction == "CREDIT") Direction.CREDIT else Direction.DEBIT)
             val cards = accounts.filter { it.type == "CREDIT_CARD" }
             val cashAccounts = accounts.filter { it.type == "CASH" }

@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.FlowRow
 import app.expenses.ACCOUNT_TYPE_LABELS
 import app.expenses.AccountRowUi
+import app.expenses.core.domain.CardNetwork
+import app.expenses.core.domain.CardTier
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.formatted
@@ -51,7 +53,7 @@ import app.expenses.core.domain.formatted
 fun AccountsScreen(
     rows: List<AccountRowUi>,
     onBack: () -> Unit,
-    onSave: (id: String?, name: String, type: String, opening: String, done: (String?) -> Unit) -> Unit,
+    onSave: (id: String?, name: String, type: String, opening: String, network: String?, tier: String?, last4: String, done: (String?) -> Unit) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
     onSaveCard: (id: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, done: (String?) -> Unit) -> Unit,
@@ -75,7 +77,8 @@ fun AccountsScreen(
                 }
                 HorizontalDivider()
             }
-            items(active, key = { it.id }) { AccountRow(it) { editing = it } }
+            // each account is a card; one that is archived stays a plain line below
+            items(active, key = { it.id }) { AccountTile(it, compact = false, onClick = { editing = it }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(168.dp)) }
             if (archived.isNotEmpty()) {
                 item { Text("Archived", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)) }
                 items(archived, key = { it.id }) { AccountRow(it) { editing = it } }
@@ -107,7 +110,7 @@ private fun AccountDialog(
     existing: AccountRowUi?,
     all: List<AccountRowUi>,
     onClose: () -> Unit,
-    onSave: (String?, String, String, String, (String?) -> Unit) -> Unit,
+    onSave: (String?, String, String, String, String?, String?, String, (String?) -> Unit) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
     onSaveCard: (String, String, String, String, String, (String?) -> Unit) -> Unit,
@@ -117,6 +120,9 @@ private fun AccountDialog(
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.type ?: "BANK") }
     var opening by rememberSaveable(existing?.id) { mutableStateOf(existing?.openingText ?: "") }
+    var network by rememberSaveable(existing?.id) { mutableStateOf(existing?.network) }
+    var tier by rememberSaveable(existing?.id) { mutableStateOf(existing?.tier) }
+    var last4 by rememberSaveable(existing?.id) { mutableStateOf(existing?.last4 ?: "") }
     var problem by remember { mutableStateOf<String?>(null) }
     val liability = type == "CREDIT_CARD" || type == "LOAN"
     val onlyActive = existing != null && !existing.archived && all.count { !it.archived } == 1
@@ -139,12 +145,28 @@ private fun AccountDialog(
                     if (liability) "What you owe before your first entry here. Leave empty if nothing." else "What it holds before your first entry here. Later entries add to or take from this.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("account_problem")) }
                 if (type == "CREDIT_CARD") {
                     if (existing != null && existing.type == "CREDIT_CARD") {
                         TextButton(onClick = { cardOpen = true }, modifier = Modifier.testTag("card_dates")) { Text(if (existing.card == null) "Set billing dates and reminders" else "Billing dates: ${existing.card.termsText}") }
                     } else Text("Save the card first, then add its billing dates to get due-date reminders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                    Text("Card network", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CardNetwork.entries.forEach { n -> FilterChip(selected = network == n.name, onClick = { network = if (network == n.name) null else n.name }, label = { Text(n.label) }, modifier = Modifier.testTag("network_${n.name}")) }
+                    }
+                    Text("Card tier", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CardTier.entries.forEach { t -> FilterChip(selected = tier == t.name, onClick = { tier = if (tier == t.name) null else t.name }, label = { Text(t.label) }, modifier = Modifier.testTag("tier_${t.name}")) }
+                    }
+                    Text("The tile takes the look of its network and tier. Premium is for Signature, Infinite, World and similar cards.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
                 }
+                OutlinedTextField(
+                    last4, { v -> if (v.all { it.isDigit() } && v.length <= 4) { last4 = v; problem = null } }, label = { Text("Last 4 digits (optional)") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth().testTag("account_last4"),
+                )
+                Text("Of the card or the account number, as your bank's texts show it. It lets a text or a bill find this account by itself.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("account_problem")) }
                 if (existing != null) {
                     Spacer(Modifier.height(4.dp))
                     if (existing.archived) TextButton(onClick = { onArchive(existing.id, false); onClose() }, modifier = Modifier.testTag("account_unarchive")) { Text("Restore to the pickers") }
@@ -155,7 +177,7 @@ private fun AccountDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(existing?.id, name, type, opening) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("account_save")) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(existing?.id, name, type, opening, network, tier, last4) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("account_save")) { Text("Save") } },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
 }

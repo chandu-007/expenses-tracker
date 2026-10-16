@@ -16,7 +16,7 @@ class BackupFormatDocTest {
         val all = listOf(
             BackupHeader.serializer(), BackupCurrency.serializer(), BackupAccount.serializer(), BackupCategory.serializer(), BackupSplit.serializer(),
             BackupShare.serializer(), BackupEntry.serializer(), BackupTemplate.serializer(), BackupBudget.serializer(), BackupBudgetPeriod.serializer(),
-            BackupRecurring.serializer(), BackupDone.serializer(), BackupPerson.serializer(), BackupBill.serializer(), BackupData.serializer(),
+            BackupRecurring.serializer(), BackupDone.serializer(), BackupPerson.serializer(), BackupBill.serializer(), BackupAccountLook.serializer(), BackupData.serializer(),
         ).flatMap(::names).toSet()
         val missing = all.filter { "`$it`" !in doc }
         assertTrue(missing.isEmpty(), "fields missing from docs/BACKUP_FORMAT.md: $missing")

@@ -61,6 +61,8 @@ data class BackupRecurring(
 
 @Serializable data class BackupCaptureRule(val id: String, val position: Int, val pattern: String, val categoryId: String)
 @Serializable data class BackupMerchant(val key: String, val categoryId: String, val uses: Int = 1)
+/** How an account looks and its last four digits. Both network and tier are names from the app's lists; an unknown name is ignored on restore. */
+@Serializable data class BackupAccountLook(val accountId: String, val network: String? = null, val tier: String? = null, val last4: String? = null)
 @Serializable data class BackupCardTerms(val accountId: String, val statementDay: Int, val dueDay: Int, val minDuePercent: Int = 5, val remindDaysBefore: Int = 3)
 @Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null)
 
@@ -93,6 +95,8 @@ data class BackupData(
     val people: List<BackupPerson> = emptyList(),
     /** Bills found in texts, with what became of them. The message and the entry a payment made are not part of the file. Absent in a backup made before bills existed. */
     val bills: List<BackupBill> = emptyList(),
+    /** Card networks, tiers and last four digits of accounts. Absent in a backup made before they existed. */
+    val accountLooks: List<BackupAccountLook> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

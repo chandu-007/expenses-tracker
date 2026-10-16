@@ -219,4 +219,21 @@ class NotificationServiceTest {
         val left = dueCards(day)
         assertEquals(1, left.size); assertTrue(left.single().contains("Visa"), left.toString())
     }
+
+    @Test
+    fun theLastFourDigitsOnTheBillPickTheCardAccountEvenWhenNothingWasRememberedAndTheOtherCardStillReminds() {
+        val day = cardWithStatementDue(); secondCardDueTheSameDay()
+        billStore.add(found("b1", due = "2026-10-12")); billStore.track("b1") // the bill says the card ends 0862
+        db.schemaQueries.upsertAccountLook("card2", "VISA", null, "0862")
+        val left = dueCards(day)
+        assertEquals(1, left.size); assertTrue(left.single().contains("Amex"), "the Visa carries 0862, so only the Visa is covered: $left")
+    }
+
+    @Test
+    fun digitsThatBelongToNoAccountFallBackToTheEarlierRules() {
+        val day = cardWithStatementDue(); secondCardDueTheSameDay()
+        billStore.add(found("b1", due = "2026-10-12")); billStore.track("b1")
+        db.schemaQueries.upsertAccountLook("card2", "VISA", null, "1111")
+        assertEquals(2, dueCards(day).size, "no account has 0862 and none was remembered: both cards still remind")
+    }
 }

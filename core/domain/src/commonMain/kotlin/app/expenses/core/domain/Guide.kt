@@ -26,7 +26,7 @@ data class GuidePlan(val mode: GuideMode, val steps: List<GuideStep>)
  * are then offered just those pages, once.
  */
 object Guide {
-    const val VERSION = 1
+    const val VERSION = 2
 
     val steps: List<GuideStep> = listOf(
         GuideStep(
@@ -109,6 +109,15 @@ object Guide {
                 "Paying the card from your bank is a transfer, so it is not counted twice.",
             ),
             "More, then Accounts", GuideTarget.ACCOUNTS,
+        ),
+        GuideStep(
+            "cards", "Account cards", "Every account is shown as a card, on this page and in the strip on Home, so you can tell them apart at a glance.",
+            listOf(
+                "Add the last 4 digits of a card or an account number, as your bank's texts show them. A text or a bill then finds its account by itself.",
+                "For a credit card, choose its network (Visa, Mastercard, RuPay, American Express) and tier, and its card takes that look.",
+                "The designs are drawn for this app; they copy no bank's card.",
+            ),
+            "More, then Accounts, and the strip on Home", GuideTarget.ACCOUNTS, since = 2,
         ),
         GuideStep(
             "categories", "Categories", "Group spending the way you think about it.",

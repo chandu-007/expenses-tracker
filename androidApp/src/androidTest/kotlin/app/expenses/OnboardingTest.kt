@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -69,7 +70,7 @@ class OnboardingTest {
         waitFor("welcome")
         waitAnyText("uninstalling the app deletes it") // the honest sentence about where the data lives
         val started = System.nanoTime()
-        compose.onNodeWithTag("welcome_add").performClick()          // step 1
+        compose.onNodeWithTag("welcome_add").performScrollTo().performClick()          // step 1
         waitFor("amount")
         compose.onNodeWithTag("amount").performTextInput("250")      // step 2 (the amount field already has focus)
         compose.onNodeWithTag("save").performClick()                 // step 3
@@ -84,7 +85,7 @@ class OnboardingTest {
     fun skippingHidesItForGoodEvenAfterARestartAndTheListSaysHowToAdd() {
         launch()
         waitFor("welcome")
-        compose.onNodeWithTag("welcome_skip").performClick()
+        compose.onNodeWithTag("welcome_skip").performScrollTo().performClick()
         waitGone("welcome")
         waitAnyText("No expenses yet")
         assertEquals("1", setting("welcome_dismissed"))
@@ -97,7 +98,7 @@ class OnboardingTest {
     fun theImportOrRestoreButtonOpensTheDataScreenWhereBothLive() {
         launch()
         waitFor("welcome")
-        compose.onNodeWithTag("welcome_import").performClick()
+        compose.onNodeWithTag("welcome_import").performScrollTo().performClick()
         waitFor("import_statement"); waitFor("open_backup")
     }
 

@@ -81,6 +81,7 @@ class BackupStore(
             },
             savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag) },
             cardTerms = q.allCardTerms().executeAsList().map { BackupCardTerms(it.account_id, it.statement_day.toInt(), it.due_day.toInt(), it.min_due_percent.toInt(), it.remind_days.toInt()) },
+            accountLooks = q.allAccountLooks().executeAsList().map { BackupAccountLook(it.account_id, it.network, it.tier, it.last4) },
             captureRules = q.allCaptureRules().executeAsList().map { BackupCaptureRule(it.id, it.position.toInt(), it.pattern, it.category_id) },
             merchantMap = q.allMerchantMap().executeAsList().map { BackupMerchant(it.key, it.category_id, it.uses.toInt()) },
             people = q.allPeople().executeAsList().map { BackupPerson(it.id, it.name, it.deleted == 1L) },
@@ -146,6 +147,13 @@ class BackupStore(
         for (m in data.merchantMap) if (m.key !in haveKeys && q.categoryById(m.categoryId).executeAsOneOrNull() != null) q.learnMerchant(m.key, m.categoryId)
         // Only for a card that exists here and has no terms yet; the terms of a card that was not restored have nothing to attach to.
         for (c in data.cardTerms) if (q.cardTermsOf(c.accountId).executeAsOneOrNull() == null && q.accountById(c.accountId).executeAsOneOrNull()?.let { it.deleted == 0L && it.type == "CREDIT_CARD" } == true) q.upsertCardTerms(c.accountId, c.statementDay.toLong(), c.dueDay.toLong(), c.minDuePercent.toLong(), c.remindDaysBefore.toLong())
+        // Only for an account that exists here and has no look yet; names this version does not know, and digits that are not four, are dropped.
+        for (l in data.accountLooks) if (q.accountLookOf(l.accountId).executeAsOneOrNull() == null && q.accountById(l.accountId).executeAsOneOrNull()?.deleted == 0L) {
+            val network = l.network?.takeIf { n -> app.expenses.core.domain.CardNetwork.entries.any { it.name == n } }
+            val tier = l.tier?.takeIf { t -> app.expenses.core.domain.CardTier.entries.any { it.name == t } }
+            val digits = l.last4?.takeIf { app.expenses.core.domain.AccountLooks.parseLast4(it).isSuccess }
+            if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
+        }
         for ((k, v) in data.settings) if (k in SETTINGS && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
         report
     }

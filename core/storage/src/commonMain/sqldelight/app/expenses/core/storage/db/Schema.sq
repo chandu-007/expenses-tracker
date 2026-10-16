@@ -256,6 +256,15 @@ CREATE TABLE card_terms (
     remind_days INTEGER NOT NULL DEFAULT 3
 );
 
+-- How an account looks and how texts find it: the network and tier of a credit card (its tile design) and the last four digits of a card or an account number.
+CREATE TABLE account_look (
+    account_id TEXT NOT NULL PRIMARY KEY,
+    network TEXT,
+    tier TEXT,
+    last4 TEXT
+);
+CREATE INDEX account_look_last4 ON account_look(last4) WHERE last4 IS NOT NULL;
+
 -- A search the user keeps under a name. Dates are relative ("last 30 days"), so it stays useful tomorrow.
 CREATE TABLE saved_search (
     id TEXT NOT NULL PRIMARY KEY,
@@ -653,6 +662,23 @@ SELECT t.* FROM card_terms t JOIN account a ON a.id = t.account_id WHERE a.delet
 
 deleteCardTerms:
 DELETE FROM card_terms WHERE account_id = :id;
+
+upsertAccountLook:
+INSERT INTO account_look(account_id, network, tier, last4) VALUES (?, ?, ?, ?)
+ON CONFLICT(account_id) DO UPDATE SET network = excluded.network, tier = excluded.tier, last4 = excluded.last4;
+
+accountLookOf:
+SELECT * FROM account_look WHERE account_id = :id;
+
+allAccountLooks:
+SELECT l.* FROM account_look l JOIN account a ON a.id = l.account_id WHERE a.deleted = 0;
+
+deleteAccountLook:
+DELETE FROM account_look WHERE account_id = :id;
+
+-- The live accounts that carry these last four digits, to match a text or a bill to its account.
+accountsWithLast4:
+SELECT a.id, a.type FROM account_look l JOIN account a ON a.id = l.account_id WHERE l.last4 = :last4 AND a.deleted = 0 AND a.archived = 0 ORDER BY a.name;
 
 -- What an account held at a moment: the same sum as accountBalances, limited to entries before :untilMillis (an exclusive end).
 accountBalanceBefore:

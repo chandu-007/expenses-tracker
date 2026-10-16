@@ -167,4 +167,18 @@ class GuideUiTest {
         waitFor("amount"); gone("guide")
         assertTrue(setting(GuideSettings.SEEN).isNullOrEmpty())
     }
+
+    @Test
+    fun someoneWhoSawTheFirstTourIsOfferedOnlyTheStopsAddedSinceAndCanAskForTheWholeTour() {
+        put(GuideSettings.SEEN, "1")
+        launch(); waitFor("guide_whatsnew")
+        val fresh = Guide.steps.filter { it.since > 1 }
+        assertTrue(fresh.isNotEmpty())
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("guide_counter") and androidx.compose.ui.test.hasText("1 of ${fresh.size}", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("guide_title", useUnmergedTree = true).assertTextContains(fresh.first().title, substring = true)
+        tap("guide_show_all"); onStop(1)
+        assertTrue(Guide.steps.size > fresh.size)
+        tap("guide_skip"); gone("guide")
+        assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN))
+    }
 }
