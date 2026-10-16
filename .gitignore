@@ -8,3 +8,6 @@ local.properties
 captures/
 *.jks
 *.keystore
+
+__pycache__/
+*.pyc
