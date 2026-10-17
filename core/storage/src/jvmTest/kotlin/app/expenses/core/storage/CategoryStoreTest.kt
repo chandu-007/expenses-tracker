@@ -1,6 +1,7 @@
 package app.expenses.core.storage
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.Template
@@ -45,11 +46,12 @@ class CategoryStoreTest {
     // ---- defaults ----
 
     @Test
-    fun theEightDefaultsAreCreatedOnceWithTheirNamesAsIds() {
-        assertEquals(CategoryStore.DEFAULTS, names())
-        assertTrue(categories.list().all { it.id == it.name && it.parentId == null && !it.hidden })
+    fun theEightExpenseDefaultsAndTheFiveIncomeOnesAreCreatedOnceTheExpenseNamesAsIds() {
+        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, names())
+        assertTrue(categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.EXPENSE }.all { it.id == it.name && it.parentId == null && !it.hidden })
+        assertEquals(CategoryStore.INCOME_DEFAULTS, categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.INCOME }.map { it.name })
         CategoryStore(db, clock, { 2_000L }) // a second start must not add them again
-        assertEquals(CategoryStore.DEFAULTS, names())
+        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, names())
         assertTrue(db.schemaQueries.opsSince("", 1_000).executeAsList().none { it.entity == "category" }, "seeding is the same on every device and is not logged")
     }
 
@@ -63,7 +65,7 @@ class CategoryStoreTest {
         val vet = categories.create("Vet", parentId = pets.id)
         assertEquals(pets.id, categories.list().first { it.id == vet.id }.parentId)
         // a top-level category has no parent, and like entries a new row logs only the fields that have a value
-        assertEquals(setOf("name", "color", "position", "hidden"), opsFor(pets.id).map { it.field_ }.toSet())
+        assertEquals(setOf("name", "color", "position", "hidden", "kind"), opsFor(pets.id).map { it.field_ }.toSet())
         assertTrue(opsFor(vet.id).any { it.field_ == "parent_id" && it.value_ == pets.id })
     }
 
@@ -130,11 +132,11 @@ class CategoryStoreTest {
         assertEquals(listOf("Groceries", "Food", "Transport"), names().take(3))
         categories.move("Groceries", -1) // already first
         assertEquals("Groceries", names().first())
-        categories.move("Other", 1) // already last
-        assertEquals("Other", names().last())
+        categories.move("Other income", 1) // already last
+        assertEquals("Other income", names().last())
         categories.move("Groceries", 1)
         assertEquals(listOf("Food", "Groceries", "Transport"), names().take(3))
-        assertEquals(CategoryStore.DEFAULTS.size, categories.list().map { it.position }.toSet().size, "positions are distinct after moves")
+        assertEquals(CategoryStore.DEFAULTS.size + CategoryStore.INCOME_DEFAULTS.size, categories.list().map { it.position }.toSet().size, "positions are distinct after moves")
     }
 
     // ---- delete and merge ----
@@ -237,4 +239,39 @@ class CategoryStoreTest {
         assertTrue(again.id != "Groceries")
         assertEquals(m(0).minorUnits, categories.usage(again.id))
     }
+
+    // ---- kinds: expense, income ----
+
+    @Test
+    fun aNewCategoryHasTheKindAskedForAndASubcategoryAlwaysTakesItsParents() {
+        val gigs = categories.create("Freelance", kind = app.expenses.core.domain.CategoryKind.INCOME)
+        assertEquals(app.expenses.core.domain.CategoryKind.INCOME, categories.list().first { it.id == gigs.id }.kind)
+        val sub = categories.create("Retainer", parentId = gigs.id, kind = app.expenses.core.domain.CategoryKind.EXPENSE)
+        assertEquals(app.expenses.core.domain.CategoryKind.INCOME, categories.list().first { it.id == sub.id }.kind, "the parent decides")
+        assertEquals("INCOME", opsFor(gigs.id).first { it.field_ == "kind" }.value_)
+    }
+
+    @Test
+    fun aKindCanChangeOnlyWhileNothingOfTheKindBeingDroppedUsesIt() {
+        val pets = categories.create("Pets"); categories.create("Vet", parentId = pets.id)
+        categories.setKind(pets.id, CategoryKind.INCOME) // unused: allowed, and the subcategory follows
+        assertEquals(listOf(CategoryKind.INCOME, CategoryKind.INCOME), categories.list().filter { it.name == "Pets" || it.name == "Vet" }.map { it.kind })
+        categories.setKind(pets.id, CategoryKind.BOTH)
+        categories.setKind(pets.id, CategoryKind.EXPENSE)
+        // an expense in Food: Food cannot become income-only
+        val m = Money(100, Currency.INR)
+        ledger.saveAccount(Account(AccountId("a"), "A", AccountType.CASH, Currency.INR))
+        ledger.save(Expense(EntryId("e1"), 1, AccountId("a"), m, listOf(CategorySplit(CategoryId("Food"), m))), EntryDetails())
+        assertFailsWith<IllegalArgumentException> { categories.setKind("Food", CategoryKind.INCOME) }
+        assertFailsWith<IllegalArgumentException> { categories.setKind(categories.create("Sub", parentId = pets.id).id, CategoryKind.INCOME) }
+    }
+
+    @Test
+    fun anExpenseCategoryCannotMergeIntoAnIncomeOneButBothAcceptsEither() {
+        val both = categories.create("Misc"); categories.setKind(both.id, CategoryKind.BOTH)
+        assertFailsWith<IllegalArgumentException> { categories.merge("Food", "Salary") }
+        categories.merge("Groceries", both.id)
+        assertEquals(null, categories.list().firstOrNull { it.id == "Groceries" })
+    }
 }
+

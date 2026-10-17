@@ -239,7 +239,7 @@ private fun RecurringEditor(
     val key = start?.id ?: NEW
     var name by rememberSaveable(key) { mutableStateOf(start?.name.orEmpty()) }
     var amountText by rememberSaveable(key) { mutableStateOf(start?.amountPlain.orEmpty()) }
-    var category by rememberSaveable(key) { mutableStateOf(start?.categoryId ?: categories.firstOrNull { !it.hidden }?.id.orEmpty()) }
+    var category by rememberSaveable(key) { mutableStateOf(start?.categoryId ?: categoryFor(categories, income = false, current = "", last = "")) }
     var account by rememberSaveable(key) { mutableStateOf(start?.accountId ?: accounts.firstOrNull()?.id.orEmpty()) }
     var kind by rememberSaveable(key) { mutableStateOf(start?.kind ?: RecurringKind.EXPENSE) }
     var toAccount by rememberSaveable(key) { mutableStateOf(start?.toAccountId ?: accounts.getOrNull(1)?.id.orEmpty()) }
@@ -293,7 +293,11 @@ private fun RecurringEditor(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RecurringKind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.name.lowercase().replaceFirstChar { it.uppercase() }) }, modifier = Modifier.testTag("rec_kind_${k.name}")) }
+                RecurringKind.entries.forEach { k -> FilterChip(
+                    selected = kind == k,
+                    // an expense and an income have their own categories: one that does not serve the new kind is swapped for one that does
+                    onClick = { if (k != kind) { kind = k; if (k != RecurringKind.TRANSFER) category = categoryFor(categories, income = k == RecurringKind.INCOME, current = category, last = "") } },
+                    label = { Text(k.name.lowercase().replaceFirstChar { it.uppercase() }) }, modifier = Modifier.testTag("rec_kind_${k.name}")) }
             }
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rec_name"))
             OutlinedTextField(
@@ -305,7 +309,7 @@ private fun RecurringEditor(
             )
             if (kind != RecurringKind.TRANSFER) Text("Category", style = MaterialTheme.typography.labelMedium)
             if (kind != RecurringKind.TRANSFER) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.filter { !it.hidden || it.id == category }.forEach { c ->
+                offeredCategories(categories, income = kind == RecurringKind.INCOME, keep = category).forEach { c ->
                     FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(displayName(categories, c)) }, modifier = Modifier.testTag("rec_cat_${c.id}"))
                 }
             }

@@ -150,7 +150,7 @@ private fun InboxCard(
                     if (changing) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
                         if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+                            offeredCategories(categories, income = false, keep = category).take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
                         }
                     }
                 }
@@ -160,7 +160,7 @@ private fun InboxCard(
             // the answer: one big Add (the label says what it will do) and Skip
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
+                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, if (credit) "" else category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
                     enabled = account.isNotEmpty() || (paired && r.treatment != "PAYMENT"), modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
                 ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
                 OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
@@ -266,7 +266,8 @@ fun CaptureRulesScreen(
                     Text("New rule", style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(pattern, { pattern = it; tested = null; problem = null }, label = { Text("Payee or text contains") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rule_pattern"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        categories.filter { !it.hidden }.take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id; problem = null }, label = { Text(c.name) }, modifier = Modifier.testTag("rule_category_${c.id}")) }
+                        // a rule only applies to captured payments, which are expenses
+                        offeredCategories(categories, income = false).take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id; problem = null }, label = { Text(c.name) }, modifier = Modifier.testTag("rule_category_${c.id}")) }
                     }
                     tested?.let { Text(if (it == 0L) "No past entry mentions this." else "It would have matched $it of your past entries.", modifier = Modifier.testTag("rule_tested")) }
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("rule_problem")) }

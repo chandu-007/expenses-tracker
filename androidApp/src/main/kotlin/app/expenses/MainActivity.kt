@@ -6,8 +6,6 @@ import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import app.expenses.ui.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -235,7 +233,7 @@ class MainActivity : FragmentActivity() {
                         }
                         val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                             // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
-                            if (WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) <= 0) {
+                            if (!app.expenses.ui.rememberKeyboardOpen()) {
                             app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
                             }
                         }
@@ -256,7 +254,7 @@ class MainActivity : FragmentActivity() {
                                     kinds = listOf(e.draft.kind),
                                     accounts = s.allAccounts.filter { a -> a.id == e.draft.accountId || a.id == e.draft.toAccountId || s.accounts.any { it.id == a.id } }, // an archived account stays pickable for an entry that uses it
                                     categories = s.categories,
-                                    onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
+                                    onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
                                     showTemplateOption = false,
                                     allTags = s.tags,
                                     attachments = attachmentList, attachmentProblem = attachmentProblem, onAttach = { uri -> e.draft.id?.let { viewModel.addAttachment(it, uri) } },
@@ -327,8 +325,9 @@ class MainActivity : FragmentActivity() {
                                 CategoriesScreen(
                                     categories = s.categories,
                                     onBack = { managingCategories = false },
-                                    onCreate = { name, parent, color -> viewModel.createCategory(name, parent, color) },
+                                    onCreate = { name, parent, color, kind -> viewModel.createCategory(name, parent, color, kind) },
                                     onUpdate = viewModel::updateCategory,
+                                    onSetKind = viewModel::setCategoryKind,
                                     onMove = viewModel::moveCategory,
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
@@ -442,8 +441,9 @@ class MainActivity : FragmentActivity() {
                                     kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
                                     accounts = s.accounts,
                                     categories = s.categories,
-                                    onCreateCategory = { name, parent, done -> viewModel.createCategory(name, parent, null, done) },
+                                    onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
                                     showTemplateOption = true,
+                                    lastExpenseCategory = s.lastCategory, lastIncomeCategory = s.lastIncomeCategory,
                                     allTags = s.tags,
                                     people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
                                     onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null },

@@ -210,6 +210,7 @@ fun EntryListScreen(
                 tags = state.tags,
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
+                selection = bulkSelectionOf(state.rows, selected),
             )
             else HomeBar(
                 selected = if (moreOpen) "More" else "Home",

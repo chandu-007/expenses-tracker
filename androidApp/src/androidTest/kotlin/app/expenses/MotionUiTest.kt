@@ -185,7 +185,8 @@ class MotionUiTest {
         waitFor("report_list")
         assertTrue(has("nav_home") && has("open_search") && has("more_menu"), "Reports carries the same bar")
         node("open_search").performClick(); waitFor("search_back")
-        assertTrue(has("open_reports"), "and so does Search")
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 4").close() // the keyboard hides the bar; its Back key closes it
+        waitFor("open_reports"); assertTrue(has("open_reports"), "and so does Search once the keyboard is away")
         node("more_menu").performClick(); waitFor("more_page")
         node("nav_home").performClick(); waitFor("add")
     }

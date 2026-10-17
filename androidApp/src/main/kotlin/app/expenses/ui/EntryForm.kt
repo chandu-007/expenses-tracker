@@ -1,6 +1,7 @@
 package app.expenses.ui
 
 import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.AmountWords
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -98,6 +99,19 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
+/**
+ * The categories to offer when choosing one for something that is [income] (or an expense, when not): the ones that serve it and are not hidden,
+ * plus [keep], the one already chosen (an entry being edited keeps its category even if it no longer serves or was hidden).
+ */
+internal fun offeredCategories(all: List<CategoryUi>, income: Boolean, keep: String? = null): List<CategoryUi> =
+    all.filter { (it.kind.serves(income) && !it.hidden) || it.id == keep }
+
+/** The category a draft of this kind should be on: [current] if it serves, else [last] if it serves and is visible, else the first visible one that serves, else none. */
+internal fun categoryFor(all: List<CategoryUi>, income: Boolean, current: String, last: String): String {
+    fun serving(id: String) = all.firstOrNull { it.id == id }?.takeIf { it.kind.serves(income) }
+    return serving(current)?.id ?: serving(last)?.takeIf { !it.hidden }?.id ?: all.firstOrNull { it.kind.serves(income) && !it.hidden }?.id.orEmpty()
+}
+
 /** Saves a draft that [EntryDrafts.build] accepted. */
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
@@ -122,7 +136,8 @@ fun EntryFormScreen(
     kinds: List<DraftKind>,
     accounts: List<AccountUi>,
     categories: List<CategoryUi>,
-    onCreateCategory: (name: String, parentId: String?, onCreated: (String) -> Unit) -> Unit,
+    /** Creates a category of the given kind: an expense or refund form asks for an expense category, an income form for an income one. */
+    onCreateCategory: (name: String, parentId: String?, kind: CategoryKind, onCreated: (String) -> Unit) -> Unit,
     showTemplateOption: Boolean,
     onSave: DraftSave,
     onBack: () -> Unit,
@@ -137,6 +152,9 @@ fun EntryFormScreen(
     attachmentProblem: String? = null,
     people: List<app.expenses.PersonUi> = emptyList(),
     onCreatePerson: (name: String, onCreated: (String) -> Unit) -> Unit = { _, _ -> },
+    /** The expense and income categories used last: where a draft lands when the kind is switched. */
+    lastExpenseCategory: String = "",
+    lastIncomeCategory: String = "",
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -153,8 +171,9 @@ fun EntryFormScreen(
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     LaunchedEffect(padOn) { if (padOn) keyboard?.hide() }
     LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
+    val forIncome = draft.kind == DraftKind.INCOME
     if (pickingCategory) CategoryPickerDialog(
-        categories.filter { !it.hidden || it.id == draft.category }, draft.category,
+        offeredCategories(categories, forIncome, draft.category), draft.category,
         onPick = { id -> draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && id == draft.category) "" else id); pickingCategory = false },
         onClose = { pickingCategory = false },
     )
@@ -175,7 +194,7 @@ fun EntryFormScreen(
     if (creatingCategory) {
         CategoryNameDialog(
             title = "New category", categories = categories, allowParent = false,
-            onConfirm = { name, parent -> onCreateCategory(name, parent) { id -> draft = draft.copy(category = id) }; creatingCategory = false },
+            onConfirm = { name, parent -> onCreateCategory(name, parent, if (forIncome) CategoryKind.INCOME else CategoryKind.EXPENSE) { id -> draft = draft.copy(category = id) }; creatingCategory = false },
             onDismiss = { creatingCategory = false },
         )
     }
@@ -242,8 +261,14 @@ fun EntryFormScreen(
                         FilterChip(
                             selected = draft.kind == k,
                             onClick = {
-                                // Switching kind keeps what is typed; a category only makes sense for expenses and income.
-                                draft = draft.copy(kind = k, splits = if (k == DraftKind.EXPENSE) draft.splits else emptyList(), toAccountId = if (k == DraftKind.TRANSFER) draft.toAccountId.ifEmpty { activeAccounts.firstOrNull { it.id != draft.accountId }?.id.orEmpty() } else draft.toAccountId)
+                                // Switching kind keeps what is typed; a category only makes sense for expenses and income, and each has its own: one that does not serve the new kind is swapped for the last one used.
+                                val swapped = when {
+                                    k == draft.kind -> draft.category
+                                    k == DraftKind.INCOME -> categoryFor(categories, true, draft.category, lastIncomeCategory)
+                                    k == DraftKind.EXPENSE || k == DraftKind.REFUND -> categoryFor(categories, false, draft.category, lastExpenseCategory)
+                                    else -> draft.category
+                                }
+                                draft = draft.copy(kind = k, category = swapped, splits = if (k == DraftKind.EXPENSE) draft.splits else emptyList(), toAccountId = if (k == DraftKind.TRANSFER) draft.toAccountId.ifEmpty { activeAccounts.firstOrNull { it.id != draft.accountId }?.id.orEmpty() } else draft.toAccountId)
                             },
                             label = { Text(k.label) }, modifier = Modifier.testTag("kind_${k.name}"),
                         )
@@ -294,7 +319,7 @@ fun EntryFormScreen(
                 Text(if (draft.kind == DraftKind.INCOME) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Hidden categories are not offered, except one already chosen (an entry being edited keeps its category).
-                    val offered = categories.filter { !it.hidden || it.id == draft.category }
+                    val offered = offeredCategories(categories, forIncome, draft.category)
                     val picks = remember(offered, draft.category) { CategoryChoices.pick(offered.map { it.id }, draft.category.ifEmpty { null }) }
                     val byId = remember(categories) { categories.associateBy { it.id } }
                     picks.shown.mapNotNull { byId[it] }.forEach { c ->
@@ -408,7 +433,7 @@ private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currenc
                         Text(categories.firstOrNull { it.id == part.category }?.let { displayName(categories, it) } ?: "Category")
                     }
                     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        categories.filter { !it.hidden || it.id == part.category }.forEach { c ->
+                        offeredCategories(categories, false, part.category).forEach { c ->
                             DropdownMenuItem(text = { Text(displayName(categories, c)) }, onClick = { open = false; update(draft.copy(splits = draft.splits.toMutableList().also { it[i] = part.copy(category = c.id) })) }, modifier = Modifier.testTag("split_pick_${i}_${c.id}"))
                         }
                     }

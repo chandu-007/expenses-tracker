@@ -14,6 +14,11 @@ object SchemaUpgrade {
     fun ensureLatest(driver: SqlDriver) {
         if ("opening_minor" !in columns(driver, "account")) run(driver, "ALTER TABLE account ADD COLUMN opening_minor INTEGER NOT NULL DEFAULT 0")
         if ("archived" !in columns(driver, "account")) run(driver, "ALTER TABLE account ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        if ("kind" !in columns(driver, "category")) {
+            run(driver, "ALTER TABLE category ADD COLUMN kind TEXT NOT NULL DEFAULT 'EXPENSE'")
+            // a category an income already uses stays available for income as well, so no existing entry loses its category
+            run(driver, "UPDATE category SET kind = 'BOTH' WHERE id IN (SELECT DISTINCT category_id FROM entry WHERE kind = 'INCOME' AND category_id IS NOT NULL)")
+        }
         if ("kind" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN kind TEXT NOT NULL DEFAULT 'EXPENSE'")
         if ("to_account_id" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN to_account_id TEXT")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0")

@@ -26,6 +26,9 @@ import java.util.UUID
 private const val LAST_CATEGORY = "last_category"
 private const val LAST_ACCOUNT = "last_account"
 
+/** The income category used last, remembered apart from [LAST_CATEGORY] so a new income starts on an income category. */
+internal const val LAST_INCOME_CATEGORY = "last_income_category"
+
 /** An entry's history for the screen. */
 data class HistoryUi(val entryId: String, val title: String, val revisions: List<HistoryRevisionUi>)
 data class HistoryRevisionUi(val index: Int, val whenText: String, val what: String, val lines: List<HistoryLine>, val canRestore: Boolean)
@@ -166,6 +169,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
                 ok.templates.putSettingIfChanged(LAST_ACCOUNT, draft.accountId)
             }
         }
+        if (draft.kind == DraftKind.INCOME && draft.category.isNotEmpty()) ok.templates.putSettingIfChanged(LAST_INCOME_CATEGORY, draft.category)
         return id
     }
 
@@ -207,18 +211,28 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
      * [undoDrafts] are the earlier versions of changed entries, [undoRestore] the ids to bring back after a delete (in the order to restore them).
      */
     data class BulkResult(val changed: Int, val skipped: Int, val why: String?, val undoDrafts: List<EntryDraft> = emptyList(), val undoRestore: List<String> = emptyList()) {
-        fun text(what: String): String = when {
-            changed == 0 && skipped == 0 -> "Nothing to change."
-            skipped == 0 -> "$what $changed ${if (changed == 1) "entry" else "entries"}."
-            else -> "$what $changed, skipped $skipped${why?.let { " ($it)" }.orEmpty()}."
+        fun text(what: String): String {
+            if (changed == 0 && skipped == 0) return "Nothing to change."
+            val head = if (changed == 0) "Nothing changed." else "$what $changed ${if (changed == 1) "entry" else "entries"}."
+            return if (skipped == 0) head else "$head $skipped skipped${why?.let { ": $it" }.orEmpty()}."
         }
     }
 
-    /** Sets the category of every selected entry that can take one (a plain expense or an income); split, shared, refund and transfer entries are skipped. All or nothing. */
-    fun bulkSetCategory(ids: List<String>, category: String): BulkResult = bulkEdit(ids, "split, shared, transfers and refunds keep their own categories") { d ->
-        when {
-            d.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(d) || d.kind == DraftKind.INCOME -> if (d.category == category) null else d.copy(category = category)
-            else -> Skip
+    /**
+     * Sets the category of every selected entry that can take one (a plain expense or an income); split, shared, refund and transfer entries are skipped.
+     * So is an entry the category is not for: an expense category is not applied to income, nor an income category to an expense (a category made for
+     * both takes either). All or nothing.
+     */
+    fun bulkSetCategory(ids: List<String>, category: String): BulkResult {
+        val kind = ok.categories.list().firstOrNull { it.id == category }?.kind
+        return bulkEdit(ids, "split, shared, transfers and refunds keep their own categories") { d ->
+            val income = d.kind == DraftKind.INCOME
+            when {
+                !(income || d.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(d)) -> Skip
+                d.category == category -> null
+                kind != null && !kind.serves(income) -> SkipFor(if (income) "income can't use an expense category" else "an expense can't use an income category")
+                else -> d.copy(category = category)
+            }
         }
     }
 
@@ -244,19 +258,25 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, private val nowMillis
 
     private object Skip
 
+    /** Skipped for its own reason, named in the result next to the general one. */
+    private class SkipFor(val reason: String)
+
     private fun bulkEdit(ids: List<String>, why: String, change: (EntryDraft) -> Any?): BulkResult {
         val old = ArrayList<EntryDraft>(); val new = ArrayList<EntryDraft>(); var skipped = 0
+        val reasons = LinkedHashSet<String>(); var general = false
         for (id in ids.distinct()) {
             val form = editable(id) as? Editable.Form
-            if (form == null) { skipped++; continue }
+            if (form == null) { skipped++; general = true; continue }
             when (val r = change(form.draft)) {
                 null -> Unit // already as wanted
-                is EntryDraft -> if (EntryDrafts.build(r, EntryId(id), BaseCurrency.current) is DraftResult.Ok) { old += form.draft; new += r } else skipped++
-                else -> skipped++
+                is EntryDraft -> if (EntryDrafts.build(r, EntryId(id), BaseCurrency.current) is DraftResult.Ok) { old += form.draft; new += r } else { skipped++; general = true }
+                is SkipFor -> { skipped++; reasons += r.reason }
+                else -> { skipped++; general = true }
             }
         }
         ok.store.atomically { new.forEach { save(it) } }
-        return BulkResult(new.size, skipped, why.takeIf { skipped > 0 }, undoDrafts = old)
+        if (general) reasons += why
+        return BulkResult(new.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoDrafts = old)
     }
 
     /** Deletes the selected entries (each can be brought back). An expense with refunds goes only if its refunds are in the selection too. All or nothing. */

@@ -27,6 +27,8 @@ CREATE TABLE category (
     color INTEGER,
     position INTEGER NOT NULL,
     hidden INTEGER NOT NULL DEFAULT 0,
+    -- EXPENSE, INCOME or BOTH: which kind of entry the category is offered for. BOTH is only for categories made before kinds existed that income already used.
+    kind TEXT NOT NULL DEFAULT 'EXPENSE',
     deleted INTEGER NOT NULL DEFAULT 0,
     -- Set when this category was merged into another. The row stays as a tombstone so an edit that arrives later and still
     -- uses this id (for example from a device that had not yet seen the merge) is redirected to the target.
@@ -895,10 +897,10 @@ categoryById:
 SELECT * FROM category WHERE id = :id;
 
 insertCategory:
-INSERT INTO category(id, name, parent_id, color, position, hidden, deleted) VALUES (?, ?, ?, ?, ?, 0, 0);
+INSERT INTO category(id, name, parent_id, color, position, hidden, deleted, kind) VALUES (?, ?, ?, ?, ?, 0, 0, ?);
 
 updateCategory:
-UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden WHERE id = :id;
+UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden, kind = :kind WHERE id = :id;
 
 softDeleteCategory:
 UPDATE category SET deleted = 1 WHERE id = :id;
@@ -912,6 +914,13 @@ SELECT merged_into FROM category WHERE id = :id AND merged_into IS NOT NULL;
 
 categoryCount:
 SELECT COUNT(*) FROM category;
+
+-- How many live expense splits and how many incomes use a category: whether it may change kind.
+categoryExpenseUse:
+SELECT (SELECT COUNT(*) FROM entry_split WHERE category_id = :id) + (SELECT COUNT(*) FROM template WHERE category_id = :id AND deleted = 0) + (SELECT COUNT(*) FROM recurring WHERE category_id = :id AND kind = 'EXPENSE');
+
+categoryIncomeUse:
+SELECT (SELECT COUNT(*) FROM entry WHERE category_id = :id AND kind = 'INCOME') + (SELECT COUNT(*) FROM recurring WHERE category_id = :id AND kind = 'INCOME');
 
 maxCategoryPosition:
 SELECT COALESCE(MAX(position), -1) FROM category WHERE deleted = 0 AND parent_id IS :parentId;
@@ -1009,13 +1018,13 @@ DELETE FROM recurring_done WHERE recurring_id = :id AND day = :day;
 
 -- Backup and restore.
 replaceCategory:
-UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden, deleted = :deleted, merged_into = :mergedInto WHERE id = :id;
+UPDATE category SET name = :name, parent_id = :parentId, color = :color, position = :position, hidden = :hidden, deleted = :deleted, merged_into = :mergedInto, kind = :kind WHERE id = :id;
 
 allCategories:
 SELECT * FROM category ORDER BY position, id;
 
 insertCategoryRaw:
-INSERT INTO category(id, name, parent_id, color, position, hidden, deleted, merged_into) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO category(id, name, parent_id, color, position, hidden, deleted, merged_into, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 allAccounts:
 SELECT * FROM account WHERE deleted = 0 ORDER BY name, id;

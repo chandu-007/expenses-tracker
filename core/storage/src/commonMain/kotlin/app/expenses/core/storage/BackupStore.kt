@@ -62,7 +62,7 @@ class BackupStore(
             accounts = q.allAccounts().executeAsList().map { BackupAccount(it.id, it.name, it.type, it.currency, it.opening_minor, it.archived == 1L) },
             // Live categories, and merged ones (as tombstones) so an edit that still uses an old id lands on its target after a restore.
             categories = q.allCategories().executeAsList().filter { it.deleted == 0L || it.merged_into != null }
-                .map { BackupCategory(it.id, it.name, it.parent_id, it.color, it.position.toInt(), it.hidden == 1L, it.deleted == 1L, it.merged_into) },
+                .map { BackupCategory(it.id, it.name, it.parent_id, it.color, it.position.toInt(), it.hidden == 1L, it.deleted == 1L, it.merged_into, it.kind) },
             entries = q.liveEntriesInInsertionOrder().executeAsList().map { r ->
                 BackupEntry(
                     r.id, r.kind, r.occurred_at, r.account_id, r.counter_account_id, r.amount_minor, r.currency, r.category_id, r.person_id,
@@ -120,10 +120,10 @@ class BackupStore(
         for (c in data.categories.sortedBy { it.parentId != null }) {
             val here = q.categoryById(c.id).executeAsOneOrNull()
             when {
-                here == null -> q.insertCategoryRaw(c.id, c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto)
+                here == null -> q.insertCategoryRaw(c.id, c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind)
                 // A fresh install already has the default categories. One nothing has touched takes the backup's version (renamed,
                 // recoloured, hidden, or merged away); one that has been used or changed on this device is left alone.
-                isUntouchedDefault(here) -> q.replaceCategory(c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.id)
+                isUntouchedDefault(here) -> q.replaceCategory(c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind, c.id)
             }
         }
         // people before the entries that refer to them; one already here keeps its own name

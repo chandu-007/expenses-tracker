@@ -12,7 +12,23 @@ data class Category(
     val colorArgb: Long?,
     val position: Int,
     val hidden: Boolean,
+    val kind: CategoryKind = CategoryKind.EXPENSE,
 )
+
+/** Which entries a category is offered for. [BOTH] exists only for categories made before kinds did, that income had already used. */
+enum class CategoryKind {
+    EXPENSE, INCOME, BOTH;
+
+    val forExpense: Boolean get() = this != INCOME
+    val forIncome: Boolean get() = this != EXPENSE
+
+    /** Whether something offered for [needed] can use a category of this kind. */
+    fun serves(income: Boolean): Boolean = if (income) forIncome else forExpense
+
+    companion object {
+        fun of(name: String?): CategoryKind = entries.firstOrNull { it.name == name } ?: EXPENSE
+    }
+}
 
 /** The rules for changing the category tree. Each check returns an error message for the user, or null if it is fine. */
 object CategoryRules {
@@ -49,6 +65,8 @@ object CategoryRules {
         if (fromId == intoId) return "Choose a different category to merge into"
         if (all.none { it.id == fromId } || all.none { it.id == intoId }) return "That category does not exist"
         if (all.any { it.parentId == fromId }) return "Move or merge this category's subcategories first"
+        val from = all.first { it.id == fromId }; val into = all.first { it.id == intoId }
+        if ((from.kind.forIncome && !into.kind.forIncome) || (from.kind.forExpense && !into.kind.forExpense)) return "${from.name} is used for ${if (from.kind.forIncome) "income" else "expenses"}, so it can only merge into a category for the same"
         return null
     }
 

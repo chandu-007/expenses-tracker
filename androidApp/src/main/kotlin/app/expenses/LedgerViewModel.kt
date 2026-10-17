@@ -217,7 +217,8 @@ data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
-data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long)
+/** [kind] says which entries the category is offered for: expenses, income, or both (only for categories made before kinds existed that income already used). */
+data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE)
 
 /** An attachment as the editor lists it. */
 data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
@@ -454,8 +455,9 @@ sealed interface UiState {
         val categories: List<CategoryUi>,
         /** Tags in use, most used first, to offer when tagging. */
         val tags: List<String>,
-        /** What the add screen starts with: the category and account used last. */
+        /** What the add screen starts with: the expense category and account used last, and the income category used last. */
         val lastCategory: String,
+        val lastIncomeCategory: String,
         val lastAccountId: String,
         val endReached: Boolean,
         val message: String? = null,
@@ -803,8 +805,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- categories ----
 
     /** Creates a category and, once saved, tells the caller its id (used to select it in the add form). */
-    fun createCategory(name: String, parentId: String?, colorArgb: Long?, onCreated: (String) -> Unit = {}) = withStore { ok ->
-        val created = ok.categories.create(name, parentId, colorArgb)
+    fun createCategory(name: String, parentId: String?, colorArgb: Long?, kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, onCreated: (String) -> Unit = {}) = withStore { ok ->
+        val created = ok.categories.create(name, parentId, colorArgb, kind)
         refresh(ok)
         viewModelScope.launch(Dispatchers.Main) { onCreated(created.id) }
     }
@@ -834,6 +836,14 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             ok.categories.setParent(id, parentId)
         }
         refresh(ok)
+    }
+
+    /** Changes what a top-level category is offered for (its subcategories follow). [onDone] gets null, or the reason it was refused, on the main thread. */
+    fun setCategoryKind(id: String, kind: app.expenses.core.domain.CategoryKind, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try { container.write { ok -> ok.categories.setKind(id, kind); refresh(ok) }; null } catch (e: IllegalArgumentException) { e.message ?: "That can't be changed" }
+            launch(Dispatchers.Main) { onDone(problem) }
+        }
     }
 
     fun moveCategory(id: String, direction: Int) = withStore { ok ->
@@ -1313,7 +1323,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
-        val usable = ok.categories.list().filter { !it.hidden }.map { it.id }.toSet()
+        val usable = ok.categories.list().filter { !it.hidden && it.kind.forExpense }.map { it.id }.toSet() // suggestions are for debits, which are expenses
         val rules = ok.captureRules.rules()
         val learned = ok.captureRules.learned()
         val zone = ZoneId.systemDefault()
@@ -1375,7 +1385,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
             val payee = named ?: rawPayee
             // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
-            val byName = ok.categories.list().filter { !it.hidden && it.parentId == null }.associate { it.name.lowercase() to it.id }
+            val byName = ok.categories.list().filter { !it.hidden && it.kind.forExpense && it.parentId == null }.associate { it.name.lowercase() to it.id }
             val history = if (i.direction == "DEBIT" && rawPayee != null) SimilarEntries.topCategory(rawPayee, similarCandidates(ok, rawPayee, "EXPENSE")) else null
             val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history) else null
             InboxRowUi(
@@ -2046,7 +2056,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val start = System.currentTimeMillis() - 3_650L * 86_400_000L
             val extraCategories = if (full) (0 until 500).map { "Category $it" } else emptyList()
             ok.db.bulkLoad(ok.driver) {
-                extraCategories.forEachIndexed { n, name -> q.insertCategoryRaw(name, name, null, null, (100 + n).toLong(), 0, 0, null) }
+                extraCategories.forEachIndexed { n, name -> q.insertCategoryRaw(name, name, null, null, (100 + n).toLong(), 0, 0, null, "EXPENSE") }
                 val categories = DEFAULT_CATEGORIES + extraCategories
                 for (i in 0 until rows) {
                     val at = start + i * step
@@ -2144,7 +2154,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         }
         loadedCategory = firstCategories(ok, loaded)
         val visible = cats.filter { !it.hidden }
-        val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visible.any { it.id == id } } ?: visible.firstOrNull()?.id ?: ""
+        val visibleExpense = visible.filter { it.kind.forExpense }
+        val visibleIncome = visible.filter { it.kind.forIncome }
+        val lastCategory = ok.templates.setting(LAST_CATEGORY)?.takeIf { id -> visibleExpense.any { it.id == id } } ?: visibleExpense.firstOrNull()?.id ?: ""
+        val lastIncomeCategory = ok.templates.setting(LAST_INCOME_CATEGORY)?.takeIf { id -> visibleIncome.any { it.id == id } } ?: visibleIncome.firstOrNull()?.id ?: ""
         val active = accounts.filter { it.archived == 0L }
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } } ?: active.firstOrNull()?.id ?: "cash"
         val layout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT))
@@ -2180,9 +2193,10 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             autoExport = autoExportUi(ok),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
-            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L) },
+            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
+            lastIncomeCategory = lastIncomeCategory,
             lastAccountId = lastAccount,
             endReached = endReached,
             undo = undo,
@@ -2203,7 +2217,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 state = p?.state ?: BudgetState.OK,
             )
         }
-        val lines = cats.filter { !it.hidden || byScope.containsKey(it.id) }
+        // Only categories that serve expenses can carry a limit (one that already has a limit stays, so it can still be removed).
+        val lines = cats.filter { (it.kind.forExpense && !it.hidden) || byScope.containsKey(it.id) }
             .map { c -> line(c.id, c.parentId?.let { pid -> names[pid]?.let { "$it › ${c.name}" } } ?: c.name) }
         val period = ok.budgets.period()
         val fmt = DateTimeFormatter.ofPattern("d MMM")

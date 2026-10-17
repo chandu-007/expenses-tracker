@@ -291,3 +291,25 @@ fun FadeIn(content: @Composable () -> Unit) {
     LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = Motion.STANDARD)) }
     Box(Modifier.graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 12.dp.toPx() }) { content() }
 }
+
+
+/**
+ * Whether the on-screen keyboard is showing. The window is resized for the keyboard rather than padded, so the insets API reports nothing on every phone
+ * and emulator this app supports; the visible part of the window shrinking by more than a sixth of its height is the reliable sign.
+ */
+@Composable
+fun rememberKeyboardOpen(): Boolean {
+    val view = androidx.compose.ui.platform.LocalView.current
+    var open by remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(view) {
+        val rect = android.graphics.Rect()
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            view.getWindowVisibleDisplayFrame(rect)
+            val full = view.rootView.height
+            open = full > 0 && (full - rect.bottom) > full / 6
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
+    }
+    return open
+}

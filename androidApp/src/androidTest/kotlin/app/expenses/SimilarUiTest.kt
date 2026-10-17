@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -134,10 +135,16 @@ class SimilarUiTest {
         assertEquals("Other", inCategory("i1"), "stopping asking changes nothing")
         fileNew("iCloud", "Bills"); Thread.sleep(2_500); compose.waitForIdle()
         assertTrue(!has("similar_dialog"), "not asked again for that name")
-        tap("more_menu"); tap("manage_categories"); waitFor("similar_off_icloud")
+        tap("more_menu"); tap("manage_categories"); waitFor("categories_list")
+        node("categories_list").performScrollToNode(hasTestTag("similar_off_icloud")); waitFor("similar_off_icloud")
         assertEquals("iCloud", runBlocking { container.write { it.templates.setting("similar_off:icloud") } }, "the name is kept as it was written, to show in the list")
-        tap("similar_ask_again_icloud"); compose.waitUntil(10_000) { !has("similar_off_icloud") }
+        tap("similar_ask_again_icloud")
+        compose.waitUntil(10_000) { runBlocking { container.write { it.templates.setting("similar_off:icloud") } } == null }
         tap("categories_back"); waitFor("add")
-        fileNew("iCloud", "Bills"); waitFor("similar_dialog", 15_000)
+        assertEquals(null, runBlocking { container.write { it.templates.setting("similar_off:icloud") } }, "the setting is gone")
+        assertEquals("Other", inCategory("i1"), "the earlier entries are still where they were")
+        fileNew("iCloud", "Bills")
+        val shown = runCatching { waitFor("similar_dialog", 15_000) }.isSuccess
+        if (!shown) throw AssertionError("no offer; entries now: " + runBlocking { container.write { ok -> ok.db.schemaQueries.similarCandidates("EXPENSE", "\"icloud\"").executeAsList().map { it.label + "=" + it.category_id } } })
     }
 }

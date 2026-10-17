@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,6 +79,14 @@ fun SearchScreen(
     var deletingSaved by remember { mutableStateOf<app.expenses.SavedSearchUi?>(null) }
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     androidx.activity.compose.BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
+    val focusManager = LocalFocusManager.current
+    // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
+    LaunchedEffect(state.results) {
+        if (selected.isNotEmpty()) { val listed = state.results.mapTo(HashSet()) { it.id }; if (selected.any { it !in listed }) selected = selected.filter { it in listed } }
+    }
+    // choosing entries is done with the keyboard out of the way
+    LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) focusManager.clearFocus() }
+    // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     var text by rememberSaveable { mutableStateOf("") }
     var min by rememberSaveable { mutableStateOf("") }
     var max by rememberSaveable { mutableStateOf("") }
@@ -89,6 +99,7 @@ fun SearchScreen(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag) {
+        selected = emptyList() // the results are about to be different: a selection made on the old ones would be of entries no longer listed
         text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g
         onChange(SearchInput(t, lo, hi, c, k, r, g))
     }
@@ -127,6 +138,7 @@ fun SearchScreen(
                 tags = tags,
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
+                selection = bulkSelectionOf(state.results, selected),
             )
             else tabBar()
         },
@@ -183,11 +195,22 @@ fun SearchScreen(
                             state.undo?.let { u -> TextButton(onClick = { onUndo(u) }, modifier = Modifier.testTag("search_undo")) { Text("Undo") } }
                         }
                     }
-                    Text(
-                        "${state.results.size} ${if (state.results.size == 1) "result" else "results"}" + if (state.truncated) ", the most recent. Narrow the search to see others." else "",
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("search_count"),
-                    )
+                    // the count and the way to select every result share one line: with the keyboard up the list has little room, and a second line would take it
+                    val listedIds = remember(state.results) { state.results.map { it.id } }
+                    val allSelected = listedIds.isNotEmpty() && selected.size >= listedIds.size && selected.toHashSet().containsAll(listedIds)
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${state.results.size} ${if (state.results.size == 1) "result" else "results"}" + if (state.truncated) ", the most recent. Narrow the search to see others." else "",
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f).testTag("search_count"),
+                        )
+                        // every listed result, not only the ones composed on screen
+                        if (listedIds.isNotEmpty()) TextButton(
+                            onClick = { selected = if (allSelected) emptyList() else listedIds },
+                            modifier = Modifier.height(32.dp).testTag("search_select_all"),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
+                    }
                     LazyColumn(Modifier.fillMaxSize().testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
                         itemsIndexed(state.results, key = { _, it -> it.seq }) { index, row ->
                             val isSelected = row.id in selected

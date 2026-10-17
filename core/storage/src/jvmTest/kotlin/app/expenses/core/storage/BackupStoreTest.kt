@@ -152,7 +152,7 @@ class BackupStoreTest {
         assertFailsWith<IllegalArgumentException> { b.backup.restore(broken) }
         assertEquals(0L, b.entries())
         assertTrue(b.db.schemaQueries.selectAccounts().executeAsList().isEmpty(), "the accounts that came before the bad entry were rolled back too")
-        assertEquals(8, b.categories.list().size, "only the seeded defaults")
+        assertEquals(13, b.categories.list().size, "only the seeded defaults (eight for expenses, five for income)")
         b.backup.restore(data) // and a good restore still works afterwards
         assertEquals(10L, b.entries())
     }

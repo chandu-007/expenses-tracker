@@ -48,18 +48,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.expenses.CategoryUi
 import app.expenses.core.domain.Category
+import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.CategoryRules
 
 /** Colours offered for categories. Optional: a category without one is simply shown without a dot. */
 val CATEGORY_COLORS: List<Long> = listOf(0xFFE53935, 0xFFFB8C00, 0xFFFDD835, 0xFF43A047, 0xFF00ACC1, 0xFF1E88E5, 0xFF8E24AA, 0xFF6D4C41)
 
 /** The shared rules need the plain domain type; the screens carry a little extra (usage). */
-internal fun List<CategoryUi>.asDomain(): List<Category> = mapIndexed { i, c -> Category(c.id, c.name, c.parentId, c.colorArgb, i, c.hidden) }
+internal fun List<CategoryUi>.asDomain(): List<Category> = mapIndexed { i, c -> Category(c.id, c.name, c.parentId, c.colorArgb, i, c.hidden, c.kind) }
 
 /** How a category is named where there is little room: "Food › Cafe" for a subcategory. */
 fun displayName(all: List<CategoryUi>, c: CategoryUi): String =
@@ -75,11 +77,12 @@ fun ColorDot(colorArgb: Long?, size: Int = 12) {
 fun CategoriesScreen(
     categories: List<CategoryUi>,
     onBack: () -> Unit,
-    onCreate: (name: String, parentId: String?, colorArgb: Long?) -> Unit,
+    onCreate: (name: String, parentId: String?, colorArgb: Long?, kind: CategoryKind) -> Unit,
     onUpdate: (id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) -> Unit,
     onMove: (id: String, direction: Int) -> Unit,
     onMerge: (fromId: String, intoId: String) -> Unit,
     onDelete: (id: String) -> Unit,
+    onSetKind: (id: String, kind: CategoryKind, onDone: (String?) -> Unit) -> Unit = { _, _, done -> done(null) },
     onAddSuggested: (Map<String, Set<String>>) -> Unit = {},
     /** Names the person told the app to stop offering a category for: (key, name). */
     stopped: List<Pair<String, String>> = emptyList(),
@@ -88,6 +91,7 @@ fun CategoriesScreen(
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
     var suggesting by rememberSaveable { mutableStateOf(false) }
+    var incomeTab by rememberSaveable { mutableStateOf(false) }
     if (suggesting) {
         androidx.activity.compose.BackHandler { suggesting = false }
         SuggestedCategoriesScreen(categories, onAdd = { onAddSuggested(it); suggesting = false }, onBack = { suggesting = false })
@@ -102,6 +106,7 @@ fun CategoriesScreen(
             onSave = { name, color, hidden, parent -> onUpdate(editedCategory.id, name, color, hidden, parent); editing = null },
             onMerge = { into -> onMerge(editedCategory.id, into); editing = null },
             onDelete = { onDelete(editedCategory.id); editing = null },
+            onSetKind = { kind, done -> onSetKind(editedCategory.id, kind, done) },
             onBack = { editing = null },
         )
         return
@@ -112,7 +117,8 @@ fun CategoriesScreen(
             title = "New category",
             categories = categories,
             allowParent = true,
-            onConfirm = { name, parent -> onCreate(name, parent, null); creating = false },
+            tabIncome = incomeTab,
+            onConfirm = { name, parent -> onCreate(name, parent, null, if (incomeTab) CategoryKind.INCOME else CategoryKind.EXPENSE); creating = false },
             onDismiss = { creating = false },
         )
     }
@@ -122,15 +128,18 @@ fun CategoriesScreen(
             TopAppBar(
                 title = { Text("Categories") },
                 navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("categories_back")) { Text("Back") } },
-                actions = { TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
+                actions = { if (!incomeTab) TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
             )
         },
         floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 88.dp)) {
-            items(categories, key = { it.id }) { c ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        KindTabs(incomeTab = incomeTab, onSelect = { incomeTab = it })
+        val shown = categories.filter { it.kind.serves(incomeTab) }
+        LazyColumn(Modifier.fillMaxSize().testTag("categories_list"), contentPadding = PaddingValues(bottom = 88.dp)) {
+            items(shown, key = { it.id }) { c ->
                 val level = if (c.parentId == null) 0 else 1
-                val siblings = categories.filter { it.parentId == c.parentId }
+                val siblings = shown.filter { it.parentId == c.parentId }
                 val index = siblings.indexOfFirst { it.id == c.id }
                 Row(
                     Modifier.fillMaxWidth().clickable { editing = c.id }.padding(start = (16 + 28 * level).dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("cat_row_${c.id}"),
@@ -142,6 +151,7 @@ fun CategoriesScreen(
                         Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                         val note = buildList {
                             if (c.hidden) add("hidden")
+                            if (c.kind == CategoryKind.BOTH) add("both")
                             add(if (c.usage == 0L) "not used yet" else "${c.usage} ${if (c.usage == 1L) "item" else "items"}")
                         }.joinToString(" · ")
                         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -159,12 +169,34 @@ fun CategoriesScreen(
                     }
                 }
                 items(stopped, key = { "stopped_${it.first}" }) { (key, name) ->
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp).testTag("similar_off_$key"), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 80.dp).testTag("similar_off_$key"), verticalAlignment = Alignment.CenterVertically) {
                         Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
                         TextButton(onClick = { onAskAgain(key) }, modifier = Modifier.testTag("similar_ask_again_$key")) { Text("Ask again") }
                     }
                     HorizontalDivider()
                 }
+            }
+        }
+        }
+    }
+}
+
+/** The two lists of categories. A simple pair of segments; the selected one is filled. */
+@Composable
+private fun KindTabs(incomeTab: Boolean, onSelect: (Boolean) -> Unit) {
+    val indicator = androidx.compose.animation.core.animateFloatAsState(if (incomeTab) 1f else 0f, Motion.spring(), label = "catTab")
+    Box(Modifier.fillMaxWidth().padding(16.dp, 8.dp)) {
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.RoundedCornerShape(24.dp))) {
+            listOf(false to "Expenses", true to "Income").forEach { (inc, label) ->
+                val on = incomeTab == inc
+                Box(
+                    Modifier.weight(1f).padding(3.dp)
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(21.dp))
+                        .clickable { onSelect(inc) }.padding(vertical = 10.dp)
+                        .testTag(if (inc) "cat_tab_income" else "cat_tab_expense")
+                        .semantics { selected = on },
+                    contentAlignment = Alignment.Center,
+                ) { Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge) }
             }
         }
     }
@@ -179,6 +211,8 @@ fun CategoryNameDialog(
     title: String,
     categories: List<CategoryUi>,
     allowParent: Boolean,
+    /** When set, only top-level categories of this list's kind are offered as parent (false = expenses, true = income). */
+    tabIncome: Boolean? = null,
     onConfirm: (name: String, parentId: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -188,7 +222,7 @@ fun CategoryNameDialog(
     val domain = remember(categories) { categories.asDomain() }
     val problem = CategoryRules.checkName(domain, name, parentId)
     val canSave = name.isNotBlank() && problem == null
-    val tops = categories.filter { it.parentId == null }
+    val tops = categories.filter { it.parentId == null && (tabIncome == null || it.kind.serves(tabIncome)) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -232,8 +266,10 @@ private fun CategoryEditorScreen(
     onSave: (name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) -> Unit,
     onMerge: (intoId: String) -> Unit,
     onDelete: () -> Unit,
+    onSetKind: (kind: CategoryKind, onDone: (String?) -> Unit) -> Unit,
     onBack: () -> Unit,
 ) {
+    var kindProblem by remember(category.id) { mutableStateOf<String?>(null) }
     var name by rememberSaveable(category.id) { mutableStateOf(category.name) }
     var color by rememberSaveable(category.id) { mutableStateOf(category.colorArgb) }
     var hidden by rememberSaveable(category.id) { mutableStateOf(category.hidden) }
@@ -292,6 +328,18 @@ private fun CategoryEditorScreen(
                 Switch(checked = hidden, onCheckedChange = { hidden = it }, modifier = Modifier.testTag("cat_hidden"))
                 Spacer(Modifier.size(12.dp))
                 Column { Text("Hidden"); Text("Not offered when adding an expense; existing entries keep it", style = MaterialTheme.typography.bodySmall) }
+            }
+            if (category.parentId == null) {
+                Text("Used for", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(CategoryKind.EXPENSE to "Expenses", CategoryKind.INCOME to "Income", CategoryKind.BOTH to "Both").forEach { (k, label) ->
+                        FilterChip(selected = category.kind == k, onClick = { if (category.kind != k) onSetKind(k) { kindProblem = it } else kindProblem = null }, label = { Text(label) }, modifier = Modifier.testTag("cat_kind_${k.name}"))
+                    }
+                }
+                Text("A category can change only while nothing of the other kind uses it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                kindProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("cat_kind_problem")) }
+            } else {
+                Text("Follows ${categories.firstOrNull { it.id == category.parentId }?.name ?: "its parent"}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("cat_kind_follows"))
             }
             if (!hasChildren) {
                 Text("Inside", style = MaterialTheme.typography.labelMedium)

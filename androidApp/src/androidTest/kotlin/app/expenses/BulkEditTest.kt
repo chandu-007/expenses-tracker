@@ -67,7 +67,7 @@ class BulkEditTest {
         launch()
         hold("row_Alpha"); waitText("1 selected")
         tap("row_Bravo"); waitText("2 selected") // once selecting, a tap toggles instead of opening
-        tap("bulk_category"); tap("bulk_cat_Bills")
+        tap("bulk_category"); tap("bulk_category_option_Bills")
         waitGone("bulk_bar")
         assertEquals(listOf("Bills", "Bills", "Food"), listOf(categoryOf("a"), categoryOf("b"), categoryOf("c")))
         waitText("Changed the category of 2 entries")
@@ -94,10 +94,11 @@ class BulkEditTest {
             ok.store.save(Income(EntryId("i"), t++, AccountId("cash"), Money(7_000, inr), CategoryId("Other")), EntryDetails(merchant = "Pay"))
         }
         val r = db { ok -> EntryActions(ok).bulkSetCategory(listOf("a", "s", "t", "i", "missing"), "Bills") }
-        assertEquals(2, r.changed, "the plain expense and the income")
-        assertEquals(3, r.skipped, "the split, the transfer and the unknown id")
+        assertEquals(1, r.changed, "the plain expense")
+        assertEquals(4, r.skipped, "the split, the transfer, the unknown id and the income (Bills is an expense category)")
         assertTrue(r.why!!.contains("split"))
-        assertEquals("Bills", categoryOf("a")); assertEquals("Bills", categoryOf("i"))
+        assertTrue(r.why!!.contains("income can't use an expense category"))
+        assertEquals("Bills", categoryOf("a")); assertEquals("Other", categoryOf("i"))
         assertEquals(listOf("Food", "Fun"), db { it.db.schemaQueries.splitsOf("s").executeAsList().map { s -> s.category_id } }, "the split is untouched")
         // an entry already in the category is neither changed nor skipped
         assertEquals(0, db { ok -> EntryActions(ok).bulkSetCategory(listOf("a"), "Bills") }.let { it.changed + it.skipped })
@@ -154,7 +155,7 @@ class BulkEditTest {
         compose.onNodeWithTag("search_text").performTextInput("Cafe")
         waitFor("result_a"); waitFor("result_b")
         hold("result_a"); tap("result_b"); waitText("2 selected")
-        tap("bulk_category"); tap("bulk_cat_Fun")
+        tap("bulk_category"); tap("bulk_category_option_Fun")
         waitFor("search_notice"); waitText("Changed the category of 2 entries")
         assertEquals(listOf("Fun", "Fun", "Food"), listOf(categoryOf("a"), categoryOf("b"), categoryOf("c")))
         tap("search_undo")
