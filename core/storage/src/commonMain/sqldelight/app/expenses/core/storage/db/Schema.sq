@@ -879,6 +879,12 @@ UPDATE template SET uses = uses + 1 WHERE id = ?;
 settingValue:
 SELECT value FROM setting WHERE key = :key;
 
+settingsWithPrefix:
+SELECT * FROM setting WHERE key >= :prefix AND key < :prefix || char(1114111) ORDER BY key;
+
+removeSetting:
+DELETE FROM setting WHERE key = ?;
+
 putSetting:
 INSERT INTO setting(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 

@@ -81,6 +81,9 @@ fun CategoriesScreen(
     onMerge: (fromId: String, intoId: String) -> Unit,
     onDelete: (id: String) -> Unit,
     onAddSuggested: (Map<String, Set<String>>) -> Unit = {},
+    /** Names the person told the app to stop offering a category for: (key, name). */
+    stopped: List<Pair<String, String>> = emptyList(),
+    onAskAgain: (String) -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -147,6 +150,21 @@ fun CategoriesScreen(
                     TextButton(onClick = { onMove(c.id, 1) }, enabled = index < siblings.lastIndex, modifier = Modifier.testTag("down_${c.id}").semantics { contentDescription = "Move ${c.name} down" }) { Text("▼") }
                 }
                 HorizontalDivider()
+            }
+            if (stopped.isNotEmpty()) {
+                item(key = "stopped_heading") {
+                    Column(Modifier.padding(16.dp, 20.dp, 16.dp, 4.dp)) {
+                        Text("Suggestions turned off", style = MaterialTheme.typography.titleSmall)
+                        Text("After you file an entry, the app offers the same category to earlier entries with the same name. For these names you chose \"Stop asking\".", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                items(stopped, key = { "stopped_${it.first}" }) { (key, name) ->
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp).testTag("similar_off_$key"), verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+                        TextButton(onClick = { onAskAgain(key) }, modifier = Modifier.testTag("similar_ask_again_$key")) { Text("Ask again") }
+                    }
+                    HorizontalDivider()
+                }
             }
         }
     }

@@ -62,6 +62,11 @@ class TemplateStore(
 
     fun putSetting(key: String, value: String) = q.putSetting(key, value)
 
+    /** Every setting whose key starts with [prefix], by key. */
+    fun settingsWithPrefix(prefix: String): List<Pair<String, String>> = q.settingsWithPrefix(prefix).executeAsList().map { it.key to it.value_ }
+
+    fun removeSetting(key: String) = q.removeSetting(key)
+
     /** Writes only when the value differs: each write is its own commit, and settings like "last category" almost never change between saves. */
     fun putSettingIfChanged(key: String, value: String) { if (setting(key) != value) q.putSetting(key, value) }
 

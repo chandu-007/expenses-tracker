@@ -720,7 +720,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             kotlinx.coroutines.delay(SIMILAR_DELAY_MS)
             container.write { ok ->
                 val key = similarKey(label)
-                if ("$key|${draft.category}" in similarQuiet || ok.templates.setting(SETTING_SIMILAR_OFF + key) == "1") return@write
+                if ("$key|${draft.category}" in similarQuiet || ok.templates.setting(SETTING_SIMILAR_OFF + key) != null) return@write
                 val found = SimilarEntries.similar(label, draft.category, entryId, similarCandidates(ok, label, if (draft.kind == DraftKind.INCOME) "INCOME" else "EXPENSE"))
                 if (found.isEmpty()) return@write
                 val names = ok.categories.list().associate { it.id to it.name }
@@ -739,7 +739,26 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val s = _similar.value ?: return
         _similar.value = null
         similarQuiet += "${similarKey(s.label)}|${s.categoryId}"
-        if (stopAsking) withStore { ok -> ok.templates.putSetting(SETTING_SIMILAR_OFF + similarKey(s.label), "1") }
+        if (stopAsking) withStore { ok -> ok.templates.putSetting(SETTING_SIMILAR_OFF + similarKey(s.label), s.label.trim().ifEmpty { "?" }) }
+    }
+
+    private val _stoppedSimilar = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    /** The names the person told the app to stop offering a category for: (key, name as it was written). */
+    val stoppedSimilar: StateFlow<List<Pair<String, String>>> get() = _stoppedSimilar
+
+    fun loadStoppedSimilar() {
+        viewModelScope.launch(BACKGROUND) { container.write { ok -> _stoppedSimilar.value = ok.templates.settingsWithPrefix(SETTING_SIMILAR_OFF).map { (k, v) -> k.removePrefix(SETTING_SIMILAR_OFF) to v } } }
+    }
+
+    /** Turns the offer back on for a name. */
+    fun askAgain(key: String) {
+        viewModelScope.launch(BACKGROUND) {
+            container.write { ok ->
+                ok.templates.removeSetting(SETTING_SIMILAR_OFF + key)
+                _stoppedSimilar.value = ok.templates.settingsWithPrefix(SETTING_SIMILAR_OFF).map { (k, v) -> k.removePrefix(SETTING_SIMILAR_OFF) to v }
+            }
+        }
+        similarQuiet.removeAll { it.startsWith("$key|") }
     }
 
     /** Files the chosen earlier entries under the offered category, as one change that Undo takes back. */

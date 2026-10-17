@@ -212,6 +212,8 @@ class MainActivity : FragmentActivity() {
                             )
                         }
                         val similarOffer by viewModel.similar.collectAsStateWithLifecycle(context = MAIN)
+                        val stoppedSimilar by viewModel.stoppedSimilar.collectAsStateWithLifecycle(context = MAIN)
+                        androidx.compose.runtime.LaunchedEffect(managingCategories) { if (managingCategories) viewModel.loadStoppedSimilar() }
                         similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
@@ -331,6 +333,7 @@ class MainActivity : FragmentActivity() {
                                     onMerge = viewModel::mergeCategory,
                                     onDelete = viewModel::deleteCategory,
                                     onAddSuggested = viewModel::addSuggestedCategories,
+                                    stopped = stoppedSimilar, onAskAgain = viewModel::askAgain,
                                 )
                             }
                             k == 13 -> {

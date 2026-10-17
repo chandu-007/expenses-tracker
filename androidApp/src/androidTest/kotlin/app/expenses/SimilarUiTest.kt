@@ -124,4 +124,20 @@ class SimilarUiTest {
         waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Bills (your earlier entries)"), textOf("inbox_goes_$id"))
     }
+
+    @Test
+    fun stopAskingIsListedUnderCategoriesAndAskAgainBringsTheOfferBack() {
+        threeEarlierICloudsInOther(); launch()
+        fileNew("iCloud", "Bills")
+        waitFor("similar_stop", 15_000); tap("similar_stop")
+        compose.waitUntil(10_000) { !has("similar_dialog") }
+        assertEquals("Other", inCategory("i1"), "stopping asking changes nothing")
+        fileNew("iCloud", "Bills"); Thread.sleep(2_500); compose.waitForIdle()
+        assertTrue(!has("similar_dialog"), "not asked again for that name")
+        tap("more_menu"); tap("manage_categories"); waitFor("similar_off_icloud")
+        assertEquals("iCloud", runBlocking { container.write { it.templates.setting("similar_off:icloud") } }, "the name is kept as it was written, to show in the list")
+        tap("similar_ask_again_icloud"); compose.waitUntil(10_000) { !has("similar_off_icloud") }
+        tap("categories_back"); waitFor("add")
+        fileNew("iCloud", "Bills"); waitFor("similar_dialog", 15_000)
+    }
 }
