@@ -19,7 +19,8 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
     }
 }
 
-enum class SuggestionSource { RULE, LEARNED, STARTER, PERSON }
+/** [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. */
+enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -42,11 +43,14 @@ object CategorySuggest {
         payee: String?, body: String, rules: List<CaptureRule>, learned: Map<String, String>, usable: Set<String>,
         /** Category name to id, for the visible categories: lets the starter list and the person default find a category by its name. */
         byName: Map<String, String> = emptyMap(), toAPerson: Boolean = false,
+        /** The category most earlier entries of this payee are in (see [SimilarEntries.topCategory]), used after the person's rules and what they chose last time. */
+        history: String? = null,
     ): CategorySuggestion? {
         val text = listOfNotNull(payee, body).joinToString(" ")
         rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
         val key = payee?.let(::merchantKey)?.takeIf { it.length >= 2 }
         key?.let { learned[it] }?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
         // below the person's own choices: a common merchant, then "a payment to a person" (no merchant to go by, so the catch-all)
         // the payee only, never the whole text: a bank's own name or footer ("Airtel Payments Bank") must not pick a category
         payee?.let { DefaultRules.categoryNameFor(it) }?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.STARTER) } }

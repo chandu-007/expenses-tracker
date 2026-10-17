@@ -211,6 +211,8 @@ class MainActivity : FragmentActivity() {
                                 onFinish = { never -> viewModel.finishGuide(never); tourIndex = 0; closeEverything() },
                             )
                         }
+                        val similarOffer by viewModel.similar.collectAsStateWithLifecycle(context = MAIN)
+                        similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                             customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen,

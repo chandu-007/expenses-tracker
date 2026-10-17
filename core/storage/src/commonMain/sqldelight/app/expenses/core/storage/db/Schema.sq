@@ -531,6 +531,17 @@ SELECT id, merchant, note, amount_minor, occurred_at FROM entry
 WHERE deleted = 0 AND kind = 'EXPENSE' AND amount_minor >= :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 ORDER BY (amount_minor = :amount) DESC, occurred_at DESC LIMIT 8;
 
+-- Earlier expenses and incomes whose merchant or note shares a word with :match (a full-text query such as "icloud" OR "storage"), with the one category each is
+-- filed under (an entry with more than one split has none, so it is never offered a move). The caller keeps only those that really read alike.
+similarCandidates:
+SELECT e.id, e.kind, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label, e.amount_minor, e.occurred_at, e.account_id,
+  CASE WHEN e.kind = 'INCOME' THEN coalesce(e.category_id, '')
+       WHEN (SELECT COUNT(*) FROM entry_split s WHERE s.entry_id = e.id) = 1 THEN (SELECT s.category_id FROM entry_split s WHERE s.entry_id = e.id)
+       ELSE '' END AS category_id
+FROM entry e
+WHERE e.deleted = 0 AND e.kind = :kind AND e.seq IN (SELECT rowid FROM entry_fts WHERE entry_fts MATCH :match)
+ORDER BY e.occurred_at DESC LIMIT 300;
+
 -- Entries from another source (a text, a notification, typed by hand) that a statement row might be: same account, kind and amount, in a window.
 entriesLikeStatementRow:
 SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount

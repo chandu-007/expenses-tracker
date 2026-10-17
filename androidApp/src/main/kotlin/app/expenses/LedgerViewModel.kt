@@ -48,6 +48,8 @@ import app.expenses.core.domain.DupStrength
 import app.expenses.core.domain.Duplicates
 import app.expenses.core.domain.PendingKey
 import app.expenses.core.domain.CategorySuggest
+import app.expenses.core.domain.SimilarCandidate
+import app.expenses.core.domain.SimilarEntries
 import app.expenses.core.domain.SuggestionSource
 import app.expenses.core.domain.CardTerms
 import app.expenses.core.domain.CardText
@@ -119,6 +121,12 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val kind: String = "",
 )
 data class AccountUi(val id: String, val name: String, val type: String = "")
+
+/** One earlier entry offered the category just chosen for a similar one. */
+data class SimilarRowUi(val id: String, val title: String, val dateText: String, val amountText: String, val fromCategory: String)
+
+/** Earlier entries that read like one the person has just filed: [label] is what it was called, [rows] are the ones not yet in [categoryName]. */
+data class SimilarUi(val label: String, val categoryId: String, val categoryName: String, val rows: List<SimilarRowUi>)
 
 /** A captured transaction waiting for review. [accountId] and [categoryId] are the suggestions the row starts with. */
 data class InboxRowUi(
@@ -486,6 +494,8 @@ private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOA
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_REDUCE_MOTION = "reduce_motion"
 private const val SETTING_MOTION_SPEED = "motion_speed"
+private const val SETTING_SIMILAR_OFF = "similar_off:"
+private const val SIMILAR_DELAY_MS = 1_200L
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
 private const val MAX_STATEMENT_ROWS = 200_000
@@ -568,6 +578,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund"; DraftKind.LOAN -> if (draft.gave) "money given" else "money received" }
         refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
         lastSaveMillis = (System.nanoTime() - startedAt) / 1e6
+        offerSimilar(draft, id)
     }
 
     /** Opens the refund form for an expense. */
@@ -676,6 +687,67 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val undo = if (r.undoDrafts.isNotEmpty() || r.undoRestore.isNotEmpty()) UndoUi("", r.text(what), bulkDrafts = r.undoDrafts, bulkRestore = r.undoRestore) else null
         refresh(ok, undo = undo)
         _search.update { it.copy(notice = r.text(what), undo = undo) }
+    }
+
+    // ---- similar entries: after a category is chosen, offer it to the earlier entries that read alike ----
+
+    private val _similar = MutableStateFlow<SimilarUi?>(null)
+    /** What to offer after a save, or null. The person decides: nothing is changed until they accept. */
+    val similar: StateFlow<SimilarUi?> get() = _similar
+    private var similarJob: kotlinx.coroutines.Job? = null
+    private val similarQuiet = mutableSetOf<String>() // "not now" for the rest of this session: label key + category
+
+    private fun similarKey(label: String) = CategorySuggest.merchantKey(label)
+
+    private fun similarCandidates(ok: AppContainer.Opened.Ok, label: String, kind: String): List<SimilarCandidate> {
+        val words = SimilarEntries.searchWords(label)
+        if (words.isEmpty()) return emptyList()
+        return ok.db.schemaQueries.similarCandidates(kind, words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
+            .map { SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at) }
+    }
+
+    /**
+     * Looks for earlier entries like the one just saved, a moment after the save (so the save is never slowed and a quick second save replaces the look).
+     * Only an expense or an income with one category is considered.
+     */
+    private fun offerSimilar(draft: EntryDraft, entryId: String) {
+        if (draft.kind != DraftKind.EXPENSE && draft.kind != DraftKind.INCOME) return
+        if (EntryDrafts.isSplit(draft) || draft.category.isEmpty()) return
+        val label = draft.note.trim()
+        if (SimilarEntries.searchWords(label).isEmpty()) return
+        similarJob?.cancel()
+        similarJob = viewModelScope.launch(BACKGROUND) {
+            kotlinx.coroutines.delay(SIMILAR_DELAY_MS)
+            container.write { ok ->
+                val key = similarKey(label)
+                if ("$key|${draft.category}" in similarQuiet || ok.templates.setting(SETTING_SIMILAR_OFF + key) == "1") return@write
+                val found = SimilarEntries.similar(label, draft.category, entryId, similarCandidates(ok, label, if (draft.kind == DraftKind.INCOME) "INCOME" else "EXPENSE"))
+                if (found.isEmpty()) return@write
+                val names = ok.categories.list().associate { it.id to it.name }
+                val fmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+                val zone = ZoneId.systemDefault()
+                _similar.value = SimilarUi(
+                    label, draft.category, names[draft.category] ?: draft.category,
+                    found.map { SimilarRowUi(it.id, it.label, fmt.format(Instant.ofEpochMilli(it.occurredAt).atZone(zone)), Money(it.amountMinor, BaseCurrency.current).formatted(), names[it.categoryId] ?: it.categoryId) },
+                )
+            }
+        }
+    }
+
+    /** Leaves the offer alone: nothing changes. [stopAsking] also stops offering for this name from now on. */
+    fun dismissSimilar(stopAsking: Boolean = false) {
+        val s = _similar.value ?: return
+        _similar.value = null
+        similarQuiet += "${similarKey(s.label)}|${s.categoryId}"
+        if (stopAsking) withStore { ok -> ok.templates.putSetting(SETTING_SIMILAR_OFF + similarKey(s.label), "1") }
+    }
+
+    /** Files the chosen earlier entries under the offered category, as one change that Undo takes back. */
+    fun applySimilar(ids: List<String>) {
+        val s = _similar.value ?: return
+        _similar.value = null
+        similarQuiet += "${similarKey(s.label)}|${s.categoryId}"
+        if (ids.isNotEmpty()) bulkSetCategory(ids, s.categoryId)
     }
 
     fun bulkSetCategory(ids: List<String>, category: String) = bulk("Changed the category of") { it.bulkSetCategory(ids, category) }
@@ -1285,7 +1357,8 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             val payee = named ?: rawPayee
             // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
             val byName = ok.categories.list().filter { !it.hidden && it.parentId == null }.associate { it.name.lowercase() to it.id }
-            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON) else null
+            val history = if (i.direction == "DEBIT" && rawPayee != null) SimilarEntries.topCategory(rawPayee, similarCandidates(ok, rawPayee, "EXPENSE")) else null
+            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history) else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(Instant.ofEpochMilli(i.receivedAt).atZone(zone)),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
@@ -1294,7 +1367,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 nameable = rawPayee != null,
                 payeeKind = when (PayeeKinds.of(rawPayee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
-                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; null -> "" },
+                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.HISTORY -> "your earlier entries"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; null -> "" },
             )
         }
     }
