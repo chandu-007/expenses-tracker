@@ -31,6 +31,9 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         # Compose draws at the screen's full refresh rate on iPhones with ProMotion.
         CADisableMinimumFrameDurationOnPhone: true
+        # Reminders: iOS may wake the app now and then to look for what is due (BGAppRefreshTask; the time is the system's choice).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [app.expenses.tracker.ios.refresh]
         NSFaceIDUsageDescription: Face ID unlocks Expenses when you turn on the app lock. Your face is checked by the iPhone; the app never sees it.
     settings:
       base:

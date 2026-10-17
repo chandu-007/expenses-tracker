@@ -95,7 +95,7 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
             HorizontalDivider()
             Text("This app only sends the kinds above (and card due dates with the bill reminders). It never sends promotions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "The app checks about once an hour in the background, so an alert can arrive up to an hour late. Your phone's battery saver can delay it further.",
+                platform.notificationTimingNote ?: "The app checks about once an hour in the background, so an alert can arrive up to an hour late. Your phone's battery saver can delay it further.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedButton(onClick = onSendTest, modifier = Modifier.testTag("notif_test")) { Text("Send a test notification") }

@@ -21,8 +21,8 @@ import kotlin.time.Clock
  *   attachments   attachmentFiles: AttachmentFileStore
  *   backup        backupCipher: BackupCipher
  *   auto-export   runAutoExport(container, folderUri, nowMillis, force)
- *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted()
- *   notification  notificationsAllowed(), showNotices(notices)
+ *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted(), supportsShortcutsCapture, readClipboardText(), openExternalUrl(url)
+ *   notification  notificationsAllowed(), showNotices(notices), notificationTimingNote
  *   app lock      authenticate(title, subtitle, onResult)
  *   statements    decodeStatementText(bytes), looksLikeXlsx(bytes), readXlsx(bytes)
  * Top-level: nowMillis(), ioDispatcher (expect), rethrowUncaught(e) (expect), see Formatting.kt for dates.
@@ -85,11 +85,27 @@ interface Platform {
     val captureChanges: Flow<Unit>
     fun isSmsPermissionGranted(): Boolean
 
+    /**
+     * True where the OS gives no access to texts but the person can feed bank messages in by hand or by an automation they set up (iPhone: a Shortcuts
+     * automation running the "Capture bank message" action, or pasting a text). The capture screens then show that setup and the paste box instead of the
+     * Android switches. False by default; Android does not override it, so none of its screens change.
+     */
+    val supportsShortcutsCapture: Boolean get() = false
+
+    /** The text on the clipboard, or null when there is none (or this platform does not offer it). Only called when the person pressed a paste button. */
+    fun readClipboardText(): String? = null
+
+    /** Opens [url] in the app that handles it (iPhone: `shortcuts://`). False when nothing could be opened. */
+    fun openExternalUrl(url: String): Boolean = false
+
     /** Whether the system will show our notifications at all. */
     fun notificationsAllowed(): Boolean
 
     /** Shows each notice that can be shown and returns those that were. Empty where notifications are unsupported. */
     fun showNotices(notices: List<Notice>): List<Notice>
+
+    /** When not null, what the Notifications screen says about when a check runs, instead of Android's "about once an hour" text. Null on Android. */
+    val notificationTimingNote: String? get() = null
 
     // ---- app lock ----
 

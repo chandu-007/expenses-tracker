@@ -76,6 +76,19 @@ class NotificationService(
         return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide)))
     }
 
+    /**
+     * What [check] would plan on [day] at [minuteOfDay], without posting or recording anything: for a platform that has to hand the system its
+     * reminders ahead of time (iPhone). Only bills and cards: repeating items that wait for the person (one set to post by itself needs no
+     * reminder), tracked bills and credit-card due dates. Budgets and the recap depend on spending that has not happened yet, and a bill found
+     * in a message is announced at once, so they are left to [check].
+     */
+    fun plannedFor(day: LocalDate, minuteOfDay: Int, zone: TimeZone): List<Notice> {
+        val prefs = prefs()
+        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1"
+        val due = recurring.due(day).filter { !it.item.auto }.map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
+        return NoticePlanner.plan(prefs.copy(budgets = false, recap = false), day, minuteOfDay, due, emptyList(), sent(), cardsDue(day, zone), null, emptyList(), trackedBills(hide))
+    }
+
     private fun money(minor: Long, code: String, hide: Boolean): String? {
         if (hide) return null // with Hide amounts on, a notification does not carry the figure either
         val digits = q.selectCurrencies().executeAsList().firstOrNull { it.code == code }?.digits?.toInt() ?: 2

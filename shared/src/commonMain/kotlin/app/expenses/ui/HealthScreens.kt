@@ -32,7 +32,12 @@ fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> U
     Scaffold(topBar = { TopAppBar(title = { Text("How capture is doing") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("health_back")) { Text("Back") } }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (report == null) { Text("Loading…"); return@Column }
-            val (headline, advice) = when (report.status) {
+            val handedOver = LocalPlatform.current.supportsShortcutsCapture
+            val (headline, advice) = if (handedOver) when (report.status) {
+                CaptureStatus.NOTHING_SEEN -> "No messages seen yet" to "Nothing has reached the app in the last 30 days. Check the automation in Shortcuts > Automation (it must be on and set to Run Immediately), and send a test message as described in Capture from texts."
+                CaptureStatus.QUIET -> "Quiet for a week or more" to "Messages were seen before, but none in the last 7 days. That is normal if you have not used your bank. If you have, check in Shortcuts > Automation that the automation is still on: iOS can switch one off after an update."
+                else -> "Capture is working" to "Messages are arriving from your Shortcuts automation (or being pasted) and are read on this phone."
+            } else when (report.status) {
                 CaptureStatus.OFF -> "Capture is off" to "Turn on Read bank texts in Capture from texts to find transactions in your bank messages."
                 CaptureStatus.PERMISSION_MISSING -> "Android has not allowed texts" to "Capture is switched on, but Android has not given this app permission to receive texts, so none can arrive. Turn the switch off and on again to be asked, or allow it in the phone's app settings."
                 CaptureStatus.NOTHING_SEEN -> "No texts seen yet" to "Capture is on and allowed, but no text has arrived in the last 30 days. If your bank has sent you texts, check that the phone is not stopping this app in the background (battery saver) and that you have not force-stopped it: Android does not deliver texts to an app that was force-stopped until you open it."

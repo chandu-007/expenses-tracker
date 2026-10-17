@@ -8,10 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.ComposeUIViewController
 import app.expenses.ui.PermissionRow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.StateFlow
 import platform.Foundation.NSLog
-import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSURL
 import platform.QuickLook.QLPreviewController
 import platform.QuickLook.QLPreviewControllerDataSourceProtocol
@@ -36,15 +34,10 @@ fun MainViewController(host: IosHostServices): UIViewController {
 }
 
 internal class IosApp private constructor(host: IosHostServices) {
-    val platform = IosPlatform(host)
-    private val arguments = NSProcessInfo.processInfo.arguments.filterIsInstance<String>()
+    private val core = IosCore.get(host)
+    val platform = core.platform
     private val lock = IosAppLock()
-
-    // Set up before the screen exists, so nothing has the file open.
-    private val container = AppContainer(platform).also { c ->
-        if ("-reset-data" in arguments) runBlocking { c.startFresh() }
-        if ("-dismiss-welcome" in arguments) runBlocking { c.write { it.templates.putSetting("welcome_dismissed", "1") } }
-    }
+    val container = core.container
     val viewModel = LedgerViewModel(container, platform)
     val rootHost: RootHost = IosRootHost(platform, lock)
 
@@ -61,7 +54,7 @@ internal class IosApp private constructor(host: IosHostServices) {
 
 private class IosRootHost(override val platform: Platform, override val lock: AppLockPort) : RootHost {
     override val addRequests: StateFlow<Int> = MutableStateFlow(0)
-    override val billsRequests: StateFlow<Int> = MutableStateFlow(0)
+    override val billsRequests: StateFlow<Int> = IosNotifications.billsRequests
 
     override fun openAttachment(uri: String, mime: String) {
         val url = NSURL.URLWithString(uri) ?: return

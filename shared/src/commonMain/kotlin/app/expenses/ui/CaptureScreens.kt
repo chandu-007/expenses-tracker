@@ -51,8 +51,11 @@ import app.expenses.InboxRowUi
 fun InboxScreen(
     rows: List<InboxRowUi>, accounts: List<AccountUi>, categories: List<CategoryUi>,
     onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit, onBack: () -> Unit,
+    /** Where bank messages can be pasted (iPhone): shows the paste button and box. Null on Android, so that screen is as it was. */
+    onPaste: ((String?, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
 ) {
     var confirmingAll by rememberSaveable { mutableStateOf(false) }
+    val paste = if (onPaste != null) rememberPasteState() else null
     // those that need no decision: not a repeat, not a related entry, an account the person has used for this bank card before (or the only account there is),
     // and an ordinary payment (a transfer or refund asks to be looked at)
     val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" }
@@ -66,13 +69,25 @@ fun InboxScreen(
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
-        if (rows.isEmpty()) {
+        if (rows.isEmpty() && onPaste != null) {
+            LazyColumn(Modifier.padding(pad).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp)) {
+                item(key = "empty") {
+                    Column {
+                        EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
+                        Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
+                        Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself. Set this up in More > Capture from texts, or paste a message below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                item(key = "paste") { PasteBox(onPaste, paste!!) }
+            }
+        } else if (rows.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+            if (onPaste != null) item(key = "paste") { PasteBox(onPaste, paste!!, Modifier.animateItem()) }
             item(key = "summary") {
                 Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${rows.size} to review", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_count"))
@@ -203,6 +218,7 @@ private fun Callout(text: String, color: androidx.compose.ui.graphics.Color, mod
 fun CaptureSettingsScreen(
     settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
 ) {
+    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack); return }
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {

@@ -1498,7 +1498,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun loadCaptureHealth(permissionGranted: Boolean) = withStore { ok ->
         val now = nowMillis()
         val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
-        _health.value = CaptureHealth.report(counts, now, ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN)
+        // where messages are handed over by a Shortcuts automation there is no switch and no permission to be missing
+        val handedOver = platform.supportsShortcutsCapture
+        _health.value = CaptureHealth.report(counts, now, handedOver || ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", handedOver || permissionGranted, SenderRules.BUILT_IN)
     }
 
     /** Adds a sender name the list was missing, so its texts are read from now on. */
@@ -1509,7 +1511,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val now = nowMillis()
         val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
         val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
-        _health.value = CaptureHealth.report(counts, now, ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", permissionGranted, SenderRules.BUILT_IN + extra)
+        val handedOver = platform.supportsShortcutsCapture
+        _health.value = CaptureHealth.report(counts, now, handedOver || ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", handedOver || permissionGranted, SenderRules.BUILT_IN + extra)
     }
 
     /** Gives the payee in this text a name of your own ("Chandu" for a phone-number address); every later text for the same address shows it. A blank name takes it off. */
@@ -1523,6 +1526,21 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun flipCaptureDirection(id: String) = withStore { ok -> ok.inbox.flipDirection(id); _inbox.value = inboxRows(ok) }
 
     fun dismissCapture(id: String) = withStore { ok -> ok.inbox.dismiss(id); _inbox.value = inboxRows(ok); refresh(ok) }
+
+    /**
+     * Where [Platform.supportsShortcutsCapture] is true (iPhone): puts one pasted bank message through [MessageIngest], with no sender (the words have to
+     * say it is a bank's, see [PasteRules]). [text] null reads the clipboard now (call this from the button press, on the main thread); a clipboard with no text answers
+     * with [PasteOutcome.clipboardEmpty]. [onResult] runs on the main thread. The words are read on this phone only and kept only if they are a transaction or a bill.
+     */
+    fun pasteMessage(text: String?, onResult: (PasteOutcome) -> Unit) {
+        val words = text ?: platform.readClipboardText()
+        if (words.isNullOrBlank()) { onResult(PasteOutcome("There is no text on the clipboard. Copy a bank message first, or type or paste it below.", null, kept = false, clipboardEmpty = true)); return }
+        viewModelScope.launch(BACKGROUND) {
+            val r = MessageIngest.ingest(container, null, words)
+            if (r.kept) container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) }
+            withContext(Dispatchers.Main) { onResult(PasteOutcome(r.message, r.detail, r.kept, clipboardEmpty = false)) }
+        }
+    }
 
     // ---- currency ----
 

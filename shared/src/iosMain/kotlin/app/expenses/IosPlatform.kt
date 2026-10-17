@@ -8,7 +8,7 @@ import app.expenses.core.storage.Sha256
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
@@ -20,6 +20,8 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.writeToURL
+import platform.UIKit.UIApplication
+import platform.UIKit.UIPasteboard
 import platform.UniformTypeIdentifiers.UTType
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -32,14 +34,14 @@ import kotlin.uuid.Uuid
  * folder first, so they read without a security scope; a scoped URL is still opened and closed properly). A file the person wants to *save* is
  * written to a staging folder and then handed to the share sheet ([IosExport]).
  *
- * Not on iPhone, and said so by the capability flags: SMS and notification capture, the widget, notifications, automatic export to a folder.
+ * Not on iPhone, and said so by the capability flags: SMS and notification capture (a Shortcuts automation and pasting stand in: [supportsShortcutsCapture]), the widget, automatic export to a folder. Reminders are local notifications ([IosNotifications]).
  * [host] supplies the Swift-only crypto behind passphrase-protected backups.
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalUuidApi::class)
 class IosPlatform(host: IosHostServices) : Platform {
     override val supportsAppLock get() = true
     override val supportsBiometricLock get() = true
-    override val supportsNotifications get() = false
+    override val supportsNotifications get() = true
     override val supportsAutoExport get() = false
     override val supportsCaptureSources get() = false
     override val supportsSmsCapture get() = false
@@ -122,10 +124,25 @@ class IosPlatform(host: IosHostServices) : Platform {
 
     override suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean) {}
 
-    override val captureChanges: Flow<Unit> = emptyFlow()
+    // Bank messages reach the iPhone app by a Shortcuts automation or by pasting ([IosCapture]); either one bumps this so an open To review refreshes.
+    override val captureChanges: Flow<Unit> = MessageIngest.changes.map { }
     override fun isSmsPermissionGranted(): Boolean = false
-    override fun notificationsAllowed(): Boolean = false
-    override fun showNotices(notices: List<Notice>): List<Notice> = emptyList()
+    override val supportsShortcutsCapture get() = true
+
+    /** The text on the clipboard. iOS asks the person to allow the paste when it comes from another app; nothing is read without a button press in the app. */
+    override fun readClipboardText(): String? {
+        val board = UIPasteboard.generalPasteboard
+        return if (board.hasStrings) board.string?.takeIf { it.isNotBlank() } else null
+    }
+
+    override fun openExternalUrl(url: String): Boolean {
+        val target = NSURL.URLWithString(url) ?: return false
+        UIApplication.sharedApplication.openURL(target, options = emptyMap<Any?, Any?>(), completionHandler = null)
+        return true
+    }
+    override fun notificationsAllowed(): Boolean = IosNotificationCenter.allowed()
+    override val notificationTimingNote get() = "iPhone decides when the app may look in the background, which can be rarely. So reminders for bills and cards in the next 7 days are handed to the phone ahead of time and arrive at the hour above even if the app is not opened; budget alerts, the weekly recap and bills found in a message appear when the app next runs, at the latest when you open it."
+    override fun showNotices(notices: List<Notice>): List<Notice> = IosNotificationCenter.show(notices)
 
     override fun authenticate(title: String, subtitle: String?, onResult: (success: Boolean, message: String?, cancelled: Boolean) -> Unit) = IosAuthentication.authenticate(title, onResult)
 

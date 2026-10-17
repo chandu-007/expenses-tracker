@@ -4,6 +4,8 @@ import Shared
 /// The iPhone app: all screens are the shared Compose UI (shared/src/commonMain), shown through one view controller. SwiftUI only owns the window.
 @main
 struct ExpensesApp: App {
+    init() { NotificationHost.start(CryptoServices()) }
+
     var body: some Scene {
         WindowGroup {
             SharedRoot()

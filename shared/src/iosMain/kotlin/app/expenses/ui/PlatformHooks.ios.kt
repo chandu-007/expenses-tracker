@@ -85,9 +85,12 @@ private object IosFilePickers : FilePickers {
 @Composable
 actual fun rememberFilePickers(): FilePickers = IosFilePickers
 
-/** Notifications are not available on iPhone yet ([app.expenses.Platform.supportsNotifications] is false), so the screen never offers this. */
+/** The system's permission dialog (once); after a refusal this app's notification page in Settings, the only place the choice can change. */
 @Composable
-actual fun rememberNotificationPermissionRequest(onDone: () -> Unit): () -> Unit = { onDone() }
+actual fun rememberNotificationPermissionRequest(onDone: () -> Unit): () -> Unit {
+    val done = androidx.compose.runtime.rememberUpdatedState(onDone)
+    return { app.expenses.IosNotifications.requestPermission { done.value() } }
+}
 
 /** iOS has no page for the passcode that an app may open; the closest is this app's own page in Settings. */
 @Composable
