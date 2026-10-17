@@ -1,5 +1,17 @@
 package app.expenses.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,10 +74,14 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
     val tag = if (compact) "balance_chip_${a.name}" else "account_${a.name}"
     // what the small chip reads out and what the tests read: masked like every other amount while Hide amounts is on
     val label = privately(a.name + (if (a.owed) " · owed" else "") + " " + a.balanceText)
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val reduce = LocalReduceMotion.current
+    val scale by animateFloatAsState(if (pressed && !reduce) 0.97f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "tilePress")
     Box(
-        modifier.clip(RoundedCornerShape(if (compact) 18.dp else 22.dp))
+        modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(if (compact) 18.dp else 22.dp))
             .background(Brush.linearGradient(listOf(Color(d.top), Color(d.bottom)), start = Offset.Zero, end = Offset(900f, 900f)))
-            .clickable(onClick = onClick).testTag(tag)
+            .clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick).testTag(tag)
             // the small chip reads as one line, as it always did; the full tile keeps its parts (balance, status) separate for the accounts page
             .then(if (compact) Modifier.clearAndSetSemantics { text = AnnotatedString(label) } else Modifier),
     ) {
@@ -112,5 +128,45 @@ private fun NetworkMark(n: CardNetwork, accent: Color, ink: Color, compact: Bool
         CardNetwork.RUPAY -> Text("RuPay", color = ink, fontWeight = FontWeight.Bold, fontSize = if (compact) 14.sp else 19.sp)
         CardNetwork.AMEX -> Text("AMEX", color = ink, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 17.sp, style = TextStyle(letterSpacing = 1.sp))
         CardNetwork.OTHER -> Box(Modifier.size(0.dp))
+    }
+}
+
+
+/**
+ * The accounts as a stack of cards, like a wallet: each card shows only its top edge (name and kind) over the one before, and the last lies fully in front.
+ * Tap the stack and the cards slide apart on a spring so each is whole; tap a card then to open it, or "Stack them" (or Back) to put them together again.
+ * One account is simply its card. Every card keeps its tag and its parts, so nothing about a card changes: only how they are laid out.
+ */
+@Composable
+fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, modifier: Modifier = Modifier) {
+    val reduce = LocalReduceMotion.current
+    var expanded by rememberSaveable { mutableStateOf(accounts.size <= 1) }
+    val open = remember { androidx.compose.animation.core.Animatable(if (expanded) 1f else 0f) }
+    androidx.compose.runtime.LaunchedEffect(expanded, reduce) {
+        if (reduce) open.snapTo(if (expanded) 1f else 0f) else open.animateTo(if (expanded) 1f else 0f, Motion.spring(dampingRatio = 0.78f, stiffness = 300f))
+    }
+    BackHandler(enabled = expanded && accounts.size > 1) { expanded = false }
+    val cardH = 168.dp
+    val gap = 12.dp
+    val n = accounts.size
+    // the edge of each card that shows while stacked: less when there are many, so the stack never grows tall
+    val peek = if (n <= 1) 0.dp else minOf(48.dp, 190.dp / (n - 1))
+    val stackedH = cardH + peek * (n - 1)
+    val spreadH = (cardH + gap) * n - gap
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("accounts_stack")) {
+        androidx.compose.animation.AnimatedVisibility(expanded && n > 1) {
+            androidx.compose.material3.TextButton(onClick = { expanded = false }, modifier = Modifier.align(Alignment.End).testTag("accounts_stack_close")) { Text("Stack them") }
+        }
+        val shown = with(density) { (stackedH.toPx() + (spreadH.toPx() - stackedH.toPx()) * open.value).toDp() }
+        Box(Modifier.fillMaxWidth().height(shown)) {
+            accounts.forEachIndexed { i, a ->
+                val y = with(density) { (peek.toPx() * i + ((cardH + gap).toPx() * i - peek.toPx() * i) * open.value).toDp() }
+                AccountTile(
+                    a, compact = false, onClick = { if (expanded) onOpen(a) else expanded = true },
+                    modifier = Modifier.fillMaxWidth().height(cardH).offset(y = y).shadow(if (i == 0) 0.dp else 8.dp, RoundedCornerShape(22.dp), clip = false),
+                )
+            }
+        }
     }
 }

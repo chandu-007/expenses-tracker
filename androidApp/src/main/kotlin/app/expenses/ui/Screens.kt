@@ -33,11 +33,14 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.size
+import app.expenses.core.domain.BudgetState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
@@ -61,7 +64,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -94,6 +96,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
@@ -136,6 +140,7 @@ fun EntryListScreen(
     onOpenBills: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
     tourMore: Boolean? = null,
+    onMoreShown: () -> Unit = {},
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -160,6 +165,7 @@ fun EntryListScreen(
     var askingFor by remember { mutableStateOf<DueUi?>(null) }
     askingFor?.let { d -> AmountDialog("Amount for ${d.name}", onConfirm = { onPostDue(d, it); askingFor = null }, onDismiss = { askingFor = null }) }
     val listState = rememberLazyListState()
+    val feel = rememberFeel()
     val snackbar = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
     // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
@@ -175,7 +181,7 @@ fun EntryListScreen(
     LaunchedEffect(state.undo) {
         val undo = state.undo ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(undo.text) else undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
-        if (result == SnackbarResult.ActionPerformed) onUndo(undo)
+        if (result == SnackbarResult.ActionPerformed) { feel(Feel.UNDO); onUndo(undo) }
         onUndoDismissed()
     }
     removing?.let { t ->
@@ -189,7 +195,7 @@ fun EntryListScreen(
     }
     var moreOpen by rememberSaveable { mutableStateOf(false) }
     // while the tour is running it says whether the More page is open; otherwise (null) the person decides
-    androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { moreOpen = it } }
+    androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { moreOpen = it; if (it) onMoreShown() } }
     BackHandler(enabled = moreOpen && selected.isEmpty()) { moreOpen = false }
     val closeMore = { moreOpen = false }
     Scaffold(
@@ -208,7 +214,7 @@ fun EntryListScreen(
             else HomeBar(
                 selected = if (moreOpen) "More" else "Home",
                 onHome = { moreOpen = false }, onSearch = { moreOpen = false; onOpenSearch() }, onReports = { moreOpen = false; onOpenReports() },
-                onMore = { moreOpen = !moreOpen },
+                onMore = { moreOpen = !moreOpen }, moreBadge = state.showBackupNudge,
             )
         },
         floatingActionButton = {
@@ -222,6 +228,7 @@ fun EntryListScreen(
         if (moreOpen) {
             // a page of its own (not a pop-up over the list): everything the app can do, grouped, in as many columns as the screen is wide enough for
             MorePage(Modifier.padding(padding)) {
+                                if (state.showBackupNudge) BackupNudgeCard(onBackUp = { closeMore(); onOpenData() }, onLater = onSnoozeBackupNudge)
                                 MenuGroup("Inbox") {
                                     MenuTile(Icons.Outlined.Inbox, "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
                                     MenuTile(Icons.Outlined.Sms, "Capture from texts", "open_capture") { closeMore(); onOpenCapture() }
@@ -252,18 +259,26 @@ fun EntryListScreen(
             }
             return@Scaffold
         }
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)
+        val fold = remember { HeaderFold() }
+        val foldPx = with(androidx.compose.ui.platform.LocalDensity.current) { 190.dp.toPx() }
+        Column(Modifier.fillMaxSize().padding(padding).nestedScroll(remember(foldPx) { fold.connection(foldPx) })) {
             val onHero = MaterialTheme.colorScheme.onPrimary
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
                 if (android.os.Build.VERSION.SDK_INT >= 31) HeroGlow(onHero) // Android 12 and later: two softly blurred lights behind the figures
                 Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
                     Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
-                Text(state.periodSpend, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = onHero, modifier = Modifier.padding(top = 4.dp).testTag("month_spend"))
+                    RollingAmount(
+                        state.periodSpend, state.periodSpendMinor,
+                        modifier = Modifier.padding(top = 4.dp).graphicsLayer { val k = 1f - 0.30f * fold.fraction; scaleX = k; scaleY = k; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }.testTag("month_spend"),
+                        color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    )
+                    if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp).foldAway(fold))
                 }
             }
+            Column(Modifier.foldAway(fold)) {
             if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
             if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
-            if (state.showBackupNudge) BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge)
             state.homeLayout.visible().forEach { section ->
                 when (section) {
                     HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
@@ -290,20 +305,24 @@ fun EntryListScreen(
                     }
                 }
             }
+            }
             Spacer(Modifier.height(4.dp))
             if (state.rows.isEmpty()) {
                 if (state.showWelcome) {
                     WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            EmptyArt(EmptyKind.HOME, Modifier.size(140.dp))
+                            Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             } else {
                 LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
-                    items(listItems, key = { if (it is RowUi) it.seq else "day$it" }, contentType = { if (it is RowUi) "row" else "day" }) { item ->
+                    itemsIndexed(listItems, key = { _, it -> if (it is RowUi) it.seq else "day$it" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
                         if (item is RowUi) SwipeableRow(
-                            item, onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
+                            item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
                             onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
                             modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
                         ) else DayHeader(item as Long)
@@ -316,7 +335,7 @@ fun EntryListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, fresh: Boolean = false, modifier: Modifier = Modifier) {
+private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, fresh: Boolean = false, modifier: Modifier = Modifier) {
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
@@ -334,10 +353,10 @@ private fun SwipeableRow(row: RowUi, onOpen: (RowUi) -> Unit, onDelete: (RowUi) 
                 Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
             }
         },
-        modifier = modifier.testTag("row_${row.title}"),
+        modifier = modifier.entryCardClip(pos).sharedContainer("entry:${row.id}").testTag("row_${row.title}"),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+            Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
                 .combinedClickable(onClick = { if (selecting) onToggle() else onOpen(row) }, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },

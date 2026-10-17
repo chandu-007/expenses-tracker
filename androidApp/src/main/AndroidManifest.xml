@@ -8,6 +8,7 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <application
+        android:enableOnBackInvokedCallback="true"
         android:name=".ExpensesApp"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

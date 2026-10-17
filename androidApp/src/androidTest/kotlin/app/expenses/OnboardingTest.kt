@@ -118,7 +118,7 @@ class OnboardingTest {
         seed(12)
         runBlocking { container.write { ok -> repeat(5) { i -> ok.store.delete(EntryId("e$i")) } } } // 7 left
         launch()
-        assertTrue(!present("backup_nudge"), "twelve were added but only seven remain")
+        assertTrue(!present("more_badge"), "twelve were added but only seven remain")
     }
 
     @Test
@@ -131,37 +131,44 @@ class OnboardingTest {
 
     // ---- the backup reminder ----
 
+    /** The reminder lives on the More page; a dot on the More tab says it is there. */
+    private fun showNudge() {
+        waitFor("more_badge")
+        compose.onNodeWithTag("more_menu").performClick()
+        waitFor("backup_nudge")
+    }
+
     @Test
     fun theReminderAppearsWhenThereIsSomethingToLoseAndNotBefore() {
         seed(9)
         launch()
-        assertTrue(!present("backup_nudge"), "nine entries is not yet enough")
+        assertTrue(!present("more_badge"), "nine entries is not yet enough")
         runBlocking { container.write { ok -> ok.store.save(Expense(EntryId("tenth"), System.currentTimeMillis(), AccountId("cash"), Money(500, Currency.INR)), EntryDetails(merchant = "Tenth")) } }
         launch()
-        waitFor("backup_nudge")
+        showNudge()
     }
 
     @Test
     fun laterQuietensItForTwoWeeksAndItReturnsAfterThat() {
         seed(12)
-        launch(); waitFor("backup_nudge")
+        launch(); showNudge()
         compose.onNodeWithTag("nudge_later").performClick()
-        waitGone("backup_nudge")
-        launch(); assertTrue(!present("backup_nudge"), "still quiet after a restart")
+        waitGone("more_badge")
+        launch(); assertTrue(!present("more_badge"), "still quiet after a restart")
         put("backup_nudge_snoozed_at", (System.currentTimeMillis() - 15 * day).toString()) // 15 days ago
-        launch(); waitFor("backup_nudge")
+        launch(); showNudge()
     }
 
     @Test
     fun backUpNowOpensTheDataScreenAndARealBackupSilencesTheReminder() {
         seed(12)
-        launch(); waitFor("backup_nudge")
+        launch(); showNudge()
         compose.onNodeWithTag("nudge_backup").performClick()
         waitFor("create_backup")
         val uri = Uri.fromFile(File(context.cacheDir, "nudge.expbak").also { files += it })
         runBlocking { DataActions(context, container).backup(uri, null) }
         assertTrue(setting("backup_last_at") != null && setting("backup_last_count") == "12", "the backup was recorded with its entry count")
-        launch(); assertTrue(!present("backup_nudge"), "a backup was just made")
+        launch(); assertTrue(!present("more_badge"), "a backup was just made")
     }
 
     @Test
@@ -170,17 +177,17 @@ class OnboardingTest {
         val bad = Uri.fromFile(File("/nonexistent-directory/x.expbak"))
         kotlin.runCatching { runBlocking { DataActions(context, container).backup(bad, null) } }.also { assertTrue(it.isFailure, "writing to nowhere fails") }
         assertEquals(null, setting("backup_last_at"), "a failed backup is not remembered")
-        launch(); waitFor("backup_nudge")
+        launch(); showNudge()
     }
 
     @Test
     fun anOldBackupWithManyNewEntriesBringsItBackAndAFreshOneDoesNot() {
         seed(30)
         put("backup_last_at", (System.currentTimeMillis() - 40 * day).toString()); put("backup_last_count", "5")
-        launch(); waitFor("backup_nudge")
+        launch(); showNudge()
         put("backup_last_at", (System.currentTimeMillis() - 2 * day).toString())
         runBlocking { container.write { ok -> ok.templates.putSetting("backup_nudge_snoozed_at", "0") } } // an expired snooze, to prove the age is what matters
-        launch(); assertTrue(!present("backup_nudge"), "many new entries but the backup is two days old")
+        launch(); assertTrue(!present("more_badge"), "many new entries but the backup is two days old")
     }
 
     @Test

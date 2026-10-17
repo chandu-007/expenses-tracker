@@ -1,6 +1,35 @@
 package app.expenses.ui
 
 import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.AmountWords
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import app.expenses.core.domain.symbolOrCode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,6 +148,10 @@ fun EntryFormScreen(
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
     val focus = remember { FocusRequester() }
+    var padOn by remember { mutableStateOf(false) }
+    val reduceMotion = LocalReduceMotion.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(padOn) { if (padOn) keyboard?.hide() }
     LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
     if (pickingCategory) CategoryPickerDialog(
         categories.filter { !it.hidden || it.id == draft.category }, draft.category,
@@ -164,16 +197,42 @@ fun EntryFormScreen(
         ) { DatePicker(state = picker) }
     }
 
+    Surface(
+        modifier = Modifier.fillMaxSize().then(if (start.id != null) Modifier.sharedContainer("entry:${start.id}") else Modifier),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } }) },
+        containerColor = Color.Transparent,
+        topBar = {
+            Column(Modifier.statusBarsPadding()) {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(width = 40.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)).testTag("sheet_handle"))
+                }
+                TopAppBar(
+                    title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
+                )
+            }
+        },
         // Pinned above the keyboard so Save is always reachable, however small the screen.
         bottomBar = {
-            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-            Button(
-                onClick = { if (built is DraftResult.Ok) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onSave(draft, saveAsTemplate) } },
-                enabled = built is DraftResult.Ok,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("save"),
-            ) { Text("Save") }
+            val feel = rememberFeel()
+            Column {
+                AnimatedVisibility(
+                    visible = padOn,
+                    enter = if (reduceMotion) EnterTransition.None else expandVertically(tween(Motion.STANDARD, easing = Motion.EaseOut)) + fadeIn(tween(Motion.STANDARD)),
+                    exit = if (reduceMotion) ExitTransition.None else shrinkVertically(tween(Motion.QUICK)) + fadeOut(tween(Motion.QUICK)),
+                ) {
+                    NumberPad { key -> draft = draft.copy(amountText = padPress(draft.amountText, key, currency.minorUnitDigits)) }
+                }
+                Button(
+                    onClick = { if (built is DraftResult.Ok) { feel(Feel.SAVE); onSave(draft, saveAsTemplate) } },
+                    enabled = built is DraftResult.Ok,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("save"),
+                ) { Text("Save") }
+            }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -192,21 +251,30 @@ fun EntryFormScreen(
                 }
             }
             if (refundOf != null) Text("Refund of $refundOf", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("refund_of"))
-            OutlinedTextField(
-                value = draft.amountText,
-                onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(amountText = v) },
-                label = { Text("Amount (${BaseCurrency.current.symbolOrCode()})") },
-                isError = draft.amountText.isNotEmpty() && amount == null,
-                supportingText = {
-                    if (draft.amountText.isNotEmpty() && amount == null) Text("Enter an amount with at most 2 decimals")
-                    else if (draft.kind == DraftKind.REFUND) Text("Up to ${Money(draft.refundableMinor, currency).formatted()} can still be refunded")
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.tourSpot("amount").testTag("amount"),
-            )
+            Column {
+                OutlinedTextField(
+                    value = draft.amountText,
+                    onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(amountText = v) },
+                    label = { Text("Amount (${BaseCurrency.current.symbolOrCode()})") },
+                    isError = draft.amountText.isNotEmpty() && amount == null,
+                    supportingText = {
+                        if (draft.amountText.isNotEmpty() && amount == null) Text("Enter an amount with at most 2 decimals")
+                        else if (draft.kind == DraftKind.REFUND) Text("Up to ${Money(draft.refundableMinor, currency).formatted()} can still be refunded")
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) app.expenses.StartupTrace.mark("add: amount focused") }.tourSpot("amount").testTag("amount"),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val words = amount?.takeIf { currency.minorUnitDigits == 2 && it.minorUnits >= 100_000L && !LocalHideAmounts.current }?.let { AmountWords.of(it.minorUnits) }
+                    if (words != null) {
+                        Text(words, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 16.dp).testTag("amount_words"))
+                    } else Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { padOn = !padOn }, modifier = Modifier.testTag("amount_pad_toggle")) { Text(if (padOn) "Keyboard" else "Pad") }
+                }
+            }
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
 
             if (draft.kind == DraftKind.LOAN) {
@@ -281,6 +349,47 @@ fun EntryFormScreen(
             }
             if (onRefund != null) {
                 OutlinedButton(onClick = onRefund, modifier = Modifier.testTag("refund_start")) { Text("Record a refund for this expense") }
+            }
+        }
+    }
+    }
+}
+
+/** The pad's keys in reading order: 1-9, then dot, 0, backspace. */
+private val PadKeys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "<")
+
+/** Applies one pad key to the amount text with the same rules as typing: digits and one dot, at most [decimals] after the dot. */
+private fun padPress(text: String, key: String, decimals: Int): String = when (key) {
+    "<" -> text.dropLast(1)
+    "." -> if (decimals == 0 || '.' in text) text else if (text.isEmpty()) "0." else "$text."
+    else -> if ('.' in text && text.substringAfter('.').length >= decimals) text else if (text == "0") key else text + key
+}
+
+@Composable
+private fun NumberPad(onKey: (String) -> Unit) {
+    val feel = rememberFeel()
+    val reduce = LocalReduceMotion.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("number_pad"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        PadKeys.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { key ->
+                    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    val pressed by source.collectIsPressedAsState()
+                    val scale by animateFloatAsState(
+                        if (pressed && !reduce) 0.92f else 1f,
+                        if (reduce) snap() else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                        label = "padKey",
+                    )
+                    val tag = when (key) { "." -> "pad_dot"; "<" -> "pad_back"; else -> "pad_$key" }
+                    Box(
+                        Modifier.weight(1f).height(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+                            .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable(interactionSource = source, indication = null) { feel(Feel.TICK); onKey(key) }
+                            .semantics { contentDescription = when (key) { "<" -> "Backspace"; "." -> "Decimal point"; else -> key } }
+                            .testTag(tag),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(if (key == "<") "⌫" else key, style = MaterialTheme.typography.titleLarge) }
+                }
             }
         }
     }

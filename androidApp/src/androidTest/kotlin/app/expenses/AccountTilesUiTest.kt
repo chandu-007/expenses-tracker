@@ -51,7 +51,12 @@ class AccountTilesUiTest {
     private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
     private fun type(tag: String, text: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performTextClearance(); node(tag).performTextInput(text) }
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)); waitFor("add") }
-    private fun openAccounts() { tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list") }
+    /** Opens the Accounts page; with several accounts the cards start stacked like a wallet, so one tap spreads them out before any card is tapped. */
+    private fun openAccounts() {
+        tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        val several = (runBlocking { container.write { it.db.schemaQueries.selectAccounts().executeAsList().count { a -> a.archived == 0L } } } ?: 0) > 1
+        if (several) { tap("accounts_stack"); waitFor("accounts_stack_close") }
+    }
     private fun look(id: String) = runBlocking { container.write { it.looks.get(id) } }
     private fun idOf(name: String) = runBlocking { container.write { it.db.schemaQueries.selectAccounts().executeAsList().first { a -> a.name == name }.id } }!!
     private fun entries() = runBlocking { container.write { it.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList() } }!!
@@ -128,5 +133,19 @@ class AccountTilesUiTest {
         assertEquals("4821", look("b")?.last4)
         tap("account_Savings"); type("account_last4", ""); for (c in "123456") node("account_last4").performTextInput(c.toString()); tap("account_save"); waitFor("account_Savings")
         assertEquals("1234", look("b")?.last4, "typing a fifth digit does nothing")
+    }
+
+    @Test
+    fun severalAccountsStartStackedLikeAWalletAndOneTapSpreadsThemApartAndAnotherStacksThemAgain() {
+        launch(); tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        fun y(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+        fun gap() = kotlin.math.abs(y("account_Bank") - y("account_Cash"))
+        val stackedGap = gap()
+        assertTrue(stackedGap in 20f..200f, "stacked: each card shows only its edge ($stackedGap px apart)")
+        assertTrue(!has("accounts_stack_close"), "nothing to close while stacked")
+        tap("accounts_stack"); waitFor("accounts_stack_close")
+        compose.waitUntil(10_000) { gap() > 400f }
+        tap("accounts_stack_close"); compose.waitUntil(10_000) { !has("accounts_stack_close") }
+        compose.waitUntil(10_000) { gap() < 200f }
     }
 }

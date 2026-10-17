@@ -1,5 +1,15 @@
 package app.expenses.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,30 +65,48 @@ fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Uni
                 listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach { Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             val slots: List<CalendarCellUi?> = List(state.blanks) { null } + state.cells
-            slots.chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth()) {
-                    (week + List(7 - week.size) { null }).forEach { cell ->
-                        if (cell == null) Box(Modifier.weight(1f).height(56.dp)) else Cell(cell, cell.epochDay == state.selectedEpochDay, Modifier.weight(1f)) { onSelect(cell.epochDay) }
+            val reduce = LocalReduceMotion.current
+            val grid: @Composable () -> Unit = {
+                Column {
+                    slots.chunked(7).forEach { week ->
+                        Row(Modifier.fillMaxWidth()) {
+                            (week + List(7 - week.size) { null }).forEach { cell ->
+                                if (cell == null) Box(Modifier.weight(1f).height(56.dp)) else Cell(cell, cell.epochDay == state.selectedEpochDay, Modifier.weight(1f)) { onSelect(cell.epochDay) }
+                            }
+                        }
                     }
                 }
             }
+            // a change of month fades the new grid in; the old one is dropped at once so its tags are never doubled for long
+            if (reduce) grid() else AnimatedContent(
+                targetState = state.offset,
+                transitionSpec = { fadeIn(tween(Motion.QUICK)) togetherWith ExitTransition.None },
+                label = "calendarMonth",
+            ) { month -> androidx.compose.runtime.key(month) { grid() } }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             if (state.selectedEpochDay == null) {
                 Text("Tap a day to see what was spent and what is due.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp).testTag("cal_hint"))
-            } else {
-                Text(state.dayTitle, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 8.dp).testTag("cal_day_title"))
-                Text("Spent ${state.dayTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp).testTag("cal_day_total"))
-                state.dayBills.forEach { Text("Due: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp).testTag("cal_bill")) }
-                if (state.dayLines.isEmpty() && state.dayBills.isEmpty()) Text("Nothing on this day.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp).testTag("cal_empty_day"))
-                state.dayLines.forEach { l ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpenEntry(l.entryId) }.padding(horizontal = 8.dp, vertical = 10.dp).testTag("cal_line_${l.title}"), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(l.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                            l.categoryName?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            AnimatedVisibility(
+                visible = state.selectedEpochDay != null,
+                enter = if (reduce) EnterTransition.None else fadeIn(tween(Motion.STANDARD, easing = Motion.EaseOut)) + slideInVertically(tween(Motion.STANDARD, easing = Motion.EaseOut)) { it / 8 },
+                exit = ExitTransition.None,
+            ) {
+                    Column {
+                        Text(state.dayTitle, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 8.dp).testTag("cal_day_title"))
+                        Text("Spent ${state.dayTotal}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp).testTag("cal_day_total"))
+                        state.dayBills.forEach { Text("Due: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp).testTag("cal_bill")) }
+                        if (state.dayLines.isEmpty() && state.dayBills.isEmpty()) Text("Nothing on this day.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp).testTag("cal_empty_day"))
+                        state.dayLines.forEach { l ->
+                            Row(Modifier.fillMaxWidth().clickable { onOpenEntry(l.entryId) }.padding(horizontal = 8.dp, vertical = 10.dp).testTag("cal_line_${l.title}"), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(l.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                    l.categoryName?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                                Text(l.amount.formatted(), style = MaterialTheme.typography.bodyLarge)
+                            }
                         }
-                        Text(l.amount.formatted(), style = MaterialTheme.typography.bodyLarge)
                     }
-                }
             }
         }
     }
@@ -88,10 +116,13 @@ fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Uni
 private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val shade = MaterialTheme.colorScheme.primary.copy(alpha = c.level * 0.18f)
     val hide = LocalHideAmounts.current
+    val reduce = LocalReduceMotion.current
+    val picked = MaterialTheme.colorScheme.secondaryContainer
+    val highlight by animateColorAsState(if (selected) picked.copy(alpha = 0.6f) else picked.copy(alpha = 0f), Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "calSelected")
     val description = "${c.day}, " + (if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
     Column(
         modifier.height(56.dp).padding(1.dp).clip(RoundedCornerShape(6.dp)).background(shade)
-            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)) else Modifier)
+            .background(highlight)
             .clickable(onClick = onClick).padding(2.dp).testTag("cal_day_${c.day}").semantics { contentDescription = privatelyPlain(description, hide) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

@@ -49,7 +49,12 @@ class AccountsUiTest {
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
-    private fun openAccounts() { tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list") }
+    /** Opens the Accounts page; with several accounts the cards start stacked like a wallet, so one tap spreads them out before any card is tapped. */
+    private fun openAccounts() {
+        tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        val several = (runBlocking { container.write { it.db.schemaQueries.selectAccounts().executeAsList().count { a -> a.archived == 0L } } } ?: 0) > 1
+        if (several) { tap("accounts_stack"); waitFor("accounts_stack_close") }
+    }
     private fun create(name: String, type: String = "BANK", opening: String = "") {
         tap("add_account"); type("account_name", name); tap("type_$type"); if (opening.isNotEmpty()) type("account_opening", opening); tap("account_save")
     }

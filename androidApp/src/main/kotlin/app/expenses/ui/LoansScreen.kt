@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,13 +72,18 @@ fun LoansScreen(
                     }
                 }
                 if (ui.rows.isEmpty()) item {
-                    Text(
-                        "Nobody yet. When you lend money, or borrow some, add it here and the app keeps track of who owes what, including part payments.",
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("loans_empty"),
-                    )
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        EmptyArt(EmptyKind.LOANS, Modifier.padding(top = 8.dp))
+                        Text(
+                            "Nobody yet. When you lend money, or borrow some, add it here and the app keeps track of who owes what, including part payments.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("loans_empty"),
+                        )
+                    }
                 }
-                items(ui.rows, key = { it.id }) { r ->
-                    Row(Modifier.fillMaxWidth().clickable { onSelect(r.id) }.padding(horizontal = 16.dp, vertical = 14.dp).testTag("loan_row_${r.name}"), verticalAlignment = Alignment.CenterVertically) {
+                itemsIndexed(ui.rows, key = { _, it -> it.id }) { index, r ->
+                  val pos = CardPos.of(index == 0, index == ui.rows.lastIndex)
+                  Column(Modifier.animateItem().entryCardClip(pos)) {
+                    Row(Modifier.fillMaxWidth().entryCardFill(pos).clickable { onSelect(r.id) }.padding(horizontal = 16.dp, vertical = 14.dp).testTag("loan_row_${r.name}"), verticalAlignment = Alignment.CenterVertically) {
                         CategoryAvatar(r.name, r.name, Modifier.padding(end = 14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(r.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
@@ -85,7 +91,7 @@ fun LoansScreen(
                         }
                         if (r.minor != 0L) Text(r.amountText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(if (r.minor > 0) Flow3.IN else Flow3.OUT), modifier = Modifier.testTag("loan_amount_${r.name}"))
                     }
-                    HorizontalDivider()
+                  }
                 }
             }
         } else {
@@ -107,7 +113,7 @@ fun LoansScreen(
                         }
                     }
                 }
-                items(ui.history, key = { it.id }) { e -> HistoryRow(e, onOpenEntry) }
+                itemsIndexed(ui.history, key = { _, it -> it.id }) { index, e -> HistoryRow(e, CardPos.of(index == 0, index == ui.history.lastIndex), onOpenEntry, Modifier.animateItem()) }
                 if (selected.entries == 0) item {
                     TextButton(onClick = { onRemove(selected.id) }, modifier = Modifier.padding(8.dp).testTag("loan_remove")) { Text("Remove ${selected.name} from the list") }
                 }
@@ -126,15 +132,14 @@ private fun Total(label: String, amount: String, color: androidx.compose.ui.grap
 }
 
 @Composable
-private fun HistoryRow(e: LoanEntryUi, onOpen: (String) -> Unit) {
-    Column {
-        Row(Modifier.fillMaxWidth().clickable { onOpen(e.id) }.padding(horizontal = 16.dp, vertical = 12.dp).testTag("loan_history_${e.id}"), verticalAlignment = Alignment.CenterVertically) {
+private fun HistoryRow(e: LoanEntryUi, pos: CardPos, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.entryCardClip(pos)) {
+        Row(Modifier.fillMaxWidth().entryCardFill(pos).clickable { onOpen(e.id) }.padding(horizontal = 16.dp, vertical = 12.dp).testTag("loan_history_${e.id}"), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (e.gave) "You gave" else "You got", style = MaterialTheme.typography.bodyLarge)
                 Text(listOf(e.dateText, e.account, e.note).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
         }
-        HorizontalDivider()
     }
 }

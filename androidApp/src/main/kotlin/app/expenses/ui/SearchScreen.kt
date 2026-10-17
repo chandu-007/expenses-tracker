@@ -1,5 +1,6 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
@@ -52,6 +54,7 @@ import app.expenses.SearchUi
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
+    tabBar: @Composable () -> Unit = {},
     state: SearchUi,
     categories: List<CategoryUi>,
     onChange: (SearchInput) -> Unit,
@@ -125,6 +128,7 @@ fun SearchScreen(
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
             )
+            else tabBar()
         },
         topBar = { TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("search_back")) { Text("Back") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -169,9 +173,9 @@ fun SearchScreen(
             HorizontalDivider()
             when {
                 state.problem != null -> Text(state.problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp).testTag("search_problem"))
-                !state.hasConditions -> Text("Type a merchant or note, or choose an amount, category or dates.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_hint"))
+                !state.hasConditions -> SearchEmpty("Type a merchant or note, or choose an amount, category or dates.", "search_hint")
                 state.searching -> Text("Searching…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_working"))
-                state.results.isEmpty() -> Text("Nothing found.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_none"))
+                state.results.isEmpty() -> SearchEmpty("Nothing found.", "search_none")
                 else -> {
                     state.notice?.let { n ->
                         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -185,15 +189,16 @@ fun SearchScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("search_count"),
                     )
                     LazyColumn(Modifier.fillMaxSize().testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
-                        items(state.results, key = { it.seq }) { row ->
+                        itemsIndexed(state.results, key = { _, it -> it.seq }) { index, row ->
                             val isSelected = row.id in selected
+                            val pos = CardPos.of(first = index == 0, last = index == state.results.lastIndex)
                             Row(
-                                Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                                Modifier.animateItem().entryCardClip(pos).fillMaxWidth().entryCardFill(pos, isSelected)
                                     .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else onOpen(row) }, onLongClick = { selected = selected.toggled(row.id) })
                                     .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+                                if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = 14.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                                     Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -201,11 +206,19 @@ fun SearchScreen(
                                 val flow = flowOf(row.kind, row.inflow)
                                 Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, color = amountColor(flow))
                             }
-                            HorizontalDivider()
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** The hint or "nothing found" line under a small picture; scrolls if the keyboard leaves little room, so the text is always reachable. */
+@Composable
+private fun SearchEmpty(text: String, tag: String) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+        EmptyArt(EmptyKind.SEARCH, Modifier.padding(top = 16.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag(tag))
     }
 }

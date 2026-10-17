@@ -4,8 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
-import androidx.activity.compose.BackHandler
+import app.expenses.ui.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -162,7 +164,11 @@ class MainActivity : FragmentActivity() {
                     if (locked) LockedScreen(lockMessage) { lock.requestUnlock(this@MainActivity) } else when (val s = state) {
                         UiState.Opening -> OpeningScreen()
                         is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                        is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHideAmounts provides s.hideAmounts) {
+                        is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(
+                            app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
+                            app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
+                        ) {
+                        androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(s.motionSpeed) }
                         // the tour: the app opens each part for real, and a layer on top explains it
                         val guide by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
                         var tourIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -208,15 +214,35 @@ class MainActivity : FragmentActivity() {
                         val screenKey = listOf(
                             history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                             customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen,
-                        ).indexOf(true).let { if (it == 1 || it == 21) -1 else it } // the add and edit form open at once: quick entry is the app's promise
-                        app.expenses.ui.ScreenEnter(screenKey) { when {
-                            history != null -> {
-                                val h = history!!
+                        ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
+                        // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
+                        val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
+                        val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
+                        // the bar along the bottom is shown by Home, Search and Reports alike; its glass indicator glides between them as one bar
+                        var wantMore by rememberSaveable { mutableStateOf(false) }
+                        val goTab: (String) -> Unit = { t ->
+                            if (searching && t != "Search") { searching = false; viewModel.closeSearch() }
+                            if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
+                            when {
+                                t == "Search" && !searching -> searching = true
+                                t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
+                                t == "More" -> wantMore = true
+                            }
+                        }
+                        val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
+                            // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
+                            if (WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) <= 0) {
+                            app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
+                            }
+                        }
+                        app.expenses.ui.ScreenHost(screenKey) { k -> when {
+                            k == 0 -> {
+                                val h = history ?: heldHistory.value!!
                                 BackHandler { viewModel.closeHistory() }
                                 HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
                             }
-                            editing is Editable.Form -> {
-                                val e = editing as Editable.Form
+                            k == 1 -> {
+                                val e = (editing as? Editable.Form) ?: (heldEditing.value as Editable.Form)
                                 BackHandler { viewModel.closeEditor() }
                                 // Keyed, so opening a refund from an expense's editor starts a new form instead of reusing the expense's typed state.
                                 androidx.compose.runtime.key(e.draft.id, e.draft.kind, e.draft.refundsEntry) {
@@ -241,28 +267,28 @@ class MainActivity : FragmentActivity() {
                                 )
                                 }
                             }
-                            editing is Editable.ReadOnly -> {
-                                val e = editing as Editable.ReadOnly
+                            k == 2 -> {
+                                val e = (editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly)
                                 BackHandler { viewModel.closeEditor() }
                                 ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
                             }
-                            inboxOpen -> {
+                            k == 3 -> {
                                 BackHandler { inboxOpen = false }
                                 InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false })
                             }
-                            healthOpen -> {
+                            k == 4 -> {
                                 BackHandler { healthOpen = false }
                                 CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
                             }
-                            privacyOpen -> {
+                            k == 5 -> {
                                 BackHandler { privacyOpen = false }
                                 PrivacyScreen(privacyRows(), PermissionNotes.canUseInternet(this), onBack = { privacyOpen = false })
                             }
-                            rulesOpen -> {
+                            k == 6 -> {
                                 BackHandler { rulesOpen = false }
                                 CaptureRulesScreen(captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false })
                             }
-                            captureOpen -> {
+                            k == 7 -> {
                                 BackHandler { captureOpen = false }
                                 CaptureSettingsScreen(
                                     captureSettings, smsPermission, NotificationCaptureService.accessGranted(this@MainActivity),
@@ -272,19 +298,19 @@ class MainActivity : FragmentActivity() {
                                     onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                                 )
                             }
-                            currencyOpen -> {
+                            k == 8 -> {
                                 BackHandler { currencyOpen = false }
                                 CurrencyScreen(s.baseCurrency, currencyBlocker, onChoose = viewModel::setBaseCurrency, onBack = { currencyOpen = false })
                             }
-                            appearing -> {
+                            k == 9 -> {
                                 BackHandler { appearing = false }
-                                AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false })
+                                AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed)
                             }
-                            customisingHome -> {
+                            k == 10 -> {
                                 BackHandler { customisingHome = false }
                                 HomeLayoutScreen(s.homeLayout, onChange = viewModel::setHomeLayout, onBack = { customisingHome = false })
                             }
-                            managingAccounts -> {
+                            k == 11 -> {
                                 BackHandler { managingAccounts = false }
                                 AccountsScreen(
                                     rows = s.accountRows, onBack = { managingAccounts = false },
@@ -292,7 +318,7 @@ class MainActivity : FragmentActivity() {
                                     onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms,
                                 )
                             }
-                            managingCategories -> {
+                            k == 12 -> {
                                 BackHandler { managingCategories = false }
                                 CategoriesScreen(
                                     categories = s.categories,
@@ -305,7 +331,7 @@ class MainActivity : FragmentActivity() {
                                     onAddSuggested = viewModel::addSuggestedCategories,
                                 )
                             }
-                            securing -> {
+                            k == 13 -> {
                                 BackHandler { securing = false; lock.dismissMessage() }
                                 SecurityScreen(
                                     settings = lockSettings, availability = lock::availability, message = lockMessage,
@@ -314,10 +340,11 @@ class MainActivity : FragmentActivity() {
                                     onBack = { securing = false; lock.dismissMessage() },
                                 )
                             }
-                            searching -> {
+                            k == 14 -> {
                                 val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
                                 BackHandler { searching = false; viewModel.closeSearch() }
                                 SearchScreen(
+                                    tabBar = { tabBar("Search") },
                                     state = found, categories = s.categories,
                                     onChange = viewModel::search,
                                     onBack = { searching = false; viewModel.closeSearch() },
@@ -329,7 +356,7 @@ class MainActivity : FragmentActivity() {
                                     saved = s.savedSearches, onSaveSearch = viewModel::saveSearch, onDeleteSaved = viewModel::deleteSavedSearch,
                                 )
                             }
-                            calendaring -> {
+                            k == 15 -> {
                                 val cal by viewModel.calendar.collectAsStateWithLifecycle(context = MAIN)
                                 BackHandler { calendaring = false; viewModel.closeCalendar() }
                                 CalendarScreen(
@@ -337,11 +364,12 @@ class MainActivity : FragmentActivity() {
                                     onShift = viewModel::shiftCalendar, onSelect = viewModel::selectCalendarDay, onOpenEntry = viewModel::openEditor,
                                 )
                             }
-                            reporting -> {
+                            k == 16 -> {
                                 val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
                                 // Back leaves the entry list first, then the report.
                                 BackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
                                 ReportsScreen(
+                                    tabBar = { tabBar("Reports") },
                                     report = report,
                                     onBack = { reporting = false; viewModel.closeReports() },
                                     onMode = viewModel::setReportMode, onStep = viewModel::stepReport,
@@ -351,7 +379,7 @@ class MainActivity : FragmentActivity() {
                                     onOpenEntry = viewModel::openEditor,
                                 )
                             }
-                            yourData -> {
+                            k == 17 -> {
                                 val dataState by viewModel.data.collectAsStateWithLifecycle(context = MAIN)
                                 val statement by viewModel.statement.collectAsStateWithLifecycle(context = MAIN)
                                 if (statement.active) {
@@ -372,11 +400,11 @@ class MainActivity : FragmentActivity() {
                                     )
                                 }
                             }
-                            alerts -> {
+                            k == 18 -> {
                                 BackHandler { alerts = false }
                                 NotificationSettingsScreen(prefs = s.notifications, onChange = viewModel::updateNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false })
                             }
-                            repeating -> {
+                            k == 19 -> {
                                 BackHandler { repeating = false }
                                 val now = java.time.LocalDate.now()
                                 RecurringScreen(
@@ -389,7 +417,7 @@ class MainActivity : FragmentActivity() {
                                     onDelete = viewModel::deleteRecurring,
                                 )
                             }
-                            budgeting -> {
+                            k == 20 -> {
                                 BackHandler { budgeting = false }
                                 BudgetScreen(
                                     budget = s.budget,
@@ -401,7 +429,7 @@ class MainActivity : FragmentActivity() {
                                     onShiftCustomDays = viewModel::shiftCustomDays,
                                 )
                             }
-                            adding -> {
+                            k == 21 -> {
                                 BackHandler { adding = false }
                                 EntryFormScreen(
                                     title = "Add",
@@ -417,14 +445,14 @@ class MainActivity : FragmentActivity() {
                                     onBack = { adding = false; prefillLoan = null },
                                 )
                             }
-                            billsOpen -> {
+                            k == 23 -> {
                                 BackHandler { billsOpen = false; viewModel.watchBills(false) }
                                 BillsScreen(
                                     ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
                                     onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
                                 )
                             }
-                            loansOpen -> {
+                            k == 22 -> {
                                 BackHandler { if (loans.selected != null) viewModel.selectLoanPerson(null) else { loansOpen = false; viewModel.watchLoans(false) } }
                                 LoansScreen(
                                     ui = loans,
@@ -460,7 +488,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                                 onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
                                 onOpenGuide = viewModel::openGuide,
-                                tourMore = if (guide != null) tourStep?.target == app.expenses.core.domain.GuideTarget.MORE else null,
+                                tourMore = if (guide != null) tourStep?.target == app.expenses.core.domain.GuideTarget.MORE else if (wantMore) true else null,
+                                onMoreShown = { wantMore = false },
                                 onCustomiseHome = { customisingHome = true },
                                 onOpenAppearance = { appearing = true },
                                 onOpenSearch = { searching = true },
@@ -542,3 +571,6 @@ class MainActivity : FragmentActivity() {
  * "Only the original thread that created a view hierarchy can touch its views". On a phone the default is the main thread anyway, so nothing changes there.
  */
 private val MAIN = kotlinx.coroutines.Dispatchers.Main.immediate
+
+/** The last non-null value of something a screen needs while it is still being drawn on its way out. */
+private class Held<T : Any>(var value: T?)

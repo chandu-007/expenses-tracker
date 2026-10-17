@@ -1,5 +1,15 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -92,22 +102,51 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
     // shares are whole percents rounded down, so the rest is what the five biggest leave of 100 (never less than the rest's own sum): the legend adds up
     val rest = if (shown.size > 5) maxOf(shown.drop(5).sumOf { it.share }, 100 - top.sumOf { it.share }) else 0
     val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, null)) else emptyList()
-    val sweep = remember(all) { Animatable(0f) }
-    LaunchedEffect(all) { sweep.animateTo(1f, tween(700)) }
+    val reduce = LocalReduceMotion.current
+    val sweep = remember(all) { Animatable(if (reduce) 1f else 0f) }
+    LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween((700 * Motion.scale / 1.8f).toInt().coerceAtLeast(500))) }
     val track = MaterialTheme.colorScheme.surfaceVariant
+    var picked by remember { mutableStateOf<String?>(null) }
+    val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "pull") }
+    val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.55f else 1f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "dim") }
+    fun toggle(key: String) { picked = if (picked == key) null else key }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("breakdown"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Box(Modifier.size(148.dp).semantics { contentDescription = "Breakdown: " + all.joinToString(", ") { "${it.name} ${it.share}%" } }, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(148.dp).semantics { contentDescription = "Breakdown: " + all.joinToString(", ") { "${it.name} ${it.share}%" } }.pointerInput(all) {
+                detectTapGestures { tap ->
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val dx = tap.x - cx
+                    val dy = tap.y - cy
+                    val dist = sqrt(dx * dx + dy * dy)
+                    if (dist < cx * 0.45f || dist > cx) { picked = null; return@detectTapGestures }
+                    var deg = Math.toDegrees(atan2(dx.toDouble(), -dy.toDouble())).toFloat()
+                    if (deg < 0f) deg += 360f
+                    val total = all.sumOf { it.share }.coerceAtLeast(1)
+                    var acc = 0f
+                    for (s in all) {
+                        acc += 360f * s.share / total
+                        if (deg <= acc) { toggle(s.key); break }
+                    }
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) {
             Canvas(Modifier.size(148.dp)) {
                 val stroke = 22.dp.toPx()
-                val inset = stroke / 2
-                val arc = Size(size.width - stroke, size.height - stroke)
+                val pull = 8.dp.toPx()
+                val inset = stroke / 2 + pull
+                val arc = Size(size.width - 2 * inset, size.height - 2 * inset)
                 drawArc(track, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
                 val total = all.sumOf { it.share }.coerceAtLeast(1)
                 var start = -90f
-                all.forEach { s ->
+                all.forEachIndexed { i, s ->
                     val full = 360f * s.share / total
                     val gap = if (all.size > 1) 2f else 0f
-                    drawArc(s.color, start, ((full - gap) * sweep.value).coerceAtLeast(0f), false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Butt))
+                    val mid = Math.toRadians((start + full / 2f).toDouble())
+                    val out = pull * pulls[i].value
+                    val shift = Offset((cos(mid) * out).toFloat(), (sin(mid) * out).toFloat())
+                    drawArc(s.color.copy(alpha = fades[i].value), start, ((full - gap) * sweep.value).coerceAtLeast(0f), false, Offset(inset, inset) + shift, arc, style = Stroke(stroke, cap = StrokeCap.Butt))
                     start += full
                 }
             }
@@ -118,8 +157,14 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             all.forEach { s ->
+                val source = remember { MutableInteractionSource() }
+                val pressed by source.collectIsPressedAsState()
+                LaunchedEffect(pressed) { if (pressed) toggle(s.key) }
+                val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                val tappable = s.onClick?.let { base.clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = it) }
+                    ?: base.pointerInput(s.key) { detectTapGestures(onPress = { toggle(s.key) }) }
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).let { m -> s.onClick?.let { m.clickable(onClick = it) } ?: m }.padding(vertical = 6.dp, horizontal = 4.dp).testTag("breakdown_${s.key}"),
+                    tappable.padding(vertical = 6.dp, horizontal = 4.dp).testTag("breakdown_${s.key}"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(10.dp).background(s.color, CircleShape))
@@ -135,17 +180,22 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
 @Composable
 fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
     val hide = LocalHideAmounts.current
+    val reduce = LocalReduceMotion.current
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("trend")) {
         Text(if (report.mode == ReportMode.PERIOD) "Last six periods" else "Spending by month", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             report.trend.forEachIndexed { i, bar ->
-                val h by animateFloatAsState(bar.fraction, tween(500), label = "bar")
+                val h by animateFloatAsState(bar.fraction, Motion.tween(reduce, 500, androidx.compose.animation.core.FastOutSlowInEasing), label = "bar")
+                val source = remember { MutableInteractionSource() }
+                val pressed by source.collectIsPressedAsState()
+                val lift by animateFloatAsState(if (pressed) 1f else 0f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "barPress")
+                val barColor = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f + 0.40f * lift)
                 Column(
-                    Modifier.weight(1f).clickable { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },
+                    Modifier.weight(1f).clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(Modifier.height(96.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                        Box(Modifier.fillMaxWidth().height((96 * h).dp.coerceAtLeast(if (bar.fraction > 0f) 4.dp else 2.dp)).background(if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f), RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)))
+                        Box(Modifier.fillMaxWidth().height((96 * h).dp.coerceAtLeast(if (bar.fraction > 0f) 4.dp else 2.dp)).background(barColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)))
                     }
                     Text(bar.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, fontWeight = if (bar.isSelected) FontWeight.Bold else null, color = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }

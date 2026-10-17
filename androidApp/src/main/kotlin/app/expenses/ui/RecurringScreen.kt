@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -156,7 +157,7 @@ fun RecurringScreen(
             if (due.isNotEmpty()) {
                 item { Text("Waiting", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)) }
                 items(due, key = { "due_${it.itemId}_${it.epochDay}" }) { d ->
-                    Column(Modifier.padding(horizontal = 16.dp)) {
+                    Column(Modifier.animateItem().padding(horizontal = 16.dp)) {
                         DueCard(d, onPost = { if (it.amount == null) asking = it else onPost(it, null) }, onSkip = onSkip)
                     }
                 }
@@ -173,14 +174,21 @@ fun RecurringScreen(
             }
             item { Text("All repeating expenses", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)) }
             if (items.isEmpty()) {
-                item { Text("Nothing repeats yet. Tap + to add rent, a subscription or a bill.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("recurring_empty")) }
+                item {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        EmptyArt(EmptyKind.GENERIC, Modifier.padding(top = 8.dp))
+                        Text("Nothing repeats yet. Tap + to add rent, a subscription or a bill.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("recurring_empty"))
+                    }
+                }
             }
-            items(items, key = { it.id }) { i ->
-                Column(Modifier.fillMaxWidth().clickable { editing = i.id }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("rec_row_${i.name}")) {
+            itemsIndexed(items, key = { _, it -> it.id }) { index, i ->
+                val pos = CardPos.of(index == 0, index == items.lastIndex)
+                Column(Modifier.animateItem().entryCardClip(pos)) {
+                Column(Modifier.fillMaxWidth().entryCardFill(pos).clickable { editing = i.id }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("rec_row_${i.name}")) {
                     Text(i.name, style = MaterialTheme.typography.bodyLarge)
                     Text(i.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                HorizontalDivider()
+                }
             }
         }
     }

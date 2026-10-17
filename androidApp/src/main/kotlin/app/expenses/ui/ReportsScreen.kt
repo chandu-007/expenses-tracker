@@ -55,6 +55,7 @@ import app.expenses.core.storage.DrillTarget
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
+    tabBar: @Composable () -> Unit = {},
     report: ReportUi?,
     onBack: () -> Unit,
     onMode: (ReportMode) -> Unit,
@@ -89,7 +90,7 @@ fun ReportsScreen(
             dismissButton = { TextButton(onClick = { pickingRange = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("Reports") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("reports_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(bottomBar = { tabBar() }, topBar = { TopAppBar(title = { Text("Reports") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("reports_back")) { Text("Back") } }) }) { padding ->
         if (report == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("Loading…") }
             return@Scaffold
@@ -135,7 +136,10 @@ fun ReportsScreen(
                 if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("report_account_note"))
                 if (report.group == ReportGroup.TAG) Text("An entry with several tags counts under each, so these can add up to more than the total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) Text("Nothing spent in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
+                if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { EmptyArt(EmptyKind.REPORTS) }
+                    Text("Nothing spent in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
+                }
             }
             if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { i, row ->
                 GroupReportRow(row, reportColor(null, i)) {
@@ -188,17 +192,17 @@ private fun DrillScreen(drill: DrillUi, onBack: () -> Unit, onOpenEntry: (String
                 }
                 HorizontalDivider()
             }
-            items(drill.lines, key = { it.entryId }) { line ->
-                DrillRow(line, onOpenEntry)
-                HorizontalDivider()
+            itemsIndexed(drill.lines, key = { _, it -> it.entryId }) { index, line ->
+                DrillRow(line, CardPos.of(index == 0, index == drill.lines.lastIndex), onOpenEntry, Modifier.animateItem())
             }
         }
     }
 }
 
 @Composable
-private fun DrillRow(line: DrillLineUi, onOpen: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onOpen(line.entryId) }.padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("drill_row_${line.entryId}"), verticalAlignment = Alignment.CenterVertically) {
+private fun DrillRow(line: DrillLineUi, pos: CardPos, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.entryCardClip(pos).fillMaxWidth().entryCardFill(pos).clickable { onOpen(line.entryId) }.padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("drill_row_${line.entryId}"), verticalAlignment = Alignment.CenterVertically) {
+        CategoryAvatar(line.category, line.title, Modifier.padding(end = 14.dp))
         Column(Modifier.weight(1f)) {
             Text(line.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             Text(listOf(line.date, line.category).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

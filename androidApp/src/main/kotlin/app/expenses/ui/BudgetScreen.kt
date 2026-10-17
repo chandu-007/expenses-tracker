@@ -100,7 +100,7 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit) {
                     color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.testTag("budget_overall_note"),
                 )
-                BudgetBar(overall, Modifier.height(10.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
+                AnimatedBudgetBar(overall, Modifier.height(10.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
                 if (budget.perDay != null && !budget.billsUseItAll) {
                     Text("about ${budget.perDay} a day", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day"))
                 } else if (budget.billsUseItAll) {

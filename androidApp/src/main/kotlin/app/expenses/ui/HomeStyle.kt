@@ -80,12 +80,12 @@ fun dayLabel(epochDay: Long, today: LocalDate = LocalDate.now()): String {
     }
 }
 
-/** A rounded tinted circle with the category's initial; the tint is the same for the same name every time (a small fixed palette, all pale enough for dark text). */
+/** A rounded tinted tile with the category's initial; the tint is the same for the same name every time (a small fixed palette, all pale enough for dark text). */
 @Composable
 fun CategoryAvatar(name: String, fallback: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 40.dp) {
     val label = name.ifBlank { fallback }
     val tint = AVATAR_TINTS[Math.floorMod(label.lowercase().hashCode(), AVATAR_TINTS.size)]
-    Box(modifier.size(size).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).clip(RoundedCornerShape(size * 0.34f)).background(tint), contentAlignment = Alignment.Center) {
         Text(label.trim().take(1).uppercase(), color = Color(0xFF1B1B1F), fontWeight = FontWeight.SemiBold)
     }
 }
@@ -103,7 +103,7 @@ fun ScreenEnter(key: Int, content: @Composable () -> Unit) {
     if (key < 0) { content(); return }
     key(key) {
         val progress = remember { Animatable(0f) }
-        LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = 220)) }
+        LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = Motion.STANDARD)) }
         Box(Modifier.graphicsLayer { val p = progress.value; alpha = 0.35f + 0.65f * p; translationY = (1f - p) * 24.dp.toPx() }) { content() }
     }
 }
@@ -119,35 +119,75 @@ fun BoxScope.HeroGlow(color: Color) {
     }
 }
 
+/** Where the glass indicator of the bottom bar last rested, so a bar that appears on another screen starts there and glides on, as one bar would. */
+private object TabMemory { var index = 0f }
+
+private val TABS = listOf("Home", "Search", "Reports", "More")
+
 /**
- * The bar along the bottom of the home screen: Home, Search, Reports and More, equal in width so they fit any screen, each label on one line (it shrinks
- * rather than wrap). [selected] is "Home" or "More". A slightly see-through surface with a fine top edge. The tags are the ones the actions had before.
+ * The bar along the bottom: Home, Search, Reports and More, equal in width so they fit any screen, each label on one line (it shrinks rather than wrap).
+ * [selected] names the tab that is current. A pane of glass (a lit, see-through pill) glides under the current tab on a spring and stretches a little while it
+ * travels, then settles; the pane starts where it last rested, so moving between screens looks like one bar moving. [moreBadge] puts a small dot on More
+ * (something there wants attention). The tags are the ones the actions had before.
  */
 @Composable
-fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit) {
-    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false) {
+    val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
+    val reduce = LocalReduceMotion.current
+    val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
+    LaunchedEffect(target, reduce) {
+        if (reduce) pos.snapTo(target)
+        else pos.animateTo(target, Motion.spring(dampingRatio = 0.72f, stiffness = 260f))
+        TabMemory.index = target
+    }
+    val glassTop = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+    val glassBottom = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    val rim = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
-                BarItem("Search", Icons.Outlined.Search, false, onSearch, Modifier.weight(1f).testTag("open_search"))
-                BarItem("Reports", Icons.Outlined.BarChart, false, onReports, Modifier.weight(1f).testTag("open_reports"))
-                BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"))
+            Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp)) {
+                Box(
+                    Modifier.matchParentSize().drawBehind {
+                        val gap = 4.dp.toPx()
+                        val w = (size.width - gap * 3) / 4f
+                        val stretch = 1f + 0.10f * kotlin.math.abs(target - pos.value).coerceAtMost(3f)
+                        val pw = w * stretch
+                        val cx = pos.value * (w + gap) + w / 2f
+                        val r = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx())
+                        val tl = androidx.compose.ui.geometry.Offset(cx - pw / 2f, 0f)
+                        val sz = androidx.compose.ui.geometry.Size(pw, size.height)
+                        drawRoundRect(Brush.verticalGradient(listOf(glassTop, glassBottom)), tl, sz, r)
+                        // the lit edge and the highlight along the top that make it read as glass
+                        drawRoundRect(rim, tl, sz, r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+                        drawRoundRect(Color.White.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(tl.x + 10.dp.toPx(), 3.dp.toPx()), androidx.compose.ui.geometry.Size(pw - 20.dp.toPx(), 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()))
+                    },
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
+                    BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"))
+                    BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"))
+                    BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent
-    val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier, badge: Boolean = false) {
+    val tint by androidx.compose.animation.animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) 0 else Motion.STANDARD), label = "tab tint",
+    )
     Column(
-        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).background(bg).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected }.padding(horizontal = 4.dp, vertical = 6.dp),
+        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
-        androidx.compose.material3.Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        Box {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            if (badge) Box(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-1).dp).size(9.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error).testTag("more_badge"))
+        }
         androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
             // the label shrinks to fit its quarter of the bar (a narrow screen or a big system font) instead of being cut or wrapped
             label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
@@ -248,6 +288,6 @@ fun Modifier.pressScale(onClick: () -> Unit, haptic: androidx.compose.ui.hapticf
 @Composable
 fun FadeIn(content: @Composable () -> Unit) {
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = 180)) }
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = Motion.STANDARD)) }
     Box(Modifier.graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 12.dp.toPx() }) { content() }
 }

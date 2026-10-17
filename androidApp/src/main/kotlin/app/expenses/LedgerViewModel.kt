@@ -162,6 +162,12 @@ data class InboxPeekRow(val title: String, val amountText: String, val credit: B
 /** What the home banner shows about To review: the first few items, the rest as a count, and what is waiting in total. */
 data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int = 0, val outText: String = "", val inText: String = "")
 
+/** One day of the home screen's spending line: the local day, what was spent, and the text shown when the person drags a finger to it. */
+data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
+
+/** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
+data class SparkUi(val days: List<SparkDayUi> = emptyList()) { val isEmpty get() = days.none { it.minor > 0 } }
+
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
     val id: String, val title: String, val kind: String, val issuer: String, val amountText: String, val amountPlain: String, val minDueText: String?, val minDuePlain: String?,
@@ -403,6 +409,8 @@ sealed interface UiState {
         val rows: List<RowUi>,
         /** Spending in the current budget period (the calendar month unless the user chose otherwise). */
         val periodSpend: String,
+        /** [periodSpend] as a number of minor units, for the total to roll up to. */
+        val periodSpendMinor: Long = 0,
         val budget: BudgetUi,
         val due: List<DueUi>,
         /** Occurrences older than the due window that nobody dealt with; mentioned so they do not vanish silently. */
@@ -425,6 +433,11 @@ sealed interface UiState {
         val inboxPending: Int,
         val inboxPeek: InboxPeekUi = InboxPeekUi(),
         val billPeek: BillPeekUi = BillPeekUi(),
+        val spark: SparkUi = SparkUi(),
+        /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
+        val reduceMotion: Boolean = false,
+        /** "off", "quick", "relaxed" or "slow": how long the app's movements take. */
+        val motionSpeed: String = "relaxed",
         val smsCapture: Boolean,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
@@ -471,6 +484,8 @@ private const val SETTING_APPEARANCE = "appearance"
 /** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
 private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOAN")
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
+private const val SETTING_REDUCE_MOTION = "reduce_motion"
+private const val SETTING_MOTION_SPEED = "motion_speed"
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val MAX_STATEMENT_BYTES = 20_000_000
 private const val MAX_STATEMENT_ROWS = 200_000
@@ -750,6 +765,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     // Balances read the whole ledger (about 25 ms on a 100,000-entry ledger even with covering indexes), so they are not part of the
     // save path: they are worked out only while something shows them, a moment after the last write, and the screen updates when ready.
     private var accountRowsCache: List<AccountRowUi> = emptyList()
+    private var sparkCache: SparkUi = SparkUi()
     private var categoryUsageCache: Map<String, Long> = emptyMap()
     private var categoriesOpen = false
     private var nudgeCache = false
@@ -780,15 +796,33 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 val rows = if (accountsOpen || balancesVisible) accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) else accountRowsCache
                 val usage = if (categoriesOpen) ok.categories.list().associate { it.id to ok.categories.usage(it.id) } else categoryUsageCache
-                Triple(nudge, rows, usage)
+                Figures(nudge, rows, usage, sparkOf(ok))
             } ?: return@launch
-            nudgeCache = figures.first; accountRowsCache = figures.second; categoryUsageCache = figures.third; figuresReady = true
+            nudgeCache = figures.nudge; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; sparkCache = figures.spark; figuresReady = true
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
-                    (st as? UiState.Ready)?.copy(accountRows = figures.second, showBackupNudge = figures.first, categories = st.categories.map { c -> c.copy(usage = figures.third[c.id] ?: c.usage) }) ?: st
+                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, spark = figures.spark, showBackupNudge = figures.nudge, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage) }) ?: st
                 }
             }
         }
+    }
+
+    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi)
+
+    /** Spending on each of the last 14 days, for the line on the home screen. One range query; worked out with the other slow figures, never on the save path. */
+    private fun sparkOf(ok: AppContainer.Opened.Ok): SparkUi {
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val t = LocalDate.now()
+        val today = kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth)
+        val first = today.minus(13, kotlinx.datetime.DateTimeUnit.DAY)
+        val perDay = ok.reports.spendPoints(DatePeriod(first, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr)
+            .groupBy { Instant.ofEpochMilli(it.atMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() }.mapValues { (_, v) -> v.sumOf { it.minor } }
+        val dayFmt = DateTimeFormatter.ofPattern("d MMM")
+        return SparkUi((0..13).map { i ->
+            val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
+            val minor = perDay[d.toEpochDays()] ?: 0L
+            SparkDayUi(d.toEpochDays(), minor, dayFmt.format(LocalDate.ofEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
+        })
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
@@ -1040,6 +1074,14 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** More, then How to use this app: every page, and nothing about it is remembered. */
+    /** Appearance: less motion. Takes effect at once, on every screen. */
+    /** [speed] is "off", "quick", "relaxed" or "slow". Off is Reduce motion: everything changes at once. */
+    fun setMotionSpeed(speed: String) = withStore { ok ->
+        ok.templates.putSetting(SETTING_REDUCE_MOTION, if (speed == "off") "1" else "0")
+        if (speed != "off") ok.templates.putSetting(SETTING_MOTION_SPEED, speed)
+        refresh(ok)
+    }
+
     fun openGuide() { _guide.value = app.expenses.core.domain.Guide.fullPlan() }
 
     /** After an update the person asked for the whole guide, not just what is new. */
@@ -1973,7 +2015,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         val t = LocalDate.now()
         val period = ok.budgets.period().containing(kotlinx.datetime.LocalDate(t.year, t.monthValue, t.dayOfMonth))
         val spent = ok.store.spendByCategory(inr, from = period.startMillis(zone), until = period.endMillis(zone)).values.fold(Money.zero(inr)) { a, m -> a + m }
-        _state.value = current.copy(rows = rowsOf(loaded), periodSpend = spent.formatted(), endReached = endReached, undo = undo)
+        _state.value = current.copy(rows = rowsOf(loaded), periodSpend = spent.formatted(), periodSpendMinor = spent.minorUnits, endReached = endReached, undo = undo)
         val quickDone = System.nanoTime()
         viewModelScope.launch(BACKGROUND) {
             container.write { ok2 -> refresh(ok2, undo = (_state.value as? UiState.Ready)?.undo) }
@@ -2019,6 +2061,7 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = UiState.Ready(
             rows = rowsOf(loaded),
             periodSpend = spent.formatted(),
+            periodSpendMinor = spent.minorUnits,
             budget = budgetUi(ok, status, cats),
             due = dueUi(ok, today),
             notifications = ok.notifications.prefs(),
@@ -2036,6 +2079,9 @@ class LedgerViewModel(app: Application) : AndroidViewModel(app) {
             inboxPending = ok.inbox.pendingCount().toInt(),
             inboxPeek = inboxPeek(ok),
             billPeek = billPeek(ok),
+            spark = sparkCache,
+            reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
+            motionSpeed = if (ok.templates.setting(SETTING_REDUCE_MOTION) == "1") "off" else ok.templates.setting(SETTING_MOTION_SPEED) ?: "relaxed",
             smsCapture = ok.templates.setting(Capture.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),

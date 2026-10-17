@@ -1,5 +1,18 @@
 package app.expenses.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,6 +74,8 @@ fun BillsScreen(
     var paying by rememberSaveable { mutableStateOf<String?>(null) }
     var dating by rememberSaveable { mutableStateOf<String?>(null) }
     val all = ui.found + ui.coming
+    // the bills already paid when the page opened do not celebrate again; one that becomes paid while it is open does
+    val baselinePaid = remember(ui.loaded) { if (ui.loaded) ui.paid.map { it.id }.toSet() else null }
     all.firstOrNull { it.id == paying }?.let { PayDialog(it, accounts, onPay, onClose = { paying = null }) }
     dating?.let { id ->
         val state = rememberDatePickerState()
@@ -73,6 +88,7 @@ fun BillsScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("Bills") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("bills_back")) { Text("Back") } }) }) { pad ->
         if (ui.loaded && all.isEmpty() && ui.paid.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
+                EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("No bills yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("bills_empty"))
                 Text(
                     "When a text or a payment app's notification says a bill is due (a credit card statement, electricity, water, gas, mobile, broadband, an EMI or an insurance premium), it appears here and you are told. " +
@@ -82,24 +98,24 @@ fun BillsScreen(
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("bills_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui.found.isNotEmpty()) {
-                item(key = "found") { Section("Found in your messages", "Add a bill to be reminded before it is due.", "bills_found_title") }
-                items(ui.found, key = { "f" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay) }
+                item(key = "found") { Section("Found in your messages", "Add a bill to be reminded before it is due.", "bills_found_title", Modifier.animateItem()) }
+                items(ui.found, key = { "f" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem()) }
             }
             if (ui.coming.isNotEmpty()) {
-                item(key = "coming") { Section("Coming up", "Sorted by due date. You are reminded three days before, on the day, and if it is overdue.", "bills_coming_title") }
-                items(ui.coming, key = { "c" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay) }
+                item(key = "coming") { Section("Coming up", "Sorted by due date. You are reminded three days before, on the day, and if it is overdue.", "bills_coming_title", Modifier.animateItem()) }
+                items(ui.coming, key = { "c" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem()) }
             }
             if (ui.paid.isNotEmpty()) {
-                item(key = "paid") { Section("Paid", null, "bills_paid_title") }
-                items(ui.paid, key = { "p" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay) }
+                item(key = "paid") { Section("Paid", null, "bills_paid_title", Modifier.animateItem()) }
+                items(ui.paid, key = { "p" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem(), flourish = baselinePaid != null && it.id !in baselinePaid) }
             }
         }
     }
 }
 
 @Composable
-private fun Section(title: String, note: String?, tag: String) {
-    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun Section(title: String, note: String?, tag: String, modifier: Modifier = Modifier) {
+    Column(modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(tag))
         if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -107,12 +123,12 @@ private fun Section(title: String, note: String?, tag: String) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> Unit, onPay: (String) -> Unit, onSetDate: (String) -> Unit, onUnpay: (String) -> Unit) {
+private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> Unit, onPay: (String) -> Unit, onSetDate: (String) -> Unit, onUnpay: (String) -> Unit, modifier: Modifier = Modifier, flourish: Boolean = false) {
     var showText by rememberSaveable(b.id) { mutableStateOf(false) }
     val found = b.status == "FOUND"; val paid = b.status == "PAID"
     val tint = when { b.overdue && !paid -> MaterialTheme.colorScheme.error; b.soon && !paid -> AMBER; else -> MaterialTheme.colorScheme.primary }
     Card(
-        Modifier.fillMaxWidth().testTag("bill_${b.id}"), shape = RoundedCornerShape(24.dp),
+        modifier.fillMaxWidth().testTag("bill_${b.id}"), shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = if (paid) 0.04f else 0.08f).compositeOver(MaterialTheme.colorScheme.surface)),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -123,7 +139,10 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
                     if (paid) Text(b.paidText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else Text(listOf(b.dueText, b.dueIn).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = if (b.overdue || b.soon) tint else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (b.overdue || b.soon) FontWeight.SemiBold else null, modifier = Modifier.testTag("bill_due_${b.id}"))
                 }
-                Text(b.amountText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp).testTag("bill_amount_${b.id}"))
+                Box(Modifier.padding(start = 8.dp)) {
+                    Text(b.amountText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("bill_amount_${b.id}"))
+                    if (paid && flourish) PaidCheck(b.id, Modifier.align(Alignment.CenterStart).offset(x = (-22).dp))
+                }
             }
             if (!paid) {
                 b.minDueText?.let { Text("Minimum due $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("bill_min_${b.id}")) }
@@ -163,6 +182,7 @@ private fun PayDialog(
     var problem by remember(b.id) { mutableStateOf<String?>(null) }
     val cards = accounts.filter { it.type == "CREDIT_CARD" }
     val isCard = b.kind == "CREDIT_CARD"
+    val feel = rememberFeel()
     AlertDialog(
         onDismissRequest = onClose, title = { Text("Mark ${b.title} paid") },
         text = {
@@ -188,7 +208,33 @@ private fun PayDialog(
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("bill_pay_problem")) }
             }
         },
-        confirmButton = { TextButton(onClick = { onPay(b.id, from, if (isCard) card else "", amount, record) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("bill_pay_ok")) { Text(if (record) "Record and mark paid" else "Mark paid") } },
+        confirmButton = { TextButton(onClick = { onPay(b.id, from, if (isCard) card else "", amount, record) { p -> if (p == null) { feel(Feel.PAID); onClose() } else problem = p } }, modifier = Modifier.testTag("bill_pay_ok")) { Text(if (record) "Record and mark paid" else "Mark paid") } },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
+}
+
+/** A small check that draws itself beside a bill's amount the moment it becomes paid, then leaves (about 600 ms). Not shown under Reduce motion. */
+@Composable
+private fun PaidCheck(id: String, modifier: Modifier = Modifier) {
+    val reduce = LocalReduceMotion.current
+    var visible by remember(id) { mutableStateOf(!reduce) }
+    if (!visible) return
+    val progress = remember(id) { Animatable(0f) }
+    LaunchedEffect(id) {
+        progress.animateTo(1f, tween(400, easing = Motion.EaseOut))
+        delay(200)
+        visible = false
+    }
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(modifier.size(18.dp).testTag("bill_paid_check_$id")) {
+        val path = Path().apply {
+            moveTo(size.width * 0.15f, size.height * 0.55f)
+            lineTo(size.width * 0.4f, size.height * 0.8f)
+            lineTo(size.width * 0.85f, size.height * 0.25f)
+        }
+        val measure = PathMeasure().apply { setPath(path, false) }
+        val part = Path()
+        measure.getSegment(0f, measure.length * progress.value, part, true)
+        drawPath(part, color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
 }

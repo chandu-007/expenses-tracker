@@ -68,6 +68,7 @@ fun InboxScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
         if (rows.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
+                EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -252,7 +253,7 @@ fun CaptureRulesScreen(
                 Text("When a captured payment mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             itemsIndexed(rules, key = { _, r -> r.id }) { i, r ->
-                Row(Modifier.fillMaxWidth().testTag("rule_${r.pattern}"), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(Modifier.animateItem().fillMaxWidth().testTag("rule_${r.pattern}"), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) { Text("\"${r.pattern}\"", style = MaterialTheme.typography.bodyLarge); Text("→ ${r.categoryName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     TextButton(onClick = { onMove(r.id, true) }, enabled = i > 0, modifier = Modifier.testTag("rule_up_${r.pattern}")) { Text("Up") }
                     TextButton(onClick = { onMove(r.id, false) }, enabled = i < rules.lastIndex, modifier = Modifier.testTag("rule_down_${r.pattern}")) { Text("Down") }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -36,7 +37,7 @@ import app.expenses.core.domain.ThemeMode
 /** Light or dark, an accent colour, and how tight the lists are. Changes apply at once. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit) {
+fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}) {
     Scaffold(topBar = { TopAppBar(title = { Text("Appearance") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("appearance_back")) { Text("Back") } }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
@@ -58,6 +59,13 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Density.entries.forEach { d -> FilterChip(selected = current.density == d, onClick = { onChange(current.copy(density = d)) }, label = { Text(d.label) }, modifier = Modifier.testTag("density_${d.name}")) }
             }
+            Text("Motion", style = MaterialTheme.typography.labelMedium)
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("off" to "Off", "quick" to "Quick", "relaxed" to "Relaxed", "slow" to "Slow").forEach { (key, label) ->
+                    FilterChip(selected = motionSpeed == key, onClick = { onMotionSpeed(key) }, label = { Text(label) }, modifier = Modifier.testTag("motion_$key"))
+                }
+            }
+            Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Compact fits more entries on the screen: the rows of the list, search and report entries are about a third tighter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

@@ -78,10 +78,10 @@ fun AccountsScreen(
                 HorizontalDivider()
             }
             // each account is a card; one that is archived stays a plain line below
-            items(active, key = { it.id }) { AccountTile(it, compact = false, onClick = { editing = it }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(168.dp)) }
+            if (active.isNotEmpty()) item(key = "wallet") { WalletStack(active, onOpen = { editing = it }, modifier = Modifier.animateItem()) }
             if (archived.isNotEmpty()) {
                 item { Text("Archived", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)) }
-                items(archived, key = { it.id }) { AccountRow(it) { editing = it } }
+                items(archived, key = { it.id }) { AccountRow(it, Modifier.animateItem()) { editing = it } }
             }
         }
     }
@@ -90,7 +90,8 @@ fun AccountsScreen(
 }
 
 @Composable
-private fun AccountRow(a: AccountRowUi, onClick: () -> Unit) {
+private fun AccountRow(a: AccountRowUi, modifier: Modifier = Modifier, onClick: () -> Unit) {
+  Column(modifier) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp, 12.dp).testTag("account_${a.name}"), horizontalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.weight(1f)) {
             Text(a.name, style = MaterialTheme.typography.bodyLarge)
@@ -103,6 +104,7 @@ private fun AccountRow(a: AccountRowUi, onClick: () -> Unit) {
         Text(a.balanceText, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("balance_${a.name}"))
     }
     HorizontalDivider()
+  }
 }
 
 @Composable

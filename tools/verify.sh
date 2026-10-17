@@ -49,7 +49,11 @@ while :; do
 done
 echo "load at start of timing step: $load (waited ${waited}s)"
 rm -rf androidApp/build/outputs/androidTest-results
-./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.class=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest > /tmp/verify-step2.log 2>&1
+# Build the test apps first and let the host go quiet: recompiling right before the first measurement left the machine busy and made every timing
+# test 2-3x slower (the same tests passed 15/15 a minute later with nothing to compile). The tests themselves still run from deleted result files.
+./gradlew :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest --rerun-tasks > /tmp/verify-step2.log 2>&1
+./gradlew --stop >/dev/null 2>&1; sleep 45
+./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest >> /tmp/verify-step2.log 2>&1
 step2=$?
 echo "step 2 gradle exit: $step2"
 
