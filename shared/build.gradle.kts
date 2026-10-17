@@ -17,8 +17,10 @@ kotlin {
     if (providers.gradleProperty("enableIos").orNull == "true") {
         val xcf = XCFramework("Shared")
         listOf(iosArm64(), iosSimulatorArm64()).forEach { t ->
-            t.binaries.framework { baseName = "Shared"; isStatic = true; xcf.add(this) }
+            t.binaries.framework(listOf(org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.RELEASE)) { baseName = "Shared"; isStatic = true; xcf.add(this) }
         }
+        // Each Kotlin/Native release link takes several GB of heap (gradle.properties); one at a time, so two never compete for the same memory.
+        tasks.matching { it.name == "linkReleaseFrameworkIosSimulatorArm64" }.configureEach { mustRunAfter("linkReleaseFrameworkIosArm64") }
         sourceSets.iosMain.dependencies {
             implementation(libs.sqldelight.native.driver)
         }

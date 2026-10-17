@@ -1,18 +1,39 @@
-# iPhone app (first test build)
+# iPhone app
 
-What it is: a SwiftUI app (`iosApp/`) over the same shared Kotlin storage and rules the Android app uses (`core/domain`, `core/storage`, through the small Swift-friendly facade in `core/facade`). Built with Xcode 27.1 / Kotlin/Native.
+What it is: the Android app's screens on iPhone. The UI and the view model are shared Kotlin (Compose Multiplatform, module `:shared`: `app.expenses.ui.*`, `LedgerViewModel`, `ExpensesRoot`); the iPhone app (`iosApp/`) is a thin SwiftUI shell that shows the shared root in one view controller. Built with Xcode 27.1, Kotlin 2.4.20, Compose Multiplatform 1.12.1.
 
-## What the first build does
-Add an expense or an income (separate category lists for each), the list grouped by day with swipe to delete, the month's spending, Cash and Bank balances, a Categories tab (expense / income), and the similar-entries offer after filing an entry (Move all, Review one by one, Not now). Amounts use Indian grouping, as on Android.
+## How the pieces fit
+- `shared/src/commonMain`: every screen, `ExpensesRoot(viewModel, host: RootHost)`, `interface Platform` (what the OS must provide).
+- `shared/src/iosMain`: `IosPlatform` (database in Application Support under iOS Data Protection, files by URL, attachments, statements, app lock), `IosAppLock` (the shared `LockGate` with Face ID / Touch ID / passcode through LocalAuthentication; covers the app-switcher snapshot while the lock is on), `IosBackupCipher`, `IosXlsx` (zip with zlib + NSXMLParser, same rules as the Android reader), `MainViewController(host)`, the iOS actuals of the UI hooks (`ui/PlatformHooks.ios.kt`: Files picker, haptics, back gesture).
+- `iosApp/Sources`: `ExpensesApp.swift` (window and `UIViewControllerRepresentable`), `CryptoServices.swift` (the only Swift-only pieces: PBKDF2 and AES-256-GCM, through CryptoKit/CommonCrypto, behind `IosHostServices`).
+- Passphrase-protected backups use the Android file layout (`EXPENC1\n`, iterations, salt, nonce, AES-GCM with the header as authenticated data). The layout is written once, in Kotlin (`IosBackupCipher`); Swift only supplies the primitives, so the formats cannot drift. `tools/backup_interop/Interop.java` repeats the Android `BackupCrypto` steps with javax.crypto: the fixture `iosApp/Tests/Fixtures/android-made.expbak` was written by it and opens on the iPhone code (unit test), and the file the iPhone test writes opens in it (`tools/ios_build.sh interop`).
+- Saving a file (export, backup): iOS shares a file that exists, so the shared "pick a place, then write" order becomes "write a staging file, then show the share sheet" (Save to Files, AirDrop, Mail...). Opening a file (statement, backup, attachment) uses the Files picker; picked files are copied to the temporary folder first.
 
-## What it does not do yet
-Everything else in the Android app: no SMS or notification capture (iOS does not allow it; the planned route is a Shortcuts bridge), no bills, budgets, reports, search, accounts management, categories editing, import or backup, no widget, no app lock, no tour, no motion work. The database is not encrypted with a separate key (iOS Data Protection encrypts the file while the phone is locked). It has not been run on a real iPhone by the developer session.
+## What works on iPhone
+The screens of the Android app are shared code, so all are in the app. Opened and looked at in the simulator: Home, add, Search with the bulk bar, Reports, More, To review, Capture from texts, Accounts, Categories (both tabs), Repeating expenses, Calendar, Lent and borrowed, Bills, Appearance, Customise home, Currency, Notifications, App lock, Privacy, Your data, the guide; the similar-entries offer. Not yet exercised on iOS: Hide amounts, Budgets, importing a real statement file, restoring a backup, attachments, and a real Face ID / passcode prompt (the simulator has none enrolled). The list: Home, add/edit (with attachments), Search with bulk edit and saved searches, Reports, Calendar, Accounts, Categories (expense/income), Recurring, Bills, Budgets, Loans, Appearance, Customise home, Currency, Hide amounts, Privacy, Your data (CSV/Excel export, statement import for CSV and .xlsx, backup and restore with optional passphrase), the guide, the similar-entries offer. App lock works through the system prompt.
 
-## Build
-`tools/ios_build.sh test` runs 4 UI tests on the iPhone 17 simulator; `tools/ios_build.sh ipa` makes a signed build and `~/Desktop/Expenses-iOS-0.1.0-test.ipa`. Requires `brew install xcodegen`. The framework is built by `./gradlew :core:facade:assembleExpensesCoreXCFramework -PenableIos=true`.
+## What is not on iPhone (and how the app says so)
+- SMS and notification capture, the To review inbox fills from nothing, and capture rules: iOS gives apps no access. The screens open and explain it.
+- Notifications (bill and budget reminders): `supportsNotifications` is false; the screen says "Not available on iPhone".
+- Automatic export to a folder: `supportsAutoExport` is false (iOS has no background scheduling that would keep it reliable); the Data screen says so.
+- Home-screen widget, Quick Settings tile, launcher shortcuts: not built.
+- A separate database key: the file relies on iOS Data Protection (readable after the first unlock).
+
+## Build and test
+- `./gradlew :shared:assembleSharedXCFramework -PenableIos=true` builds `shared/build/XCFrameworks/release/Shared.xcframework` (the Kotlin/Native link needs the big heap set in `gradle.properties`: `kotlin.native.jvmArgs`).
+- `tools/ios_build.sh test`: framework, XcodeGen project, then unit tests (backup format) and UI tests on the iPhone 17 simulator. The UI tests find Compose elements by `testTag`: on iOS every testTag is an accessibility identifier, so they use the same tags as the Android device tests. Launch arguments for tests: `-reset-data` (empty ledger), `-dismiss-welcome`. Screenshots of the screens visited are written to `/tmp/ios-shots`.
+- `tools/ios_build.sh interop`: the iPhone-written backup read back by the Java reference.
+- `tools/ios_build.sh ipa`: signed Release build, `~/Desktop/Expenses-iOS-<version>-test.ipa`. `tools/ios_build.sh build`: simulator and device builds without packaging.
+- The app icon is generated by `swift tools/make_ios_icon.swift <out.png>` from the Android adaptive icon's shapes (no alpha channel).
+- Requires `brew install xcodegen`. Version 0.1.0 (1), bundle id `app.expenses.tracker.ios`, display name Expenses, iPhone only, iOS 17 and later.
 
 ## Installing on the iPhone (free Apple ID signing)
-1. The build is signed with the Apple Development certificate of team 9V2G5RH624 and a provisioning profile that lists one device (UDID 00008150-000855380C99401C). It expires 7 days after it was made (a free account); after that rebuild and reinstall. A paid Apple Developer account makes it a year and allows TestFlight.
+1. The build is signed with the Apple Development certificate of team 9V2G5RH624 and a provisioning profile that lists one device (UDID 00008150-000855380C99401C). It expires 7 days after it was made (a free account); after that rebuild and reinstall. A paid Apple Developer account makes it a year and allows TestFlight and the App Store.
 2. On the iPhone: Settings > Privacy & Security > Developer Mode > On (it restarts).
 3. Install: connect the iPhone by cable, open Xcode > Window > Devices and Simulators, select the phone, press + under Installed Apps and choose the .ipa. (Or `xcrun devicectl device install app --device <name> Expenses.app`.)
 4. First launch: Settings > General > VPN & Device Management > the developer app > Trust.
+
+## App Store checklist
+- `PrivacyInfo.xcprivacy` declares no tracking and no collected data, and the required-reason APIs the app and its frameworks use: UserDefaults (CA92.1), file timestamps (C617.1), system boot time / uptime (35F9.1). No disk-space API is used by the app's own code.
+- `NSFaceIDUsageDescription` is set. Export compliance: the app uses AES-256-GCM only for the user's own backup files; whether to declare that exempt (`ITSAppUsesNonExemptEncryption`) is the owner's answer to give in App Store Connect, so the key is not preset.
+- The icon is 1024x1024 without alpha. Screenshots, description, privacy policy URL and age rating are still to be made in App Store Connect.

@@ -13,9 +13,9 @@ import androidx.compose.ui.window.DialogProperties
 import platform.Foundation.NSURL
 import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
-import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeFolder
 import platform.UniformTypeIdentifiers.UTTypeItem
@@ -55,14 +55,8 @@ private class PickerDelegate(private val onPicked: (String?) -> Unit) : NSObject
 
 private object PickerHolder { var active: PickerDelegate? = null }
 
-private fun topViewController(): UIViewController? {
-    var vc = UIApplication.sharedApplication.keyWindow?.rootViewController
-    while (vc?.presentedViewController != null) vc = vc.presentedViewController
-    return vc
-}
-
 private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) -> Unit) {
-    val top = topViewController()
+    val top = app.expenses.topViewController()
     if (top == null) { onPicked(null); return }
     val delegate = PickerDelegate(onPicked)
     PickerHolder.active = delegate
@@ -72,8 +66,8 @@ private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) 
 
 /**
  * Open a file or a folder with the Files app picker. Opened files are copied into the app's temporary folder first, so the URL is readable without
- * a security scope. Saving a new file ([createDocument]) is not wired up on iPhone yet: iOS only exports a file that already exists, so the caller's
- * "pick a place, then write" order does not fit; it reports "nothing picked".
+ * a security scope. Saving a new file ([createDocument]) answers at once with a staging file; writing to it (Platform.writeBytes) opens the share sheet
+ * (Save to Files, AirDrop, Mail...), see [app.expenses.IosExport].
  */
 private object IosFilePickers : FilePickers {
     override fun openDocument(mimeTypes: List<String>, onPicked: (String?) -> Unit) {
@@ -81,7 +75,7 @@ private object IosFilePickers : FilePickers {
         present(UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true), onPicked)
     }
 
-    override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) = onPicked(null)
+    override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) = onPicked(app.expenses.IosExport.stagingFile(suggestedName))
 
     override fun openFolder(onPicked: (String?) -> Unit) {
         present(UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false), onPicked)
@@ -95,9 +89,11 @@ actual fun rememberFilePickers(): FilePickers = IosFilePickers
 @Composable
 actual fun rememberNotificationPermissionRequest(onDone: () -> Unit): () -> Unit = { onDone() }
 
-/** The app lock is not available on iPhone yet, so the screen never offers this. */
+/** iOS has no page for the passcode that an app may open; the closest is this app's own page in Settings. */
 @Composable
-actual fun rememberOpenSecuritySettings(): () -> Unit = {}
+actual fun rememberOpenSecuritySettings(): () -> Unit = {
+    NSURL.URLWithString(UIApplicationOpenSettingsURLString)?.let { UIApplication.sharedApplication.openURL(it, emptyMap<Any?, Any>(), null) }
+}
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -105,5 +101,5 @@ actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.
 
 @Composable
 actual fun GuideDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, scrimColor = Color.Transparent)) { content() }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, usePlatformInsets = false, scrimColor = Color.Transparent)) { content() }
 }

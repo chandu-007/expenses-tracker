@@ -1,0 +1,3 @@
+Expenses backup interop sample
+{"entries":[{"note":"Lunch","amount":"1250.50"}]}
+naïve café ₹
