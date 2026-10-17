@@ -19,11 +19,11 @@ import java.util.UUID
  * that is not a transaction from an allowlisted header leaves **only a count** (no words, no number) in capture health.
  */
 object Capture {
-    const val SMS = "SMS"
-    const val NOTIFICATION = "NOTIFICATION"
-    const val SETTING_NOTIF_ON = "capture_notif_on"
-    const val SETTING_EXTRA_ROOTS = "capture_extra_roots"
-    const val SETTING_SMS_ON = "capture_sms_on"
+    const val SMS = CaptureKeys.SMS
+    const val NOTIFICATION = CaptureKeys.NOTIFICATION
+    const val SETTING_NOTIF_ON = CaptureKeys.SETTING_NOTIF_ON
+    const val SETTING_EXTRA_ROOTS = CaptureKeys.SETTING_EXTRA_ROOTS
+    const val SETTING_SMS_ON = CaptureKeys.SETTING_SMS_ON
 
     /** Bumped whenever capture changed the inbox, so an open screen can refresh. */
     val changes = kotlinx.coroutines.flow.MutableStateFlow(0)

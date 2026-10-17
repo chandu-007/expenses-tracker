@@ -215,19 +215,19 @@ class DataTest {
         runBlocking { actions.backup(uri, null) }
         resetApp()
         launch()
-        viewModel().openBackup(uri)
+        viewModel().openBackup(uri.toString())
         waitFor("restore_preview")
         waitAnyText("5 entries are new to this phone")
         assertEquals(0L, entryCount())
         compose.onNodeWithTag("restore_cancel").performClick()
         waitGone("restore_preview")
         assertEquals(0L, entryCount())
-        viewModel().openBackup(uri)
+        viewModel().openBackup(uri.toString())
         waitFor("restore_confirm")
         compose.onNodeWithTag("restore_confirm").performClick()
         waitText("data_status", "Restored: 5 entries added")
         assertEquals(5L, entryCount())
-        viewModel().openBackup(uri)
+        viewModel().openBackup(uri.toString())
         waitAnyText("5 are already here")
     }
 
@@ -238,7 +238,7 @@ class DataTest {
         runBlocking { actions.backup(uri, "correct horse") }
         resetApp()
         launch()
-        viewModel().openBackup(uri)
+        viewModel().openBackup(uri.toString())
         waitFor("open_passphrase")
         compose.onNodeWithTag("open_passphrase").performTextInput("wrong one!")
         compose.onNodeWithTag("open_unlock").performClick()

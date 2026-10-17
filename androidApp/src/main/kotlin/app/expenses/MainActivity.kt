@@ -63,6 +63,10 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
     private val viewModel: LedgerViewModel by viewModels()
 
+    /** The view model takes the shared container and platform, so the default factory must be the app's. */
+    override val defaultViewModelProviderFactory: androidx.lifecycle.ViewModelProvider.Factory
+        get() = (application as ExpensesApp).viewModelFactory
+
     /** Counts requests to open the add screen from the launcher shortcut or the Quick Settings tile. */
     private val addRequests = MutableStateFlow(0)
     private val billsRequests = MutableStateFlow(0)
@@ -70,6 +74,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("onCreate: begin")
         super.onCreate(savedInstanceState)
+        (application as ExpensesApp).platform.activity = this
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
         if (savedInstanceState == null && intent.action == ACTION_OPEN_BILLS) billsRequests.value = 1
         if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS)) viewModel.deferGuide()
@@ -89,7 +94,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
             MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
-              androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT)) {
+              androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides (application as ExpensesApp).platform) {
                 Surface {
                     val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
                     LaunchedEffect(Unit) { StartupTrace.mark("first composition") }
@@ -338,7 +343,7 @@ class MainActivity : FragmentActivity() {
                             k == 13 -> {
                                 BackHandler { securing = false; lock.dismissMessage() }
                                 SecurityScreen(
-                                    settings = lockSettings, availability = lock::availability, message = lockMessage,
+                                    settings = lockSettings, availability = { app.expenses.ui.LockAvailability.valueOf(lock.availability().name) }, message = lockMessage,
                                     onEnable = { lock.enable(this@MainActivity, it) }, onDisable = { lock.disable(this@MainActivity) },
                                     onTimeout = { lock.setTimeout(this@MainActivity, it) },
                                     onBack = { securing = false; lock.dismissMessage() },
@@ -523,6 +528,12 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        val platform = (application as ExpensesApp).platform
+        if (platform.activity === this) platform.activity = null
+        super.onDestroy()
+    }
+
     override fun onStart() {
         super.onStart()
         (application as ExpensesApp).lock.onStart(this)
@@ -550,8 +561,8 @@ class MainActivity : FragmentActivity() {
         return base.copy(primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)))
     }
 
-    private fun openAttachment(uri: Uri, mime: String) {
-        val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime.ifBlank { "*/*" }).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    private fun openAttachment(uri: String, mime: String) {
+        val view = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), mime.ifBlank { "*/*" }).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try { startActivity(Intent.createChooser(view, "Open with")) } catch (e: android.content.ActivityNotFoundException) { android.widget.Toast.makeText(this, "No app on this phone can open that file.", android.widget.Toast.LENGTH_LONG).show() }
     }
 

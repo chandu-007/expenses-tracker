@@ -32,7 +32,7 @@ class ViewModelStartupTest {
      */
     @Test
     fun everyViewModelFinishesLoadingHoweverQuicklyItIsCreated() {
-        val factory = ViewModelProvider.AndroidViewModelFactory(app)
+        val factory = app.viewModelFactory
         repeat(400) { n ->
             val store = ViewModelStore()
             val vm = ViewModelProvider(store, factory)[LedgerViewModel::class.java]

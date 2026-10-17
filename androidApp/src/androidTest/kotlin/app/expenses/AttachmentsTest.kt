@@ -58,7 +58,7 @@ class AttachmentsTest {
     fun aFileIsCopiedInRecordedShownInTheEditorReadableThroughTheProviderAndRemovedWithItsFile() {
         seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
         val bytes = ByteArray(5_000) { (it * 7).toByte() }
-        vm().addAttachment("e", source("bill.pdf", bytes))
+        vm().addAttachment("e", source("bill.pdf", bytes).toString())
         waitFor("attachment_bill.pdf")
         val a = recorded().single()
         assertEquals("bill.pdf", a.name); assertEquals(5_000L, a.sizeBytes)
@@ -73,9 +73,9 @@ class AttachmentsTest {
     @Test
     fun anOversizedOrEmptyFileIsRefusedWithAMessageAndLeavesNoFileOrRecord() {
         seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
-        vm().addAttachment("e", source("huge.bin", ByteArray(15 * 1024 * 1024 + 1)))
+        vm().addAttachment("e", source("huge.bin", ByteArray(15 * 1024 * 1024 + 1)).toString())
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("over 15 MB", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        vm().addAttachment("e", source("empty.txt", ByteArray(0)))
+        vm().addAttachment("e", source("empty.txt", ByteArray(0)).toString())
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("That file is empty", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(emptyList(), recorded()); assertEquals(emptySet(), onDisk())
     }
@@ -83,8 +83,8 @@ class AttachmentsTest {
     @Test
     fun theEleventhFileIsRefusedAndItsCopyIsRemoved() {
         seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
-        repeat(10) { i -> vm().addAttachment("e", source("f$i.txt", byteArrayOf(1, 2, 3))); compose.waitUntil(10_000) { recorded().size == i + 1 } }
-        vm().addAttachment("e", source("one-too-many.txt", byteArrayOf(9)))
+        repeat(10) { i -> vm().addAttachment("e", source("f$i.txt", byteArrayOf(1, 2, 3)).toString()); compose.waitUntil(10_000) { recorded().size == i + 1 } }
+        vm().addAttachment("e", source("one-too-many.txt", byteArrayOf(9)).toString())
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("up to 10 attachments", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(10, recorded().size); assertEquals(10, onDisk().size, "no stray copy of the refused file")
     }

@@ -386,3 +386,16 @@ The owner liked all four sizes, so the widget picker now lists **four entries** 
 - **Not verified / limits.** Not installed on a real iPhone (none was connected); the profile expires after 7 days; the feature set is small (see `docs/IOS.md`); no database key beyond iOS Data Protection.
 
 **Verification (slice 70):** 936 host/JVM tests, 363 functional device tests (2 skipped) and 15 timing-gate tests on a cold-booted Android 8 emulator, plus 4 iPhone UI tests on the simulator. **History:** the script's own timing step failed twice (8 and 9 of 15) with Xcode and the iOS simulator running on the same Mac; the previous commit failed the same tests in the same state, and after quitting Xcode and cold-booting the emulator the gate passed 15 of 15 on this tree, so the script's PASS line was not obtained in one run: the three parts above were each observed passing on this tree.
+
+## Slice 71 (stage 1 of 3): the UI and ViewModel move into a shared Compose Multiplatform module
+
+**Decision:** the iPhone app gets every screen by sharing the Android app's Compose UI and ViewModel through Compose Multiplatform (same `androidx.compose.*` packages), not by rewriting the screens in SwiftUI. The small SwiftUI app from slice 70 stays until the shared one replaces it.
+
+- New module `:shared` (android library + iosArm64/iosSimulatorArm64): all of `app.expenses.ui`, `LedgerViewModel` (now a plain `ViewModel(container, platform)`), `EntryActions`, `AppContainer(platform)`, `DataTransfer` (the old `DataActions` logic), `Formatting`, setting keys.
+- `Platform` (shared interface) is everything the shared code needs from the OS: database, files at String URIs, attachments, backup cipher, auto-export, capture and notification hooks, app lock, statement decoding, and capability flags; `AndroidPlatform` implements it with the existing Android code; `IosPlatform` has a first skeleton. UI hooks (`rememberFeel`, `rememberFilePickers`, `PlatformBackHandler`, `rememberKeyboardOpen`, `systemAnimationsOff`, ...) are `expect`/`actual`.
+- Android behaviour unchanged; the shared module compiles for Android and iOS. Date text is now English-only (it followed the phone's locale before).
+- Tests: tests that passed a `Uri` now pass its string; `isDatabaseClosed` and the timing counters are public.
+
+**Verification:** 936 host/JVM tests, 363 functional device tests (2 skipped) and 15 timing-gate tests, by tools/verify.sh from deleted result files on a cold-booted emulator (the first attempt ran with no emulator and was discarded).
+
+**Next:** stage 2 moves the app's Compose root (`MainActivity`'s screen switching) into shared code; stage 3 is the iOS host (Xcode project hosting the shared UI, iOS platform services: database, files, share, Face ID lock) and testing on the simulator.

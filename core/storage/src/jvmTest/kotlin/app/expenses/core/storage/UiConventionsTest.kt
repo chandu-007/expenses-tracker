@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
  * silently show real amounts, so this fails the build if any screen file imports it.
  */
 class UiConventionsTest {
-    private val ui = listOf(File("../../androidApp/src/main/kotlin/app/expenses/ui"), File("androidApp/src/main/kotlin/app/expenses/ui")).first { it.isDirectory }
+    private val ui = listOf(File("../../shared/src/commonMain/kotlin/app/expenses/ui"), File("shared/src/commonMain/kotlin/app/expenses/ui")).first { it.isDirectory }
 
     @Test
     fun noScreenImportsMaterialsTextBypassingTheAmountMask() {

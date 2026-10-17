@@ -55,13 +55,13 @@ class SafFolder(private val context: Context, private val tree: Uri) : ExportFol
  * read back and compared before the run counts, so a half-written file is reported, not recorded as a success.
  */
 object AutoExport {
-    const val KEEP = 7
-    const val BACKUP_PREFIX = "expenses-backup"
-    const val XLSX_PREFIX = "expenses"
-    const val S_FOLDER = "auto_export_folder"
-    const val S_FREQ = "auto_export_freq"
-    const val S_LAST_AT = "auto_export_last_at"
-    const val S_STATUS = "auto_export_status"
+    const val KEEP = AutoExportKeys.KEEP
+    const val BACKUP_PREFIX = AutoExportKeys.BACKUP_PREFIX
+    const val XLSX_PREFIX = AutoExportKeys.XLSX_PREFIX
+    const val S_FOLDER = AutoExportKeys.FOLDER
+    const val S_FREQ = AutoExportKeys.FREQ
+    const val S_LAST_AT = AutoExportKeys.LAST_AT
+    const val S_STATUS = AutoExportKeys.STATUS
 
     data class Result(val ran: Boolean, val ok: Boolean, val text: String)
 

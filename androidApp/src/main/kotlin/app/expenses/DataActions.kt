@@ -2,20 +2,16 @@ package app.expenses
 
 import android.content.Context
 import android.net.Uri
-import app.expenses.core.storage.BackupCounts
 import app.expenses.core.storage.BackupData
-import app.expenses.core.storage.BackupException
-import app.expenses.core.storage.BackupFile
 import app.expenses.core.storage.BackupHeader
 import app.expenses.core.storage.RestoreReport
-import app.expenses.core.storage.Sha256
-import kotlinx.datetime.TimeZone
 
 /**
- * Export, backup and restore through files the user picked with the system file picker. A file that was written is read back and
- * compared before it is reported as saved, so "Backup saved" never means "probably saved".
+ * Export, backup and restore with a content [Uri]: the Android face of the shared [DataTransfer], which holds the logic.
  */
-class DataActions(private val context: Context, private val container: AppContainer, private val now: () -> Long = System::currentTimeMillis) {
+class DataActions(context: Context, container: AppContainer, now: () -> Long = System::currentTimeMillis) {
+    private val transfer = DataTransfer(AndroidPlatform(context), container, now)
+
     /** A backup file that was opened: either it needs a passphrase first, or it has been checked and previewed. */
     sealed interface Opened {
         class NeedsPassphrase(val bytes: ByteArray) : Opened
@@ -23,68 +19,19 @@ class DataActions(private val context: Context, private val container: AppContai
     }
 
     companion object {
-        const val SETTING_BACKUP_AT = "backup_last_at"
-        const val SETTING_BACKUP_COUNT = "backup_last_count"
+        const val SETTING_BACKUP_AT = DataTransfer.SETTING_BACKUP_AT
+        const val SETTING_BACKUP_COUNT = DataTransfer.SETTING_BACKUP_COUNT
     }
 
-    class Saved(val bytes: Int, val counts: BackupCounts, val encrypted: Boolean)
+    suspend fun exportCsv(uri: Uri): Int = transfer.exportCsv(uri.toString())
+    suspend fun exportXlsx(uri: Uri): Int = transfer.exportXlsx(uri.toString())
+    suspend fun backup(uri: Uri, passphrase: String?): DataTransfer.Saved = transfer.backup(uri.toString(), passphrase)
+    suspend fun open(uri: Uri, passphrase: String?): Opened = transfer.open(uri.toString(), passphrase).let(::wrap)
+    suspend fun openBytes(bytes: ByteArray, passphrase: String?): Opened = wrap(transfer.openBytes(bytes, passphrase))
+    suspend fun restore(data: BackupData): RestoreReport = transfer.restore(data)
 
-    /** Writes every entry as a CSV. Returns the number of entries. */
-    suspend fun exportCsv(uri: Uri): Int {
-        val bytes = container.write { it.csv.bytes(TimeZone.currentSystemDefault()) } ?: throw BackupException("The data is not available.")
-        writeAndVerify(uri, bytes)
-        return bytes.decodeToString().lines().count { it.isNotEmpty() } - 1
-    }
-
-    /** Writes every entry as an Excel workbook. Returns the number of entries. */
-    suspend fun exportXlsx(uri: Uri): Int {
-        val (bytes, count) = container.write { ok -> ok.csv.xlsx(TimeZone.currentSystemDefault()) to ok.db.schemaQueries.entryCount().executeAsOne() } ?: throw BackupException("The data is not available.")
-        writeAndVerify(uri, bytes)
-        return count.toInt()
-    }
-
-    /** Writes a full backup, encrypted when [passphrase] is not null. */
-    suspend fun backup(uri: Uri, passphrase: String?): Saved {
-        val (plain, counts) = container.write { ok ->
-            val data = ok.backup.export()
-            BackupFile.encode(data, now()) to BackupCounts(data.accounts.size, data.categories.size, data.entries.size, data.templates.size, data.budgets.size, data.recurring.size)
-        } ?: throw BackupException("The data is not available.")
-        val bytes = if (passphrase != null) BackupCrypto.encrypt(plain, passphrase) else plain
-        writeAndVerify(uri, bytes)
-        // Check the file the way a restore would, so a backup that could not be restored is found out now.
-        val back = if (passphrase != null) BackupCrypto.decrypt(read(uri), passphrase) else read(uri)
-        BackupFile.decode(back)
-        // Remember that it worked, so the reminder to make a backup stops. Only now: a backup that failed above must not count.
-        container.write { ok ->
-            ok.templates.putSetting(SETTING_BACKUP_AT, now().toString())
-            ok.templates.putSetting(SETTING_BACKUP_COUNT, counts.entries.toString())
-        }
-        return Saved(bytes.size, counts, passphrase != null)
-    }
-
-    /** Opens a backup file and checks it. Nothing on the device changes. */
-    suspend fun open(uri: Uri, passphrase: String?): Opened = openBytes(read(uri), passphrase)
-
-    suspend fun openBytes(bytes: ByteArray, passphrase: String?): Opened {
-        val plain = if (BackupCrypto.isEncrypted(bytes)) {
-            if (passphrase == null) return Opened.NeedsPassphrase(bytes)
-            BackupCrypto.decrypt(bytes, passphrase)
-        } else bytes
-        val (header, data) = BackupFile.decode(plain)
-        val report = container.write { it.backup.preview(data) } ?: throw BackupException("The data is not available.")
-        return Opened.Ready(header, data, report)
-    }
-
-    /** Merges the opened backup into this device. Everything already here is left as it is. */
-    suspend fun restore(data: BackupData): RestoreReport =
-        container.write { ok -> ok.backup.restore(data).also { app.expenses.core.domain.BaseCurrency.current = ok.currency.current() } } ?: throw BackupException("The data is not available.")
-
-    private fun read(uri: Uri): ByteArray =
-        context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw BackupException("That file could not be opened.")
-
-    private fun writeAndVerify(uri: Uri, bytes: ByteArray) {
-        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes); it.flush() } ?: throw BackupException("That location could not be written to.")
-        val back = read(uri)
-        if (back.size != bytes.size || Sha256.hex(back) != Sha256.hex(bytes)) throw BackupException("The file was not saved correctly. Try another location.")
+    private fun wrap(o: DataTransfer.Opened): Opened = when (o) {
+        is DataTransfer.Opened.NeedsPassphrase -> Opened.NeedsPassphrase(o.bytes)
+        is DataTransfer.Opened.Ready -> Opened.Ready(o.header, o.data, o.report)
     }
 }

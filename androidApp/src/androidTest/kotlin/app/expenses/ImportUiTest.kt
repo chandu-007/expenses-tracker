@@ -65,7 +65,7 @@ class ImportUiTest {
         waitFor("import_statement")
     }
 
-    private fun start(uri: Uri) { viewModel().startImport(uri); waitFor("import_account_bank") }
+    private fun start(uri: Uri) { viewModel().startImport(uri.toString()); waitFor("import_account_bank") }
 
     private val hdfc = """
         Account Statement,,,,,,
@@ -182,11 +182,11 @@ class ImportUiTest {
     @Test
     fun unusableFilesGiveAClearMessageAndSaveNothing() {
         openData()
-        viewModel().startImport(file("empty.csv", ""))
+        viewModel().startImport(file("empty.csv", "").toString())
         waitText("import_error", "no rows to import")
         compose.onNodeWithTag("import_close").performClick()
         waitFor("import_statement")
-        viewModel().startImport(file("one.csv", "Date,Amount\n"))
+        viewModel().startImport(file("one.csv", "Date,Amount\n").toString())
         waitText("import_error", "no rows to import")
         assertEquals(0L, entryCount())
     }
@@ -200,7 +200,7 @@ class ImportUiTest {
                 CsvExport(ok.db).build(kotlinx.datetime.TimeZone.UTC)
             }
         }!!
-        viewModel().startImport(file("own.csv", exported))
+        viewModel().startImport(file("own.csv", exported).toString())
         waitText("import_error", "exported from this app")
         waitText("import_error", "make a backup")
         assertEquals(1L, entryCount(), "nothing was imported: only the one entry that was exported is there")
@@ -210,7 +210,7 @@ class ImportUiTest {
     fun anEmptyExportOfTheAppsOwnDataGetsTheRestoreMessageNotAGenericOne() {
         openData()
         val header = runBlocking { container.write { ok -> CsvExport(ok.db).build(kotlinx.datetime.TimeZone.UTC) } }!!   // a fresh ledger: only the header row
-        viewModel().startImport(file("own-empty.csv", header))
+        viewModel().startImport(file("own-empty.csv", header).toString())
         waitText("import_error", "exported from this app")
     }
 
@@ -231,7 +231,7 @@ class ImportUiTest {
     @Test
     fun aFileThatIsNotAWorkbookButLooksLikeOneExplainsItself() {
         openData()
-        viewModel().startImport(file("broken.xls", asset("big.xls").copyOf(700)))
+        viewModel().startImport(file("broken.xls", asset("big.xls").copyOf(700)).toString())
         compose.waitUntil(10_000) { viewModel().statement.value.error != null }
         assertTrue(viewModel().statement.value.error!!.contains("Excel"), viewModel().statement.value.error!!)
     }

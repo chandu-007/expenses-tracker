@@ -64,6 +64,7 @@ dependencies {
     implementation(project(":core:domain"))
     implementation(project(":core:storage"))
     implementation(project(":core:parsers"))
+    implementation(project(":shared"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
