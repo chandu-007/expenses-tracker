@@ -42,7 +42,7 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
         val seen = HashMap<String, Int>()
         val ordered = txns.withIndex().map { (i, t) ->
             val key = "${account.value}|${t.date.toEpochDays()}|${t.flow}|${t.minor}|${normalise(t.description)}"
-            val n = seen.merge(key, 1, Int::plus)!! - 1
+            val n = (seen[key] ?: 0).also { seen[key] = it + 1 }
             Triple(t, "$key|$n", i)
         }.sortedWith(compareBy({ it.first.date }, { it.third }))
 

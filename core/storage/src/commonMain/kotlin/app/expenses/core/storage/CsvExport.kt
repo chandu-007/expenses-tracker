@@ -53,7 +53,7 @@ class CsvExport(private val db: ExpensesDb) {
                 else -> splits[e.id].orEmpty().joinToString(" + ") { categories[it.category_id] ?: it.category_id }
             }
             rows += listOf(
-                local.date.toString(), "%02d:%02d".format(local.hour, local.minute), TYPE_NAMES[e.kind] ?: e.kind,
+                local.date.toString(), "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}", TYPE_NAMES[e.kind] ?: e.kind,
                 money(e.amount_minor, e.currency), e.currency, yourShare,
                 text(category), text(e.account_id?.let { accounts[it] ?: it }.orEmpty()), text(e.counter_account_id?.let { accounts[it] ?: it }.orEmpty()),
                 text(e.person_id.orEmpty()), text(e.merchant.orEmpty()), text(e.note.orEmpty()), text(tags[e.id].orEmpty().joinToString(", ")), text(e.source),

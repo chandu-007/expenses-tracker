@@ -374,3 +374,15 @@ The owner liked all four sizes, so the widget picker now lists **four entries** 
 - **Not verified / limits.** Nothing was tried on a real phone. An older backup restores its categories as expense categories, so income entries already in it keep their category but the income picker will not offer an expense-kind category. Reports still group income and expenses as before (no income-by-category view). Income categories have no suggested catalogue.
 
 **Verification:** 932 host/JVM tests (both targets counted), 363 functional device tests (2 skipped) and 15 timing-gate tests; verified in two steps by tools/verify.sh from deleted result files (a cold-booted Android 8 emulator). **History:** the first full run failed on the schema migration check and five device tests (listed above); the second passed.
+
+## Slice 70: the first iPhone build
+
+**Request from the owner:** a build to install on the iPhone and start testing.
+
+- **Shared core on iOS.** `core:domain`, `core:parsers` and `core:storage` now compile for iOS (Kotlin/Native). Four JVM-only calls were replaced by common ones (`toSortedMap`, `String.format`, `HashMap.merge`, `@Volatile`, a deprecated `String(CharArray)`); behaviour is unchanged on Android.
+- **Facade (`core/facade`).** `AppCore`: accounts and balances, categories by kind, add (with amount parsing and reasons), recent entries, month spending, the similar-entries offer and move, delete. Four host tests; it is built into `ExpensesCore.xcframework` with a native SQLite driver.
+- **App (`iosApp/`).** SwiftUI: Home (month spend, balances, entries by day, swipe to delete), Add (expense or income, category chips, account), Categories (expense / income), the similar-entries sheet. Four XCUITests pass on the iPhone 17 simulator (add shows row and total; a bad amount is explained; income and expense categories are separate; similar entries are offered and reviewed one by one). I looked at the home and add screens in a simulator screenshot.
+- **Signed device build.** Release build signed with the Apple Development identity and a team profile that includes the owner's registered iPhone; packaged as `~/Desktop/Expenses-iOS-0.1.0-test.ipa`. Steps in `docs/IOS.md`.
+- **Not verified / limits.** Not installed on a real iPhone (none was connected); the profile expires after 7 days; the feature set is small (see `docs/IOS.md`); no database key beyond iOS Data Protection.
+
+**Verification (slice 70):** 936 host/JVM tests, 363 functional device tests (2 skipped) and 15 timing-gate tests on a cold-booted Android 8 emulator, plus 4 iPhone UI tests on the simulator. **History:** the script's own timing step failed twice (8 and 9 of 15) with Xcode and the iOS simulator running on the same Mac; the previous commit failed the same tests in the same state, and after quitting Xcode and cold-booting the emulator the gate passed 15 of 15 on this tree, so the script's PASS line was not obtained in one run: the three parts above were each observed passing on this tree.

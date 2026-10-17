@@ -18,7 +18,7 @@ object EntryHistory {
     fun revisions(ops: List<LoggedChange>): List<Revision> {
         val out = ArrayList<Revision>()
         var state = LinkedHashMap<String, String?>()
-        for ((at, group) in ops.groupBy { it.atMillis }.toSortedMap()) {
+        for ((at, group) in ops.groupBy { it.atMillis }.entries.sortedBy { it.key }) {
             val before = LinkedHashMap(state)
             val changes = ArrayList<FieldChange>()
             for (op in group) {

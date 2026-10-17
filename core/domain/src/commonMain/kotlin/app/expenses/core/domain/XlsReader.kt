@@ -70,7 +70,7 @@ object XlsReader {
         class Entry(val name: String, val type: Int, val start: Int, val size: Long)
         val entries = (0 until directory.size / 128).map { i ->
             val o = i * 128; val len = (u16(directory, o + 0x40) / 2 - 1).coerceIn(0, 31)
-            Entry(String(CharArray(len) { c -> u16(directory, o + 2 * c).toChar() }), directory[o + 0x42].toInt(), i32(directory, o + 0x74), i32(directory, o + 0x78).toLong() and 0xFFFFFFFFL)
+            Entry(CharArray(len) { c -> u16(directory, o + 2 * c).toChar() }.concatToString(), directory[o + 0x42].toInt(), i32(directory, o + 0x74), i32(directory, o + 0x78).toLong() and 0xFFFFFFFFL)
         }
         val root = entries.firstOrNull { it.type == 5 } ?: throw Unreadable("This Excel file is damaged and could not be read.")
         val book = entries.firstOrNull { it.type == 2 && it.name == "Workbook" }

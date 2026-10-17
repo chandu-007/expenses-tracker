@@ -41,7 +41,7 @@ class PeopleStore(private val db: ExpensesDb) {
     }
 
     private fun normalize(name: String) = name.trim().replace(Regex("\\s+"), " ")
-    private fun newId(): String = Random.nextBytes(8).joinToString("") { "%02x".format(it) }
+    private fun newId(): String = Random.nextBytes(8).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     companion object { const val MAX_NAME = 60 }
 }

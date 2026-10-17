@@ -31,5 +31,6 @@ rootProject.name = "expenses-tracker"
 include(":core:domain")
 include(":core:parsers")
 include(":core:storage")
+include(":core:facade")
 include(":androidApp")
 include(":backend")

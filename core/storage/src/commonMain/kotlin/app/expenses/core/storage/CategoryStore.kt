@@ -176,7 +176,7 @@ class CategoryStore(
     private fun toCategory(r: app.expenses.core.storage.db.Category) =
         Category(r.id, r.name, r.parent_id, r.color, r.position.toInt(), r.hidden == 1L, CategoryKind.of(r.kind))
 
-    private fun newId(): String = Random.nextBytes(8).joinToString("") { "%02x".format(it) }
+    private fun newId(): String = Random.nextBytes(8).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     /**
      * The first time, creates the eight default categories. Their ids equal their names, so entries recorded before categories

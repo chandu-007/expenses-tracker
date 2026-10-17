@@ -24,7 +24,7 @@ fun Currency.symbolOrCode(): String = if (code == "INR") "₹" else code
  * and changes only through [BaseCurrencyRules]-checked code.
  */
 object BaseCurrency {
-    @Volatile var current: Currency = Currency.INR
+    @kotlin.concurrent.Volatile var current: Currency = Currency.INR
 }
 
 /** What already exists in the ledger, as far as it bears on changing the base currency. */
