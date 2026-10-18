@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Google Play build: Play allows the SMS permissions only for default SMS apps and a short list of exceptions, so this build declares none and has
+  no text receiver. Bank alerts still arrive through payment-app notifications (opt-in) and by hand. The directly installed build keeps SMS capture.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.RECEIVE_SMS" tools:node="remove" />
+    <uses-feature android:name="android.hardware.telephony" tools:node="remove" />
+    <application>
+        <receiver android:name=".SmsReceiver" tools:node="remove" />
+    </application>
+</manifest>

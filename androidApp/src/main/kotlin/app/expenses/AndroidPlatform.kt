@@ -35,7 +35,7 @@ class AndroidPlatform(context: Context) : Platform {
     override val supportsNotifications get() = true
     override val supportsAutoExport get() = true
     override val supportsCaptureSources get() = true
-    override val supportsSmsCapture get() = true
+    override val supportsSmsCapture get() = BuildConfig.SMS_CAPTURE
     override val supportsNotificationCapture get() = true
     override val supportsWidget get() = true
     override val seedingEnabled get() = BuildConfig.SEEDING_ENABLED

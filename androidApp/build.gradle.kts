@@ -20,6 +20,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Test-data seeding through an intent extra exists only where this is true; never in release.
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
+        // Whether this build reads bank texts. Off only in the Google Play build, which has no SMS permission (see src/play/AndroidManifest.xml).
+        buildConfigField("boolean", "SMS_CAPTURE", "true")
     }
 
     // The release key lives outside the repository: its path and passwords are Gradle properties in ~/.gradle/gradle.properties. Without them the release
@@ -44,6 +46,13 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // The Google Play build: release code and signing, without the SMS permission and receiver. `./gradlew :androidApp:bundlePlay` makes the .aab to upload.
+        create("play") {
+            initWith(getByName("release"))
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "SMS_CAPTURE", "false")
         }
         // Release code (R8, not debuggable) signed with the debug key, for measuring startup and scrolling honestly.
         create("benchmark") {

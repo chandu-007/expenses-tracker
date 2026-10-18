@@ -228,7 +228,7 @@ fun EntryListScreen(
                                 if (state.showBackupNudge) BackupNudgeCard(onBackUp = { closeMore(); onOpenData() }, onLater = onSnoozeBackupNudge)
                                 MenuGroup("Inbox") {
                                     MenuTile(Icons.Outlined.Inbox, "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
-                                    MenuTile(Icons.Outlined.Sms, "Capture from texts", "open_capture") { closeMore(); onOpenCapture() }
+                                    MenuTile(Icons.Outlined.Sms, if (LocalPlatform.current.supportsSmsCapture || LocalPlatform.current.supportsShortcutsCapture) "Capture from texts" else "Capture from payment apps", "open_capture") { closeMore(); onOpenCapture() }
                                 }
                                 MenuGroup("Money") {
                                     MenuTile(Icons.Outlined.AccountBalance, "Accounts", "manage_accounts") { closeMore(); onManageAccounts() }

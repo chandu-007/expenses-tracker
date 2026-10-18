@@ -220,8 +220,11 @@ fun CaptureSettingsScreen(
 ) {
     if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack); return }
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
-    Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
+    // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
+    val readsTexts = LocalPlatform.current.supportsSmsCapture
+    Scaffold(topBar = { TopAppBar(title = { Text(if (readsTexts) "Capture from texts" else "Capture from payment apps") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (readsTexts) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Read bank texts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = settings.smsOn && permissionGranted, onCheckedChange = onToggle, modifier = Modifier.testTag("capture_sms_switch"))
@@ -232,6 +235,7 @@ fun CaptureSettingsScreen(
             Text("Texts from people, one-time passwords and anything from a sender that is not on the list below are ignored without being read; the sender is checked first. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
             if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
             HorizontalDivider()
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Read payment app notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = settings.notifOn && notifAccess, onCheckedChange = onToggleNotif, modifier = Modifier.testTag("capture_notif_switch"))
