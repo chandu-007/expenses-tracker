@@ -31,4 +31,4 @@ The app is not directed at children under 13 and I do not knowingly collect anyt
 If this policy changes I will update this page and the date above. The app will not start collecting data without a new version and a clear notice.
 
 ## Contact
-[YOUR CONTACT EMAIL]
+nelluri.c@gmail.com
