@@ -57,3 +57,10 @@ iOS lets no app read text messages or other apps' notifications, so Android's au
 - `PrivacyInfo.xcprivacy` declares no tracking and no collected data, and the required-reason APIs the app and its frameworks use: UserDefaults (CA92.1), file timestamps (C617.1), system boot time / uptime (35F9.1). No disk-space API is used by the app's own code.
 - `NSFaceIDUsageDescription` is set. Export compliance: the app uses AES-256-GCM only for the user's own backup files; whether to declare that exempt (`ITSAppUsesNonExemptEncryption`) is the owner's answer to give in App Store Connect, so the key is not preset.
 - The icon is 1024x1024 without alpha. Screenshots, description, privacy policy URL and age rating are still to be made in App Store Connect.
+
+## Setting up the Shortcuts automation on iOS 27 (from Apple's Shortcuts User Guide for iOS 27)
+In iOS 27 an automation is added to a shortcut: create the shortcut first, then give it a trigger.
+1. Shortcuts > + > rename it "Capture bank message" > Add Action > search "Expenses" > **Capture bank message**; set Message (and Sender) to Shortcut Input.
+2. **Edit > Automation > Message** (options: Sender, Message Contains; with several, all must match). Message Contains: `debited` (a second shortcut for `credited`).
+3. To run without asking: the shortcut's **Info (i) > Privacy > Allow Running When Locked**; the Message trigger is on Apple's list of automations that can run automatically; individual actions may also need Always Allow.
+Not verified on a phone running iOS 27.0.1: the labels come from Apple's guide, and whether the Message trigger hands the text over as Shortcut Input in the new flow is untested.

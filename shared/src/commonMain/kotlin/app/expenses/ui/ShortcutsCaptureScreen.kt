@@ -31,13 +31,13 @@ import app.expenses.PasteOutcome
 
 /** Where the words come from on a platform with no access to texts: the steps of the Shortcuts automation are [SHORTCUTS_STEPS]. Shown only where `Platform.supportsShortcutsCapture` is true. */
 internal val SHORTCUTS_STEPS = listOf(
-    "Open the Shortcuts app (the button below does it) and tap Automation at the bottom.",
-    "Tap New Automation (the + button), then choose Message.",
-    "Under Message Contains, type words your bank's texts always have, for example: debited, credited, Rs., INR. Leave Sender empty. Tap Done.",
-    "Choose Run Immediately (not Run After Confirmation), and turn off Notify When Run. Tap Next.",
-    "Tap New Blank Automation, then Add Action. Search for Expenses and choose Capture bank message.",
+    "Open the Shortcuts app (the button below does it), tap + to make a new shortcut, and name it Capture bank message.",
+    "Tap Add Action, search for Expenses, and choose Capture bank message.",
     "In the action, tap Message and choose Shortcut Input (its Content). Optionally tap Sender and choose Shortcut Input, then Sender.",
-    "Tap Done. From now on a text containing one of those words is handed to this app, which reads it on this phone.",
+    "Tap Edit, then Automation (on iOS 27 an automation belongs to a shortcut). Choose the Message trigger.",
+    "Under Message Contains, type words your bank's texts always have, for example: debited. Leave Sender empty. Add a second shortcut for credited if you want those too.",
+    "To make it run without asking: open the shortcut's Info (i) button, tap Privacy, and turn on Allow Running When Locked. If the action asks to be allowed, choose Always Allow.",
+    "Tap Done. From now on a text containing those words is handed to this app, which reads it on this phone.",
 )
 
 /**
