@@ -2,6 +2,8 @@ package app.expenses
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -117,7 +119,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     SideEffect { host.onDarkChanged(dark) }
     MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
-            Surface {
+            // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
+            Surface(Modifier.imePadding()) {
             val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(Unit) { platform.trace("first composition") }
             var adding by rememberSaveable { mutableStateOf(false) }

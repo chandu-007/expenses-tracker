@@ -428,3 +428,15 @@ The owner liked all four sizes, so the widget picker now lists **four entries** 
 - **Not verified:** the Play build was not run on a device (instrumented tests run the debug build); whether Google accepts the notification listener for an expense tracker is unconfirmed; help text elsewhere still says "texts" in the Play build.
 
 **Verification:** 937 host/JVM tests, 363 functional device tests (2 skipped) and 15 timing-gate tests, by tools/verify.sh in one run from deleted result files on a cold-booted emulator: PASS.
+
+## Slice 74: the keyboard no longer covers the screen, and Done puts it away
+
+**Reported by the owner (on a real phone):** the keyboard stays on top of the screen, and after a search the keyboard must be dismissed by tapping something.
+
+- **Cause.** The app targets Android 16 (API 36): from Android 15 the window is not resized for the keyboard (`adjustResize` is ignored under enforced edge-to-edge), and Material's `Scaffold` does not pad for the keyboard, so it was drawn over the bottom of the screen. The API 26 emulator still resizes, which is why this had looked fine there.
+- **Fix.** The shared root takes the keyboard's height as padding (`Modifier.imePadding()` on the root surface, also on iPhone through the existing wrapper), so every screen with a text field keeps its bottom bar and buttons above the keyboard. On Search, **Done** (the keyboard's action key, previously Search, which did nothing) clears focus and hides the keyboard; so do choosing entries and scrolling the results.
+- **Test.** `doneOnTheKeyboardPutsItAwayAndLeavesTheResultsShown` reads the system's input-method state (`dumpsys input_method`) and fails if the keyboard stays. Order matters: hiding the keyboard before clearing focus left it showing on Android 8; clear focus first, then hide.
+- **Not verified:** on a real Android 15 or 16 phone (the emulator is Android 8, where the window already resized, so the new padding is untested where it matters); on iPhone beyond compiling.
+- Also made `CategoriesTest.aDuplicateNameIsRefused...` wait for the dialog before typing; it still fails about 1 run in 3 on this emulator (it failed the same way before this slice), cause not found.
+
+**Verification:** 937 host/JVM tests pass; the 364 device tests had one failure (the Categories test above, which passes on re-run); the timing gate failed 8 of 15 with the host at load 7 and swap at 2.6 of 4 GB, not re-run on a quiet machine. The change touches no database code.

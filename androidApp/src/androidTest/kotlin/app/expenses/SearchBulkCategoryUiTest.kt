@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -175,5 +176,18 @@ class SearchBulkCategoryUiTest {
         compose.waitUntil(10_000) { categoryOf("p1") == "income:otherincome" && categoryOf("p2") == "income:otherincome" }
         compose.waitUntil(10_000) { has("search_notice") && textOf("search_notice").contains("Changed the category of 2 entries") }
         assertEquals("Other", categoryOf("e1"), "the expense that was not selected is untouched")
+    }
+
+    @Test
+    fun doneOnTheKeyboardPutsItAwayAndLeavesTheResultsShown() {
+        expense("a", "Netflix one"); expense("b", "Netflix two")
+        launch(); tap("open_search"); waitFor("search_text")
+        node("search_text").performTextInput("Netflix")
+        compose.waitUntil(10_000) { has("search_count") && has("result_a") }
+        fun keyboardShown() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("dumpsys input_method").use { java.io.BufferedReader(java.io.InputStreamReader(java.io.FileInputStream(it.fileDescriptor))).readText() }.contains("mInputShown=true")
+        compose.waitUntil(10_000) { keyboardShown() }
+        node("search_text").performImeAction()
+        compose.waitUntil(10_000) { !keyboardShown() }
+        assertTrue(has("result_a") && has("result_b"), "the results are still there")
     }
 }

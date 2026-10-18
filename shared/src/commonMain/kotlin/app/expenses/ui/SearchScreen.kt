@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
@@ -80,12 +81,20 @@ fun SearchScreen(
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     PlatformBackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     val focusManager = LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    // Done on the keyboard, choosing entries and scrolling the results all put the keyboard away, so the results can be seen
+    val dismissKeyboard = { focusManager.clearFocus(); keyboard?.hide() }
+    val hideOnScroll = remember(keyboard) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset { if (available.y != 0f) { keyboard?.hide(); focusManager.clearFocus() }; return androidx.compose.ui.geometry.Offset.Zero }
+        }
+    }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     LaunchedEffect(state.results) {
         if (selected.isNotEmpty()) { val listed = state.results.mapTo(HashSet()) { it.id }; if (selected.any { it !in listed }) selected = selected.filter { it in listed } }
     }
     // choosing entries is done with the keyboard out of the way
-    LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) focusManager.clearFocus() }
+    LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) { keyboard?.hide(); focusManager.clearFocus() } }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     var text by rememberSaveable { mutableStateOf("") }
     var min by rememberSaveable { mutableStateOf("") }
@@ -146,7 +155,7 @@ fun SearchScreen(
         Column(Modifier.fillMaxSize().padding(padding)) {
             OutlinedTextField(
                 value = text, onValueChange = { changed(t = it) }, label = { Text("Merchant or note") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).focusRequester(focus).testTag("search_text"),
             )
             if (saved.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -155,8 +164,8 @@ fun SearchScreen(
                 }
             }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = min, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(lo = v) }, label = { Text("From ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("search_min"))
-                OutlinedTextField(value = max, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(hi = v) }, label = { Text("To ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("search_max"))
+                OutlinedTextField(value = min, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(lo = v) }, label = { Text("From ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_min"))
+                OutlinedTextField(value = max, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(hi = v) }, label = { Text("To ₹") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_max"))
             }
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box {
@@ -211,7 +220,7 @@ fun SearchScreen(
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
                     }
-                    LazyColumn(Modifier.fillMaxSize().testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
+                    LazyColumn(Modifier.fillMaxSize().nestedScroll(hideOnScroll).testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
                         itemsIndexed(state.results, key = { _, it -> it.seq }) { index, row ->
                             val isSelected = row.id in selected
                             val pos = CardPos.of(first = index == 0, last = index == state.results.lastIndex)

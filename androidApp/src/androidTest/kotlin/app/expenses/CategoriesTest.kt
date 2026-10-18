@@ -110,6 +110,7 @@ class CategoriesTest {
         compose.onNodeWithTag("add").performClick()
         waitFor("new_category_chip")
         compose.onNodeWithTag("new_category_chip").performScrollTo().performClick()
+        waitFor("cat_name") // the dialog opens a moment after the tap
         compose.onNodeWithTag("cat_name").performTextInput("food")
         waitForText("There is already a category called")
         compose.onNodeWithTag("cat_confirm").assertIsNotEnabled()
