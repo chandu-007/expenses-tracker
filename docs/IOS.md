@@ -48,7 +48,7 @@ iOS lets no app read text messages or other apps' notifications, so Android's au
 - Requires `brew install xcodegen`. Version 0.1.0 (1), bundle id `app.expenses.tracker.ios`, display name Expenses, iPhone only, iOS 17 and later.
 
 ## Installing on the iPhone (free Apple ID signing)
-1. The build is signed with the Apple Development certificate of team 9V2G5RH624 and a provisioning profile that lists one device (UDID 00008150-000855380C99401C). It expires 7 days after it was made (a free account); after that rebuild and reinstall. A paid Apple Developer account makes it a year and allows TestFlight and the App Store.
+1. The build is signed with the Apple Development certificate of team 9V2G5RH624 and a provisioning profile that lists one device. It expires 7 days after it was made (a free account); after that rebuild and reinstall. A paid Apple Developer account makes it a year and allows TestFlight and the App Store.
 2. On the iPhone: Settings > Privacy & Security > Developer Mode > On (it restarts).
 3. Install: connect the iPhone by cable, open Xcode > Window > Devices and Simulators, select the phone, press + under Installed Apps and choose the .ipa. (Or `xcrun devicectl device install app --device <name> Expenses.app`.)
 4. First launch: Settings > General > VPN & Device Management > the developer app > Trust.
