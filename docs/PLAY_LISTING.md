@@ -1,6 +1,6 @@
 # Google Play: what to enter in Play Console
 
-Package `app.expenses`. Build the file to upload with `./gradlew :androidApp:bundlePlay` (output `androidApp/build/outputs/bundle/play/androidApp-play.aab`). It is the release build without the SMS permission and without the text receiver (checked in the built manifest); everything else is identical.
+Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is already taken on Play by another developer; the directly installed APK keeps `app.expenses`, so existing testers keep their data, but the Play app and the APK are two different apps on a phone). Build the file to upload with `./gradlew :androidApp:bundlePlay` (output `androidApp/build/outputs/bundle/play/androidApp-play.aab`). It is the release build without the SMS permission and without the text receiver (checked in the built manifest); everything else is identical.
 
 ## Store listing (draft, English India)
 - **App name** (30 max): `Expenses: private tracker`

@@ -440,3 +440,8 @@ The owner liked all four sizes, so the widget picker now lists **four entries** 
 - Also made `CategoriesTest.aDuplicateNameIsRefused...` wait for the dialog before typing; it still fails about 1 run in 3 on this emulator (it failed the same way before this slice), cause not found.
 
 **Verification:** 937 host/JVM tests pass; the 364 device tests had one failure (the Categories test above, which passes on re-run); the timing gate failed 8 of 15 with the host at load 7 and swap at 2.6 of 4 GB, not re-run on a quiet machine. The change touches no database code.
+
+## Slice 75: a package name of its own for Google Play
+
+`app.expenses` is already taken on Play. The `play` build type now gets the application id `io.github.chandu007.expenses` (`androidComponents.onVariants`), and the code namespace stays `app.expenses`. The directly installed build keeps `app.expenses` so testers keep their data. Two places hardcoded the old name and were fixed: the home-screen widget's intents (now `BuildConfig.APPLICATION_ID`) and the launcher shortcut (`src/play/res/xml/shortcuts.xml` overrides the target package for the Play build). Checked in the built files: the Play APK/AAB has the new package, file authority `io.github.chandu007.expenses.files`, the shortcut targets it, and no SMS permission; the release APK is unchanged.
+**Not verified:** the Play build on a device (the Android emulator could not start: the Mac's disk was full), and no device tests were run after this change (the debug and release builds are unchanged apart from the widget intents using the same package value); no full verification was run.

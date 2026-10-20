@@ -101,3 +101,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
 }
+
+// The Google Play build has its own package name: `app.expenses` is already taken on Play by another developer. The code's namespace stays `app.expenses`.
+// The directly installed build keeps `app.expenses`, so testers who have it keep their data and update in place.
+androidComponents {
+    onVariants(selector().withBuildType("play")) { variant -> variant.applicationId.set("io.github.chandu007.expenses") }
+}

@@ -3,6 +3,7 @@ package app.expenses.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import app.expenses.BuildConfig
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -244,9 +245,9 @@ private fun Chip(b: WidgetButton, modifier: GlanceModifier, showDetail: Boolean 
     }
 }
 
-private fun openIntent() = Intent().setClassName("app.expenses", "app.expenses.MainActivity")
+private fun openIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity")
 
-private fun addIntent() = Intent().setClassName("app.expenses", "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE)
+private fun addIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE)
 
 /** Tap on a quick-entry button: records the expense and remembers it so it can be undone for a couple of minutes. */
 class QuickAddAction : ActionCallback {
