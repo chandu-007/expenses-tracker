@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -42,12 +43,12 @@ class AppearanceUiTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
-    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     @Suppress("UNCHECKED_CAST")
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) } as T
     private fun saved() = Appearances.decode(db { it.templates.setting("appearance") })
     private fun height(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot().let { it.bottom.value - it.top.value }
-    private fun open() { tap("more_menu"); tap("open_appearance"); waitFor("theme_DARK") }
+    private fun open() { compose.openMore(); tap("open_appearance"); waitFor("theme_DARK") }
 
     @Test
     fun theChoicesAreSavedKeptAfterARestartAndShownAsSelectedWhenTheScreenReopens() {
@@ -64,10 +65,10 @@ class AppearanceUiTest {
         db { ok -> ok.store.save(Expense(EntryId("e"), System.currentTimeMillis(), AccountId("cash"), Money(500, Currency.INR)), EntryDetails(merchant = "Cafe")) }
         launch(); waitFor("row_Cafe")
         val comfortable = height("row_Cafe")
-        open(); tap("density_COMPACT"); compose.waitUntil(10_000) { saved().density == Density.COMPACT }; tap("appearance_back"); waitFor("row_Cafe")
+        open(); tap("density_COMPACT"); compose.waitUntil(10_000) { saved().density == Density.COMPACT }; tap("appearance_back"); compose.closeMore(); waitFor("row_Cafe")
         val compact = height("row_Cafe")
         assertTrue(compact < comfortable - 4, "compact $compact dp should be shorter than comfortable $comfortable dp")
-        open(); tap("density_COMFORTABLE"); compose.waitUntil(10_000) { saved().density == Density.COMFORTABLE }; tap("appearance_back"); waitFor("row_Cafe")
+        open(); tap("density_COMFORTABLE"); compose.waitUntil(10_000) { saved().density == Density.COMFORTABLE }; tap("appearance_back"); compose.closeMore(); waitFor("row_Cafe")
         assertEquals(comfortable, height("row_Cafe"), 0.5f)
     }
 

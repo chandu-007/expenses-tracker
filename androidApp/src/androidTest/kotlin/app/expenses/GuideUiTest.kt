@@ -138,7 +138,7 @@ class GuideUiTest {
     @Test
     fun moreOffersTheTourAnytimeStartingFromHomeWithoutTheUpdateChoiceAndClosingItChangesNothingStored() {
         put(GuideSettings.SEEN, "0"); put(GuideSettings.OFF, "1") // an old version seen, and updates switched off: nothing is shown on its own
-        launch(); waitFor("add"); assertTrue(!has("guide")); tap("more_menu"); tap("open_guide"); waitFor("guide")
+        launch(); waitFor("add"); assertTrue(!has("guide")); compose.openMore(); tap("open_guide"); waitFor("guide")
         waitFor("add") // the More page was closed: the tour starts on the home screen, where the Add button is
         assertTrue(!has("guide_never"), "no update choice when it was asked for")
         tap("guide_skip"); gone("guide")

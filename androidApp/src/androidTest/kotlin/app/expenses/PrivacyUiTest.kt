@@ -51,7 +51,7 @@ class PrivacyUiTest {
     private fun seed() = db { ok ->
         ok.store.save(Expense(EntryId("e"), System.currentTimeMillis(), AccountId("cash"), Money(123_456, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(123_456, Currency.INR)))), EntryDetails(merchant = "Cafe"))
     }
-    private fun toggle() { tap("more_menu"); tap("toggle_privacy") }
+    private fun toggle() { compose.openMore(); tap("toggle_privacy"); compose.closeMore() }
 
     @Test
     fun hidingAmountsCoversTheHeadlineTheRowsAndTheBalancesAndShowingBringsThemBack() {
@@ -70,7 +70,7 @@ class PrivacyUiTest {
     fun theChoiceSurvivesARestartAndTheMenuOfferToShowThemAgain() {
         seed(); launch(); toggle(); compose.waitUntil(10_000) { hidden() == "1" }
         launch(); text("month_spend").assertTextEquals("₹••••")
-        tap("more_menu"); waitFor("toggle_privacy")
+        compose.openMore(); waitFor("toggle_privacy")
         assertTrue(anyText("Show amounts"))
     }
 
@@ -90,7 +90,7 @@ class PrivacyUiTest {
         seed(); launch(); toggle(); compose.waitUntil(10_000) { hidden() == "1" }
         tap("open_reports"); waitFor("report_spent"); text("report_spent").assertTextEquals("₹••••")
         assertTrue(!anyText("1,234.56"))
-        tap("reports_back"); waitFor("add"); tap("more_menu"); tap("open_calendar"); waitFor("cal_month")
+        tap("reports_back"); waitFor("add"); compose.openMore(); tap("open_calendar"); waitFor("cal_month")
         val day = java.time.LocalDate.now().dayOfMonth
         text("cal_amount_$day").assertTextEquals("₹••••")
         text("cal_total").assertTextEquals("Spent ₹••••")

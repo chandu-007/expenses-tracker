@@ -116,18 +116,25 @@ object BackupFile {
     }
 
     /** Checks the file and returns its contents, or throws [BackupException] saying what is wrong. Nothing is written anywhere. */
-    fun decode(bytes: ByteArray): Pair<BackupHeader, BackupData> {
+    fun decode(raw: ByteArray): Pair<BackupHeader, BackupData> {
+        // a copy that went through an email, a chat or a cloud drive can arrive with a byte-order mark or blank space in front, or a newline behind
+        val bytes = withoutLeadingNoise(raw)
+        if (bytes.isEmpty()) throw BackupException("That file is empty, so it is not a backup. A download that did not finish can leave an empty file: save the backup again and choose it once more.")
+        if (bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) throw BackupException("That is a zip or Excel file, not a backup. A backup file ends in .expbak. ${describe(raw)}")
+        if (bytes[0] == '<'.code.toByte()) throw BackupException("That is a web page, not a backup: the download may have been blocked or asked you to sign in. ${describe(raw)}")
         val newline = bytes.indexOf('\n'.code.toByte())
-        if (newline <= 0) throw BackupException("This is not a backup file from this app.")
+        if (newline <= 0) throw BackupException("This is not a backup file from this app. ${describe(raw)}")
         val header = try {
-            json.decodeFromString(BackupHeader.serializer(), bytes.copyOfRange(0, newline).decodeToString())
+            json.decodeFromString(BackupHeader.serializer(), bytes.copyOfRange(0, newline).decodeToString().trim())
         } catch (e: Exception) {
-            throw BackupException("This is not a backup file from this app.")
+            throw BackupException("This is not a backup file from this app. ${describe(raw)}")
         }
-        if (header.format != FORMAT) throw BackupException("This is not a backup file from this app.")
+        if (header.format != FORMAT) throw BackupException("This is not a backup file from this app (it says it is \"${header.format.take(40)}\"). ${describe(raw)}")
         if (header.version > VERSION) throw BackupException("This backup was made by a newer version of the app. Update the app to restore it.")
         if (header.version < 1) throw BackupException("This backup file is not valid.")
-        val payload = bytes.copyOfRange(newline + 1, bytes.size)
+        var payload = bytes.copyOfRange(newline + 1, bytes.size)
+        // blank space after the data (a trailing newline added on the way) is not part of it
+        if (payload.size > header.payloadBytes && payload.copyOfRange(header.payloadBytes, payload.size).all { it == '\n'.code.toByte() || it == '\r'.code.toByte() || it == ' '.code.toByte() }) payload = payload.copyOfRange(0, header.payloadBytes)
         if (payload.size != header.payloadBytes) throw BackupException("This backup file is incomplete or damaged (it should hold ${header.payloadBytes} bytes of data but holds ${payload.size}).")
         if (Sha256.hex(payload) != header.sha256) throw BackupException("This backup file is damaged: its contents do not match its checksum. Nothing was changed.")
         val data = try {
@@ -137,4 +144,15 @@ object BackupFile {
         }
         return header to data
     }
+
+    private fun withoutLeadingNoise(bytes: ByteArray): ByteArray {
+        var i = 0
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) i = 3
+        while (i < bytes.size && (bytes[i] == ' '.code.toByte() || bytes[i] == '\n'.code.toByte() || bytes[i] == '\r'.code.toByte() || bytes[i] == '\t'.code.toByte())) i++
+        return if (i == 0) bytes else bytes.copyOfRange(i, bytes.size)
+    }
+
+    /** What to tell about a file that is not a backup, without showing any of its words: its size and the first bytes in hex. */
+    private fun describe(bytes: ByteArray): String =
+        "(The file has ${bytes.size} bytes and begins ${bytes.take(8).joinToString(" ") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }}.)"
 }

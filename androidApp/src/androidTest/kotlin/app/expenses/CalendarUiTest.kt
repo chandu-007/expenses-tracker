@@ -60,7 +60,7 @@ class CalendarUiTest {
     private fun expense(id: String, minor: Long, day: Int, merchant: String, month: LocalDate = now) = db { ok ->
         ok.store.save(Expense(EntryId(id), at(day, 12, month), AccountId("cash"), Money(minor, inr), listOf(CategorySplit(CategoryId("Food"), Money(minor, inr)))), EntryDetails(merchant = merchant))
     }
-    private fun open() { launch(); tap("more_menu"); tap("open_calendar"); waitFor("cal_month") }
+    private fun open() { launch(); compose.openMore(); tap("open_calendar"); waitFor("cal_month") }
     private fun text(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
 
     @Test

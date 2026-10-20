@@ -34,7 +34,7 @@ class CategoryPickerUiTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
-    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun chips() = runBlocking { container.write { it.categories.list().map { c -> c.id } } }!!.filter { has("category_chip_$it") }
     private fun makeCategories(n: Int) = runBlocking { container.write { ok -> repeat(n) { ok.categories.create("Extra %03d".format(it)) } } }
 

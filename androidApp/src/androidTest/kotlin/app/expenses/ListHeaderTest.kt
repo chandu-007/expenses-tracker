@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -51,10 +52,10 @@ class ListHeaderTest {
         // the actions moved to the bottom bar, so the title is no longer beside them and is just its own text ("Spent this month", about 106 dp); a squeeze showed as one letter, about 10 dp
         assertTrue(title.width > 90.dp, "the title is ${title.width} wide; it was squeezed to a single letter when the header overflowed")
         assertTrue(title.height < 40.dp, "the title wrapped onto ${title.height} of height")
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         for (tag in listOf("manage_categories", "open_recurring", "open_notifications", "open_security", "open_data")) {
             compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag(tag).assertIsDisplayed()
+            compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed() // the page scrolls: each place must be reachable on this screen
         }
         compose.onNodeWithText("Your data: export and backup").assertIsDisplayed()
     }

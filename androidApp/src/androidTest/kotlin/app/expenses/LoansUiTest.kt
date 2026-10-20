@@ -41,7 +41,7 @@ class LoansUiTest {
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = tag !in setOf("loans_owed", "loans_owe", "loan_balance"))
     private fun waitText(tag: String, text: String) = compose.waitUntil(10_000) { runCatching { node(tag).assertTextContains(text, substring = true) }.isSuccess }
     private fun launch() { scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
-    private fun openLoans() { tap("more_menu"); tap("open_loans"); waitFor("loans_list") }
+    private fun openLoans() { compose.openMore(); tap("open_loans"); waitFor("loans_list") }
     private fun entries() = runBlocking { container.write { it.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList() } }!!
 
     @Test
@@ -69,7 +69,7 @@ class LoansUiTest {
         assertEquals(listOf("PAID_TO_PERSON", "RECEIVED_FROM_PERSON", "RECEIVED_FROM_PERSON"), e.map { it.direction })
         assertEquals(listOf(500_000L, 150_000L, 350_000L), e.map { it.amount_minor }); assertEquals(setOf("Chandu"), e.map { it.merchant }.toSet())
         // back at home: spending is untouched, and each row has its own sign
-        tap("loans_back"); tap("loans_back"); waitFor("add")
+        tap("loans_back"); tap("loans_back"); compose.closeMore(); waitFor("add")
         tap("nav_home"); waitFor("month_spend")
         node("month_spend").assertTextEquals("₹0.00")
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("amount_Chandu"), useUnmergedTree = true).fetchSemanticsNodes().size == 3 }

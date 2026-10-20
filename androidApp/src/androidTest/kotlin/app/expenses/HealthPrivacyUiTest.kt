@@ -45,7 +45,7 @@ class HealthPrivacyUiTest {
         assertFalse(PermissionNotes.canUseInternet(context), "the privacy promise: no network permission in the built app")
         val undescribed = PermissionNotes.declared(context).filter { it !in PermissionNotes.NOTES }
         assertEquals(emptyList(), undescribed, "a permission in the manifest has no description for the privacy screen")
-        launch(); tap("more_menu"); tap("open_privacy"); waitFor("privacy_internet")
+        launch(); compose.openMore(); tap("open_privacy"); waitFor("privacy_internet")
         assertEquals("This app has no permission to use the internet.", textOf("privacy_internet"))
         val sms = PermissionNotes.NOTES.getValue(Manifest.permission.RECEIVE_SMS).first
         waitFor("privacy_$sms")
@@ -59,7 +59,7 @@ class HealthPrivacyUiTest {
         ingest("AX-HDFCBK-S", "123456 is the OTP for your transaction of Rs.1,250.00", 2_000)
         ingest("+919876543210", "hello", 3_000)
         ingest("AX-MYCOOP-S", debit, 4_000); ingest("AX-MYCOOP-S", debit, 5_000)
-        launch(); tap("more_menu"); tap("open_capture"); tap("open_health"); waitFor("health_headline")
+        launch(); compose.openMore(); tap("open_capture"); tap("open_health"); waitFor("health_headline")
         assertEquals("Capture is off", textOf("health_headline"))
         assertEquals("1", textOf("health_count_Found as transactions")); assertEquals("1", textOf("health_count_One-time passwords ignored")); assertEquals("1", textOf("health_count_Texts from people ignored"))
         waitFor("health_sender_HDFCBK")

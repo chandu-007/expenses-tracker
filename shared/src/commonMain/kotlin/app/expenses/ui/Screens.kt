@@ -109,6 +109,9 @@ import app.expenses.DueUi
 import app.expenses.core.domain.AmountMask
 import app.expenses.core.domain.HomeSection
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.formatted
+import androidx.compose.ui.graphics.Color
 import app.expenses.core.domain.parseAmount
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -137,6 +140,9 @@ fun EntryListScreen(
     onOpenGuide: () -> Unit = {},
     tourMore: Boolean? = null,
     onMoreShown: () -> Unit = {},
+    /** Whether the More page is showing. It lives above the screens, so a screen opened from More returns to More on Back. */
+    moreOpen: Boolean = false,
+    onMoreChange: (Boolean) -> Unit = {},
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -163,6 +169,8 @@ fun EntryListScreen(
     val listState = rememberLazyListState()
     val feel = rememberFeel()
     val snackbar = remember { SnackbarHostState() }
+    // the Undo bar of an entry just saved would sit over the foot of the More page: opening another page lets it go
+    androidx.compose.runtime.LaunchedEffect(moreOpen) { if (moreOpen) snackbar.currentSnackbarData?.dismiss() }
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
     // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
     val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
@@ -189,11 +197,9 @@ fun EntryListScreen(
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
         )
     }
-    var moreOpen by rememberSaveable { mutableStateOf(false) }
     // while the tour is running it says whether the More page is open; otherwise (null) the person decides
-    androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { moreOpen = it; if (it) onMoreShown() } }
-    BackHandler(enabled = moreOpen && selected.isEmpty()) { moreOpen = false }
-    val closeMore = { moreOpen = false }
+    androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { onMoreChange(it); if (it) onMoreShown() } }
+    BackHandler(enabled = moreOpen && selected.isEmpty()) { onMoreChange(false) }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
@@ -210,8 +216,8 @@ fun EntryListScreen(
             )
             else HomeBar(
                 selected = if (moreOpen) "More" else "Home",
-                onHome = { moreOpen = false }, onSearch = { moreOpen = false; onOpenSearch() }, onReports = { moreOpen = false; onOpenReports() },
-                onMore = { moreOpen = !moreOpen }, moreBadge = state.showBackupNudge,
+                onHome = { onMoreChange(false) }, onSearch = { onMoreChange(false); onOpenSearch() }, onReports = { onMoreChange(false); onOpenReports() },
+                onMore = { onMoreChange(!moreOpen) }, moreBadge = state.showBackupNudge,
             )
         },
         floatingActionButton = {
@@ -223,37 +229,56 @@ fun EntryListScreen(
         },
     ) { padding ->
         if (moreOpen) {
-            // a page of its own (not a pop-up over the list): everything the app can do, grouped, in as many columns as the screen is wide enough for
-            MorePage(Modifier.padding(padding)) {
-                                if (state.showBackupNudge) BackupNudgeCard(onBackUp = { closeMore(); onOpenData() }, onLater = onSnoozeBackupNudge)
-                                MenuGroup("Inbox") {
-                                    MenuTile(Icons.Outlined.Inbox, "To review", "open_inbox", badge = state.inboxPending.takeIf { it > 0 }?.toString()) { closeMore(); onOpenInbox() }
-                                    MenuTile(Icons.Outlined.Sms, if (LocalPlatform.current.supportsSmsCapture || LocalPlatform.current.supportsShortcutsCapture) "Capture from texts" else "Capture from payment apps", "open_capture") { closeMore(); onOpenCapture() }
-                                }
-                                MenuGroup("Money") {
-                                    MenuTile(Icons.Outlined.AccountBalance, "Accounts", "manage_accounts") { closeMore(); onManageAccounts() }
-                                    MenuTile(Icons.Outlined.Label, "Categories", "manage_categories") { closeMore(); onManageCategories() }
-                                    MenuTile(Icons.Outlined.Repeat, "Repeating expenses", "open_recurring") { closeMore(); onOpenRecurring() }
-                                    MenuTile(Icons.Outlined.CalendarMonth, "Calendar", "open_calendar") { closeMore(); onOpenCalendar() }
-                                    MenuTile(Icons.Outlined.SwapHoriz, "Lent and borrowed", "open_loans") { closeMore(); onOpenLoans() }
-                                    MenuTile(Icons.Outlined.Receipt, "Bills", "open_bills", badge = state.billPeek.newCount.takeIf { it > 0 }?.toString()) { closeMore(); onOpenBills() }
-                                }
-                                MenuGroup("Make it yours") {
-                                    MenuTile(Icons.Outlined.Palette, "Appearance", "open_appearance") { closeMore(); onOpenAppearance() }
-                                    MenuTile(Icons.Outlined.Dashboard, "Customise home", "open_home_layout") { closeMore(); onCustomiseHome() }
-                                    MenuTile(Icons.Outlined.CurrencyRupee, "Currency", "open_currency") { closeMore(); onOpenCurrency() }
-                                    MenuTile(Icons.Outlined.Notifications, "Notifications", "open_notifications") { closeMore(); onOpenNotifications() }
-                                }
-                                MenuGroup("Privacy and data") {
-                                    MenuTile(if (state.hideAmounts) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (state.hideAmounts) "Show amounts" else "Hide amounts", "toggle_privacy") { closeMore(); onToggleHideAmounts() }
-                                    MenuTile(Icons.Outlined.Lock, "App lock", "open_security") { closeMore(); onOpenSecurity() }
-                                    MenuTile(Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "open_privacy") { closeMore(); onOpenPrivacy() }
-                                    MenuTile(Icons.Outlined.Backup, "Your data: export and backup", "open_data") { closeMore(); onOpenData() }
-                                }
-                                MenuGroup("Help") {
-                                    MenuTile(Icons.Outlined.Info, "How to use this app", "open_guide") { closeMore(); onOpenGuide() }
-                                }
+            // a page of its own (not a pop-up over the list): everything the app can do, grouped. Opening a place keeps this page underneath, so Back comes back to it
+            val platform = LocalPlatform.current
+            val money = Pair(Color(0xFF1E88E5), Color(0xFF1565C0))
+            val teal = Pair(Color(0xFF00897B), Color(0xFF00695C))
+            val purple = Pair(Color(0xFF8E24AA), Color(0xFF6A1B9A))
+            val green = Pair(Color(0xFF43A047), Color(0xFF2E7D32))
+            val amber = Pair(Color(0xFFFB8C00), Color(0xFFEF6C00))
+            val reads = platform.supportsSmsCapture || platform.supportsShortcutsCapture
+            val activeAccounts = state.accountRows.filter { !it.archived }
+            val net = Money(activeAccounts.sumOf { it.balanceMinor }, BaseCurrency.current).formatted()
+            val visible = state.categories.filter { !it.hidden }
+            val nudges = buildList {
+                if (state.inboxPending > 0) add(MoreNudge("open_inbox", Icons.Outlined.Inbox, "To review", "${state.inboxPending} waiting for you", state.inboxPending, Color(0xFF6750A4), Color(0xFF4F378B), onOpenInbox))
+                if (state.billPeek.newCount > 0) add(MoreNudge("open_bills", Icons.Outlined.Receipt, "Bills", "${state.billPeek.newCount} new", state.billPeek.newCount, Color(0xFF00897B), Color(0xFF004D40), onOpenBills))
             }
+            MorePage(
+                Modifier.padding(padding), nudges,
+                reminder = if (state.showBackupNudge) ({ BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge) }) else null,
+                sections = listOf(
+                    MoreSection("Inbox and bills", teal.first, teal.second, listOf(
+                        MoreRow("open_inbox", Icons.Outlined.Inbox, "To review", if (state.inboxPending > 0) "${state.inboxPending} waiting for you" else "Nothing waiting", onClick = onOpenInbox),
+                        MoreRow("open_bills", Icons.Outlined.Receipt, "Bills", if (state.billPeek.newCount > 0) "${state.billPeek.newCount} new" else "Card and utility bills found in your messages", onClick = onOpenBills),
+                    )),
+                    MoreSection("Money", money.first, money.second, listOf(
+                        MoreRow("manage_accounts", Icons.Outlined.AccountBalance, "Accounts", "${activeAccounts.size} ${if (activeAccounts.size == 1) "account" else "accounts"} \u00B7 net $net", onClick = onManageAccounts),
+                        MoreRow("manage_categories", Icons.Outlined.Label, "Categories", "${visible.count { it.kind.forExpense }} for expenses \u00B7 ${visible.count { it.kind.forIncome }} for income", onClick = onManageCategories),
+                        MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
+                        MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
+                        MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
+                    )),
+                    MoreSection("Capture", teal.first, teal.second, listOf(
+                        MoreRow("open_capture", Icons.Outlined.Sms, if (reads) "Capture from texts" else "Capture from payment apps", if (reads) "Bank texts and payment alerts, added only when you approve" else "Google Pay, PhonePe, Paytm and BHIM alerts, added only when you approve", onClick = onOpenCapture),
+                        MoreRow("open_notifications", Icons.Outlined.Notifications, "Notifications", "Bills, budgets and the weekly recap", onClick = onOpenNotifications),
+                    )),
+                    MoreSection("Make it yours", purple.first, purple.second, listOf(
+                        MoreRow("open_appearance", Icons.Outlined.Palette, "Appearance", "Theme, density and motion speed", onClick = onOpenAppearance),
+                        MoreRow("open_home_layout", Icons.Outlined.Dashboard, "Customise home", "Choose and reorder the blocks", onClick = onCustomiseHome),
+                        MoreRow("open_currency", Icons.Outlined.CurrencyRupee, "Currency", BaseCurrency.current.code, onClick = onOpenCurrency),
+                    )),
+                    MoreSection("Privacy and data", green.first, green.second, listOf(
+                        MoreRow("toggle_privacy", if (state.hideAmounts) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (state.hideAmounts) "Show amounts" else "Hide amounts", "Replace every figure with dots", switchOn = state.hideAmounts, onClick = onToggleHideAmounts),
+                        MoreRow("open_security", Icons.Outlined.Lock, "App lock", "Fingerprint, face or your phone's PIN", onClick = onOpenSecurity),
+                        MoreRow("open_privacy", Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "Permissions in plain words", onClick = onOpenPrivacy),
+                        MoreRow("open_data", Icons.Outlined.Backup, "Your data: export and backup", "Excel, CSV, backup and restore", onClick = onOpenData),
+                    )),
+                    MoreSection("Help", amber.first, amber.second, listOf(
+                        MoreRow("open_guide", Icons.Outlined.Info, "How to use this app", "A two-minute tour of the real screens", onClick = onOpenGuide),
+                    )),
+                ),
+            )
             return@Scaffold
         }
         LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)

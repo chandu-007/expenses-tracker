@@ -49,9 +49,9 @@ class RecurringUiTest {
 
     /** The less frequent places are in the "More" menu on the list. */
     private fun openFromMenu(tag: String) {
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag(tag).performClick()
+        compose.onNodeWithTag(tag).also { runCatching { it.performScrollTo() } }.performClick()
     }
 
     @Before fun fresh() = resetApp()
@@ -97,7 +97,7 @@ class RecurringUiTest {
         waitFor(dueTag(id, "card")) // it starts today, so it is waiting on this screen
         compose.onNodeWithTag(dueTag(id, "post")).performClick()
         waitGone(dueTag(id, "card"))
-        compose.onNodeWithTag("recurring_back").performClick()
+        compose.onNodeWithTag("recurring_back").performClick(); compose.closeMore()
         waitSpend("₹15,000.00")
         assertEquals(1L, runBlocking { container.write { it.db.schemaQueries.entryCount().executeAsOne() } })
     }
@@ -123,7 +123,7 @@ class RecurringUiTest {
         compose.onNodeWithTag(dueTag(items.getValue("SIP").id, "post")).performClick(); waitGone(dueTag(items.getValue("SIP").id, "card"))
         val kinds = runBlocking { container.write { it.db.schemaQueries.recentEntries(10).executeAsList().map { e -> e.kind } } }!!
         assertEquals(listOf("INCOME", "TRANSFER"), kinds.sorted())
-        compose.onNodeWithTag("recurring_back").performClick(); waitSpend("₹0.00")
+        compose.onNodeWithTag("recurring_back").performClick(); compose.closeMore(); waitSpend("₹0.00")
         val b = runBlocking { container.write { it.store.balances().mapKeys { e -> e.key.value }.mapValues { e -> e.value.minorUnits } } }!!
         assertEquals(mapOf("bank" to 4_500_000L, "cash" to 500_000L), b)
     }
@@ -233,7 +233,7 @@ class RecurringUiTest {
         waitFor("rec_delete_confirm")
         compose.onNodeWithTag("rec_delete_confirm").performClick()
         waitFor("recurring_empty")
-        compose.onNodeWithTag("recurring_back").performClick()
+        compose.onNodeWithTag("recurring_back").performClick(); compose.closeMore()
         waitSpend("₹1,000.00")
     }
 

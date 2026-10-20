@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
@@ -50,7 +51,7 @@ class BulkEditTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun waitText(s: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(s, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun hold(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTouchInput { longClick() } }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
 

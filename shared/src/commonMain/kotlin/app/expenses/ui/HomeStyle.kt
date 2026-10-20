@@ -198,26 +198,6 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
     }
 }
 
-/** How many tiles go side by side on the More page: two on a phone, three where the screen is wide (a tablet or a phone on its side). */
-val LocalMoreColumns = androidx.compose.runtime.compositionLocalOf { 2 }
-
-/** The More page: a title and the groups of tiles, scrolling if the screen is short, with as many columns as the width allows. */
-@Composable
-fun MorePage(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
-        val cols = if (maxWidth >= 600.dp) 3 else 2
-        androidx.compose.runtime.CompositionLocalProvider(LocalMoreColumns provides cols) {
-            FadeIn { Column(Modifier.fillMaxSize().androidxVerticalScroll().padding(horizontal = 16.dp, vertical = 12.dp).testTag("more_page")) {
-                Text("More", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-                content()
-            } }
-        }
-    }
-}
-
-@Composable
-private fun Modifier.androidxVerticalScroll(): Modifier = this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
-
 /** Whether money went out, came in, or only moved between your own accounts. */
 enum class Flow3 { OUT, IN, MOVE }
 
@@ -246,35 +226,6 @@ fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
     Flow3.OUT -> "-" + amount.removePrefix("-")
     Flow3.IN -> "+" + amount.removePrefix("+")
     Flow3.MOVE -> amount
-}
-
-@Composable
-fun MenuHeading(text: String) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 2.dp))
-}
-
-/** A group of tiles under a small heading, two to a row. */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-fun MenuGroup(heading: String, tiles: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
-    MenuHeading(heading)
-    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = LocalMoreColumns.current, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = tiles)
-}
-
-/** One place in the More menu: a tinted round badge with a symbol and the name (up to three lines), and optionally a count. Keeps the tag the plain item had. */
-@Composable
-fun androidx.compose.foundation.layout.FlowRowScope.MenuTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tag: String, badge: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .pressScale(onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        }
-        Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 3, modifier = Modifier.weight(1f).padding(start = 8.dp))
-        if (badge != null) Box(Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 7.dp, vertical = 1.dp)) { Text(badge, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium) }
-    }
 }
 
 /** Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. */

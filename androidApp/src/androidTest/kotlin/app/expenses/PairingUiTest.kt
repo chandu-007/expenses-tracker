@@ -48,7 +48,7 @@ class PairingUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
-    private fun openInbox() { tap("more_menu"); tap("open_inbox"); waitFor("inbox_back") }
+    private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun idAt(t: Long) = runBlocking { container.write { it.inbox.list().first { i -> i.receivedAt == t }.id } }!!
     private fun entries() = runBlocking { container.write { it.db.schemaQueries.recentEntries(50).executeAsList() } }!!
     private fun balance(id: String) = runBlocking { container.write { it.store.balances().getValue(AccountId(id)).minorUnits } }!!

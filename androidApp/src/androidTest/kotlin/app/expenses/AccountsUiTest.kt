@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -47,11 +48,11 @@ class AccountsUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
-    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
     /** Opens the Accounts page; with several accounts the cards start stacked like a wallet, so one tap spreads them out before any card is tapped. */
     private fun openAccounts() {
-        tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        compose.openMore(); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
         val several = (runBlocking { container.write { it.db.schemaQueries.selectAccounts().executeAsList().count { a -> a.archived == 0L } } } ?: 0) > 1
         if (several) { tap("accounts_stack"); waitFor("accounts_stack_close") }
     }
@@ -112,7 +113,7 @@ class AccountsUiTest {
         assertEquals("7500", balanceOf("Old bank"), "archiving keeps the balance")
         val pickable = runBlocking { container.write { ok -> ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L }.map { it.name } } }!!
         assertTrue("Old bank" !in pickable)
-        tap("back"); waitFor("add"); tap("add"); waitFor("amount")
+        tap("back"); compose.closeMore(); waitFor("add"); tap("add"); waitFor("amount")
         assertTrue(has("account_chip_Bank") && !has("account_chip_Old bank"), "the add form offers Bank but no longer the archived account")
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }; waitFor("add")
         openAccounts()

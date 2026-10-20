@@ -52,7 +52,7 @@ class IncomeCategoriesUiTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
     private fun openAdd() { tap("add"); waitFor("amount") }
-    private fun openFromMenu(tag: String) { tap("more_menu"); tap(tag) }
+    private fun openFromMenu(tag: String) { compose.openMore(); tap(tag) }
 
     private fun assertOffers(prefix: String, shown: List<String>, notShown: List<String>) {
         shown.forEach { assertTrue(has("$prefix$it"), "$prefix$it should be offered") }

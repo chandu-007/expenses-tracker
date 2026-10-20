@@ -120,7 +120,7 @@ class SimilarUiTest {
     fun aCapturedTextStartsFromTheCategoryOfTheEarlierEntriesOfThatPayee() {
         past("nf1", "Netflix", "Bills", 40); past("nf2", "Netflix", "Bills", 10)
         runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Rs.649.00 debited from A/c XX1234 on 05-10-26 to VPA netflix@okaxis (UPI Ref 444444444444). Not you? Call 18002586161", 5_000) }
-        launch(); tap("more_menu"); tap("open_inbox"); waitFor("inbox_back")
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_back")
         val id = runBlocking { container.write { it.inbox.list().first().id } }!!
         waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Bills (your earlier entries)"), textOf("inbox_goes_$id"))
@@ -135,12 +135,12 @@ class SimilarUiTest {
         assertEquals("Other", inCategory("i1"), "stopping asking changes nothing")
         fileNew("iCloud", "Bills"); Thread.sleep(2_500); compose.waitForIdle()
         assertTrue(!has("similar_dialog"), "not asked again for that name")
-        tap("more_menu"); tap("manage_categories"); waitFor("categories_list")
+        compose.openMore(); tap("manage_categories"); waitFor("categories_list")
         node("categories_list").performScrollToNode(hasTestTag("similar_off_icloud")); waitFor("similar_off_icloud")
         assertEquals("iCloud", runBlocking { container.write { it.templates.setting("similar_off:icloud") } }, "the name is kept as it was written, to show in the list")
         tap("similar_ask_again_icloud")
         compose.waitUntil(10_000) { runBlocking { container.write { it.templates.setting("similar_off:icloud") } } == null }
-        tap("categories_back"); waitFor("add")
+        tap("categories_back"); compose.closeMore(); waitFor("add")
         assertEquals(null, runBlocking { container.write { it.templates.setting("similar_off:icloud") } }, "the setting is gone")
         assertEquals("Other", inCategory("i1"), "the earlier entries are still where they were")
         fileNew("iCloud", "Bills")

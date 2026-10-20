@@ -74,7 +74,7 @@ class BillsUiTest {
     private fun reveal(tag: String) { if (has("bills_list") && !has(tag)) runCatching { compose.onNodeWithTag("bills_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) } }
     private fun tap(tag: String) { compose.waitUntil(10_000) { reveal(tag); has(tag) }; compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
     private fun gone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
-    private fun openBills() { launch(); tap("more_menu"); tap("open_bills"); waitFor("bills_list") }
+    private fun openBills() { launch(); compose.openMore(); tap("open_bills"); waitFor("bills_list") }
     private fun shade(): List<Pair<String, String>> = manager.activeNotifications.map { (it.notification.extras.getCharSequence("android.title")?.toString().orEmpty()) to (it.notification.extras.getCharSequence("android.text")?.toString().orEmpty()) }
 
     @Test
@@ -139,7 +139,7 @@ class BillsUiTest {
         ingest(cardText()); val id = bills(BillStatus.FOUND).single().id
         runBlocking { container.write { it.bills.track(id) } }
         ingest("Payment of Rs 12,345.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.", at = System.currentTimeMillis() + 1_000)
-        launch(); tap("more_menu"); tap("open_inbox"); waitFor("inbox_list")
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
         val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
         tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
         compose.waitUntil(10_000) { bills(BillStatus.PAID).size == 1 }
@@ -151,7 +151,7 @@ class BillsUiTest {
         ingest(cardText()); val id = bills(BillStatus.FOUND).single().id
         runBlocking { container.write { it.bills.track(id) } }
         ingest("Payment of Rs 200.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.", at = System.currentTimeMillis() + 1_000)
-        launch(); tap("more_menu"); tap("open_inbox"); waitFor("inbox_list")
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
         val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
         tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
         assertEquals(emptyList(), bills(BillStatus.PAID)); assertEquals(1, bills(BillStatus.TRACKED).size)
@@ -159,7 +159,7 @@ class BillsUiTest {
 
     private fun settleFromReview(payment: String): Unit {
         ingest(payment, at = System.currentTimeMillis() + 1_000)
-        launch(); tap("more_menu"); tap("open_inbox"); waitFor("inbox_list")
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
         val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
         tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
     }

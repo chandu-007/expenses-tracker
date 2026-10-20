@@ -247,6 +247,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
                 // the bar along the bottom is shown by Home, Search and Reports alike; its glass indicator glides between them as one bar
                 var wantMore by rememberSaveable { mutableStateOf(false) }
+                // the More page is open: kept here, above the screens, so Back from a screen opened from More comes back to More
+                var moreOpen by rememberSaveable { mutableStateOf(false) }
                 val goTab: (String) -> Unit = { t ->
                     if (searching && t != "Search") { searching = false; viewModel.closeSearch() }
                     if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
@@ -520,6 +522,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenGuide = viewModel::openGuide,
                         tourMore = if (guide != null) tourStep?.target == app.expenses.core.domain.GuideTarget.MORE else if (wantMore) true else null,
                         onMoreShown = { wantMore = false },
+                        moreOpen = moreOpen, onMoreChange = { moreOpen = it },
                         onCustomiseHome = { customisingHome = true },
                         onOpenAppearance = { appearing = true },
                         onOpenSearch = { searching = true },

@@ -53,9 +53,9 @@ class NotificationsTest {
 
     /** The less frequent places are in the "More" menu on the list. */
     private fun openFromMenu(tag: String) {
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag(tag).performClick()
+        compose.onNodeWithTag(tag).also { runCatching { it.performScrollTo() } }.performClick()
     }
 
     @Before fun fresh() {

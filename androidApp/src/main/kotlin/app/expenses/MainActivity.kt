@@ -27,9 +27,20 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
     private val viewModel: LedgerViewModel by viewModels()
 
-    /** The view model takes the shared container and platform, so the default factory must be the app's. */
+    /**
+     * The screen's view model takes the shared container and platform, so it is built by the app's factory. Every other view model of this activity
+     * (the system fingerprint/PIN prompt and the fragment manager each keep one) is built by the activity's usual factory: giving the app's factory
+     * to them made turning on the app lock crash with "No initializer set for given class".
+     */
     override val defaultViewModelProviderFactory: androidx.lifecycle.ViewModelProvider.Factory
-        get() = (application as ExpensesApp).viewModelFactory
+        get() {
+            val app = (application as ExpensesApp).viewModelFactory
+            val usual = super.defaultViewModelProviderFactory
+            return object : androidx.lifecycle.ViewModelProvider.Factory {
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>, extras: androidx.lifecycle.viewmodel.CreationExtras): T =
+                    if (modelClass == LedgerViewModel::class.java) app.create(modelClass, extras) else usual.create(modelClass, extras)
+            }
+        }
 
     /** Counts requests to open the add screen from the launcher shortcut or the Quick Settings tile. */
     private val addRequests = MutableStateFlow(0)

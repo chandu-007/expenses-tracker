@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -95,9 +96,9 @@ class AppLockTest {
     private fun background() { scenario!!.moveToState(Lifecycle.State.CREATED) }
     private fun foreground() { scenario!!.moveToState(Lifecycle.State.RESUMED) }
     private fun openSecurity() {
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         waitFor("open_security")
-        compose.onNodeWithTag("open_security").performClick()
+        compose.onNodeWithTag("open_security").performScrollTo().performClick()
         waitFor("lock_switch")
     }
 

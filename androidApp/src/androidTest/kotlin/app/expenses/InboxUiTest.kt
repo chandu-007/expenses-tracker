@@ -45,7 +45,7 @@ class InboxUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() } // scrolls only where the node sits in a scrolling list
-    private fun openInbox() { tap("more_menu"); tap("open_inbox"); waitFor("inbox_back") }
+    private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun entries() = runBlocking { container.write { ok -> ok.db.schemaQueries.recentEntries(50).executeAsList() } }!!
 
     @Test
@@ -202,12 +202,12 @@ class InboxUiTest {
         if (!granted()) {
             // switched on in the settings but Android never allowed it (or the person took it back): the screen says so and the switch is off
             runBlocking { container.write { it.templates.putSetting(Capture.SETTING_SMS_ON, "1") } }
-            launch(); tap("more_menu"); tap("open_capture"); waitFor("capture_permission_missing")
+            launch(); compose.openMore(); tap("open_capture"); waitFor("capture_permission_missing")
             compose.onNodeWithTag("capture_sms_switch", useUnmergedTree = true).assertIsOff()
             runBlocking { container.write { it.templates.putSetting(Capture.SETTING_SMS_ON, "0") } }
             android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.RECEIVE_SMS}")).use { it.readBytes() } // grantRuntimePermission needs API 28
         }
-        launch(); tap("more_menu"); tap("open_capture"); tap("capture_sms_switch")
+        launch(); compose.openMore(); tap("open_capture"); tap("capture_sms_switch")
         compose.waitUntil(10_000) { on() == "1" }
         compose.onNodeWithTag("capture_sms_switch", useUnmergedTree = true).assertIsOn()
         tap("capture_sms_switch"); compose.waitUntil(10_000) { on() == "0" }

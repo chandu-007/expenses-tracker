@@ -83,16 +83,16 @@ class MotionUiTest {
 
     @Test
     fun reduceMotionIsASwitchUnderAppearanceThatIsRememberedAndMakesScreensChangeAtOnce() {
-        launch(); tap("more_menu"); tap("open_appearance"); waitFor("motion_off")
+        launch(); compose.openMore(); tap("open_appearance"); waitFor("motion_off")
         tap("motion_off"); compose.waitUntil(10_000) { runBlocking { container.write { it.templates.setting("reduce_motion") } } == "1" }
-        tap("appearance_back"); waitFor("add")
-        launch(); tap("more_menu"); tap("open_appearance"); waitFor("motion_off")
+        tap("appearance_back"); compose.closeMore(); waitFor("add")
+        launch(); compose.openMore(); tap("open_appearance"); waitFor("motion_off")
         assertEquals("1", runBlocking { container.write { it.templates.setting("reduce_motion") } }, "still on after the app was reopened")
     }
 
     @Test
     fun theSpeedChoiceIsRememberedStretchesEveryDurationAndOffStillWins() {
-        launch(); tap("more_menu"); tap("open_appearance"); waitFor("motion_slow")
+        launch(); compose.openMore(); tap("open_appearance"); waitFor("motion_slow")
         tap("motion_slow")
         compose.waitUntil(10_000) { runBlocking { container.write { it.templates.setting("motion_speed") } } == "slow" }
         compose.waitUntil(10_000) { app.expenses.ui.Motion.scale == 2.8f }
@@ -117,7 +117,7 @@ class MotionUiTest {
         val due = LocalDate.now().plusDays(8).format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
         runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 4821 statement is generated. Total Amt Due Rs.5,000.00, Min Amt Due Rs.250.00, Due Date $due.", System.currentTimeMillis()) }
         val id = runBlocking { container.write { it.bills.list(BillStatus.FOUND).single().id.also { b -> it.bills.track(b) } } }!!
-        launch(); tap("more_menu"); tap("open_bills"); waitFor("bills_list")
+        launch(); compose.openMore(); tap("open_bills"); waitFor("bills_list")
         tap("bill_pay_$id"); waitFor("bill_pay_amount"); tap("bill_pay_ok")
         waitFor("bills_paid_title"); waitFor("bill_paid_check_$id")
     }

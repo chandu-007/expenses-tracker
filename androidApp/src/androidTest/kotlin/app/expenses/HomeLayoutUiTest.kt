@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -46,11 +47,11 @@ class HomeLayoutUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
-    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
     private fun saved() = db { HomeLayout.decode(it.templates.setting("home_layout")) }
     private fun top(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot().top.value
-    private fun customise() { tap("more_menu"); tap("open_home_layout"); waitFor("home_row_BUDGET") }
+    private fun customise() { compose.openMore(); tap("open_home_layout"); waitFor("home_row_BUDGET") }
     private fun seed() = db { ok ->
         ok.store.save(Expense(EntryId("e"), System.currentTimeMillis(), AccountId("cash"), Money(10_000, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(10_000, Currency.INR)))), EntryDetails(merchant = "Cafe"))
         ok.templates.save(app.expenses.core.domain.Template("t", "Chai", Money(2_000, Currency.INR), CategoryId("Food"), AccountId("cash"), null))
@@ -94,10 +95,10 @@ class HomeLayoutUiTest {
         seed(); launch(); customise()
         tap("home_toggle_BALANCES")
         compose.waitUntil(10_000) { HomeSection.BALANCES in saved().hidden }
-        tap("home_layout_back"); waitFor("add"); waitGone("balances"); assertTrue(has("templates"))
+        tap("home_layout_back"); compose.closeMore(); waitFor("add"); waitGone("balances"); assertTrue(has("templates"))
         launch(); waitFor("templates"); assertTrue(!has("balances"), "still hidden after the app was reopened")
         customise(); tap("home_toggle_BALANCES"); compose.waitUntil(10_000) { saved().hidden.isEmpty() }
-        tap("home_layout_back"); waitFor("balances")
+        tap("home_layout_back"); compose.closeMore(); waitFor("balances")
     }
 
     @Test
@@ -107,7 +108,7 @@ class HomeLayoutUiTest {
         customise()
         repeat(3) { i -> tap("home_down_BUDGET"); compose.waitUntil(10_000) { saved().order.indexOf(HomeSection.BUDGET) == i + 1 } }
         compose.waitUntil(10_000) { saved().order.last() == HomeSection.BUDGET }
-        tap("home_layout_back"); waitFor("templates"); waitFor("budget_summary")
+        tap("home_layout_back"); compose.closeMore(); waitFor("templates"); waitFor("budget_summary")
         assertTrue(top("templates") < top("budget_summary"), "now the quick entries are above the budget")
         assertEquals(listOf(HomeSection.BILLS, HomeSection.BALANCES, HomeSection.QUICK_ENTRIES, HomeSection.BUDGET), saved().order)
     }

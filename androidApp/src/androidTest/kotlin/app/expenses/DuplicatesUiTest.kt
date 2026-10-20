@@ -51,7 +51,7 @@ class DuplicatesUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" }
-    private fun openInbox() { tap("more_menu"); tap("open_inbox"); waitFor("inbox_back") }
+    private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun ids() = runBlocking { container.write { it.inbox.list().associate { i -> i.receivedAt to i.id } } }!!
     private fun entryCount() = runBlocking { container.write { it.db.schemaQueries.recentEntries(50).executeAsList().size } }!!
 

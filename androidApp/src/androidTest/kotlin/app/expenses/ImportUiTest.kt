@@ -59,9 +59,9 @@ class ImportUiTest {
     private fun openData() {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
         waitFor("add")
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         waitFor("open_data")
-        compose.onNodeWithTag("open_data").performClick()
+        compose.onNodeWithTag("open_data").performScrollTo().performClick()
         waitFor("import_statement")
     }
 
@@ -97,11 +97,11 @@ class ImportUiTest {
         compose.onNodeWithTag("import_close").performClick()
         waitFor("import_statement")
         // on the list, the salary reads as money in and the purchases do not
-        compose.onNodeWithTag("data_back").performClick()
+        compose.onNodeWithTag("data_back").performClick(); compose.closeMore()
         waitFor("add")
         waitAnyText("+₹50,000.00")
         assertTrue(compose.onAllNodes(hasText("+₹1,250.50"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "spending has no plus sign")
-        compose.onNodeWithTag("more_menu").performClick(); waitFor("open_data"); compose.onNodeWithTag("open_data").performClick(); waitFor("import_statement")
+        compose.openMore(); waitFor("open_data"); compose.onNodeWithTag("open_data").performScrollTo().performClick(); waitFor("import_statement")
         start(file("hdfc-again.csv", hdfc))
         compose.onNodeWithTag("import_confirm").performClick()
         waitAnyText("Imported 0 transactions")

@@ -47,9 +47,9 @@ class CategoriesTest {
 
     /** The less frequent places are in the "More" menu on the list. */
     private fun openFromMenu(tag: String) {
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag(tag).performClick()
+        compose.onNodeWithTag(tag).also { runCatching { it.performScrollTo() } }.performClick()
     }
 
     @Before fun fresh() = resetApp()
@@ -126,7 +126,7 @@ class CategoriesTest {
         compose.onNodeWithTag("cat_name").performTextInput("Dining")
         compose.onNodeWithTag("cat_save").performClick()
         waitForText("Dining")
-        compose.onNodeWithTag("categories_back").performClick()
+        compose.onNodeWithTag("categories_back").performClick(); compose.closeMore()
         waitForText("· Dining")
         val spend = runBlocking { container.write { it.store.spendByCategory(inr).entries.single().let { e -> e.key!!.value to e.value.minorUnits } } }
         assertEquals("Food" to 25_000L, spend, "the id is unchanged, so the entry still counts under it")
@@ -141,7 +141,7 @@ class CategoriesTest {
         compose.onNodeWithTag("cat_hidden").performClick()
         compose.onNodeWithTag("cat_save").performClick()
         waitForText("hidden")
-        compose.onNodeWithTag("categories_back").performClick()
+        compose.onNodeWithTag("categories_back").performClick(); compose.closeMore()
         waitFor("add")
         compose.onNodeWithTag("add").performClick()
         waitFor("new_category_chip")
@@ -166,7 +166,7 @@ class CategoriesTest {
         waitForText("2 items")
         val totals = runBlocking { container.write { it.store.spendByCategory(inr).entries.associate { e -> e.key!!.value to e.value.minorUnits } } }
         assertEquals(mapOf("Food" to 15_000L), totals)
-        compose.onNodeWithTag("categories_back").performClick()
+        compose.onNodeWithTag("categories_back").performClick(); compose.closeMore()
         waitForText("· Food")
     }
 

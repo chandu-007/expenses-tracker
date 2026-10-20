@@ -223,4 +223,34 @@ class BackupStoreTest {
         c.backup.restore(roundTrip(src))
         assertEquals("Transport", c.categories.list().first { it.id == "Transport" }.name)
     }
+
+    // ---- a file that has been through email, a chat or a cloud drive ----
+
+    private fun sampleFile(): ByteArray { val a = Device("a"); a.populate(); return BackupFile.encode(a.backup.export(), 1L) }
+
+    @Test
+    fun aByteOrderMarkBlankSpaceInFrontOrANewlineBehindDoesNotMakeABackupUnreadable() {
+        val good = sampleFile()
+        val bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+        val expected = BackupFile.decode(good).second
+        assertEquals(expected, BackupFile.decode(bom + good).second, "byte-order mark")
+        assertEquals(expected, BackupFile.decode("\r\n  ".encodeToByteArray() + good).second, "blank space in front")
+        assertEquals(expected, BackupFile.decode(good + "\r\n".encodeToByteArray()).second, "newline behind")
+        // but data added behind that is not blank space is still refused
+        assertFailsWith<BackupException> { BackupFile.decode(good + "x".encodeToByteArray()) }
+    }
+
+    @Test
+    fun aFileThatIsNotABackupSaysWhatItLooksLikeAndGivesItsSizeAndFirstBytesButNoneOfItsWords() {
+        fun message(bytes: ByteArray) = assertFailsWith<BackupException> { BackupFile.decode(bytes) }.message.orEmpty()
+        assertTrue(message(ByteArray(0)).contains("empty"))
+        assertTrue(message("PK\u0003\u0004zip".encodeToByteArray()).contains("zip or Excel"))
+        assertTrue(message("<html>Sign in</html>".encodeToByteArray()).contains("web page"))
+        val other = message("hello private words\nsecond line".encodeToByteArray())
+        assertTrue(other.contains("not a backup file from this app") && other.contains("31 bytes") && other.contains("68 65 6c 6c 6f"), other)
+        assertTrue(!other.contains("private"), "the words of the file are never repeated")
+        val wrong = message(withHeader(1, "{}", format = "other-app"))
+        assertTrue(wrong.contains("other-app"), wrong)
+    }
 }
+

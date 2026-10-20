@@ -43,8 +43,8 @@ class CaptureRulesUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
-    private fun openRules() { tap("more_menu"); tap("open_capture"); tap("open_rules"); waitFor("rule_pattern") }
-    private fun openInbox() { tap("more_menu"); tap("open_inbox"); waitFor("inbox_back") }
+    private fun openRules() { compose.openMore(); tap("open_capture"); tap("open_rules"); waitFor("rule_pattern") }
+    private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun pendingId() = runBlocking { container.write { it.inbox.list().first().id } }!!
     private fun addRule(pattern: String, category: String) { compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput(pattern); tap("rule_category_$category"); tap("rule_add"); compose.waitUntil(10_000) { has("rule_$pattern") } }
 
@@ -70,12 +70,12 @@ class CaptureRulesUiTest {
         tap("rules_back"); tap("capture_back"); openInbox()
         val id = pendingId(); waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Transport (your rule)"), "uber is first")
-        tap("inbox_back"); tap("more_menu"); tap("open_capture"); tap("open_rules")
+        tap("inbox_back"); compose.openMore(); tap("open_capture"); tap("open_rules")
         tap("rule_up_eats")
         compose.waitUntil(10_000) { runBlocking { container.write { it.captureRules.rules().first().pattern } } == "eats" }
         tap("rules_back"); tap("capture_back"); openInbox(); waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Food (your rule)"), textOf("inbox_goes_$id"))
-        tap("inbox_back"); tap("more_menu"); tap("open_capture"); tap("open_rules"); tap("rule_remove_eats")
+        tap("inbox_back"); compose.openMore(); tap("open_capture"); tap("open_rules"); tap("rule_remove_eats")
         compose.waitUntil(10_000) { !has("rule_eats") }
         assertEquals(listOf("uber"), runBlocking { container.write { it.captureRules.rules().map { r -> r.pattern } } })
     }

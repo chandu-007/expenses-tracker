@@ -49,7 +49,7 @@ class CategoryKindsUiTest {
     private fun openManager() {
         compose.waitForIdle(); scenario?.close()
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
-        tap("more_menu"); tap("manage_categories"); waitFor("new_category")
+        compose.openMore(); tap("manage_categories"); waitFor("new_category")
     }
 
     private fun spend(category: String) = runBlocking {

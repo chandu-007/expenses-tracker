@@ -46,7 +46,7 @@ class ReimportUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
-    private fun openInbox() { tap("more_menu"); tap("open_inbox"); waitFor("inbox_back") }
+    private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun pendingId() = runBlocking { container.write { it.inbox.list().single().id } }!!
     private fun saveSmsEntry() = runBlocking { container.write { it.store.save(Expense(EntryId("kept"), oct5, AccountId("bank"), Money(125_000, Currency.INR), listOf(CategorySplit(CategoryId("Fun"), Money(125_000, Currency.INR)))), EntryDetails(merchant = "My own name for it", source = "sms", sourceRef = "628374659283")) } }
     private fun live() = runBlocking { container.write { it.db.schemaQueries.recentEntries(50).executeAsList() } }!!

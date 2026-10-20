@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -55,9 +56,9 @@ class DataTest {
 
     /** The less frequent places are in the "More" menu on the list. */
     private fun openFromMenu(tag: String) {
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag(tag).performClick()
+        compose.onNodeWithTag(tag).also { runCatching { it.performScrollTo() } }.performClick()
     }
 
     @Before fun fresh() = resetApp()

@@ -134,7 +134,7 @@ class OnboardingTest {
     /** The reminder lives on the More page; a dot on the More tab says it is there. */
     private fun showNudge() {
         waitFor("more_badge")
-        compose.onNodeWithTag("more_menu").performClick()
+        compose.openMore()
         waitFor("backup_nudge")
     }
 

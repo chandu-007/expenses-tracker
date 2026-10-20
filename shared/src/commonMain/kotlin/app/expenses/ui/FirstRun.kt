@@ -1,5 +1,7 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
@@ -43,18 +45,17 @@ fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> 
 /** A single dismissible reminder, shown only when [BackupNudge] says so. */
 @Composable
 fun BackupNudgeCard(onBackUp: () -> Unit, onLater: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("backup_nudge"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
+    // one slim bar: what and why on the left, the two answers on the right (it used to be a tall card with a paragraph)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp).testTag("backup_nudge"),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Back up your expenses", style = MaterialTheme.typography.titleSmall)
-            Text("They live only on this phone. A backup is one file you can keep in your drive or send to yourself.", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onBackUp, modifier = Modifier.testTag("nudge_backup")) { Text("Back up now") }
-                TextButton(onClick = onLater, modifier = Modifier.testTag("nudge_later")) { Text("Later") }
-            }
+        Column(Modifier.weight(1f)) {
+            Text("Back up your expenses", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text("They live only on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
+        Button(onClick = onBackUp, modifier = Modifier.testTag("nudge_backup")) { Text("Back up now") }
+        TextButton(onClick = onLater, modifier = Modifier.testTag("nudge_later")) { Text("Later") }
     }
 }

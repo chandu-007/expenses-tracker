@@ -53,7 +53,7 @@ class AccountTilesUiTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)); waitFor("add") }
     /** Opens the Accounts page; with several accounts the cards start stacked like a wallet, so one tap spreads them out before any card is tapped. */
     private fun openAccounts() {
-        tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        compose.openMore(); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
         val several = (runBlocking { container.write { it.db.schemaQueries.selectAccounts().executeAsList().count { a -> a.archived == 0L } } } ?: 0) > 1
         if (several) { tap("accounts_stack"); waitFor("accounts_stack_close") }
     }
@@ -106,7 +106,7 @@ class AccountTilesUiTest {
         val due = LocalDate.now().plusDays(8).format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))
         runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 0862 statement is generated. Total Amt Due Rs.5,000.00, Min Amt Due Rs.250.00, Due Date $due.", System.currentTimeMillis()) }
         val id = runBlocking { container.write { it.bills.list(BillStatus.FOUND).single().id.also { b -> it.bills.track(b) } } }!!
-        launch(); tap("more_menu"); tap("open_bills"); waitFor("bills_list")
+        launch(); compose.openMore(); tap("open_bills"); waitFor("bills_list")
         tap("bill_pay_$id"); waitFor("bill_pay_amount"); tap("bill_pay_ok") // no card tapped: the one carrying 0862 is already chosen
         compose.waitUntil(10_000) { entries().isNotEmpty() }
         assertEquals("visa", entries().single().counter_account_id, "the Visa, not the Amex")
@@ -117,7 +117,7 @@ class AccountTilesUiTest {
         save(Account(AccountId("sav"), "Savings", AccountType.BANK, inr))
         runBlocking { container.write { it.looks.save(AccountLook("sav", last4 = "7777")) } }
         runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Rs.500.00 debited from A/c XX7777 on ${LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yy"))} to VPA cafe@okhdfc (UPI Ref 628374659283). Not you? Call 18002586161", System.currentTimeMillis()) }
-        launch(); tap("more_menu"); tap("open_inbox"); waitFor("inbox_list")
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
         val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
         tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
         assertEquals("sav", entries().single().account_id, "not the default Bank account")
@@ -137,7 +137,7 @@ class AccountTilesUiTest {
 
     @Test
     fun severalAccountsStartStackedLikeAWalletAndOneTapSpreadsThemApartAndAnotherStacksThemAgain() {
-        launch(); tap("more_menu"); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
+        launch(); compose.openMore(); tap("manage_accounts"); waitFor("accounts_list"); waitFor("accounts_stack")
         fun y(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
         fun gap() = kotlin.math.abs(y("account_Bank") - y("account_Cash"))
         val stackedGap = gap()

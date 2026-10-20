@@ -39,7 +39,7 @@ class SuggestedCategoriesUiTest {
     fun tickedSuggestionsAreAddedUnderTheRightParentsAndNothingIsDuplicated() {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
         val before = cats().size
-        tap("more_menu"); tap("manage_categories"); tap("suggested_categories")
+        compose.openMore(); tap("manage_categories"); tap("suggested_categories")
         waitFor("suggested_add")
         tap("suggested_pick_Rent")                       // a whole new group: the group and both of its subcategories
         tap("suggested_child_Transport_Fuel")            // one subcategory under a category the app starts with
