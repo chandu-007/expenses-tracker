@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +40,7 @@ import app.expenses.core.domain.ThemeMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Appearance") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("appearance_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Appearance", Area.LOOK, Icons.Outlined.Palette, onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

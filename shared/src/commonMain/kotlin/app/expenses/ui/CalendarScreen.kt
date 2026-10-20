@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +52,7 @@ import app.expenses.core.domain.formatted
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Unit, onSelect: (Long) -> Unit, onOpenEntry: (String) -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Calendar") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("calendar_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Calendar", Area.MONEY, Icons.Outlined.CalendarMonth, onBack, "calendar_back") }) { pad ->
         if (state == null) return@Scaffold
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -27,6 +27,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +72,7 @@ fun InboxScreen(
         confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
-    Scaffold(topBar = { TopAppBar(title = { Text("To review") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("inbox_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("To review", Area.CAPTURE, Icons.Outlined.Inbox, onBack, "inbox_back") }) { pad ->
         if (rows.isEmpty() && onPaste != null) {
             LazyColumn(Modifier.padding(pad).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp)) {
                 item(key = "empty") {
@@ -222,7 +226,7 @@ fun CaptureSettingsScreen(
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture
-    Scaffold(topBar = { TopAppBar(title = { Text(if (readsTexts) "Capture from texts" else "Capture from payment apps") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar(if (readsTexts) "Capture from texts" else "Capture from payment apps", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (readsTexts) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -267,7 +271,7 @@ fun CaptureRulesScreen(
     var category by rememberSaveable { mutableStateOf("") }
     var tested by remember { mutableStateOf<Long?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
-    Scaffold(topBar = { TopAppBar(title = { Text("Category rules") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("rules_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 Text("When a captured payment mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

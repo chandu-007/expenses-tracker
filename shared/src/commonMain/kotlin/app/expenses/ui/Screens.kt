@@ -231,11 +231,7 @@ fun EntryListScreen(
         if (moreOpen) {
             // a page of its own (not a pop-up over the list): everything the app can do, grouped. Opening a place keeps this page underneath, so Back comes back to it
             val platform = LocalPlatform.current
-            val money = Pair(Color(0xFF1E88E5), Color(0xFF1565C0))
-            val teal = Pair(Color(0xFF00897B), Color(0xFF00695C))
-            val purple = Pair(Color(0xFF8E24AA), Color(0xFF6A1B9A))
-            val green = Pair(Color(0xFF43A047), Color(0xFF2E7D32))
-            val amber = Pair(Color(0xFFFB8C00), Color(0xFFEF6C00))
+            val money = Area.MONEY; val teal = Area.CAPTURE; val purple = Area.LOOK; val green = Area.PRIVACY; val amber = Area.HELP
             val reads = platform.supportsSmsCapture || platform.supportsShortcutsCapture
             val activeAccounts = state.accountRows.filter { !it.archived }
             val net = Money(activeAccounts.sumOf { it.balanceMinor }, BaseCurrency.current).formatted()
@@ -248,33 +244,33 @@ fun EntryListScreen(
                 Modifier.padding(padding), nudges,
                 reminder = if (state.showBackupNudge) ({ BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge) }) else null,
                 sections = listOf(
-                    MoreSection("Inbox and bills", teal.first, teal.second, listOf(
+                    MoreSection("Inbox and bills", teal.top, teal.bottom, listOf(
                         MoreRow("open_inbox", Icons.Outlined.Inbox, "To review", if (state.inboxPending > 0) "${state.inboxPending} waiting for you" else "Nothing waiting", onClick = onOpenInbox),
                         MoreRow("open_bills", Icons.Outlined.Receipt, "Bills", if (state.billPeek.newCount > 0) "${state.billPeek.newCount} new" else "Card and utility bills found in your messages", onClick = onOpenBills),
                     )),
-                    MoreSection("Money", money.first, money.second, listOf(
+                    MoreSection("Money", money.top, money.bottom, listOf(
                         MoreRow("manage_accounts", Icons.Outlined.AccountBalance, "Accounts", "${activeAccounts.size} ${if (activeAccounts.size == 1) "account" else "accounts"} \u00B7 net $net", onClick = onManageAccounts),
                         MoreRow("manage_categories", Icons.Outlined.Label, "Categories", "${visible.count { it.kind.forExpense }} for expenses \u00B7 ${visible.count { it.kind.forIncome }} for income", onClick = onManageCategories),
                         MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
                     )),
-                    MoreSection("Capture", teal.first, teal.second, listOf(
+                    MoreSection("Capture", teal.top, teal.bottom, listOf(
                         MoreRow("open_capture", Icons.Outlined.Sms, if (reads) "Capture from texts" else "Capture from payment apps", if (reads) "Bank texts and payment alerts, added only when you approve" else "Google Pay, PhonePe, Paytm and BHIM alerts, added only when you approve", onClick = onOpenCapture),
                         MoreRow("open_notifications", Icons.Outlined.Notifications, "Notifications", "Bills, budgets and the weekly recap", onClick = onOpenNotifications),
                     )),
-                    MoreSection("Make it yours", purple.first, purple.second, listOf(
+                    MoreSection("Make it yours", purple.top, purple.bottom, listOf(
                         MoreRow("open_appearance", Icons.Outlined.Palette, "Appearance", "Theme, density and motion speed", onClick = onOpenAppearance),
                         MoreRow("open_home_layout", Icons.Outlined.Dashboard, "Customise home", "Choose and reorder the blocks", onClick = onCustomiseHome),
                         MoreRow("open_currency", Icons.Outlined.CurrencyRupee, "Currency", BaseCurrency.current.code, onClick = onOpenCurrency),
                     )),
-                    MoreSection("Privacy and data", green.first, green.second, listOf(
+                    MoreSection("Privacy and data", green.top, green.bottom, listOf(
                         MoreRow("toggle_privacy", if (state.hideAmounts) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (state.hideAmounts) "Show amounts" else "Hide amounts", "Replace every figure with dots", switchOn = state.hideAmounts, onClick = onToggleHideAmounts),
                         MoreRow("open_security", Icons.Outlined.Lock, "App lock", "Fingerprint, face or your phone's PIN", onClick = onOpenSecurity),
                         MoreRow("open_privacy", Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "Permissions in plain words", onClick = onOpenPrivacy),
                         MoreRow("open_data", Icons.Outlined.Backup, "Your data: export and backup", "Excel, CSV, backup and restore", onClick = onOpenData),
                     )),
-                    MoreSection("Help", amber.first, amber.second, listOf(
+                    MoreSection("Help", amber.top, amber.bottom, listOf(
                         MoreRow("open_guide", Icons.Outlined.Info, "How to use this app", "A two-minute tour of the real screens", onClick = onOpenGuide),
                     )),
                 ),

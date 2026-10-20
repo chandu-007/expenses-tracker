@@ -166,7 +166,8 @@ class SearchBulkCategoryUiTest {
         income("p1", "Payout One"); income("p2", "Payout Two")
         expense("e1", "Payout Shop")
         search("Payout", "p1", "p2", "e1")
-        hold("result_p1"); tap("result_p2"); waitTextOf("bulk_count", "2 selected")
+        hold("result_p1"); waitTextOf("bulk_count", "1 selected") // selection mode must be on before the second tap, or that tap is not a selection
+        tap("result_p2"); waitTextOf("bulk_count", "2 selected")
         tap("bulk_category"); waitFor("bulk_category_search")
         node("bulk_category_search").performTextInput("other")
         waitFor("bulk_category_option_income:otherincome")

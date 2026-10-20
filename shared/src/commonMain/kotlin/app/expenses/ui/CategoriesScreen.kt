@@ -37,6 +37,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,9 +127,8 @@ fun CategoriesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Categories") },
-                navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("categories_back")) { Text("Back") } },
+            AreaTopBar(
+                "Categories", Area.MONEY, Icons.Outlined.Label, onBack, "categories_back",
                 actions = { if (!incomeTab) TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
             )
         },

@@ -35,6 +35,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -149,7 +151,7 @@ fun RecurringScreen(
         return
     }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Repeating expenses") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("recurring_back")) { Text("Back") } }) },
+        topBar = { AreaTopBar("Repeating expenses", Area.MONEY, Icons.Outlined.Repeat, onBack, "recurring_back") },
         floatingActionButton = { FloatingActionButton(onClick = { editing = NEW }, modifier = Modifier.testTag("new_recurring")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 88.dp)) {

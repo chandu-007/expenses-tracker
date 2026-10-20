@@ -18,6 +18,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.FlowRow
@@ -98,7 +100,7 @@ fun DataScreen(
         )
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Your data") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("data_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { AreaTopBar("Your data", Area.PRIVACY, Icons.Outlined.Backup, onBack, "data_back") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (state.busy) CircularProgressIndicator(Modifier.testTag("data_busy"))
             state.status?.let {

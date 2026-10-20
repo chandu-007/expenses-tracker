@@ -18,6 +18,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,7 +74,7 @@ fun SecurityScreen(
     var chosen by rememberSaveable { mutableStateOf(LockTimeout.ONE_MINUTE) }
     val shown = if (settings.enabled) settings.timeout else chosen
 
-    Scaffold(topBar = { TopAppBar(title = { Text("App lock") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("security_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { AreaTopBar("App lock", Area.PRIVACY, Icons.Outlined.Lock, onBack, "security_back") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (!platform.supportsAppLock) Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("lock_unavailable"))
             else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

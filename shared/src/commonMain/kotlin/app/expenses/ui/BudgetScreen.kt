@@ -29,6 +29,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Savings
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -145,7 +147,7 @@ fun BudgetScreen(
             onDismiss = { editing = null; editingOverall = false },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("Budget") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("budget_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { AreaTopBar("Budget", Area.MONEY, Icons.Outlined.Savings, onBack, "budget_back") }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

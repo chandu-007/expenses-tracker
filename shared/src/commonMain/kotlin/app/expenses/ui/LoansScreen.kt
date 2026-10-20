@@ -22,6 +22,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,10 +53,7 @@ fun LoansScreen(
     val selected = ui.selected
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(selected?.name ?: "Lent and borrowed") },
-                navigationIcon = { TextButton(onClick = { if (selected != null) onSelect(null) else onBack() }, modifier = Modifier.testTag("loans_back")) { Text("Back") } },
-            )
+            AreaTopBar(selected?.name ?: "Lent and borrowed", Area.MONEY, Icons.Outlined.SwapHoriz, { if (selected != null) onSelect(null) else onBack() }, "loans_back")
         },
     ) { padding ->
         if (selected == null) {

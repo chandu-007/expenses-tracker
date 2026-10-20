@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +48,7 @@ fun SuggestedCategoriesScreen(existing: List<CategoryUi>, onAdd: (Map<String, Se
     }
     val count = remember(picks, existing) { CategoryCatalog.plan(domain, picks).size }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Suggested categories") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("suggested_back")) { Text("Back") } }) },
+        topBar = { AreaTopBar("Suggested categories", Area.MONEY, Icons.Outlined.Label, onBack, "suggested_back") },
         bottomBar = {
             Button(
                 onClick = { onAdd(picks) }, enabled = count > 0,

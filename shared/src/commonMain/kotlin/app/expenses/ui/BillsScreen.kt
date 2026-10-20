@@ -40,6 +40,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,7 +87,7 @@ fun BillsScreen(
             dismissButton = { TextButton(onClick = { dating = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("Bills") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("bills_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Bills", Area.CAPTURE, Icons.Outlined.Receipt, onBack, "bills_back") }) { pad ->
         if (ui.loaded && all.isEmpty() && ui.paid.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))

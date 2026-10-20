@@ -15,6 +15,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -29,7 +32,7 @@ private fun whenText(ms: Long?): String = ms?.let { dateTimeLabel(it) } ?: "neve
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> Unit, onBack: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("How capture is doing") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("health_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("How capture is doing", Area.CAPTURE, Icons.Outlined.Sms, onBack, "health_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (report == null) { Text("Loading…"); return@Column }
             val handedOver = LocalPlatform.current.supportsShortcutsCapture
@@ -80,7 +83,7 @@ data class PermissionRow(val name: String, val granted: Boolean, val why: String
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacyScreen(permissions: List<PermissionRow>, canUseInternet: Boolean, onBack: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Privacy: what this app can see") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("privacy_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Privacy: what this app can see", Area.PRIVACY, Icons.Outlined.PrivacyTip, onBack, "privacy_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (canUseInternet) "This app is allowed to use the internet." else "This app has no permission to use the internet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("privacy_internet"))
             Text(if (canUseInternet) "Check what it sends in the phone's settings." else "Nothing you enter or capture can leave this phone through this app: your entries, texts and amounts stay here. Backups and exports are files you choose to save or share yourself.", style = MaterialTheme.typography.bodyMedium)

@@ -25,6 +25,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,7 +66,7 @@ fun AccountsScreen(
     val active = rows.filter { !it.archived }
     val archived = rows.filter { it.archived }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Accounts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("back")) { Text("Back") } }) },
+        topBar = { AreaTopBar("Accounts", Area.MONEY, Icons.Outlined.AccountBalance, onBack, "back") },
         floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account")) { Text("+") } },
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list")) {

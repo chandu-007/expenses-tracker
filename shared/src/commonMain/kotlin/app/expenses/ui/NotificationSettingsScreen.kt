@@ -17,6 +17,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +69,7 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
     LifecycleResumeEffect(Unit) { allowed = platform.notificationsAllowed(); onPauseOrDispose { } }
     val askPermission = rememberNotificationPermissionRequest { allowed = platform.notificationsAllowed() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Notifications") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("notif_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { AreaTopBar("Notifications", Area.CAPTURE, Icons.Outlined.Notifications, onBack, "notif_back") }) { padding ->
         if (!platform.supportsNotifications) {
             Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp).testTag("notif_unavailable"))
             return@Scaffold

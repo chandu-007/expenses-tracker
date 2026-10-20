@@ -18,6 +18,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,7 +35,7 @@ import app.expenses.core.domain.HomeSection
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeLayoutScreen(layout: HomeLayout, onChange: (HomeLayout) -> Unit, onBack: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Customise home") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("home_layout_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Customise home", Area.LOOK, Icons.Outlined.Dashboard, onBack, "home_layout_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             Text("Choose what the home screen shows and move blocks up or down. The headline total and the list of entries are always there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             layout.order.forEachIndexed { i, section ->

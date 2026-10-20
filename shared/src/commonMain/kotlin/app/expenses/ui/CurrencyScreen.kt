@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.CurrencyRupee
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -24,7 +26,7 @@ import app.expenses.core.domain.CurrencyChoices
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CurrencyScreen(current: Currency, blocker: String?, onChoose: (String) -> Unit, onBack: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Currency") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("currency_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Currency", Area.LOOK, Icons.Outlined.CurrencyRupee, onBack, "currency_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Every amount in this ledger is in ${CurrencyChoices.name(current)} (${current.code}).", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("currency_current"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

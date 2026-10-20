@@ -16,6 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +52,7 @@ internal val SHORTCUTS_STEPS = listOf(
 internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit) {
     val platform = LocalPlatform.current
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
-    Scaffold(topBar = { TopAppBar(title = { Text("Capture from texts") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("capture_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Capture from texts", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Bank texts on iPhone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("shortcuts_title"))
             Text("iPhone does not let any app read your text messages. What it does allow is an automation in the Shortcuts app that runs when a message arrives and hands that message to this app. Set it up once and bank texts land in To review by themselves, with nothing added to your ledger until you say so.", style = MaterialTheme.typography.bodyMedium)
