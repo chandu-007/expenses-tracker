@@ -87,7 +87,7 @@ class BackupStore(
             people = q.allPeople().executeAsList().map { BackupPerson(it.id, it.name, it.deleted == 1L) },
             bills = q.allBills().executeAsList().map { BackupBill(it.id, it.issuer, it.kind, it.title, it.amount_minor, it.min_due_minor, it.currency, it.due_date, it.account_last4, it.reference, it.auto_debit == 1L, it.received_at, it.status, it.paid_at, it.dedupe_key) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
-            settings = SETTINGS.mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.let { k to it } }.toMap(),
+            settings = (SETTINGS + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
 
@@ -154,7 +154,7 @@ class BackupStore(
             val digits = l.last4?.takeIf { app.expenses.core.domain.AccountLooks.parseLast4(it).isSuccess }
             if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
         }
-        for ((k, v) in data.settings) if (k in SETTINGS && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
+        for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
         report
     }
 
@@ -198,6 +198,10 @@ class BackupStore(
 
     companion object {
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
-        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots")
+        val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots",
+            "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit")
+
+        /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
+        const val CARD_LIMIT_PREFIX = "card_limit:"
     }
 }

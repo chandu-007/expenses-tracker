@@ -227,7 +227,7 @@ class NotificationService(
 
     companion object {
         private const val MAX_BILL_NOTICES = 5
-        private const val PACE_FROM_MONTH_PERCENT = 10
+        private const val PACE_FROM_MONTH_PERCENT = 30 // rent and EMIs land in the first days: no verdict before a third of the period
         private const val PACE_UNTIL_MONTH_PERCENT = 90
         private const val PACE_MIN_USED_PERCENT = 30
         private const val PACE_LEAD_PERCENT = 20

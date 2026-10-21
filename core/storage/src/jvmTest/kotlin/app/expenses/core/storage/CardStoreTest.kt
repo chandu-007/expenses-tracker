@@ -206,4 +206,3 @@ class CardStoreTest {
         assertTrue(check(LocalDate(2026, 11, 2)).none { it.kind == NoticeKind.BUDGET_WRAPUP }, "October's 600 went over its 500")
     }
 }
-

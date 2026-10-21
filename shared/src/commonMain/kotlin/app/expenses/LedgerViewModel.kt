@@ -1081,7 +1081,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 val card = ok.db.schemaQueries.accountById(cardAccountId).executeAsOneOrNull() ?: return@write null
                 if (card.archived != 0L) return@write null
                 val active = ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L && it.id != cardAccountId }
-                val last = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } }
+                val last = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id && it.type != "CREDIT_CARD" } } // the account used last is often a card itself
                 val from = last ?: active.firstOrNull { it.type != "CREDIT_CARD" }?.id ?: active.firstOrNull()?.id ?: return@write null
                 val left = ok.cards.standing(cardAccountId, todayLocal(), kotlinx.datetime.TimeZone.currentSystemDefault())?.remaining ?: 0L
                 val amount = if (left > 0) Money(left, BaseCurrency.current).toPlainString() else ""

@@ -161,7 +161,7 @@ fun DataScreen(
             Text("Choose Google Drive in the list that opens to keep the file in your Drive.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_drive_hint"))
             if (canShareBackup) {
                 OutlinedButton(onClick = { onShareBackup("expenses-backup-$today.expbak", pass.ifEmpty { null }) }, enabled = !state.busy && passProblem == null, modifier = Modifier.testTag("share_backup")) { Text("Send backup to…") }
-                Text("Opens the share sheet: Google Drive, email, WhatsApp. Sending is not confirmed here, so it does not count as a backup made.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Opens the share sheet: Google Drive, email, WhatsApp. Sending is not confirmed here, so it does not count as a backup made." + if (pass.isEmpty()) " Without a passphrase the file is not encrypted, and it leaves this phone through the app you choose: set one above first if that matters." else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider()
 

@@ -252,5 +252,20 @@ class BackupStoreTest {
         val wrong = message(withHeader(1, "{}", format = "other-app"))
         assertTrue(wrong.contains("other-app"), wrong)
     }
+
+    @Test
+    fun theNotificationChoicesAndEachCardsCreditLimitTravelInABackupAndComeBackOnRestore() {
+        val a = Device("a"); val b = Device("b")
+        val cards = CardStore(a.db, a.clock) { 1L }
+        a.ledger.saveAccount(app.expenses.core.domain.ledger.Account(app.expenses.core.domain.ledger.AccountId("card"), "HDFC card", app.expenses.core.domain.ledger.AccountType.CREDIT_CARD, a.inr))
+        cards.save(app.expenses.core.domain.CardTerms("card", 14, 5)); cards.setCreditLimit("card", 250_000)
+        a.notifications.setPrefs(a.notifications.prefs().copy(budgetNearPercent = 60, budgetPace = false, cardLimit = false, billAhead1 = false, budgetWrapUp = false, recap = true))
+        val data = a.backup.export()
+        assertEquals("250000", data.settings["card_limit:card"])
+        b.backup.restore(data)
+        assertEquals("250000", b.db.schemaQueries.settingValue("card_limit:card").executeAsOneOrNull(), "the limit came back")
+        val p = b.notifications.prefs()
+        assertEquals(60, p.budgetNearPercent); assertEquals(false, p.budgetPace); assertEquals(false, p.cardLimit); assertEquals(false, p.billAhead1); assertEquals(false, p.budgetWrapUp); assertEquals(true, p.recap)
+    }
 }
 

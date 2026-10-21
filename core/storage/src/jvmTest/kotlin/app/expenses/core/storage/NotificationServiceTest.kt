@@ -84,11 +84,13 @@ class NotificationServiceTest {
     fun budgetAlertsFollowSpendingAndOnlyFireOncePerLevel() {
         budgets.setLimit(null, m(100_000))
         spend("a", 700, "Food")
-        // 70% used a week into the month is running ahead of it: a pace note, once, and nothing else
-        val pace = service.check(today, noon, zone).notices.single()
+        assertTrue(service.check(today, noon, zone).notices.isEmpty(), "70% a week in is fine: rent and EMIs land early, so no pace verdict before a third of the month")
+        // the same 70% well into the month is running ahead of it: a pace note, once, and nothing else
+        val later = LocalDate(2026, 10, 15)
+        val pace = service.check(later, noon, zone).notices.single()
         assertEquals(NoticeKind.BUDGET_PACE, pace.kind)
         service.markShown(listOf(pace))
-        assertTrue(service.check(today, noon, zone).notices.isEmpty(), "said once")
+        assertTrue(service.check(later, noon, zone).notices.isEmpty(), "said once")
         spend("b", 150, "Food")
         val near = service.check(today, noon, zone).notices.single()
         assertEquals(NoticeKind.BUDGET_NEAR, near.kind)

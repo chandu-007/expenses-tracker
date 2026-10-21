@@ -492,3 +492,12 @@ Asked for by the owner: improve budget, bill and credit-card alerts; an optional
 
 **Verification:** 383 device functional tests, 4 failed in the full run (`LoansUiTest.borrowing...`, and three `NotificationsTest` tests that this slice changed: fixed as above and then 12 of 12), the rest of the classes touched pass in re-runs (24 of 24 for attachments, alerts, notifications). Host tests pass. The timing gate was not re-run (it fails on this Mac before and after, see slice 76).
 
+### Slice 78 follow-up (version 0.1.4), after review
+
+- **Backups now carry the alert choices:** `BackupStore.SETTINGS` gained `notif_recap` and the new `notif_*` keys, and each card's credit limit (`card_limit:<account id>`) is exported and restored (restore only fills what is not already set). Round trip tested in `BackupStoreTest`.
+- **App lock wording** now says the Mark paid button on a bill notice marks a tracked bill paid without unlocking (it records nothing).
+- **Pace alert is gentler:** no verdict before 30% of the period has passed (rent and EMIs land early); the storage test now says 70% a week in is fine and a pace note comes later in the month. Entries from repeating items are still counted.
+- **Pay now** no longer starts from a credit card as the paying account.
+- **Send backup to...** warns on screen when no passphrase is set.
+- **Not changed, on purpose:** the "In 3 hours" button is the snooze (WorkManager keeps it across a reboot); "bills due this week" counts tracked and found bills only, not repeating items or card due dates; a camera result after the activity is recreated is lost (the picked-file path is unaffected). Verification: host tests pass; 45 of 45 device tests in Notifications, Alerts, Data, App lock and Accounts.
+
