@@ -146,7 +146,7 @@ class NotificationsTest {
         launch()
         openFromMenu("open_notifications")
         waitFor("notif_test")
-        compose.onNodeWithTag("notif_test").performClick()
+        compose.onNodeWithTag("notif_test").performScrollTo().performClick()
         compose.waitUntil(10_000) { titles().contains("Test notification") }
     }
 
@@ -168,18 +168,18 @@ class NotificationsTest {
         waitFor("notif_bills")
         compose.onNodeWithTag("notif_quiet_start").assertTextEquals("22:00")
         compose.onNodeWithTag("notif_quiet_end").assertTextEquals("07:00")
-        compose.onNodeWithTag("notif_bills").performClick()
+        compose.onNodeWithTag("notif_bills").performScrollTo().performClick()
         compose.waitUntil(10_000) { !prefs().bills }
         compose.onNodeWithTag("notif_bill_hour_up").assertIsNotEnabled()
-        compose.onNodeWithTag("notif_bills").performClick()
+        compose.onNodeWithTag("notif_bills").performScrollTo().performClick()
         compose.waitUntil(10_000) { prefs().bills }
         compose.onNodeWithTag("notif_bill_hour_up").assertIsEnabled()
-        repeat(3) { compose.onNodeWithTag("notif_quiet_start_up").performClick() }
+        repeat(3) { compose.onNodeWithTag("notif_quiet_start_up").performScrollTo().performClick() }
         compose.waitUntil(10_000) { prefs().quietStartMinute == 60 }
         compose.onNodeWithTag("notif_quiet_start").assertTextEquals("01:00")
-        repeat(8) { compose.onNodeWithTag("notif_quiet_end_down").performClick() }
+        repeat(8) { compose.onNodeWithTag("notif_quiet_end_down").performScrollTo().performClick() }
         compose.waitUntil(10_000) { prefs().quietEndMinute == 23 * 60 }
-        compose.onNodeWithTag("notif_quiet").performClick()
+        compose.onNodeWithTag("notif_quiet").performScrollTo().performClick()
         compose.waitUntil(10_000) { !prefs().quietEnabled }
         compose.onNodeWithTag("notif_quiet_start_up").assertIsNotEnabled()
     }
@@ -205,7 +205,11 @@ class NotificationsTest {
         assertEquals(Notifier.channelOf(app.expenses.core.domain.NoticeKind.BILL_DUE), shown.notification.channelId, "with the bill reminders, not the budget alerts")
         manager.cancelAll()
         runBlocking { container.write { it.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), AccountId("amex"), Money(40_000, inr))) } }
-        assertEquals(0, check(), "paid in full: nothing to remind")
+        // paid in full: no more reminders, but the card is told once that the bill is paid
+        assertEquals(1, check(), "one notice: that it is paid")
+        compose.waitUntil(10_000) { titles() == listOf("Amex bill is paid") }
+        manager.cancelAll()
+        assertEquals(0, check(), "and then nothing")
     }
 
     @Test

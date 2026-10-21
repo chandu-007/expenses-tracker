@@ -131,4 +131,79 @@ class CardStoreTest {
         ledger.saveAccount(Account(card, "HDFC card", AccountType.BANK, inr))
         assertEquals(emptyList(), cards.all()); assertEquals(emptyList(), service.check(LocalDate(2026, 4, 5), 10 * 60, zone).notices.filter { it.kind == NoticeKind.CARD_DUE })
     }
+
+    // ---- statement, credit limit and "paid" notices, through the service ----
+
+    private fun check(d: LocalDate, hour: Int = 12) = service.check(d, hour * 60, zone).notices
+    init { service.setPrefs(app.expenses.core.domain.NotificationPrefs(quietEnabled = false)) }
+
+    @Test
+    fun aStatementNoticeComesOnTheDayItIsMadeAndForTwoDaysAfterButOnlyOnceAndNotForAnEmptyOne() {
+        cards.save(terms)
+        spend(at(2026, 3, 1), 120_000)
+        assertTrue(check(LocalDate(2026, 3, 14)).none { it.kind == NoticeKind.CARD_STATEMENT }, "the day before the statement")
+        val n = check(LocalDate(2026, 3, 15)).single { it.kind == NoticeKind.CARD_STATEMENT }
+        assertEquals("HDFC card statement is ready", n.title); assertTrue(n.text.contains("1,200.00") && n.text.contains("minimum") && n.text.contains("5 Apr"), n.text); assertEquals("card", n.ref)
+        assertTrue(check(LocalDate(2026, 3, 17)).any { it.kind == NoticeKind.CARD_STATEMENT }, "two days on, not yet told: still announced")
+        assertTrue(check(LocalDate(2026, 3, 18)).none { it.kind == NoticeKind.CARD_STATEMENT }, "three days on, not yet told: too late to announce")
+        service.markShown(listOf(n))
+        assertTrue(check(LocalDate(2026, 3, 16)).none { it.kind == NoticeKind.CARD_STATEMENT }, "once")
+        // a card with nothing owed has no statement to announce
+        cards.clear("card"); cards.save(terms.copy(statementDay = 20))
+        ledger.save(Income(EntryId("pay"), at(2026, 3, 10), card, Money(120_000, inr), app.expenses.core.domain.ledger.CategoryId("income:salary")))
+        assertTrue(check(LocalDate(2026, 3, 20)).none { it.kind == NoticeKind.CARD_STATEMENT })
+    }
+
+    @Test
+    fun theCreditLimitNoticeFollowsTheBalanceAtEightyAndOneHundredPercentOncePerMonth() {
+        cards.save(terms); cards.setCreditLimit("card", 100_000)
+        spend(at(2026, 3, 2), 70_000)
+        assertTrue(check(today(3)).none { it.kind == NoticeKind.CARD_LIMIT }, "70%")
+        spend(at(2026, 3, 3), 15_000)
+        val n80 = check(today(4)).single { it.kind == NoticeKind.CARD_LIMIT }
+        assertEquals("HDFC card is 85% of its limit", n80.title); service.markShown(listOf(n80))
+        assertTrue(check(today(5)).none { it.kind == NoticeKind.CARD_LIMIT })
+        spend(at(2026, 3, 5), 20_000)
+        val n100 = check(today(6)).single { it.kind == NoticeKind.CARD_LIMIT }
+        assertEquals("HDFC card is at its credit limit", n100.title); service.markShown(listOf(n100))
+        assertTrue(check(today(7)).none { it.kind == NoticeKind.CARD_LIMIT })
+        assertTrue(check(LocalDate(2026, 4, 2)).any { it.kind == NoticeKind.CARD_LIMIT }, "a new month says it again")
+        cards.setCreditLimit("card", null)
+        assertTrue(check(LocalDate(2026, 5, 2)).none { it.kind == NoticeKind.CARD_LIMIT }, "no limit, no notice")
+        assertNull(cards.creditLimit("card"))
+    }
+
+    @Test
+    fun payingAStatementInFullThatWasToldAboutBringsOnePaidNoticeAndAStatementNeverToldAboutDoesNot() {
+        cards.save(terms)
+        spend(at(2026, 3, 1), 50_000)
+        val told = check(LocalDate(2026, 3, 15)).single { it.kind == NoticeKind.CARD_STATEMENT }
+        service.markShown(listOf(told))
+        assertTrue(check(LocalDate(2026, 3, 20)).none { it.kind == NoticeKind.CARD_CLEARED }, "still owed")
+        ledger.save(Transfer(EntryId("pay"), at(2026, 3, 22), bank, card, Money(50_000, inr)))
+        val paid = check(LocalDate(2026, 3, 23)).single { it.kind == NoticeKind.CARD_CLEARED }
+        assertEquals("HDFC card bill is paid", paid.title); service.markShown(listOf(paid))
+        assertTrue(check(LocalDate(2026, 3, 24)).none { it.kind == NoticeKind.CARD_CLEARED }, "once")
+    }
+
+    @Test
+    fun theWarningLevelIsTheChosenPercentAndLastMonthsKeptBudgetIsSaidInTheFirstDaysOnly() {
+        budgets.setLimit(null, Money(100_000, inr))
+        ledger.save(Expense(EntryId("sep"), at(2026, 9, 10), bank, Money(80_000, inr), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), Money(80_000, inr)))))
+        val early = check(LocalDate(2026, 10, 2))
+        val wrap = early.single { it.kind == NoticeKind.BUDGET_WRAPUP }
+        assertTrue(wrap.text.contains("800.00") && wrap.text.contains("1,000.00") && wrap.text.contains("200.00"), wrap.text)
+        assertTrue(check(LocalDate(2026, 10, 8)).none { it.kind == NoticeKind.BUDGET_WRAPUP }, "after the first days it is not news")
+        service.markShown(listOf(wrap)); assertTrue(check(LocalDate(2026, 10, 3)).none { it.kind == NoticeKind.BUDGET_WRAPUP })
+        // a lower warning level warns sooner
+        ledger.save(Expense(EntryId("oct"), at(2026, 10, 20), bank, Money(60_000, inr), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), Money(60_000, inr)))))
+        assertTrue(check(LocalDate(2026, 10, 24)).none { it.kind == NoticeKind.BUDGET_NEAR }, "60% is below the default 80")
+        service.setPrefs(service.prefs().copy(budgetNearPercent = 50))
+        assertTrue(check(LocalDate(2026, 10, 24)).any { it.kind == NoticeKind.BUDGET_NEAR }, "60% is past a chosen 50")
+        // and last month's note is for a kept budget only
+        service.setPrefs(service.prefs().copy(budgetNearPercent = 80))
+        budgets.setLimit(null, Money(50_000, inr))
+        assertTrue(check(LocalDate(2026, 11, 2)).none { it.kind == NoticeKind.BUDGET_WRAPUP }, "October's 600 went over its 500")
+    }
 }
+

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -90,9 +91,9 @@ class AttachmentsTest {
     }
 
     @Test
-    fun aNewEntrySaysToSaveFirstAndTheSweepRemovesOnlyFilesWithNoRecord() {
+    fun aNewEntryCanTakeAFileBeforeItIsSavedAndTheSweepRemovesOnlyFilesWithNoRecord() {
         launch(); tap("add"); waitFor("attachments_hint")
-        assertTrue(!has("attachment_add"))
+        assertTrue(has("attachment_add"), "a bill can be attached while adding, it is optional")
         seed()
         val keep = "keep"; val orphan = "orphan"
         db { ok -> ok.attachments.add(keep, "e", "k.txt", "text/plain", 1, "h") }
@@ -115,4 +116,39 @@ class AttachmentsTest {
         assertTrue(assertFailsWith<IllegalArgumentException> { files.copyStream("broken", broken) }.message!!.contains("disk gone"))
         assertEquals(false, files.file("broken").exists())
     }
+
+    @Test
+    fun aFileChosenWhileAddingIsKeptWithTheEntryOnSaveAndDeletedWhenTheFormIsClosed() {
+        launch(); tap("add"); waitFor("amount")
+        val bytes = ByteArray(2_000) { (it * 3).toByte() }
+        vm().stageAttachment(source("lightbill.jpg", bytes).toString())
+        waitFor("attachment_lightbill.jpg")
+        assertEquals(1, onDisk().size); assertEquals(0, db { ok -> ok.attachments.allIds().size }, "nothing is recorded until the entry exists")
+        // closing the form throws the file away
+        compose.onNodeWithTag("cancel", useUnmergedTree = true).performClick(); waitFor("add")
+        compose.waitUntil(10_000) { onDisk().isEmpty() }
+        // choosing it again and saving keeps it with the new entry
+        tap("add"); waitFor("amount")
+        vm().stageAttachment(source("lightbill.jpg", bytes).toString()); waitFor("attachment_lightbill.jpg")
+        compose.onNodeWithTag("amount", useUnmergedTree = true).performTextInput("1842.50"); tap("save")
+        waitFor("add"); compose.waitUntil(10_000) { db { ok -> ok.attachments.allIds().size } == 1 }
+        val entry = db { ok -> ok.db.schemaQueries.recentEntries(5).executeAsList().single().id }
+        val a = db { ok -> ok.attachments.list(entry) }.single()
+        assertEquals("lightbill.jpg", a.name); assertEquals(bytes.toList(), files.file(a.id).readBytes().toList())
+        assertEquals(setOf(a.id), onDisk(), "the one file, now the entry's")
+    }
+
+    @Test
+    fun aStagedFileCanBeRemovedAndTheTenFileLimitAppliesBeforeSaving() {
+        launch(); tap("add"); waitFor("amount")
+        vm().stageAttachment(source("one.pdf", ByteArray(100)).toString()); waitFor("attachment_one.pdf")
+        tap("attachment_delete_one.pdf"); tap("attachment_remove_ok"); waitGone("attachment_one.pdf")
+        compose.waitUntil(10_000) { onDisk().isEmpty() }
+        for (i in 1..10) vm().stageAttachment(source("f$i.pdf", ByteArray(100)).toString())
+        compose.waitUntil(10_000) { onDisk().size == 10 }
+        vm().stageAttachment(source("eleven.pdf", ByteArray(100)).toString())
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("up to 10 attachments", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(10, onDisk().size, "no stray copy of the refused file")
+    }
 }
+

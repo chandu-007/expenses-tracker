@@ -291,6 +291,7 @@ fun EntryListScreen(
                         modifier = Modifier.padding(top = 4.dp).graphicsLayer { val k = 1f - 0.30f * fold.fraction; scaleX = k; scaleY = k; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }.testTag("month_spend"),
                         color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     )
+                    if (state.spark.compare.isNotEmpty()) Text(state.spark.compare, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 4.dp).foldAway(fold).testTag("month_compare"))
                     if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp).foldAway(fold))
                 }
             }
@@ -474,8 +475,8 @@ private fun BillsBanner(peek: app.expenses.BillPeekUi, onOpen: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else "Bills coming up", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("bills_banner_title"))
-                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else if (peek.dueThisWeek > 0) (if (peek.dueThisWeek == 1) "1 bill due this week" else "${peek.dueThisWeek} bills due this week") else "Bills coming up", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("bills_banner_title"))
+                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) "Anything overdue is included" else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(if (peek.newCount > 0) "Add" else "Open", color = MaterialTheme.colorScheme.onSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondary).padding(horizontal = 16.dp, vertical = 8.dp))
             }

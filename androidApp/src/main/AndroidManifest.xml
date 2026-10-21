@@ -7,6 +7,10 @@
     <!-- Phones are the target, but the app still installs without a telephony stack (tablets, Chromebooks): capture is just unavailable there. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
+    <queries>
+        <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
+    </queries>
+
     <application
         android:enableOnBackInvokedCallback="true"
         android:name=".ExpensesApp"
@@ -48,6 +52,8 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <receiver android:name=".NoticeActionReceiver" android:exported="false" />
 
         <service
             android:name=".NotificationCaptureService"

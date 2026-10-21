@@ -59,6 +59,11 @@ import app.expenses.ui.ReportsScreen
 import app.expenses.ui.SearchScreen
 import app.expenses.ui.RecurringScreen
 
+/** A request to pay a credit card: open the add form as a transfer to [accountId]. [n] counts requests, so the same card asked twice is two requests. */
+data class PayCardRequest(val n: Int, val accountId: String)
+
+private val NoPayCardRequests: StateFlow<PayCardRequest?> = kotlinx.coroutines.flow.MutableStateFlow(null)
+
 /** What [ExpensesRoot] needs from the host (Android activity, iOS view controller) and cannot get any other way. */
 interface RootHost {
     val platform: Platform
@@ -68,6 +73,15 @@ interface RootHost {
 
     /** Counts requests to open the bills page (a bill notification). */
     val billsRequests: StateFlow<Int>
+
+    /** The latest "Pay now" tap on a card notice (a new [PayCardRequest.n] each time), or null. A host without notification buttons keeps the default. */
+    val payCardRequests: StateFlow<PayCardRequest?> get() = NoPayCardRequests
+
+    /** True where a file can be handed to another app through the system share sheet (Android). */
+    val canShareFiles: Boolean get() = false
+
+    /** Offers [bytes] as a file called [name] to the apps the person picks (Google Drive, email, a chat). */
+    fun shareFile(name: String, mime: String, bytes: ByteArray) {}
     val lock: AppLockPort
 
     /** Opens an attachment (a URI from [LedgerViewModel.attachmentUri]) in another app. */
@@ -124,6 +138,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(Unit) { platform.trace("first composition") }
             var adding by rememberSaveable { mutableStateOf(false) }
+            // "fromAccount|toAccount|amount|note" when the add form is opened by Pay now on a card notice
+            var prefillTransfer by rememberSaveable { mutableStateOf<String?>(null) }
             var managingCategories by rememberSaveable { mutableStateOf(false) }
             LaunchedEffect(managingCategories) { viewModel.setCategoriesScreenOpen(managingCategories) }
             var managingAccounts by rememberSaveable { mutableStateOf(false) }
@@ -178,11 +194,20 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             LaunchedEffect(requests) {
                 if (requests > handledRequests) { handledRequests = requests; prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
             }
+            val payRequest by host.payCardRequests.collectAsState()
+            var handledPay by rememberSaveable { mutableIntStateOf(0) }
+            LaunchedEffect(payRequest) {
+                val r = payRequest ?: return@LaunchedEffect
+                if (r.n > handledPay) { handledPay = r.n; viewModel.payCardDraft(r.accountId) { draft -> if (draft != null) { prefillTransfer = draft; prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true } } }
+            }
 
             val editing by viewModel.editor.collectAsStateWithLifecycle(context = MAIN)
             val history by viewModel.history.collectAsStateWithLifecycle(context = MAIN)
             val attachmentList by viewModel.attachments.collectAsStateWithLifecycle(context = MAIN)
             val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle(context = MAIN)
+            val stagedList by viewModel.stagedAttachments.collectAsStateWithLifecycle(context = MAIN)
+            // closing the add form without saving deletes the files chosen for it (a save takes them first)
+            LaunchedEffect(adding) { if (!adding) viewModel.discardStaged() }
 
             if (locked) LockedScreen(lockMessage) { lock.requestUnlock() } else when (val s = state) {
                 UiState.Opening -> OpeningScreen()
@@ -344,7 +369,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         AccountsScreen(
                             rows = s.accountRows, onBack = { managingAccounts = false },
                             onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
-                            onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms,
+                            onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms, onSetCreditLimit = viewModel::setCreditLimit,
                         )
                     }
                     k == 12 -> {
@@ -429,6 +454,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx,
                                 autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
+                                canShareBackup = host.canShareFiles, onShareBackup = { name, pass -> viewModel.shareBackup(name, pass) { n, b -> host.shareFile(n, "application/octet-stream", b) } },
                             )
                         }
                     }
@@ -465,7 +491,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BackHandler { adding = false }
                         EntryFormScreen(
                             title = "Add",
-                            start = prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
+                            attachments = stagedList, attachmentProblem = attachmentProblem, onAttach = viewModel::stageAttachment,
+                            onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
+                            onRemoveAttachment = { a -> viewModel.unstageAttachment(a.id) },
+                            start = prefillTransfer?.split('|')?.let { p -> EntryDraft(null, DraftKind.TRANSFER, p[2], "", emptyList(), p[0], p[1], p.getOrElse(3) { "" }, nowMillis()) } ?: prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
                             kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
                             accounts = s.accounts,
                             categories = s.categories,
@@ -474,8 +503,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             lastExpenseCategory = s.lastCategory, lastIncomeCategory = s.lastIncomeCategory,
                             allTags = s.tags,
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
-                            onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null },
-                            onBack = { adding = false; prefillLoan = null },
+                            onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
+                            onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
                         )
                     }
                     k == 23 -> {

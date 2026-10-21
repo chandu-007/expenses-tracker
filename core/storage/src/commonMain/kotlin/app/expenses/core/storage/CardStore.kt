@@ -20,6 +20,12 @@ class CardStore(private val db: ExpensesDb, private val clock: HlcClock, private
 
     fun all(): List<CardTerms> = q.allCardTerms().executeAsList().map(::of)
 
+    /** The credit limit the person entered for a card, in minor units, or null. Kept on this device only (a setting, not part of the synced billing terms). */
+    fun creditLimit(accountId: String): Long? = q.settingValue("card_limit:$accountId").executeAsOneOrNull()?.toLongOrNull()?.takeIf { it > 0 }
+
+    /** Sets the credit limit; null or zero removes it. */
+    fun setCreditLimit(accountId: String, minor: Long?) { q.putSetting("card_limit:$accountId", if (minor != null && minor > 0) minor.toString() else "") }
+
     /** Saves the terms of a credit card. Refuses an account that is not a live credit card. */
     fun save(terms: CardTerms) {
         db.transaction {

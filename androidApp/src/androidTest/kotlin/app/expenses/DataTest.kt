@@ -260,4 +260,27 @@ class DataTest {
         compose.onNodeWithTag("backup_pass2").performTextInput("abcdefgX")
         compose.onNodeWithTag("create_backup").assertIsNotEnabled()
     }
+
+    // ---- sending a backup through the share sheet (Google Drive, email, a chat) ----
+
+    @Test
+    fun aBackupForTheShareSheetIsCheckedAndRestorableButIsNotCountedAsABackupMade() {
+        populate(); launch()
+        waitFor("share_backup"); waitFor("backup_drive_hint")
+        var plain: Pair<String, ByteArray>? = null
+        viewModel().shareBackup("expenses-backup-test.expbak", null) { n, b -> plain = n to b }
+        compose.waitUntil(10_000) { plain != null }
+        val (header, data) = app.expenses.core.storage.BackupFile.decode(plain!!.second)
+        assertEquals("expenses-backup", header.format); assertEquals(entryCount().toInt(), data.entries.size)
+        assertEquals(null, runBlocking { container.write { it.templates.setting(DataTransfer.SETTING_BACKUP_AT) } }, "sending is not confirmed, so no backup is recorded as made")
+        waitAnyText("Backup ready")
+        // with a passphrase the bytes are sealed: unreadable without it, readable with it
+        var sealed: ByteArray? = null
+        viewModel().shareBackup("b.expbak", "correct horse battery") { _, b -> sealed = b }
+        compose.waitUntil(90_000) { sealed != null }
+        assertTrue(BackupCrypto.isEncrypted(sealed!!))
+        assertTrue(runCatching { app.expenses.core.storage.BackupFile.decode(sealed!!) }.isFailure, "not readable as it is")
+        assertEquals(entryCount().toInt(), app.expenses.core.storage.BackupFile.decode(BackupCrypto.decrypt(sealed!!, "correct horse battery")).second.entries.size)
+    }
 }
+

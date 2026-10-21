@@ -85,7 +85,7 @@ class LoansUiTest {
         openLoans()
         node("loan_state_Asha").assertTextEquals("you owe"); node("loans_owe").assertTextContains("₹800.00", substring = true)
         // a person made in the form but never used can be taken off the list
-        tap("loan_give"); tap("new_person_chip"); type("new_person_name", "Typo Name"); tap("new_person_ok"); waitFor("person_chip_Typo Name"); tap("cancel")
+        tap("loan_give"); waitFor("amount"); compose.waitForIdle(); tap("new_person_chip"); type("new_person_name", "Typo Name"); tap("new_person_ok"); waitFor("person_chip_Typo Name"); tap("cancel")
         waitFor("loans_list"); waitFor("loan_row_Typo Name")
         tap("loan_row_Typo Name"); tap("loan_remove")
         compose.waitUntil(10_000) { !has("loan_row_Typo Name") && has("loan_row_Asha") }

@@ -45,6 +45,7 @@ class MainActivity : FragmentActivity() {
     /** Counts requests to open the add screen from the launcher shortcut or the Quick Settings tile. */
     private val addRequests = MutableStateFlow(0)
     private val billsRequests = MutableStateFlow(0)
+    private val payCardRequests = MutableStateFlow<PayCardRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("onCreate: begin")
@@ -52,6 +53,7 @@ class MainActivity : FragmentActivity() {
         (application as ExpensesApp).platform.activity = this
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
         if (savedInstanceState == null && intent.action == ACTION_OPEN_BILLS) billsRequests.value = 1
+        if (savedInstanceState == null && intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest(1, it) }
         if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS)) viewModel.deferGuide()
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
@@ -88,9 +90,22 @@ class MainActivity : FragmentActivity() {
         override val platform get() = app.platform
         override val addRequests get() = this@MainActivity.addRequests
         override val billsRequests get() = this@MainActivity.billsRequests
+        override val payCardRequests get() = this@MainActivity.payCardRequests
         // read on each use: tests replace ExpensesApp.lock
         private var port: ActivityLockPort? = null
         override val lock: AppLockPort get() = port?.takeIf { it.lock === app.lock } ?: ActivityLockPort(app.lock, this@MainActivity).also { port = it }
+
+        override val canShareFiles get() = true
+
+        override fun shareFile(name: String, mime: String, bytes: ByteArray) {
+            val dir = java.io.File(cacheDir, "backups").also { it.mkdirs() }
+            dir.listFiles().orEmpty().forEach { it.delete() } // earlier ones: a file of yours should not sit in the cache longer than it must
+            val file = java.io.File(dir, name.substringAfterLast('/').ifEmpty { "backup.expbak" })
+            file.writeBytes(bytes)
+            val uri = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, file.name).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            try { startActivity(Intent.createChooser(send, "Send backup to")) } catch (e: android.content.ActivityNotFoundException) { android.widget.Toast.makeText(this@MainActivity, "No app on this phone can take it.", android.widget.Toast.LENGTH_LONG).show() }
+        }
 
         override fun openAttachment(uri: String, mime: String) {
             val view = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), mime.ifBlank { "*/*" }).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -136,6 +151,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         if (intent.action == ACTION_ADD_EXPENSE) addRequests.value += 1
         if (intent.action == ACTION_OPEN_BILLS) billsRequests.value += 1
+        if (intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest((payCardRequests.value?.n ?: 0) + 1, it) }
         if (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS) viewModel.deferGuide()
     }
 
@@ -143,6 +159,9 @@ class MainActivity : FragmentActivity() {
         const val ACTION_ADD_EXPENSE = "app.expenses.action.ADD_EXPENSE"
         /** A bill notification: open the bills page. */
         const val ACTION_OPEN_BILLS = "app.expenses.action.OPEN_BILLS"
+        /** A card notice's Pay now: open the add form as a transfer to the card in [EXTRA_CARD_ID]. */
+        const val ACTION_PAY_CARD = "app.expenses.action.PAY_CARD"
+        const val EXTRA_CARD_ID = "card_id"
     }
 }
 

@@ -9,6 +9,8 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
+import app.expenses.core.domain.PeriodCompare
+import kotlinx.datetime.daysUntil
 import app.expenses.core.domain.BackupNudge
 import app.expenses.core.domain.Csv
 import app.expenses.core.domain.LastBackup
@@ -99,6 +101,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -174,7 +177,7 @@ data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int
 data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
 
 /** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
-data class SparkUi(val days: List<SparkDayUi> = emptyList()) { val isEmpty get() = days.none { it.minor > 0 } }
+data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point, or empty. */ val compare: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
@@ -190,7 +193,7 @@ data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<Bi
 data class BillPeekRow(val id: String, val title: String, val amountText: String, val dueIn: String, val isNew: Boolean, val overdue: Boolean)
 
 /** What the home banner shows about bills: how many are new, and the first few (new ones first, then the soonest being tracked). */
-data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0) { val isEmpty get() = rows.isEmpty() }
+data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0, /** Tracked bills due within a week, overdue ones included. */ val dueThisWeek: Int = 0) { val isEmpty get() = rows.isEmpty() }
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
@@ -212,7 +215,7 @@ data class AccountRowUi(
 )
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
-data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String)
+data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "")
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
@@ -572,9 +575,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
      * Saves the add or edit form: a new entry when [EntryDraft.id] is null, otherwise an edit. A new expense can also become a quick entry.
      * On a rule it breaks, the reason is shown and the form is left as it was (the editor stays open).
      */
-    fun saveEntry(draft: EntryDraft, saveAsTemplate: Boolean) = withStore { ok ->
+    fun saveEntry(draft: EntryDraft, saveAsTemplate: Boolean) {
+        // photos and files chosen before saving go with the new entry; taken now, on the caller's thread, so closing the form cannot discard them first
+        val carried = if (draft.id == null) takeStaged() else emptyList()
+        saveEntryNow(draft, saveAsTemplate, carried)
+    }
+
+    private fun saveEntryNow(draft: EntryDraft, saveAsTemplate: Boolean, carried: List<Staged>) = withStore { ok ->
         val startedAt = TimeSource.Monotonic.markNow()
-        val id = EntryActions(ok).save(draft)
+        val id = try { EntryActions(ok).save(draft) } catch (e: Exception) { restoreStaged(carried); throw e } // a refused save keeps what was chosen, to try again
+        carried.forEach { ok.attachments.add(it.id, id, it.name, it.mime, it.sizeBytes, it.sha256) }
         val amount = parseAmount(draft.amountText, inr)!!
         if (saveAsTemplate && draft.kind == DraftKind.EXPENSE && draft.id == null && !EntryDrafts.isSplit(draft)) {
             val name = draft.note.trim().ifEmpty { draft.category }
@@ -654,6 +664,43 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             }
         }
     }
+
+    // ---- files chosen while adding a new entry, before it exists ----
+
+    private class Staged(val id: String, val name: String, val mime: String, val sizeBytes: Long, val sha256: String)
+    private val staged = MutableStateFlow<List<Staged>>(emptyList())
+    private val _stagedUi = MutableStateFlow<List<AttachmentUi>>(emptyList())
+
+    /** The photos and files chosen so far for the entry being added; they are attached when it is saved and deleted if the form is closed. */
+    val stagedAttachments: StateFlow<List<AttachmentUi>> get() = _stagedUi
+
+    private fun publishStaged() { _stagedUi.value = staged.value.map { AttachmentUi(it.id, it.name, AttachmentRules.sizeText(it.sizeBytes), it.mime) } }
+    private fun takeStaged(): List<Staged> = staged.getAndUpdate { emptyList() }.also { publishStaged() }
+    private fun restoreStaged(items: List<Staged>) { staged.update { items + it }; publishStaged() }
+
+    /** Copies a picked or photographed file in for the entry about to be added. A refusal is shown as a message and leaves nothing behind. */
+    fun stageAttachment(uri: String) {
+        viewModelScope.launch(BACKGROUND) {
+            val id = Uuid.random().toString()
+            _attachmentProblem.value = null
+            try {
+                AttachmentRules.checkAdd(staged.value.size, null)?.let { throw IllegalArgumentException(it) }
+                val mime = platform.mimeType(uri).orEmpty()
+                val name = platform.displayName(uri)
+                val copied = attachmentFiles.copyIn(id, uri)
+                staged.update { it + Staged(id, AttachmentRules.safeName(name ?: uri.substringAfterLast('/').ifEmpty { null }), mime, copied.sizeBytes, copied.sha256) }
+                publishStaged()
+            } catch (e: Exception) {
+                attachmentFiles.delete(id)
+                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file: ${e.message ?: e::class.simpleName}"
+            }
+        }
+    }
+
+    fun unstageAttachment(id: String) { staged.update { list -> list.filterNot { it.id == id } }; publishStaged(); attachmentFiles.delete(id) }
+
+    /** The add form was closed without saving: the files chosen for it are deleted. */
+    fun discardStaged() { takeStaged().forEach { attachmentFiles.delete(it.id) }; _attachmentProblem.value = null }
 
     fun removeAttachment(entryId: String, id: String) = withStore { ok ->
         ok.attachments.delete(id)
@@ -923,11 +970,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val perDay = ok.reports.spendPoints(DatePeriod(first, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr)
             .groupBy { dateOfMillis(it.atMillis).epochDay() }.mapValues { (_, v) -> v.sumOf { it.minor } }
         val dayFmt = DatePattern("d MMM")
+        // this period against the last one at the same point in it
+        val budgetPeriod = ok.budgets.period()
+        val compare = PeriodCompare.lastName(budgetPeriod)?.let { last ->
+            val cur = budgetPeriod.containing(today)
+            val before = budgetPeriod.containing(cur.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
+            val daysIn = cur.start.daysUntil(today) + 1
+            val comparableEnd = minOf(before.start.plus(daysIn, kotlinx.datetime.DateTimeUnit.DAY), before.endExclusive)
+            val now = ok.reports.spent(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).minorUnits
+            val earlier = ok.reports.spent(DatePeriod(before.start, comparableEnd), zone, inr).minorUnits
+            PeriodCompare.describe(now, earlier, last) { Money(it, inr).formatted() }
+        }.orEmpty()
         return SparkUi((0..13).map { i ->
             val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
             val minor = perDay[d.toEpochDays()] ?: 0L
             SparkDayUi(d.toEpochDays(), minor, dayFmt.format(localDateOfEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
-        })
+        }, compare)
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
@@ -945,7 +1003,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 if (shownOpening == 0L) "" else Money(shownOpening, inr).toPlainString(), ok.store.accountUsage(AccountId(a.id)),
                 ok.db.schemaQueries.accountSavedItemUsage(a.id).executeAsOne(),
                 if (type != AccountType.CREDIT_CARD) null else ok.cards.terms(a.id)?.let { t ->
-                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty())
+                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty())
                 },
                 looks[a.id]?.network?.name, looks[a.id]?.tier?.name, looks[a.id]?.last4,
             )
@@ -1004,7 +1062,34 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
     }
 
-    fun clearCardTerms(accountId: String) = withStore { ok -> ok.cards.clear(accountId); refresh(ok) }
+    fun clearCardTerms(accountId: String) = withStore { ok -> ok.cards.clear(accountId); ok.cards.setCreditLimit(accountId, null); refresh(ok) }
+
+    /** Sets (or, with empty text, removes) a card's credit limit, for the "near the limit" notice. Text that is not a positive amount removes it. */
+    fun setCreditLimit(accountId: String, limit: String) = withStore { ok ->
+        val minor = limit.trim().replace(",", "").takeIf { it.isNotEmpty() }?.let { app.expenses.core.domain.parseAmount(it, BaseCurrency.current)?.minorUnits }
+        ok.cards.setCreditLimit(accountId, minor)
+        refresh(ok)
+    }
+
+    /**
+     * What Pay now on a card notice opens: "fromAccount|toAccount|amount|note" for a transfer to the card [cardAccountId] of what is left on its statement
+     * (empty when nothing is known), from the account used last (or the first other one). Null when the card is gone or there is no account to pay from.
+     */
+    fun payCardDraft(cardAccountId: String, onReady: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val draft = container.write { ok ->
+                val card = ok.db.schemaQueries.accountById(cardAccountId).executeAsOneOrNull() ?: return@write null
+                if (card.archived != 0L) return@write null
+                val active = ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L && it.id != cardAccountId }
+                val last = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } }
+                val from = last ?: active.firstOrNull { it.type != "CREDIT_CARD" }?.id ?: active.firstOrNull()?.id ?: return@write null
+                val left = ok.cards.standing(cardAccountId, todayLocal(), kotlinx.datetime.TimeZone.currentSystemDefault())?.remaining ?: 0L
+                val amount = if (left > 0) Money(left, BaseCurrency.current).toPlainString() else ""
+                listOf(from, cardAccountId, amount, "Card payment: ${card.name}").joinToString("|")
+            }
+            withContext(Dispatchers.Main) { onReady(draft) }
+        }
+    }
 
     fun setAccountArchived(id: String, archived: Boolean) = withStore { ok ->
         val row = ok.db.schemaQueries.accountById(id).executeAsOneOrNull() ?: return@withStore
@@ -1275,8 +1360,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val shown = ok.bills.list(app.expenses.core.storage.BillStatus.FOUND, 3).map { it to true } +
             ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED, 3).filter { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { it <= soon } == true }.map { it to false }
         val rows = shown.take(3).map { (b, isNew) -> billRow(ok, b, accounts, today).let { BillPeekRow(it.id, it.title, it.amountText, it.dueIn, isNew, it.overdue) } }
+        val week = today.plusDays(7)
+        val dueThisWeek = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED).count { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { it <= week } == true }
         if (rows.isEmpty()) return BillPeekUi(newCount = fresh)
-        return BillPeekUi(fresh, rows, more = (fresh + shown.count { !it.second } - rows.size).coerceAtLeast(0))
+        return BillPeekUi(fresh, rows, more = (fresh + shown.count { !it.second } - rows.size).coerceAtLeast(0), dueThisWeek = dueThisWeek)
     }
 
     private fun billsChanged(ok: AppContainer.Opened.Ok, message: String? = null) {
@@ -1975,6 +2062,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun createBackup(uri: String, passphrase: String?) = dataAction {
         val saved = actions.backup(uri, passphrase)
         "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories" + if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private."
+    }
+
+    /**
+     * Makes a backup and hands it to [deliver] (on the main thread) to be sent through the share sheet: Google Drive, email, a chat. Checked first like a
+     * saved one, but not counted as a backup made, because whether it was sent is out of our hands.
+     */
+    fun shareBackup(name: String, passphrase: String?, deliver: (name: String, bytes: ByteArray) -> Unit) = dataAction {
+        val (bytes, saved) = actions.backupForSharing(passphrase)
+        withContext(Dispatchers.Main) { deliver(name, bytes) }
+        "Backup ready: ${saved.counts.entries} entries" + (if (saved.encrypted) ", protected by your passphrase. " else ", not encrypted. ") + "Choose where to send it; this app cannot tell whether it arrived, so check there."
     }
 
     /** Opens a backup file. Nothing changes until [confirmRestore]. */

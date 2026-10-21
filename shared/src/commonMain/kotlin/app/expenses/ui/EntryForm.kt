@@ -505,7 +505,6 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Receipts and files", style = MaterialTheme.typography.labelMedium)
-        if (!saved) { Text("Save the entry first, then you can attach a photo or file to it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint")); return }
         items.forEach { a ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("attachment_${a.name}")) {
                 TextButton(onClick = { onOpen(a) }, modifier = Modifier.weight(1f).testTag("attachment_open_${a.name}")) { Text("${a.name} · ${a.sizeText}", maxLines = 1) }
@@ -513,8 +512,11 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
             }
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("attachment_problem")) }
-        OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
-        Text("Kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (picker.canTakePhoto) OutlinedButton(onClick = { picker.takePhoto { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_camera")) { Text("Take a photo") }
+            OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
+        }
+        Text(if (saved) "Kept on this phone only. A backup does not include them yet." else "Optional. Added to the entry when you save it, kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint"))
     }
 }
 

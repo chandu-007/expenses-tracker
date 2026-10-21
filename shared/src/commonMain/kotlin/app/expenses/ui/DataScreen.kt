@@ -49,6 +49,8 @@ fun DataScreen(
     onAutoFrequency: (AutoExportFrequency) -> Unit = {},
     onAutoNow: () -> Unit = {},
     onBackup: (String, String?) -> Unit,
+    canShareBackup: Boolean = false,
+    onShareBackup: (name: String, passphrase: String?) -> Unit = { _, _ -> },
     onOpenBackup: (String) -> Unit,
     onImportStatement: (String) -> Unit,
     onUnlock: (String) -> Unit,
@@ -137,7 +139,7 @@ fun DataScreen(
 
             Text("Backup", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Everything in one file: entries, categories, budgets, repeating expenses. Keep it somewhere safe, like your drive or email to yourself. " +
+                "Everything in one file: entries, categories, budgets, repeating expenses. Keep it somewhere safe, like your Google Drive or email to yourself. " +
                     "Uninstalling the app deletes the data on this phone, so make a backup first.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -155,7 +157,12 @@ fun DataScreen(
                     modifier = Modifier.fillMaxWidth().testTag("backup_pass2"),
                 )
             }
-            OutlinedButton(onClick = { pickers.createDocument("expenses-backup-$today.expbak", "application/octet-stream") { it?.let { uri -> onBackup(uri, pass.ifEmpty { null }) } } }, enabled = !state.busy && passProblem == null, modifier = Modifier.testTag("create_backup")) { Text("Create backup") }
+            OutlinedButton(onClick = { pickers.createDocument("expenses-backup-$today.expbak", "application/octet-stream") { it?.let { uri -> onBackup(uri, pass.ifEmpty { null }) } } }, enabled = !state.busy && passProblem == null, modifier = Modifier.testTag("create_backup")) { Text("Save backup to a file") }
+            Text("Choose Google Drive in the list that opens to keep the file in your Drive.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_drive_hint"))
+            if (canShareBackup) {
+                OutlinedButton(onClick = { onShareBackup("expenses-backup-$today.expbak", pass.ifEmpty { null }) }, enabled = !state.busy && passProblem == null, modifier = Modifier.testTag("share_backup")) { Text("Send backup to…") }
+                Text("Opens the share sheet: Google Drive, email, WhatsApp. Sending is not confirmed here, so it does not count as a backup made.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             HorizontalDivider()
 
             Text("Restore", style = MaterialTheme.typography.titleMedium)

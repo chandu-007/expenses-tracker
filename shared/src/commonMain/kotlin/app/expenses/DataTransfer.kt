@@ -41,14 +41,29 @@ class DataTransfer(private val platform: Platform, private val container: AppCon
         return count.toInt()
     }
 
-    /** Writes a full backup, encrypted when [passphrase] is not null. */
-    suspend fun backup(uri: String, passphrase: String?): Saved {
+    private suspend fun backupContents(passphrase: String?): Triple<ByteArray, BackupCounts, Boolean> {
         val (plain, counts) = container.write { ok ->
             val data = ok.backup.export()
             BackupFile.encode(data, now()) to BackupCounts(data.accounts.size, data.categories.size, data.entries.size, data.templates.size, data.budgets.size, data.recurring.size)
         } ?: throw BackupException("The data is not available.")
         val cipher = platform.backupCipher
-        val bytes = if (passphrase != null) cipher.encrypt(plain, passphrase) else plain
+        return Triple(if (passphrase != null) cipher.encrypt(plain, passphrase) else plain, counts, passphrase != null)
+    }
+
+    /**
+     * A full backup as bytes, for handing to another app (the share sheet: Drive, email, a chat), checked the way a restore would. It is not recorded as
+     * a backup made: there is no telling whether the person finished sending it.
+     */
+    suspend fun backupForSharing(passphrase: String?): Pair<ByteArray, Saved> {
+        val (bytes, counts, encrypted) = backupContents(passphrase)
+        BackupFile.decode(if (passphrase != null) platform.backupCipher.decrypt(bytes, passphrase) else bytes)
+        return bytes to Saved(bytes.size, counts, encrypted)
+    }
+
+    /** Writes a full backup, encrypted when [passphrase] is not null. */
+    suspend fun backup(uri: String, passphrase: String?): Saved {
+        val (bytes, counts, _) = backupContents(passphrase)
+        val cipher = platform.backupCipher
         writeAndVerify(uri, bytes)
         // Check the file the way a restore would, so a backup that could not be restored is found out now.
         val back = if (passphrase != null) cipher.decrypt(read(uri), passphrase) else read(uri)

@@ -147,9 +147,97 @@ class NotificationsTest {
         assertEquals(listOf("BESCOM electricity bill due in 3 days"), titles(LocalDate(2026, 10, 10)))
         assertEquals(listOf("BESCOM electricity bill due tomorrow"), titles(LocalDate(2026, 10, 8)))
         assertEquals(listOf("BESCOM electricity bill is due today"), titles(LocalDate(2026, 10, 7)))
-        assertEquals(listOf("BESCOM electricity bill is overdue"), titles(LocalDate(2026, 10, 1)))
+        assertEquals(listOf("BESCOM electricity bill is overdue"), titles(LocalDate(2026, 10, 6)))
         assertEquals(emptyList(), titles(LocalDate(2026, 10, 7), minute = at(8)), "before the reminder hour (9:00)")
         assertEquals(emptyList(), titles(LocalDate(2026, 10, 7), sent = setOf(NoticePlanner.trackedKey("t", "today"))))
         assertEquals(listOf("BESCOM electricity bill is due today"), titles(LocalDate(2026, 10, 7), sent = setOf(NoticePlanner.trackedKey("t", "ahead"))), "having been told ahead does not stop the notice on the day")
+    }
+
+    private val noQuiet = NotificationPrefs(quietEnabled = false)
+
+    @Test
+    fun theTwoDayAheadRemindersCanBeSwitchedOffEachOnItsOwnAndTheDayItselfAlwaysComes() {
+        fun titles(date: LocalDate, prefs: NotificationPrefs) = planBills(trackedBills = listOf(tracked("t", date)), prefs = prefs).map { it.title }
+        assertEquals(emptyList(), titles(LocalDate(2026, 10, 10), noQuiet.copy(billAhead3 = false)))
+        assertEquals(listOf("BESCOM electricity bill due tomorrow"), titles(LocalDate(2026, 10, 8), noQuiet.copy(billAhead3 = false)))
+        assertEquals(emptyList(), titles(LocalDate(2026, 10, 8), noQuiet.copy(billAhead1 = false)))
+        assertEquals(listOf("BESCOM electricity bill due in 3 days"), titles(LocalDate(2026, 10, 10), noQuiet.copy(billAhead1 = false)))
+        assertEquals(listOf("BESCOM electricity bill is due today"), titles(LocalDate(2026, 10, 7), noQuiet.copy(billAhead3 = false, billAhead1 = false)))
+    }
+
+    @Test
+    fun anOverdueBillIsRemindedOnceADayForAWeekWithTheDaysCountedAndThenLeftAlone() {
+        fun plan(daysOverdue: Int, sent: Set<String> = emptySet()) = planBills(trackedBills = listOf(tracked("t", LocalDate.fromEpochDays(today.toEpochDays() - daysOverdue))), sent = sent)
+        assertEquals("BESCOM electricity bill is overdue", plan(1).single().title)
+        assertEquals("BESCOM electricity bill is overdue by 3 days", plan(3).single().title)
+        assertEquals(1, plan(NoticePlanner.OVERDUE_NAG_DAYS).size, "the seventh day still reminds")
+        assertEquals(emptyList(), plan(NoticePlanner.OVERDUE_NAG_DAYS + 1), "then it is left alone")
+        assertEquals(emptyList(), plan(3, sent = setOf(NoticePlanner.trackedKey("t", "overdue3"))), "once for each day")
+        assertEquals(1, plan(3, sent = setOf(NoticePlanner.trackedKey("t", "overdue2"))).size, "yesterday's notice does not stop today's")
+        assertEquals("t", plan(2).single().ref, "the notice knows its bill, for its buttons")
+    }
+
+    private fun planWith(prefs: NotificationPrefs = noQuiet, minute: Int = at(12), sent: Set<String> = emptySet(), pace: List<BudgetPace> = emptyList(), wrapUp: BudgetWrapUp? = null,
+                         statements: List<CardStatementMade> = emptyList(), limits: List<CardLimitUse> = emptyList(), cleared: List<CardCleared> = emptyList(), budgets: List<BudgetStanding> = emptyList()) =
+        NoticePlanner.plan(prefs, today, minute, emptyList(), budgets, sent, pace = pace, wrapUp = wrapUp, statements = statements, limits = limits, cleared = cleared)
+
+    private val start = LocalDate(2026, 10, 1)
+    private fun pace(scope: String? = null) = BudgetPace(scope, "Food", 60, 30, "₹400.00 left of ₹1,000.00", start)
+
+    @Test
+    fun aPaceNoticeIsSentOncePerBudgetAndPeriodAndNotAfterNearOrOverWasSaid() {
+        val n = planWith(pace = listOf(pace())).single()
+        assertEquals(NoticeKind.BUDGET_PACE, n.kind); assertEquals("Food: spending is ahead of the month", n.title); assertEquals("60% used with 30% of the month gone. ₹400.00 left of ₹1,000.00", n.text)
+        assertEquals(emptyList(), planWith(pace = listOf(pace()), sent = setOf(NoticePlanner.paceKey(null, start))))
+        assertEquals(emptyList(), planWith(pace = listOf(pace()), sent = setOf(NoticePlanner.budgetKey(null, start, BudgetState.NEAR))))
+        assertEquals(2, planWith(pace = listOf(pace(), pace("Food"))).size, "the overall budget and a category are separate")
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(budgetPace = false), pace = listOf(pace())))
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(budgets = false), pace = listOf(pace())))
+    }
+
+    @Test
+    fun theMonthEndNoteComesOnceFromTheReminderHourAndCanBeSwitchedOff() {
+        val w = BudgetWrapUp(LocalDate(2026, 9, 1), "₹8,000.00 spent of ₹10,000.00: ₹2,000.00 kept.")
+        assertEquals("You kept last month's budget", planWith(wrapUp = w).single().title)
+        assertEquals(emptyList(), planWith(wrapUp = w, minute = at(8)))
+        assertEquals(emptyList(), planWith(wrapUp = w, sent = setOf(NoticePlanner.wrapUpKey(w.periodStart))))
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(budgetWrapUp = false), wrapUp = w))
+    }
+
+    @Test
+    fun aCardStatementNoticeSaysWhatIsOwedOnceAndHonoursItsSwitch() {
+        val st = CardStatementMade("card", "HDFC card", LocalDate(2026, 10, 5), LocalDate(2026, 10, 25), "₹12,000.00", "₹600.00")
+        val n = planWith(statements = listOf(st)).single()
+        assertEquals(NoticeKind.CARD_STATEMENT, n.kind); assertEquals("HDFC card statement is ready", n.title); assertEquals("₹12,000.00 owed, minimum ₹600.00, due 25 Oct", n.text); assertEquals("card", n.ref)
+        assertEquals(emptyList(), planWith(statements = listOf(st), sent = setOf(NoticePlanner.cardStatementKey("card", st.statementDate))))
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(cardStatement = false), statements = listOf(st)))
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(bills = false), statements = listOf(st)))
+        assertEquals(emptyList(), planWith(statements = listOf(st), minute = at(8)))
+    }
+
+    @Test
+    fun theCreditLimitNoticeComesOncePerMonthAndLevelAndTheHundredMakesTheEightyPointless() {
+        fun use(level: Int, month: Int = 2026 * 12 + 10) = CardLimitUse("card", "HDFC card", level, level, "₹80,000.00", "₹1,00,000.00", month)
+        assertEquals("HDFC card is 80% of its limit", planWith(limits = listOf(use(80))).single().title)
+        assertEquals("HDFC card is at its credit limit", planWith(limits = listOf(use(100))).single().title)
+        assertEquals(emptyList(), planWith(limits = listOf(use(80)), sent = setOf(NoticePlanner.cardLimitKey("card", 80, 2026 * 12 + 10))))
+        assertEquals(1, planWith(limits = listOf(use(80, 2026 * 12 + 11)), sent = setOf(NoticePlanner.cardLimitKey("card", 80, 2026 * 12 + 10))).size, "a new month says it again")
+        assertEquals(emptyList(), planWith(limits = listOf(use(80)), sent = setOf(NoticePlanner.cardLimitKey("card", 100, 2026 * 12 + 10))))
+        assertEquals(emptyList(), planWith(prefs = noQuiet.copy(cardLimit = false), limits = listOf(use(100))))
+        assertEquals(emptyList(), planWith(prefs = NotificationPrefs(quietEnabled = true, quietStartMinute = at(22), quietEndMinute = at(7)), limits = listOf(use(100)), minute = at(3)), "not in quiet hours")
+    }
+
+    @Test
+    fun aClearedNoticeIsOncePerStatement() {
+        val c = CardCleared("card", "HDFC card", LocalDate(2026, 10, 25))
+        assertEquals("HDFC card bill is paid", planWith(cleared = listOf(c)).single().title)
+        assertEquals(emptyList(), planWith(cleared = listOf(c), sent = setOf(NoticePlanner.cardClearedKey("card", c.dueDate))))
+    }
+
+    @Test
+    fun theNearLimitPercentMustBeInRange() {
+        assertEquals(50, NotificationPrefs(budgetNearPercent = 50).budgetNearPercent)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { NotificationPrefs(budgetNearPercent = 40) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { NotificationPrefs(budgetNearPercent = 96) }
     }
 }

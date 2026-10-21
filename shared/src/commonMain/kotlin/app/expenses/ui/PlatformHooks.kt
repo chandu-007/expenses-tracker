@@ -32,6 +32,12 @@ interface FilePickers {
 
     /** Choose a folder the app may keep writing into later. */
     fun openFolder(onPicked: (String?) -> Unit)
+
+    /** True where the phone can take a photo for the app (a camera app is installed). Always false by default. */
+    val canTakePhoto: Boolean get() = false
+
+    /** Takes a photo with the phone's camera app and returns its address, or null when cancelled or unavailable. Needs no camera permission of its own. */
+    fun takePhoto(onPicked: (String?) -> Unit) { onPicked(null) }
 }
 
 @Composable

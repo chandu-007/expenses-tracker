@@ -38,9 +38,33 @@ object Notifier {
     }
 
     internal fun channelOf(kind: NoticeKind) = when (kind) {
-        NoticeKind.BILL_DUE, NoticeKind.CARD_DUE, NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED -> CHANNEL_BILLS
-        NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> CHANNEL_BUDGETS
+        NoticeKind.BILL_DUE, NoticeKind.CARD_DUE, NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED, NoticeKind.CARD_STATEMENT, NoticeKind.CARD_LIMIT, NoticeKind.CARD_CLEARED -> CHANNEL_BILLS
+        NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER, NoticeKind.BUDGET_PACE, NoticeKind.BUDGET_WRAPUP -> CHANNEL_BUDGETS
         NoticeKind.WEEKLY_RECAP -> CHANNEL_RECAP
+    }
+
+    /**
+     * The buttons a notice carries: a tracked bill can be marked paid or reminded about again in three hours without opening the app; a card notice
+     * has Pay now, which opens the add form as a transfer to that card with what is left to pay.
+     */
+    private fun addButtons(context: Context, builder: NotificationCompat.Builder, n: Notice) {
+        val ref = n.ref ?: return
+        val id = n.key.hashCode()
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        when (n.kind) {
+            NoticeKind.BILL_TRACKED -> {
+                val paid = Intent(context, NoticeActionReceiver::class.java).setAction(NoticeActionReceiver.ACTION_MARK_PAID).putExtra(NoticeActionReceiver.EXTRA_REF, ref).putExtra(NoticeActionReceiver.EXTRA_NOTIFICATION_ID, id)
+                val later = Intent(context, NoticeActionReceiver::class.java).setAction(NoticeActionReceiver.ACTION_SNOOZE).putExtra(NoticeActionReceiver.EXTRA_REF, ref)
+                    .putExtra(NoticeActionReceiver.EXTRA_TITLE, n.title).putExtra(NoticeActionReceiver.EXTRA_TEXT, n.text).putExtra(NoticeActionReceiver.EXTRA_KIND, n.kind.name).putExtra(NoticeActionReceiver.EXTRA_NOTIFICATION_ID, id)
+                builder.addAction(0, "Mark paid", PendingIntent.getBroadcast(context, id * 3 + 1, paid, flags))
+                builder.addAction(0, "In 3 hours", PendingIntent.getBroadcast(context, id * 3 + 2, later, flags))
+            }
+            NoticeKind.CARD_DUE, NoticeKind.CARD_STATEMENT, NoticeKind.CARD_LIMIT -> {
+                val pay = Intent(context, MainActivity::class.java).setAction(MainActivity.ACTION_PAY_CARD).putExtra(MainActivity.EXTRA_CARD_ID, ref).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                builder.addAction(0, "Pay now", PendingIntent.getActivity(context, id * 3 + 3, pay, flags))
+            }
+            else -> {}
+        }
     }
 
     /** Shows each notice that can be shown and returns those that were. */
@@ -61,6 +85,7 @@ object Notifier {
             if (isBill) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
                 NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_notification).setContentTitle(if (n.kind == NoticeKind.BILL_FOUND) "A bill was found" else "A bill needs attention").setContentText("Open the app to see it").build(),
             )
+            addButtons(context, builder, n)
             val notification = builder.build()
             @Suppress("MissingPermission") // checked in canShow
             NotificationManagerCompat.from(context).notify(n.key.hashCode(), notification)

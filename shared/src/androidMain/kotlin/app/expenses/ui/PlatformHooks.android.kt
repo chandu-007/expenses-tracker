@@ -93,8 +93,24 @@ actual fun rememberFilePickers(): FilePickers {
         }
         pending?.invoke(uri?.toString()); pending = null
     }
-    return remember(open, create, folder) {
+    // the photo is written to a file of ours in the cache by the camera app (through our own file provider), so no camera permission is needed
+    var photoFile by remember { mutableStateOf<java.io.File?>(null) }
+    val photo = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val file = photoFile; photoFile = null
+        val uri = if (ok && file != null && file.length() > 0) androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file) else null
+        pending?.invoke(uri?.toString()); pending = null
+    }
+    val cameraAvailable = remember(context) { Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).resolveActivity(context.packageManager) != null }
+    return remember(open, create, folder, photo, cameraAvailable) {
         object : FilePickers {
+            override val canTakePhoto: Boolean get() = cameraAvailable
+            override fun takePhoto(onPicked: (String?) -> Unit) {
+                val dir = java.io.File(context.cacheDir, "camera").also { it.mkdirs() }
+                dir.listFiles().orEmpty().filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }.forEach { it.delete() } // yesterday's leftovers
+                val file = java.io.File.createTempFile("bill", ".jpg", dir)
+                photoFile = file; pending = onPicked
+                try { photo.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)) } catch (e: Exception) { photoFile = null; pending = null; file.delete(); onPicked(null) }
+            }
             override fun openDocument(mimeTypes: List<String>, onPicked: (String?) -> Unit) { pending = onPicked; open.launch(mimeTypes.toTypedArray()) }
             override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) { pending = onPicked; create.launch(suggestedName to mime) }
             override fun openFolder(onPicked: (String?) -> Unit) { pending = onPicked; folder.launch(null) }

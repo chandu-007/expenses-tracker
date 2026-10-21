@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -50,13 +51,13 @@ private fun TimeRow(label: String, minute: Int, tag: String, enabled: Boolean, o
 }
 
 @Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title)
+            Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.testTag(tag))
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled, modifier = Modifier.testTag(tag))
     }
 }
 
@@ -84,10 +85,24 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
                     ) { Text("Allow notifications") }
                 }
             }
-            SwitchRow("Bill reminders", "Once, on the day a repeating expense is due and again if it is overdue", prefs.bills, "notif_bills") { on -> onChange { p -> p.copy(bills = on) } }
+            SwitchRow("Bill reminders", "On the day a bill or repeating expense is due, then once a day for a week while it is overdue", prefs.bills, "notif_bills") { on -> onChange { p -> p.copy(bills = on) } }
             TimeRow("Remind me from", prefs.billHour * 60, "notif_bill_hour", prefs.bills) { d -> onChange { p -> p.copy(billHour = (p.billHour + d).mod(24)) } }
+            SwitchRow("3 days before a bill is due", "A heads-up for a bill you are tracking", prefs.billAhead3, "notif_ahead3", enabled = prefs.bills) { on -> onChange { p -> p.copy(billAhead3 = on) } }
+            SwitchRow("The day before", "One more reminder the day before", prefs.billAhead1, "notif_ahead1", enabled = prefs.bills) { on -> onChange { p -> p.copy(billAhead1 = on) } }
             HorizontalDivider()
-            SwitchRow("Budget alerts", "Once when a budget reaches 80% of its limit, and once when it goes over", prefs.budgets, "notif_budgets") { on -> onChange { p -> p.copy(budgets = on) } }
+            Text("Credit cards", style = MaterialTheme.typography.titleSmall)
+            SwitchRow("When a statement is made", "What is owed, the minimum and the due date (set billing dates on the card under Accounts)", prefs.cardStatement, "notif_card_statement", enabled = prefs.bills) { on -> onChange { p -> p.copy(cardStatement = on) } }
+            SwitchRow("Near the credit limit", "At 80% and at 100% of the limit you enter on the card. Also says when a bill has been paid in full", prefs.cardLimit, "notif_card_limit", enabled = prefs.bills) { on -> onChange { p -> p.copy(cardLimit = on) } }
+            HorizontalDivider()
+            SwitchRow("Budget alerts", "When a budget reaches the level below, and once when it goes over", prefs.budgets, "notif_budgets") { on -> onChange { p -> p.copy(budgets = on) } }
+            Text("Warn me at", color = if (prefs.budgets) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(50, 70, 80, 90).forEach { percent ->
+                    FilterChip(selected = prefs.budgetNearPercent == percent, onClick = { onChange { p -> p.copy(budgetNearPercent = percent) } }, enabled = prefs.budgets, label = { Text("$percent%") }, modifier = Modifier.testTag("notif_near_$percent"))
+                }
+            }
+            SwitchRow("Spending ahead of the month", "Before the limit is near: for example 60% used with 30% of the month gone", prefs.budgetPace, "notif_pace", enabled = prefs.budgets) { on -> onChange { p -> p.copy(budgetPace = on) } }
+            SwitchRow("Month-end note", "In the first days of a month: how last month went, if you stayed under the overall budget", prefs.budgetWrapUp, "notif_wrapup", enabled = prefs.budgets) { on -> onChange { p -> p.copy(budgetWrapUp = on) } }
             HorizontalDivider()
             SwitchRow("Weekly recap", "Once a week, early in the week, from the hour above: how much you spent last week, against the week before, and where most of it went. Off until you turn it on", prefs.recap, "notif_recap") { on -> onChange { p -> p.copy(recap = on) } }
             HorizontalDivider()

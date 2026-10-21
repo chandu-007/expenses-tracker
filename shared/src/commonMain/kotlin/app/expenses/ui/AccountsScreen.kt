@@ -60,6 +60,7 @@ fun AccountsScreen(
     onDelete: (String) -> Unit,
     onSaveCard: (id: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, done: (String?) -> Unit) -> Unit,
     onClearCard: (String) -> Unit,
+    onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
 ) {
     var editing by remember { mutableStateOf<AccountRowUi?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -87,8 +88,8 @@ fun AccountsScreen(
             }
         }
     }
-    if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete, onSaveCard, onClearCard)
-    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard) }
+    if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit)
+    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit) }
 }
 
 @Composable
@@ -119,6 +120,7 @@ private fun AccountDialog(
     onDelete: (String) -> Unit,
     onSaveCard: (String, String, String, String, String, (String?) -> Unit) -> Unit,
     onClearCard: (String) -> Unit,
+    onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
 ) {
     var cardOpen by remember { mutableStateOf(false) }
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
@@ -130,7 +132,7 @@ private fun AccountDialog(
     var problem by remember { mutableStateOf<String?>(null) }
     val liability = type == "CREDIT_CARD" || type == "LOAN"
     val onlyActive = existing != null && !existing.archived && all.count { !it.archived } == 1
-    if (cardOpen && existing != null) CardTermsDialog(existing, onSaveCard, onClearCard) { cardOpen = false }
+    if (cardOpen && existing != null) CardTermsDialog(existing, onSaveCard, onClearCard, onSetCreditLimit) { cardOpen = false }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(if (existing == null) "New account" else "Edit account") },
@@ -193,7 +195,8 @@ private fun AccountDialog(
 
 /** The billing dates of a credit card. Days are 1 to 28 so every month has them. */
 @Composable
-private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, String, String, (String?) -> Unit) -> Unit, onClear: (String) -> Unit, onClose: () -> Unit) {
+private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, String, String, (String?) -> Unit) -> Unit, onClear: (String) -> Unit, onSetLimit: (String, String) -> Unit, onClose: () -> Unit) {
+    var limit by rememberSaveable(a.id) { mutableStateOf(a.card?.creditLimit.orEmpty()) }
     var statement by rememberSaveable(a.id) { mutableStateOf(a.card?.statementDay?.toString() ?: "") }
     var due by rememberSaveable(a.id) { mutableStateOf(a.card?.dueDay?.toString() ?: "") }
     var percent by rememberSaveable(a.id) { mutableStateOf(a.card?.minDuePercent?.toString() ?: "5") }
@@ -210,12 +213,13 @@ private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, St
                 field(due, "Payment due day (1 to 28)", "card_due_day") { due = it }
                 field(percent, "Minimum due, percent of the statement", "card_min_percent") { percent = it }
                 field(remind, "Remind this many days before (0 to 10)", "card_remind_days") { remind = it }
+                OutlinedTextField(limit, { v -> if (v.all { it.isDigit() || it == '.' } && v.length <= 12) limit = v }, label = { Text("Credit limit, optional") }, supportingText = { Text("For a notice at 80% and 100% of it") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag("card_limit"))
                 Text("Both days are on your card statement. The minimum is only an estimate; your statement has the exact figure. You get one reminder ahead and one on the due day, and none once the statement is paid.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("card_problem")) }
                 if (a.card != null) TextButton(onClick = { onClear(a.id); onClose() }, modifier = Modifier.testTag("card_clear")) { Text("Remove billing dates") }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(a.id, statement, due, percent, remind) { p -> if (p == null) onClose() else problem = p } }, modifier = Modifier.testTag("card_save")) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(a.id, statement, due, percent, remind) { p -> if (p == null) { onSetLimit(a.id, limit); onClose() } else problem = p } }, modifier = Modifier.testTag("card_save")) { Text("Save") } },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
 }

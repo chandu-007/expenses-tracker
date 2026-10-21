@@ -13,7 +13,12 @@ import app.expenses.core.domain.NoticePlanner
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.formatted
 import app.expenses.core.storage.db.ExpensesDb
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.TimeZone
 
 /** What one check found: the repeating expenses it posted by itself, and the notices that should be shown now. */
@@ -44,6 +49,8 @@ class NotificationService(
             NotificationPrefs(
                 bills = flag(BILLS, d.bills), budgets = flag(BUDGETS, d.budgets), quietEnabled = flag(QUIET_ON, d.quietEnabled),
                 quietStartMinute = int(QUIET_START, d.quietStartMinute), quietEndMinute = int(QUIET_END, d.quietEndMinute), billHour = int(BILL_HOUR, d.billHour), recap = flag(RECAP, d.recap),
+                budgetNearPercent = int(NEAR_PERCENT, d.budgetNearPercent), budgetPace = flag(PACE, d.budgetPace), budgetWrapUp = flag(WRAP_UP, d.budgetWrapUp),
+                billAhead3 = flag(AHEAD3, d.billAhead3), billAhead1 = flag(AHEAD1, d.billAhead1), cardStatement = flag(CARD_STATEMENT, d.cardStatement), cardLimit = flag(CARD_LIMIT, d.cardLimit),
             )
         }.getOrDefault(d) // a damaged value falls back to the defaults rather than blocking the app
     }
@@ -57,6 +64,13 @@ class NotificationService(
             q.putSetting(QUIET_END, p.quietEndMinute.toString())
             q.putSetting(BILL_HOUR, p.billHour.toString())
             q.putSetting(RECAP, if (p.recap) "1" else "0")
+            q.putSetting(NEAR_PERCENT, p.budgetNearPercent.toString())
+            q.putSetting(PACE, if (p.budgetPace) "1" else "0")
+            q.putSetting(WRAP_UP, if (p.budgetWrapUp) "1" else "0")
+            q.putSetting(AHEAD3, if (p.billAhead3) "1" else "0")
+            q.putSetting(AHEAD1, if (p.billAhead1) "1" else "0")
+            q.putSetting(CARD_STATEMENT, if (p.cardStatement) "1" else "0")
+            q.putSetting(CARD_LIMIT, if (p.cardLimit) "1" else "0")
         }
     }
 
@@ -67,13 +81,30 @@ class NotificationService(
         val bills = recurring.due(today).map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
         val status = budgets.status(today, zone, currency)
         val names = q.liveCategories().executeAsList().associate { it.id to it.name }
-        val standings = status.progress.filter { it.state != BudgetState.OK }.map {
-            val left = if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left of ${it.limit.formatted()}" else "${app.expenses.core.domain.Money(-it.remaining.minorUnits, currency).formatted()} over ${it.limit.formatted()}"
-            BudgetStanding(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.state, left, status.period.start)
+        val prefs0 = prefs()
+        // the warning level is the person's own: over is over, near is from the chosen percent
+        fun levelOf(p: app.expenses.core.domain.BudgetProgress) = when { p.state == BudgetState.OVER -> BudgetState.OVER; p.usedPercent >= prefs0.budgetNearPercent -> BudgetState.NEAR; else -> BudgetState.OK }
+        fun leftText(it: app.expenses.core.domain.BudgetProgress) =
+            if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left of ${it.limit.formatted()}" else "${app.expenses.core.domain.Money(-it.remaining.minorUnits, currency).formatted()} over ${it.limit.formatted()}"
+        val standings = status.progress.filter { levelOf(it) != BudgetState.OK }.map {
+            BudgetStanding(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", levelOf(it), leftText(it), status.period.start)
         }
-        val prefs = prefs()
+        // spending well ahead of the month while still below the warning level (a budget needs some days behind it and some ahead to say anything)
+        val daysIn = status.period.start.daysUntil(today) + 1
+        val monthPercent = (daysIn * 100 / status.period.days).coerceIn(0, 100)
+        val pace = if (monthPercent in PACE_FROM_MONTH_PERCENT..PACE_UNTIL_MONTH_PERCENT) status.progress.filter { levelOf(it) == BudgetState.OK && it.usedPercent >= PACE_MIN_USED_PERCENT && it.usedPercent >= monthPercent + PACE_LEAD_PERCENT }
+            .map { app.expenses.core.domain.BudgetPace(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.usedPercent, monthPercent, leftText(it), status.period.start) } else emptyList()
+        // in the first days of a month: last month's overall budget, if there was one and it was kept
+        val wrapUp = if (prefs0.budgetWrapUp && status.period.start.daysUntil(today) < WRAP_UP_DAYS) {
+            val before = budgets.status(status.period.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY), zone, currency)
+            before.progress.firstOrNull { it.categoryId == null && it.spent.minorUnits > 0 && it.spent <= it.limit }?.let {
+                app.expenses.core.domain.BudgetWrapUp(before.period.start, "${it.spent.formatted()} spent of ${it.limit.formatted()}: ${it.remaining.formatted()} kept.")
+            }
+        } else null
+        val prefs = prefs0
         val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1"
-        return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide)))
+        return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide),
+            pace = pace, wrapUp = wrapUp, statements = cardStatements(today, zone), limits = cardLimits(today, zone), cleared = cardsCleared(today, zone)))
     }
 
     /**
@@ -149,6 +180,43 @@ class NotificationService(
         CardDue(terms.accountId, account.name, standing.cycle.dueDate, app.expenses.core.domain.Money(standing.remaining, currency).formatted(), app.expenses.core.domain.Money(standing.minimumDue, currency).formatted(), terms.remindDaysBefore)
     }
 
+    private fun currencyOf(code: String) = app.expenses.core.domain.Currency(code, q.selectCurrencies().executeAsList().firstOrNull { it.code == code }?.digits?.toInt() ?: 2)
+
+    /** Cards whose statement was made today or in the last two days and has something on it: told about once, from the reminder hour. */
+    private fun cardStatements(today: LocalDate, zone: TimeZone): List<app.expenses.core.domain.CardStatementMade> = cards.all().mapNotNull { terms ->
+        val account = q.accountById(terms.accountId).executeAsOneOrNull() ?: return@mapNotNull null
+        val standing = cards.standing(terms.accountId, today, zone) ?: return@mapNotNull null
+        val age = standing.cycle.statementDate.daysUntil(today)
+        if (age !in 0..2 || standing.statementBalance <= 0) return@mapNotNull null
+        val cur = currencyOf(account.currency)
+        app.expenses.core.domain.CardStatementMade(terms.accountId, account.name, standing.cycle.statementDate, standing.cycle.dueDate, app.expenses.core.domain.Money(standing.statementBalance, cur).formatted(), app.expenses.core.domain.Money(standing.minimumDue, cur).formatted())
+    }
+
+    /** Cards that were reminded about (a statement or a due notice was sent for this cycle) and whose statement is now paid in full. */
+    private fun cardsCleared(today: LocalDate, zone: TimeZone): List<app.expenses.core.domain.CardCleared> {
+        val sent = sent()
+        return cards.all().mapNotNull { terms ->
+            val account = q.accountById(terms.accountId).executeAsOneOrNull() ?: return@mapNotNull null
+            val standing = cards.standing(terms.accountId, today, zone) ?: return@mapNotNull null
+            if (standing.statementBalance <= 0 || standing.remaining > 0) return@mapNotNull null
+            val told = NoticePlanner.cardStatementKey(terms.accountId, standing.cycle.statementDate) in sent || NoticePlanner.cardKey(terms.accountId, standing.cycle.dueDate, false) in sent || NoticePlanner.cardKey(terms.accountId, standing.cycle.dueDate, true) in sent
+            if (!told) null else app.expenses.core.domain.CardCleared(terms.accountId, account.name, standing.cycle.dueDate)
+        }
+    }
+
+    /** Cards with a credit limit whose balance owed has reached 80% or 100% of it (the highest level reached). */
+    private fun cardLimits(today: LocalDate, zone: TimeZone): List<app.expenses.core.domain.CardLimitUse> = cards.all().mapNotNull { terms ->
+        val limit = cards.creditLimit(terms.accountId) ?: return@mapNotNull null
+        val account = q.accountById(terms.accountId).executeAsOneOrNull() ?: return@mapNotNull null
+        val untilMillis = today.plus(1, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
+        val owed = -(q.accountBalanceBefore(untilMillis, terms.accountId).executeAsOneOrNull()?.let { (it as Any?) as? Number }?.toLong() ?: 0L)
+        if (owed <= 0) return@mapNotNull null
+        val percent = (owed * 100 / limit).coerceAtMost(1000L).toInt()
+        val level = when { percent >= 100 -> 100; percent >= 80 -> 80; else -> return@mapNotNull null }
+        val cur = currencyOf(account.currency)
+        app.expenses.core.domain.CardLimitUse(terms.accountId, account.name, level, percent, app.expenses.core.domain.Money(owed, cur).formatted(), app.expenses.core.domain.Money(limit, cur).formatted(), today.year * 12 + today.monthNumber)
+    }
+
     fun markShown(notices: List<Notice>) {
         if (notices.isEmpty()) return
         val keys = (sent().toList() + notices.map { it.key }).distinct().takeLast(MAX_REMEMBERED)
@@ -159,6 +227,11 @@ class NotificationService(
 
     companion object {
         private const val MAX_BILL_NOTICES = 5
+        private const val PACE_FROM_MONTH_PERCENT = 10
+        private const val PACE_UNTIL_MONTH_PERCENT = 90
+        private const val PACE_MIN_USED_PERCENT = 30
+        private const val PACE_LEAD_PERCENT = 20
+        private const val WRAP_UP_DAYS = 5
         private const val RECAP = "notif_recap"
         private const val BILLS = "notif_bills"
         private const val BUDGETS = "notif_budgets"
@@ -167,6 +240,13 @@ class NotificationService(
         private const val QUIET_END = "notif_quiet_end"
         private const val BILL_HOUR = "notif_bill_hour"
         private const val SENT = "notif_sent"
+        private const val NEAR_PERCENT = "notif_near_percent"
+        private const val PACE = "notif_pace"
+        private const val WRAP_UP = "notif_wrapup"
+        private const val AHEAD3 = "notif_ahead3"
+        private const val AHEAD1 = "notif_ahead1"
+        private const val CARD_STATEMENT = "notif_card_statement"
+        private const val CARD_LIMIT = "notif_card_limit"
 
         /** Only the most recent events are remembered; a notice older than this could repeat, which is harmless. */
         const val MAX_REMEMBERED = 400
