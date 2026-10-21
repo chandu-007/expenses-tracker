@@ -80,7 +80,7 @@ class MainActivity : FragmentActivity() {
         (application as ExpensesApp).lock.onStop(this)
         // the widget shows this month's spending: bring it up to date when the person leaves the app
         val appContext = applicationContext
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { app.expenses.widget.QuickAddWidget().updateAll(appContext) } }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { app.expenses.widget.refreshWidgets(appContext) } }
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
     }

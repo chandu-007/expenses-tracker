@@ -262,13 +262,19 @@ class QuickAddAction : ActionCallback {
                 prefs[LAST_AT] = System.currentTimeMillis()
             }
         }
-        QuickAddWidget().updateAll(context)
+        refreshWidgets(context)
         toast(context, added?.text ?: "Could not add this entry. Open the app.")
         // Someone who only uses the widget never opens the app, so tidy the search index here, after the confirmation is
         // already on screen. Without this, unmerged index segments pile up until SQLite forces a 50-100 ms merge in the
         // middle of a save (measured at about 1,000 unmerged saves). Bounded, and does nothing if there is nothing to merge.
         if (added != null) container.maintain(budgetMillis = WIDGET_MAINTENANCE_MILLIS)
     }
+}
+
+/** Redraws every widget of the app (quick add and Today) from the database. Called whenever what they show may have changed. */
+suspend fun refreshWidgets(context: Context) {
+    QuickAddWidget().updateAll(context)
+    TodayWidget().updateAll(context)
 }
 
 /** How long the widget may spend merging the search index after a tap. */
@@ -279,8 +285,7 @@ class ToggleTotalAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val container = (context.applicationContext as ExpensesApp).container
         container.write { ok -> ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1") "0" else "1") }
-        QuickAddWidget().updateAll(context)
-        TodayWidget().updateAll(context)
+        refreshWidgets(context)
     }
 }
 
@@ -291,7 +296,7 @@ class UndoAction : ActionCallback {
         val container = (context.applicationContext as ExpensesApp).container
         val undone = container.write { ok -> EntryActions(ok).undo(entryId, UNDO_WINDOW_MILLIS) } == true
         updateAppWidgetState(context, glanceId) { prefs -> prefs.remove(LAST_ID); prefs.remove(LAST_TEXT); prefs.remove(LAST_AT) }
-        QuickAddWidget().updateAll(context)
+        refreshWidgets(context)
         toast(context, if (undone) "Undone" else "Too late to undo from here")
     }
 }

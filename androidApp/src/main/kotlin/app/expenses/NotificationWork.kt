@@ -40,6 +40,6 @@ object NotificationWork {
             val shown = Notifier.show(context, result.notices)
             ok.notifications.markShown(shown)
             shown.size
-        } ?: 0
+        }.also { runCatching { app.expenses.widget.refreshWidgets(context) } } ?: 0 // the widgets move on with the clock too: today's total is a new day after midnight
     }
 }
