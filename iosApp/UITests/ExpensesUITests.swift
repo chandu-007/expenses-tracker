@@ -144,7 +144,7 @@ final class ExpensesUITests: XCTestCase {
         XCTAssertFalse(el(app, "cat_row_Food").exists)
         shot("categories-income")
         tap(app, "categories_back")
-        XCTAssertTrue(appears(app, "add"), "Back leads to Home, as on Android")
+        XCTAssertTrue(appears(app, "more_page"), "Back returns to More, as on Android")
     }
 
     func testMoreAndDataScreens() {
@@ -160,7 +160,7 @@ final class ExpensesUITests: XCTestCase {
         XCTAssertTrue(appears(app, "auto_unavailable"), "Automatic export is explained as not on iPhone\n" + app.debugDescription)
         shot("data")
         tap(app, "data_back")
-        XCTAssertTrue(appears(app, "add"), "Back leads to Home, as on Android")
+        XCTAssertTrue(appears(app, "more_page"), "Back returns to More, as on Android")
     }
 
     func testSimilarEntriesAreOfferedAndReviewedOneByOne() {
