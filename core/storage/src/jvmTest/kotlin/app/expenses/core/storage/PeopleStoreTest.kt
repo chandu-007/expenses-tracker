@@ -120,5 +120,18 @@ class PeopleStoreTest {
         assertEquals(20_000L, owed(a), "10,000 lent and 10,000 share")
         assertEquals(0L, people.balances("USD").first { it.person.id == a.id }.minor)
     }
+
+    @Test
+    fun theSharesOfABillTravelInABackupAndComeBackOnAnotherDevice() {
+        val a = people.create("Asha"); val r = people.create("Ravi")
+        sharedDinner("dinner", listOf(a, r), 90_000, 1_000)
+        val data = d.backup.export()
+        val other = Device("b")
+        other.backup.restore(data)
+        val otherPeople = PeopleStore(other.db)
+        assertEquals(listOf(30_000L, 30_000L), otherPeople.balances("INR").filter { it.person.name in setOf("Asha", "Ravi") }.map { it.minor })
+        assertEquals(30_000L, other.ledger.spendByCategory(Currency.INR)[app.expenses.core.domain.ledger.CategoryId("Food")]?.minorUnits, "only your share is spending on the other device too")
+        assertEquals(3, other.db.schemaQueries.allShares().executeAsList().size)
+    }
 }
 
