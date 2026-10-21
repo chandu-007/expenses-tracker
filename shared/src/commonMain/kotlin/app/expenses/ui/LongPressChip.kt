@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,7 +25,7 @@ import androidx.compose.ui.unit.dp
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun LongPressChip(label: String, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+fun LongPressChip(label: String, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, leading: androidx.compose.ui.graphics.vector.ImageVector? = null) {
     val shape = RoundedCornerShape(8.dp)
     Surface(
         shape = shape, color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -32,6 +33,9 @@ fun LongPressChip(label: String, onClick: () -> Unit, onLongClick: () -> Unit, m
             .combinedClickable(onClick = onClick, onLongClick = onLongClick, role = Role.Button)
             .semantics { onLongClick(label = "Remove") { onLongClick(); true } },
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+        androidx.compose.foundation.layout.Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            if (leading != null) androidx.compose.material3.Icon(leading, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
     }
 }

@@ -385,6 +385,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             tags = s.tags, onBulkAddTag = viewModel::bulkAddTag, onBulkRemoveTag = viewModel::bulkRemoveTag,
                             onUndo = viewModel::undo,
                             saved = s.savedSearches, onSaveSearch = viewModel::saveSearch, onDeleteSaved = viewModel::deleteSavedSearch,
+                            recent = s.recentSearches, onRemember = viewModel::rememberSearch, onForgetRecent = viewModel::forgetSearch, onClearRecent = viewModel::clearRecentSearches,
                         )
                     }
                     k == 15 -> {

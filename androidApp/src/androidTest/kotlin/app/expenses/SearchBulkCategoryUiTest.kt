@@ -103,7 +103,7 @@ class SearchBulkCategoryUiTest {
         assertEquals(List(4) { "Bills" }, (1..4).map { categoryOf("n$it") })
         assertEquals("income:salary", categoryOf("s1"), "the incomes were never in the results")
         // the results refreshed: each row's second line names its category now
-        val shown = { compose.onAllNodes(hasText(" · ", substring = true), useUnmergedTree = true).fetchSemanticsNodes().map { n -> n.config[SemanticsProperties.Text].joinToString(" ") { it.text } } }
+        val shown = { compose.onAllNodes(hasText(" · ", substring = true) and !hasTestTag("search_count"), useUnmergedTree = true).fetchSemanticsNodes().map { n -> n.config[SemanticsProperties.Text].joinToString(" ") { it.text } } }
         val refreshed = runCatching { compose.waitUntil(10_000) { shown().let { rows -> rows.isNotEmpty() && rows.all { it.endsWith("Bills") } } } }.isSuccess
         if (!refreshed) throw AssertionError("every row on screen should name Bills now: " + shown()) // only the rows that fit are composed
         tap("search_undo")

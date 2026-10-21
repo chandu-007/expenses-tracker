@@ -6,6 +6,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,3 +51,24 @@ val LocalCompact = compositionLocalOf { false }
 /** The vertical padding of a list row: [comfortable] normally, about two thirds of it when compact (never below 4 dp, so the row stays easy to hit). */
 @Composable
 fun rowPadding(comfortable: androidx.compose.ui.unit.Dp): androidx.compose.ui.unit.Dp = if (LocalCompact.current) maxOf(androidx.compose.ui.unit.Dp(4f), comfortable * 2 / 3) else comfortable
+
+/**
+ * [text] with every place [query] occurs picked out (bold on a soft background), for search results. While "hide amounts" is on, or with no query, it is
+ * the plain masked [Text]: the highlight must never be a way round the mask.
+ */
+@Composable
+fun MatchText(text: String, query: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, maxLines: Int = Int.MAX_VALUE, style: TextStyle = LocalTextStyle.current) {
+    val q = query.trim()
+    if (LocalHideAmounts.current || q.isEmpty() || !text.contains(q, ignoreCase = true)) { Text(text, modifier, color = color, maxLines = maxLines, style = style); return }
+    val mark = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, background = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+    val built = androidx.compose.ui.text.buildAnnotatedString {
+        var from = 0
+        while (true) {
+            val at = text.indexOf(q, from, ignoreCase = true)
+            if (at < 0) { append(text.substring(from)); break }
+            append(text.substring(from, at)); withStyle(mark) { append(text.substring(at, at + q.length)) }; from = at + q.length
+        }
+    }
+    androidx.compose.material3.Text(built, modifier = modifier, color = color, maxLines = maxLines, style = style)
+}
+

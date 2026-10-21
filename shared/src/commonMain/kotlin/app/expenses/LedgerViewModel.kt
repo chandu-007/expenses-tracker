@@ -117,6 +117,8 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val category: String = "",
     /** The entry's kind (EXPENSE, INCOME, TRANSFER, REFUND ...): a transfer between your own accounts is neither money in nor out. */
     val kind: String = "",
+    /** The amount in minor units (paise, cents), to total a list of results. */
+    val minor: Long = 0,
 )
 data class AccountUi(val id: String, val name: String, val type: String = "")
 
@@ -450,6 +452,8 @@ sealed interface UiState {
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
         val savedSearches: List<SavedSearchUi>,
+        /** The words searched for lately, newest first, to offer again on the search screen. */
+        val recentSearches: List<String>,
         val categories: List<CategoryUi>,
         /** Tags in use, most used first, to offer when tagging. */
         val tags: List<String>,
@@ -488,6 +492,8 @@ private const val PROFILE_SEARCH_ROWS = 15
 private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
+private const val SETTING_RECENT_SEARCHES = "recent_searches"
+private const val RECENT_SEARCHES_KEPT = 6
 private const val SETTING_APPEARANCE = "appearance"
 /** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
 private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOAN")
@@ -1030,6 +1036,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun deleteSavedSearch(id: String) = withStore { ok -> ok.savedSearches.delete(id); refresh(ok) }
+
+    /** Keeps [text] among the recent searches (newest first, no repeats, the last few only). Words shorter than two letters are not kept. */
+    fun rememberSearch(text: String) = withStore { ok ->
+        val t = text.trim().replace('\n', ' ')
+        if (t.length < 2) return@withStore
+        val now = ok.templates.setting(SETTING_RECENT_SEARCHES).orEmpty().split('\n').filter { it.isNotBlank() }
+        val next = (listOf(t) + now.filterNot { it.equals(t, ignoreCase = true) }).take(RECENT_SEARCHES_KEPT)
+        if (next != now) { ok.templates.putSetting(SETTING_RECENT_SEARCHES, next.joinToString("\n")); refresh(ok) }
+    }
+
+    fun forgetSearch(text: String) = withStore { ok ->
+        val now = ok.templates.setting(SETTING_RECENT_SEARCHES).orEmpty().split('\n').filter { it.isNotBlank() }
+        ok.templates.putSetting(SETTING_RECENT_SEARCHES, now.filterNot { it == text }.joinToString("\n")); refresh(ok)
+    }
+
+    fun clearRecentSearches() = withStore { ok -> ok.templates.putSetting(SETTING_RECENT_SEARCHES, ""); refresh(ok) }
 
     // ---- automatic export ----
 
@@ -2191,6 +2213,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             accounts = active.map { AccountUi(it.id, it.name, it.type) },
             allAccounts = accounts.map { AccountUi(it.id, it.name, it.type) },
             accountRows = accountRowsCache,
+            recentSearches = ok.templates.setting(SETTING_RECENT_SEARCHES).orEmpty().split('\n').filter { it.isNotBlank() },
             savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             baseCurrency = BaseCurrency.current,
@@ -2302,6 +2325,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         day = dateOfMillis(e.occurred_at).epochDay(),
         category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
         kind = e.kind,
+        minor = e.amount_minor,
     )
 
     // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it
