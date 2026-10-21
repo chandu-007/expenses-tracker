@@ -25,6 +25,7 @@ class DataActions(context: Context, container: AppContainer, now: () -> Long = S
 
     suspend fun exportCsv(uri: Uri): Int = transfer.exportCsv(uri.toString())
     suspend fun exportXlsx(uri: Uri): Int = transfer.exportXlsx(uri.toString())
+    suspend fun exportFinancialYear(uri: Uri, yearsBack: Int): String = transfer.exportFinancialYear(uri.toString(), yearsBack)
     suspend fun backup(uri: Uri, passphrase: String?): DataTransfer.Saved = transfer.backup(uri.toString(), passphrase)
     suspend fun open(uri: Uri, passphrase: String?): Opened = transfer.open(uri.toString(), passphrase).let(::wrap)
     suspend fun openBytes(bytes: ByteArray, passphrase: String?): Opened = wrap(transfer.openBytes(bytes, passphrase))

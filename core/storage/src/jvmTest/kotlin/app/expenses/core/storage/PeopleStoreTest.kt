@@ -86,4 +86,39 @@ class PeopleStoreTest {
         other.backup.restore(data) // twice changes nothing
         assertEquals(1, otherPeople.list().size)
     }
+
+    // ---- a bill shared with friends: one expense, your share is spending, theirs is owed to you ----
+
+    private fun sharedDinner(id: String, with: List<Person>, total: Long, at: Long) {
+        val (each, mine) = app.expenses.core.domain.BillSplit.shares(total, with.size)!!
+        d.ledger.save(app.expenses.core.domain.ledger.Expense(EntryId(id), at, AccountId("bank"), m(total), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), m(total))),
+            listOf(app.expenses.core.domain.ledger.Share(null, m(mine))) + with.map { app.expenses.core.domain.ledger.Share(PersonId(it.id), m(each)) }))
+    }
+
+    @Test
+    fun aSharedBillIsOwedByEachFriendForTheirShareAndOnlyYourShareIsSpentAndTheAccountPaysAll() {
+        val a = people.create("Asha"); val r = people.create("Ravi")
+        sharedDinner("dinner", listOf(a, r), 90_001, 1_000)
+        assertEquals(30_000L, owed(a)); assertEquals(30_000L, owed(r))
+        assertEquals(30_001L, d.ledger.spendByCategory(Currency.INR)[app.expenses.core.domain.ledger.CategoryId("Food")]?.minorUnits, "your share, with the odd paisa")
+        assertEquals(-90_001L, d.ledger.balances()[AccountId("bank")]!!.minorUnits, "the account paid the whole bill")
+        assertEquals(1, people.balances("INR").first { it.person.id == a.id }.entries)
+        assertFailsWith<IllegalArgumentException> { people.remove(a.id) }
+        // paying their share back settles it, as for money lent
+        got("back", a, 30_000, 2_000)
+        assertEquals(0L, owed(a)); assertEquals(30_000L, owed(r))
+        // deleting the bill takes the shares with it
+        d.ledger.delete(EntryId("dinner"))
+        assertEquals(-30_000L, owed(a), "they paid you back for a bill that is gone: you owe them that"); assertEquals(0L, owed(r))
+    }
+
+    @Test
+    fun aSharedBillAddsToWhatWasLentAndOtherCurrenciesAreNotMixedIn() {
+        val a = people.create("Asha")
+        gave("loan", a, 10_000, 500)
+        sharedDinner("d1", listOf(a), 20_000, 1_000)
+        assertEquals(20_000L, owed(a), "10,000 lent and 10,000 share")
+        assertEquals(0L, people.balances("USD").first { it.person.id == a.id }.minor)
+    }
 }
+

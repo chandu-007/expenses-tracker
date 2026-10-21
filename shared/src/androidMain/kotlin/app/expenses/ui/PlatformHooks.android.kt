@@ -17,6 +17,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -94,22 +95,27 @@ actual fun rememberFilePickers(): FilePickers {
         pending?.invoke(uri?.toString()); pending = null
     }
     // the photo is written to a file of ours in the cache by the camera app (through our own file provider), so no camera permission is needed
-    var photoFile by remember { mutableStateOf<java.io.File?>(null) }
+    // saved with the screen: if Android destroys it while the camera app is in front, the target file is still known when the photo comes back
+    var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var recovered by rememberSaveable { mutableStateOf<String?>(null) }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val file = photoFile; photoFile = null
-        val uri = if (ok && file != null && file.length() > 0) androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file) else null
-        pending?.invoke(uri?.toString()); pending = null
+        val file = photoPath?.let { java.io.File(it) }; photoPath = null
+        val uri = if (ok && file != null && file.length() > 0) androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file).toString() else null // some camera apps report success and leave an empty file
+        val callback = pending; pending = null
+        if (callback != null) callback(uri) else if (uri != null) recovered = uri
     }
     val cameraAvailable = remember(context) { Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).resolveActivity(context.packageManager) != null }
-    return remember(open, create, folder, photo, cameraAvailable) {
+    return remember(open, create, folder, photo, cameraAvailable, recovered) {
         object : FilePickers {
             override val canTakePhoto: Boolean get() = cameraAvailable
+            override val recoveredPhoto: String? get() = recovered
+            override fun consumeRecoveredPhoto() { recovered = null }
             override fun takePhoto(onPicked: (String?) -> Unit) {
                 val dir = java.io.File(context.cacheDir, "camera").also { it.mkdirs() }
                 dir.listFiles().orEmpty().filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }.forEach { it.delete() } // yesterday's leftovers
                 val file = java.io.File.createTempFile("bill", ".jpg", dir)
-                photoFile = file; pending = onPicked
-                try { photo.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)) } catch (e: Exception) { photoFile = null; pending = null; file.delete(); onPicked(null) }
+                photoPath = file.absolutePath; pending = onPicked
+                try { photo.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)) } catch (e: Exception) { photoPath = null; pending = null; file.delete(); onPicked(null) }
             }
             override fun openDocument(mimeTypes: List<String>, onPicked: (String?) -> Unit) { pending = onPicked; open.launch(mimeTypes.toTypedArray()) }
             override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) { pending = onPicked; create.launch(suggestedName to mime) }

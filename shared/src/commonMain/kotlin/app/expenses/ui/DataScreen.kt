@@ -1,6 +1,7 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +45,7 @@ fun DataScreen(
     onBack: () -> Unit,
     onExportCsv: (String) -> Unit,
     onExportXlsx: (String) -> Unit = {},
+    onExportFinancialYear: (uri: String, yearsBack: Int) -> Unit = { _, _ -> },
     autoExport: AutoExportUi? = null,
     onAutoFolder: (String) -> Unit = {},
     onAutoFrequency: (AutoExportFrequency) -> Unit = {},
@@ -113,6 +115,12 @@ fun DataScreen(
             Text("Every entry as an Excel workbook (amounts are numbers, so they add up) or a plain CSV file. Free, always. For moving to another phone use a backup: a spreadsheet leaves things out.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { pickers.createDocument("expenses-$today.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") { it?.let(onExportXlsx) } }, enabled = !state.busy, modifier = Modifier.testTag("export_xlsx")) { Text("Export as Excel (.xlsx)") }
             OutlinedButton(onClick = { pickers.createDocument("expenses-$today.csv", "text/csv") { it?.let(onExportCsv) } }, enabled = !state.busy, modifier = Modifier.testTag("export_csv")) { Text("Export as CSV") }
+            Text("Financial year summary", style = MaterialTheme.typography.titleSmall)
+            Text("One page for your records or an accountant: income, spending, spending by category and by month for April to March. A summary, not tax advice.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { pickers.createDocument("expenses-financial-year-this.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") { it?.let { uri -> onExportFinancialYear(uri, 0) } } }, enabled = !state.busy, modifier = Modifier.testTag("export_fy_this")) { Text("This year") }
+                OutlinedButton(onClick = { pickers.createDocument("expenses-financial-year-last.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") { it?.let { uri -> onExportFinancialYear(uri, 1) } } }, enabled = !state.busy, modifier = Modifier.testTag("export_fy_last")) { Text("Last year") }
+            }
             HorizontalDivider()
 
             if (autoExport != null && !platform.supportsAutoExport) {

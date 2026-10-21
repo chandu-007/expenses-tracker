@@ -4,6 +4,8 @@
     <string name="add_expense">Add expense</string>
     <string name="widget_quick_add">Expenses: standard (4 x 2)</string>
     <string name="widget_description">Record an expense from a saved quick entry with one tap.</string>
+    <string name="widget_today">Expenses: today (2 x 2)</string>
+    <string name="widget_today_description">What you spent today and what is left to spend each day. Amounts stay hidden until you show them.</string>
     <string name="widget_small">Expenses: small (2 x 1)</string>
     <string name="widget_wide">Expenses: wide (4 x 1)</string>
     <string name="widget_large">Expenses: large (4 x 4)</string>

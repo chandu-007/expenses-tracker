@@ -54,14 +54,18 @@ object Notifier {
         when (n.kind) {
             NoticeKind.BILL_TRACKED -> {
                 val paid = Intent(context, NoticeActionReceiver::class.java).setAction(NoticeActionReceiver.ACTION_MARK_PAID).putExtra(NoticeActionReceiver.EXTRA_REF, ref).putExtra(NoticeActionReceiver.EXTRA_NOTIFICATION_ID, id)
-                val later = Intent(context, NoticeActionReceiver::class.java).setAction(NoticeActionReceiver.ACTION_SNOOZE).putExtra(NoticeActionReceiver.EXTRA_REF, ref)
+                fun snooze(mode: app.expenses.core.domain.SnoozeMode) = Intent(context, NoticeActionReceiver::class.java).setAction(NoticeActionReceiver.ACTION_SNOOZE).putExtra(NoticeActionReceiver.EXTRA_REF, ref)
                     .putExtra(NoticeActionReceiver.EXTRA_TITLE, n.title).putExtra(NoticeActionReceiver.EXTRA_TEXT, n.text).putExtra(NoticeActionReceiver.EXTRA_KIND, n.kind.name).putExtra(NoticeActionReceiver.EXTRA_NOTIFICATION_ID, id)
-                builder.addAction(0, "Mark paid", PendingIntent.getBroadcast(context, id * 3 + 1, paid, flags))
-                builder.addAction(0, "In 3 hours", PendingIntent.getBroadcast(context, id * 3 + 2, later, flags))
+                    .putExtra(NoticeActionReceiver.EXTRA_MODE, mode.name)
+                val now = java.time.LocalTime.now()
+                val later = app.expenses.core.domain.Snooze.laterMode(now.hour * 60 + now.minute)
+                builder.addAction(0, "Mark paid", PendingIntent.getBroadcast(context, id * 4 + 1, paid, flags))
+                builder.addAction(0, app.expenses.core.domain.Snooze.label(later), PendingIntent.getBroadcast(context, id * 4 + 2, snooze(later), flags))
+                builder.addAction(0, app.expenses.core.domain.Snooze.label(app.expenses.core.domain.SnoozeMode.TOMORROW), PendingIntent.getBroadcast(context, id * 4 + 3, snooze(app.expenses.core.domain.SnoozeMode.TOMORROW), flags))
             }
             NoticeKind.CARD_DUE, NoticeKind.CARD_STATEMENT, NoticeKind.CARD_LIMIT -> {
                 val pay = Intent(context, MainActivity::class.java).setAction(MainActivity.ACTION_PAY_CARD).putExtra(MainActivity.EXTRA_CARD_ID, ref).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                builder.addAction(0, "Pay now", PendingIntent.getActivity(context, id * 3 + 3, pay, flags))
+                builder.addAction(0, "Pay now", PendingIntent.getActivity(context, id * 4 + 4, pay, flags))
             }
             else -> {}
         }

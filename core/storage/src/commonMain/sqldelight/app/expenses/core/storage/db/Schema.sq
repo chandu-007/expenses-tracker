@@ -459,6 +459,18 @@ FROM spend_line
 WHERE currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis
 GROUP BY category_id;
 
+-- Every expense with a merchant (or a note standing in for one) since a time, to look for charges that keep coming.
+expenseSamples:
+SELECT COALESCE(merchant, note) AS name, occurred_at, amount_minor FROM entry
+WHERE deleted = 0 AND kind = 'EXPENSE' AND currency = :currency AND occurred_at >= :fromMillis AND COALESCE(merchant, note) IS NOT NULL;
+
+-- What was posted by repeating items (rent, EMIs, subscriptions): planned spending, left out when judging whether spending runs ahead of the month.
+spendByCategoryFromRepeating:
+SELECT s.category_id AS category_id, SUM(s.mine_minor) AS mine
+FROM spend_line s JOIN recurring_done d ON d.entry_id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis
+GROUP BY s.category_id;
+
 -- Your spending grouped by something other than category. All of them count exactly the spend lines the category report counts.
 spendByAccount:
 SELECT e.account_id AS key, SUM(s.mine_minor) AS mine FROM spend_line s JOIN entry e ON e.id = s.entry_id
@@ -571,7 +583,7 @@ removePerson:
 UPDATE person SET deleted = 1 WHERE id = ?;
 
 personUsage:
-SELECT COUNT(*) FROM entry WHERE person_id = ?;
+SELECT (SELECT COUNT(*) FROM entry WHERE person_id = :id) + (SELECT COUNT(*) FROM entry_share WHERE person_id = :id);
 
 -- What each person owes (positive) or is owed (negative), from the settlements with them: money the person gave minus money the person got.
 loanBalances:
@@ -579,6 +591,19 @@ SELECT person_id, SUM(CASE direction WHEN 'PAID_TO_PERSON' THEN amount_minor WHE
     COUNT(*) AS n, MAX(occurred_at) AS last_at
 FROM entry WHERE kind = 'SETTLEMENT' AND deleted = 0 AND currency = ? AND person_id IS NOT NULL
 GROUP BY person_id;
+
+-- What friends owe from bills shared with them (an expense whose shares name them): the part of the amount that is theirs, not spending of yours.
+sharesOwed:
+SELECT s.person_id AS person_id, SUM(s.amount_minor) AS owed, COUNT(*) AS n, MAX(e.occurred_at) AS last_at
+FROM entry_share s JOIN entry e ON e.id = s.entry_id
+WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND e.currency = ? AND s.person_id IS NOT NULL
+GROUP BY s.person_id;
+
+sharedEntriesOfPerson:
+SELECT e.id AS id, e.occurred_at AS occurred_at, e.currency AS currency, e.account_id AS account_id, e.merchant AS merchant, e.note AS note, s.amount_minor AS share_minor
+FROM entry_share s JOIN entry e ON e.id = s.entry_id
+WHERE s.person_id = ? AND e.deleted = 0 AND e.kind = 'EXPENSE'
+ORDER BY e.occurred_at DESC, e.seq DESC;
 
 loanEntriesOfPerson:
 SELECT * FROM entry WHERE kind = 'SETTLEMENT' AND person_id = ? AND deleted = 0 ORDER BY occurred_at DESC, seq DESC;

@@ -501,3 +501,21 @@ Asked for by the owner: improve budget, bill and credit-card alerts; an optional
 - **Send backup to...** warns on screen when no passphrase is set.
 - **Not changed, on purpose:** the "In 3 hours" button is the snooze (WorkManager keeps it across a reboot); "bills due this week" counts tracked and found bills only, not repeating items or card due dates; a camera result after the activity is recreated is lost (the picked-file path is unaffected). Verification: host tests pass; 45 of 45 device tests in Notifications, Alerts, Data, App lock and Accounts.
 
+## Slice 79: the four gaps and six new features (version 0.2.0)
+
+**Gaps closed**
+- **Bills due this week** now counts tracked bills, repeating items that wait for the person, and credit cards with something left (a card whose own bill is tracked counts once), with a total of what has a known amount. The banner shows when any of them has something.
+- **Camera photo survives Android recreating the screen:** the target file is saved with the screen and a photo whose callback was lost is handed over once (`FilePickers.recoveredPhoto`). Not exercised on a device (the camera was not driven); an empty file from a camera app is refused.
+- **Pace alert ignores planned spending:** what repeating items posted (`spend_line` joined to `recurring_done`) is taken off before judging; a rent-only month no longer reads as ahead.
+- **Snooze:** the second button is "This evening" (before 15:00) or "In 3 hours", plus "Tomorrow" (09:00; this morning if before nine). Delay is worked out when the button is pressed (`Snooze`).
+
+**New**
+- **Spending insight on Home:** the category furthest above its usual (average of the earlier periods at the same point; needs two earlier periods; at least 25% and 500 more) in one line under the month figure.
+- **Subscriptions** (More, Money): charges found from your entries (`SubscriptionFinder`: same merchant, steady gap monthly / quarterly / yearly, near-constant amount, still going), with the next date and what each costs a year (monthly x 12, quarterly x 4, yearly x 1), a total, and "Not one" to hide a wrong guess. A review caught a first version that used 365 / 30; fixed and tested.
+- **Today widget** (Android): what was spent today and what the budget leaves per day; hidden unless shown from the eye, hidden under Hide amounts and the App lock, like the month total. The data and masking are tested; how it draws on a launcher was not seen.
+- **Split a bill with friends:** on a new expense, "Split with friends" (below the account chips) shares it equally. It is **one expense with shares** (the model already had `Expense.shares`): the account pays the whole bill, reports and budgets count your share (the odd paise are yours), and the Lent and borrowed balances now include what friends owe from shared bills (their history shows "Their share of ..."). Undo is one entry. A first draft recorded loans next to the expense; a review pointed to the model and it was replaced. A shared expense still opens read-only in the editor.
+- **Financial-year summary** (Your data): April to March, this year or last, as an Excel sheet of income, spending, spending by category and by month. A summary, not tax advice.
+- **Not built:** reading a receipt photo (needs an on-device text-recognition library, which the app does not have; awaiting the owner).
+
+**Tests:** domain (PeriodCompare, SpendingInsight, Snooze, SubscriptionFinder, BillSplit and sharing in drafts), storage (pace with rent, people balances with shares, financial year), device (AlertsUiTest, SubscriptionsUiTest, SplitBillUiTest, QuickAddWidgetTest, DataTest). Mutation-checked: pace with planned spend. The full functional suite (390 tests) had one failure: `QuickEntryTest.theNextEntryStartsWithTheCategoryAndAccountUsedLast` failed 3 of 3 alone because the split chip first sat above the category chips and pushed them off screen with the keyboard up; the split section now sits below the account chips and the test passes (12 of 12 with the attachment and split tests). Not re-run in full after that move. Not verified: iPhone (Xcode is gone), the camera, a launcher, Android 15/16, real notification timing.
+

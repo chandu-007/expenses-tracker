@@ -280,6 +280,7 @@ class ToggleTotalAction : ActionCallback {
         val container = (context.applicationContext as ExpensesApp).container
         container.write { ok -> ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1") "0" else "1") }
         QuickAddWidget().updateAll(context)
+        TodayWidget().updateAll(context)
     }
 }
 

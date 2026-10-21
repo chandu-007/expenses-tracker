@@ -38,6 +38,10 @@ interface FilePickers {
 
     /** Takes a photo with the phone's camera app and returns its address, or null when cancelled or unavailable. Needs no camera permission of its own. */
     fun takePhoto(onPicked: (String?) -> Unit) { onPicked(null) }
+
+    /** A photo that was taken but whose callback was lost because Android recreated the screen while the camera was open; handed over once, then cleared. */
+    val recoveredPhoto: String? get() = null
+    fun consumeRecoveredPhoto() {}
 }
 
 @Composable

@@ -86,6 +86,7 @@ import app.expenses.CategoryUi
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.DraftResult
+import app.expenses.core.domain.BillSplit
 import app.expenses.core.domain.EntryDraft
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
@@ -115,10 +116,10 @@ internal fun categoryFor(all: List<CategoryUi>, income: Boolean, current: String
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean)
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>))
     },
 )
 
@@ -187,7 +188,7 @@ fun EntryFormScreen(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { creatingPerson = false }, title = { Text("Who is it?") },
             text = { OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.testTag("new_person_name")) },
-            confirmButton = { TextButton(onClick = { onCreatePerson(name) { id -> draft = draft.copy(personId = id) }; creatingPerson = false }, enabled = name.isNotBlank(), modifier = Modifier.testTag("new_person_ok")) { Text("Add") } },
+            confirmButton = { TextButton(onClick = { onCreatePerson(name) { id -> draft = if (draft.kind == DraftKind.EXPENSE) draft.copy(splitWith = (draft.splitWith + id).distinct()) else draft.copy(personId = id) }; creatingPerson = false }, enabled = name.isNotBlank(), modifier = Modifier.testTag("new_person_ok")) { Text("Add") } },
             dismissButton = { TextButton(onClick = { creatingPerson = false }) { Text("Cancel") } },
         )
     }
@@ -353,6 +354,28 @@ fun EntryFormScreen(
                 }
                 Text("Moving money between your own accounts is not spending or income: use it for an ATM withdrawal, paying a card bill, or topping up a wallet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // a new expense can be shared equally with friends: the whole amount leaves the account, your share is the spending, and each of them owes theirs
+            if (draft.kind == DraftKind.EXPENSE && draft.id == null && !split) {
+                var sharing by rememberSaveable { mutableStateOf(draft.splitWith.isNotEmpty()) }
+                FilterChip(selected = sharing, onClick = { sharing = !sharing; if (!sharing) draft = draft.copy(splitWith = emptyList()) }, label = { Text("Split with friends") }, modifier = Modifier.testTag("split_toggle"))
+                if (sharing) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        people.forEach { p ->
+                            val on = p.id in draft.splitWith
+                            FilterChip(selected = on, onClick = { draft = draft.copy(splitWith = if (on) draft.splitWith - p.id else draft.splitWith + p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("split_person_${p.name}"))
+                        }
+                        AssistChip(onClick = { creatingPerson = true }, label = { Text("+ New person") }, modifier = Modifier.testTag("split_new_person"))
+                    }
+                    val shares = amount?.let { BillSplit.shares(it.minorUnits, draft.splitWith.size) }
+                    Text(
+                        if (draft.splitWith.isEmpty()) "Choose who shares this bill. Everyone pays an equal part."
+                        else if (shares == null) "Enter the whole bill to see each share."
+                        else "You pay ${Money(shares.second, currency).formatted()} of it; each of the ${draft.splitWith.size} owes ${Money(shares.first, currency).formatted()}. The whole bill leaves your account.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("split_summary"),
+                    )
+                }
+            }
+
             OutlinedTextField(
                 value = draft.note, onValueChange = { draft = draft.copy(note = it) },
                 label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),
@@ -496,6 +519,8 @@ private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: 
 private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.AttachmentUi>, problem: String?, onAttach: (String) -> Unit, onOpen: (app.expenses.AttachmentUi) -> Unit, onRemove: (app.expenses.AttachmentUi) -> Unit) {
     val picker = rememberFilePickers()
     var removing by remember { mutableStateOf<app.expenses.AttachmentUi?>(null) }
+    // a photo whose screen was recreated while the camera was open arrives here
+    LaunchedEffect(picker.recoveredPhoto) { picker.recoveredPhoto?.let { onAttach(it); picker.consumeRecoveredPhoto() } }
     removing?.let { a ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { removing = null }, title = { Text("Remove \"${a.name}\"?") }, text = { Text("The file is deleted from this phone. The entry stays.") },

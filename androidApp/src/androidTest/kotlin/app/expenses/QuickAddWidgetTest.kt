@@ -324,4 +324,28 @@ class QuickAddWidgetTest {
             host.deleteAppWidgetId(id)
         }
     }
+
+    @Test
+    fun theTodayWidgetCountsOnlyTodayShowsWhatIsLeftEachDayAndIsMaskedUnderTheSameRules() {
+        val now = System.currentTimeMillis()
+        val yesterday = now - 36L * 3_600_000
+        runBlocking {
+            container.write { ok ->
+                ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("t"), now, AccountId("cash"), Money(25_000, inr), emptyList()))
+                ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("y"), yesterday, AccountId("cash"), Money(900_000, inr), emptyList()))
+                ok.budgets.setLimit(null, Money(100_000_000, inr))
+            }
+        }
+        val widget = app.expenses.widget.TodayWidget()
+        val fresh = runBlocking { widget.loadToday(context) }!!
+        assertTrue(fresh.spentToday.none { it.isDigit() } && fresh.perDayLine!!.none { it.isDigit() } && !fresh.revealed && fresh.canToggle, "hidden until shown: ${fresh.spentToday} / ${fresh.perDayLine}")
+        runBlocking { container.write { it.templates.putSetting("widget_show_total", "1") } }
+        val shown = runBlocking { widget.loadToday(context) }!!
+        assertEquals("₹250.00", shown.spentToday, "today's 250 only, not yesterday's 9,000")
+        assertTrue(shown.perDayLine!!.endsWith(" a day left") && shown.perDayLine!!.any { it.isDigit() }, shown.perDayLine)
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        val hidden = runBlocking { widget.loadToday(context) }!!
+        assertTrue(hidden.spentToday.none { it.isDigit() } && hidden.perDayLine!!.none { it.isDigit() } && !hidden.canToggle, "Hide amounts wins over the widget's switch")
+    }
 }
+

@@ -183,6 +183,20 @@ class DataTest {
     }
 
     @Test
+    fun theFinancialYearSummaryIsAValidWorkbookNamedForTheYearAndTheScreenOffersBothYears() {
+        populate(); launch()
+        waitFor("export_fy_this"); waitFor("export_fy_last")
+        val uri = file("fy.xlsx")
+        val label = runBlocking { actions.exportFinancialYear(uri, 0) }
+        assertTrue(Regex("FY \\d{4}-\\d{2}").matches(label), label)
+        val parts = java.util.zip.ZipInputStream(File(uri.path!!).inputStream()).use { z -> generateSequence { z.nextEntry }.associate { e -> e.name to z.readBytes().decodeToString() } }
+        assertTrue(parts.getValue("xl/workbook.xml").contains(label), "the sheet is named for the year")
+        val sheet = parts.getValue("xl/worksheets/sheet1.xml")
+        assertTrue(sheet.contains("Spending by category") && sheet.contains("Income minus spending") && sheet.contains(">Month<"))
+        assertEquals(12, Regex("<t xml:space=\"preserve\">20\\d\\d-\\d\\d</t>").findAll(sheet).count(), "twelve months")
+    }
+
+    @Test
     fun theExcelExportIsAValidWorkbookWithNumericAmountsAndOneRowPerEntry() {
         populate()
         val uri = file("out.xlsx")

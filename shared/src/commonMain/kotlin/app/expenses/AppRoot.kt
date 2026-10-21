@@ -175,6 +175,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var yourData by rememberSaveable { mutableStateOf(false) }
             var reporting by rememberSaveable { mutableStateOf(false) }
             var calendaring by rememberSaveable { mutableStateOf(false) }
+            var subscribing by rememberSaveable { mutableStateOf(false) }
             var searching by rememberSaveable { mutableStateOf(false) }
             var securing by rememberSaveable { mutableStateOf(false) }
             val lock = host.lock
@@ -222,10 +223,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 var tourIndex by rememberSaveable { mutableIntStateOf(0) }
                 // back to the home screen, with nothing of the tour left open
                 val closeEverything = {
-                    adding = false; searching = false; reporting = false; calendaring = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
+                    adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
                     billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
                     privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false
-                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeReports(); viewModel.cancelRestore()
+                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                 }
                 val tourStep = guide?.steps?.getOrNull(tourIndex.coerceAtLeast(0))
@@ -265,7 +266,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
                 val screenKey = listOf(
                     history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen,
+                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing,
                 ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
@@ -421,6 +422,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onShift = viewModel::shiftCalendar, onSelect = viewModel::selectCalendarDay, onOpenEntry = viewModel::openEditor,
                         )
                     }
+                    k == 24 -> {
+                        val subs by viewModel.subscriptions.collectAsStateWithLifecycle(context = MAIN)
+                        BackHandler { subscribing = false; viewModel.closeSubscriptions() }
+                        app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions)
+                    }
                     k == 16 -> {
                         val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
                         // Back leaves the entry list first, then the report.
@@ -451,7 +457,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             DataScreen(
                                 state = dataState,
                                 onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
-                                onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx,
+                                onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx, onExportFinancialYear = viewModel::exportFinancialYear,
                                 autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                 canShareBackup = host.canShareFiles, onShareBackup = { name, pass -> viewModel.shareBackup(name, pass) { n, b -> host.shareFile(n, "application/octet-stream", b) } },
@@ -547,6 +553,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenData = { yourData = true },
                         onOpenReports = { reporting = true; viewModel.openReports() },
                         onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
+                        onOpenSubscriptions = { subscribing = true; viewModel.openSubscriptions() },
                         onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                         onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
                         onOpenGuide = viewModel::openGuide,

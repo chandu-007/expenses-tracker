@@ -242,4 +242,25 @@ class NotificationServiceTest {
         db.schemaQueries.upsertAccountLook("card2", "VISA", null, "1111")
         assertEquals(2, dueCards(day).size, "no account has 0862 and none was remembered: both cards still remind")
     }
+
+    @Test
+    fun rentPostedByARepeatingItemIsPlannedAndDoesNotMakeSpendingLookAheadOfTheMonth() {
+        budgets.setLimit(null, m(100_000))
+        val day = LocalDate(2026, 10, 15)
+        // 70% of the limit by the middle of the month: ahead of it when it is ordinary spending ...
+        spend("a", 700, "Food")
+        // (the helper spends on 7 Oct; check on the 15th)
+        assertEquals(NoticeKind.BUDGET_PACE, service.check(day, noon, zone).notices.single().kind)
+    }
+
+    @Test
+    fun theSame70PercentFromARepeatingRentIsNotAPaceNotice() {
+        budgets.setLimit(null, m(100_000))
+        recurring.save(RecurringItem("rent", "Rent", m(70_000), CategoryId("Bills"), bank.id, null, Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 10, 7)), false))
+        recurring.post("rent", LocalDate(2026, 10, 7), zone)
+        assertTrue(service.check(LocalDate(2026, 10, 15), noon, zone).notices.none { it.kind == NoticeKind.BUDGET_PACE }, "rent is planned")
+        spend("b", 300, "Food") // 30% unplanned: still not ahead of the month
+        assertTrue(service.check(LocalDate(2026, 10, 15), noon, zone).notices.none { it.kind == NoticeKind.BUDGET_PACE })
+    }
 }
+

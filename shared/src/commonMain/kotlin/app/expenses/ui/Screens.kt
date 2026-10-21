@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -135,6 +136,7 @@ fun EntryListScreen(
     onOpenData: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onOpenSubscriptions: () -> Unit = {},
     onOpenLoans: () -> Unit,
     onOpenBills: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
@@ -253,6 +255,7 @@ fun EntryListScreen(
                         MoreRow("manage_categories", Icons.Outlined.Label, "Categories", "${visible.count { it.kind.forExpense }} for expenses \u00B7 ${visible.count { it.kind.forIncome }} for income", onClick = onManageCategories),
                         MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
+                        MoreRow("open_subscriptions", Icons.Outlined.Autorenew, "Subscriptions", "Charges that keep coming, and what they cost a year", onClick = onOpenSubscriptions),
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
                     )),
                     MoreSection("Capture", teal.top, teal.bottom, listOf(
@@ -292,6 +295,7 @@ fun EntryListScreen(
                         color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     )
                     if (state.spark.compare.isNotEmpty()) Text(state.spark.compare, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 4.dp).foldAway(fold).testTag("month_compare"))
+                    if (state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).foldAway(fold).testTag("home_insight"))
                     if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp).foldAway(fold))
                 }
             }
@@ -476,7 +480,7 @@ private fun BillsBanner(peek: app.expenses.BillPeekUi, onOpen: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else if (peek.dueThisWeek > 0) (if (peek.dueThisWeek == 1) "1 bill due this week" else "${peek.dueThisWeek} bills due this week") else "Bills coming up", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("bills_banner_title"))
-                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) "Anything overdue is included" else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) (if (peek.weekTotal.isNotEmpty()) "${peek.weekTotal} in all. Overdue ones are included" else "Overdue ones are included") else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(if (peek.newCount > 0) "Add" else "Open", color = MaterialTheme.colorScheme.onSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondary).padding(horizontal = 16.dp, vertical = 8.dp))
             }

@@ -92,8 +92,13 @@ class NotificationService(
         // spending well ahead of the month while still below the warning level (a budget needs some days behind it and some ahead to say anything)
         val daysIn = status.period.start.daysUntil(today) + 1
         val monthPercent = (daysIn * 100 / status.period.days).coerceIn(0, 100)
-        val pace = if (monthPercent in PACE_FROM_MONTH_PERCENT..PACE_UNTIL_MONTH_PERCENT) status.progress.filter { levelOf(it) == BudgetState.OK && it.usedPercent >= PACE_MIN_USED_PERCENT && it.usedPercent >= monthPercent + PACE_LEAD_PERCENT }
-            .map { app.expenses.core.domain.BudgetPace(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", it.usedPercent, monthPercent, leftText(it), status.period.start) } else emptyList()
+        // what repeating items posted is planned (rent, EMIs): it does not count towards "ahead of the month"
+        val planned = budgets.plannedSpend(status.period, zone, currency)
+        val childrenOf = q.liveCategories().executeAsList().filter { it.parent_id != null }.groupBy({ it.parent_id!! }, { it.id })
+        fun plannedFor(scope: String?) = if (scope == null) planned.values.sum() else (listOf(scope) + childrenOf[scope].orEmpty()).sumOf { planned[it] ?: 0L }
+        fun unplannedPercent(p: app.expenses.core.domain.BudgetProgress) = ((p.spent.minorUnits - plannedFor(p.categoryId)).coerceAtLeast(0L) * 100 / p.limit.minorUnits).coerceAtMost(1000L).toInt()
+        val pace = if (monthPercent in PACE_FROM_MONTH_PERCENT..PACE_UNTIL_MONTH_PERCENT) status.progress.filter { levelOf(it) == BudgetState.OK && unplannedPercent(it) >= PACE_MIN_USED_PERCENT && unplannedPercent(it) >= monthPercent + PACE_LEAD_PERCENT }
+            .map { app.expenses.core.domain.BudgetPace(it.categoryId, it.categoryId?.let { id -> names[id] } ?: "Everything", unplannedPercent(it), monthPercent, leftText(it), status.period.start) } else emptyList()
         // in the first days of a month: last month's overall budget, if there was one and it was kept
         val wrapUp = if (prefs0.budgetWrapUp && status.period.start.daysUntil(today) < WRAP_UP_DAYS) {
             val before = budgets.status(status.period.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY), zone, currency)

@@ -9,7 +9,12 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
+import app.expenses.core.domain.InsightLine
 import app.expenses.core.domain.PeriodCompare
+import app.expenses.core.domain.SubscriptionFinder
+import app.expenses.core.domain.SubscriptionSample
+import app.expenses.core.domain.SpendingInsight
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.daysUntil
 import app.expenses.core.domain.BackupNudge
 import app.expenses.core.domain.Csv
@@ -177,7 +182,7 @@ data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int
 data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
 
 /** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
-data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point, or empty. */ val compare: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
+data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point, or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
@@ -193,7 +198,7 @@ data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<Bi
 data class BillPeekRow(val id: String, val title: String, val amountText: String, val dueIn: String, val isNew: Boolean, val overdue: Boolean)
 
 /** What the home banner shows about bills: how many are new, and the first few (new ones first, then the soonest being tracked). */
-data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0, /** Tracked bills due within a week, overdue ones included. */ val dueThisWeek: Int = 0) { val isEmpty get() = rows.isEmpty() }
+data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0, /** Tracked bills due within a week, overdue ones included. */ val dueThisWeek: Int = 0, /** What they add up to (those with a known amount, in the ledger's currency), or empty. */ val weekTotal: String = "") { val isEmpty get() = rows.isEmpty() && dueThisWeek == 0 }
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
@@ -215,6 +220,11 @@ data class AccountRowUi(
 )
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
+/** One charge that keeps coming, as the Subscriptions screen shows it. */
+data class SubscriptionRowUi(val key: String, val name: String, val amountText: String, val cadenceText: String, val nextText: String, val yearlyText: String)
+
+data class SubscriptionsUi(val rows: List<SubscriptionRowUi> = emptyList(), val monthlyText: String = "", val yearlyText: String = "", val ignored: Int = 0)
+
 data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "")
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
@@ -496,6 +506,7 @@ private const val BALANCES_DEBOUNCE_MS = 1_500L
 private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
 private const val SETTING_RECENT_SEARCHES = "recent_searches"
+private const val SETTING_SUBS_IGNORED = "subs_ignored"
 private const val RECENT_SEARCHES_KEPT = 6
 private const val SETTING_APPEARANCE = "appearance"
 /** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
@@ -981,11 +992,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val earlier = ok.reports.spent(DatePeriod(before.start, comparableEnd), zone, inr).minorUnits
             PeriodCompare.describe(now, earlier, last) { Money(it, inr).formatted() }
         }.orEmpty()
+        // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
+        val insight = PeriodCompare.lastName(budgetPeriod)?.let {
+            val cur = budgetPeriod.containing(today)
+            val daysIn = cur.start.daysUntil(today) + 1
+            val now = ok.reports.breakdown(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).associate { it.name to it.total.minorUnits }
+            var edge = cur.start
+            val earlier = (1..3).map {
+                val p = budgetPeriod.containing(edge.minus(1, kotlinx.datetime.DateTimeUnit.DAY)); edge = p.start
+                ok.reports.breakdown(DatePeriod(p.start, minOf(p.start.plus(daysIn, kotlinx.datetime.DateTimeUnit.DAY), p.endExclusive)), zone, inr).associate { r -> r.name to r.total.minorUnits }
+            }.filter { m -> m.values.sum() > 0 }
+            if (earlier.size < 2) null else SpendingInsight.best(now.map { (name, minor) -> InsightLine(name, minor, earlier.sumOf { m -> m[name] ?: 0L } / earlier.size) }) { Money(it, inr).formatted() }
+        }.orEmpty()
         return SparkUi((0..13).map { i ->
             val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
             val minor = perDay[d.toEpochDays()] ?: 0L
             SparkDayUi(d.toEpochDays(), minor, dayFmt.format(localDateOfEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
-        }, compare)
+        }, compare, insight)
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
@@ -1199,9 +1222,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             LoanRowUi(b.person.id, b.person.name, b.minor, Money(kotlin.math.abs(b.minor), inr).formatted(), when { b.minor > 0 -> "owes you"; b.minor < 0 -> "you owe"; else -> "settled up" }, b.entries)
         }
         val selected = rows.firstOrNull { it.id == selectedPerson }
-        val history = selected?.let { s -> ok.db.schemaQueries.loanEntriesOfPerson(s.id).executeAsList().map { e ->
-            LoanEntryUi(e.id, dateFormat.format(e.occurred_at), Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), e.direction == "PAID_TO_PERSON", e.account_id?.let { accountNames[it] }.orEmpty(), e.note.orEmpty())
-        } }.orEmpty()
+        val history = selected?.let { s ->
+            // lent and borrowed entries, and the shares of bills they were part of, newest first (a share reads as money they owe you, like money lent)
+            val lent = ok.db.schemaQueries.loanEntriesOfPerson(s.id).executeAsList().map { e ->
+                e.occurred_at to LoanEntryUi(e.id, dateFormat.format(e.occurred_at), Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), e.direction == "PAID_TO_PERSON", e.account_id?.let { accountNames[it] }.orEmpty(), e.note.orEmpty())
+            }
+            val shares = ok.db.schemaQueries.sharedEntriesOfPerson(s.id).executeAsList().map { e ->
+                e.occurred_at to LoanEntryUi(e.id, dateFormat.format(e.occurred_at), Money(e.share_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), true, e.account_id?.let { accountNames[it] }.orEmpty(), "Their share of " + (e.merchant ?: e.note ?: "a bill"))
+            }
+            (lent + shares).sortedByDescending { it.first }.map { it.second }
+        }.orEmpty()
         _loans.value = LoansUi(rows, Money(rows.filter { it.minor > 0 }.sumOf { it.minor }, inr).formatted(), Money(rows.filter { it.minor < 0 }.sumOf { -it.minor }, inr).formatted(), selected, history)
     }
 
@@ -1353,17 +1383,40 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         ok.bills.reconcileWithEntries()
         val fresh = ok.bills.count(app.expenses.core.storage.BillStatus.FOUND).toInt()
         val tracked = ok.bills.count(app.expenses.core.storage.BillStatus.TRACKED).toInt()
-        if (fresh + tracked == 0) return BillPeekUi()
-        val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val today = todayLocal()
+        val week = weekAhead(ok, today)
+        if (fresh + tracked == 0) return if (week.first == 0) BillPeekUi() else BillPeekUi(dueThisWeek = week.first, weekTotal = week.second)
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val soon = todayLocal().plusDays(14)
         val shown = ok.bills.list(app.expenses.core.storage.BillStatus.FOUND, 3).map { it to true } +
             ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED, 3).filter { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { it <= soon } == true }.map { it to false }
         val rows = shown.take(3).map { (b, isNew) -> billRow(ok, b, accounts, today).let { BillPeekRow(it.id, it.title, it.amountText, it.dueIn, isNew, it.overdue) } }
-        val week = today.plusDays(7)
-        val dueThisWeek = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED).count { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { it <= week } == true }
-        if (rows.isEmpty()) return BillPeekUi(newCount = fresh)
-        return BillPeekUi(fresh, rows, more = (fresh + shown.count { !it.second } - rows.size).coerceAtLeast(0), dueThisWeek = dueThisWeek)
+        if (rows.isEmpty()) return BillPeekUi(newCount = fresh, dueThisWeek = week.first, weekTotal = week.second)
+        return BillPeekUi(fresh, rows, more = (fresh + shown.count { !it.second } - rows.size).coerceAtLeast(0), dueThisWeek = week.first, weekTotal = week.second)
+    }
+
+    /**
+     * Everything that falls due within a week, overdue included, counted once: tracked bills, repeating items that wait for the person (one set to post by
+     * itself needs nothing from them), and credit cards with something left on the statement (not a card whose bill is already tracked). The count and the
+     * total of what has a known amount.
+     */
+    private fun weekAhead(ok: AppContainer.Opened.Ok, today: LocalDate): Pair<Int, String> {
+        val until = today.plusDays(8)
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        var count = 0; var total = 0L
+        val trackedBills = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED)
+        val trackedDue = trackedBills.mapNotNull { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { d -> b to d } }
+        trackedDue.filter { (_, d) -> d < until }.forEach { (b, _) -> count++; if (b.currency == inr.code) total += b.amountMinor }
+        ok.recurring.unhandled(today.minusDays(14), until).filter { !it.item.auto && it.item.kind == app.expenses.core.domain.RecurringKind.EXPENSE }.forEach { due ->
+            count++; due.item.amount?.takeIf { it.currency == inr }?.let { total += it.minorUnits }
+        }
+        val cardBills = trackedDue.filter { (b, _) -> b.kind == "CREDIT_CARD" }.map { it.second }
+        ok.cards.all().forEach { terms ->
+            val st = ok.cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 && it.cycle.dueDate < until } ?: return@forEach
+            if (cardBills.any { kotlin.math.abs(it.toEpochDays() - st.cycle.dueDate.toEpochDays()) <= 2 }) return@forEach // its own bill is already counted
+            count++; total += st.remaining
+        }
+        return count to (if (count > 0 && total > 0) Money(total, inr).formatted() else "")
     }
 
     private fun billsChanged(ok: AppContainer.Opened.Ok, message: String? = null) {
@@ -1925,6 +1978,38 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) { container.write { ok -> calendarRequest?.let { _calendar.value = buildCalendar(ok, it) } } }
     }
 
+    // ---- subscriptions: charges that keep coming ----
+
+    private val _subscriptions = MutableStateFlow<SubscriptionsUi?>(null)
+    val subscriptions: StateFlow<SubscriptionsUi?> get() = _subscriptions
+
+    private fun subscriptionsUi(ok: AppContainer.Opened.Ok): SubscriptionsUi {
+        val today = todayLocal()
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
+        val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
+        val ignored = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+        val all = SubscriptionFinder.find(samples, today.toEpochDays().toInt())
+        val shown = all.filter { it.key !in ignored }
+        val dayFmt = DatePattern("d MMM")
+        fun cadence(d: Int) = when (d) { 30 -> "every month"; 91 -> "every 3 months"; else -> "every year" }
+        return SubscriptionsUi(
+            shown.map { SubscriptionRowUi(it.key, it.name, Money(it.amountMinor, inr).formatted(), cadence(it.cadenceDays), "next about " + dayFmt.format(localDateOfEpochDay(it.nextDay.toLong())), Money(it.yearlyMinor, inr).formatted() + " a year") },
+            Money(shown.sumOf { it.monthlyMinor }, inr).formatted(), Money(shown.sumOf { it.yearlyMinor }, inr).formatted(), all.size - shown.size,
+        )
+    }
+
+    fun openSubscriptions() = withStore { ok -> _subscriptions.value = subscriptionsUi(ok) }
+    fun closeSubscriptions() { _subscriptions.value = null }
+
+    /** "Not a subscription": hides this guess from the list. */
+    fun ignoreSubscription(key: String) = withStore { ok ->
+        val now = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }
+        ok.templates.putSetting(SETTING_SUBS_IGNORED, (now + key).distinct().joinToString("\n")); _subscriptions.value = subscriptionsUi(ok)
+    }
+
+    fun showIgnoredSubscriptions() = withStore { ok -> ok.templates.putSetting(SETTING_SUBS_IGNORED, ""); _subscriptions.value = subscriptionsUi(ok) }
+
     fun openCalendar() = calendarAction { CalendarRequest(0, null) }
     fun closeCalendar() { calendarRequest = null; _calendar.value = null }
     fun shiftCalendar(delta: Int) = calendarAction { CalendarRequest(it.offset + delta, null) }
@@ -2057,6 +2142,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun exportXlsx(uri: String) = dataAction { "Exported ${actions.exportXlsx(uri)} entries as an Excel workbook." }
+    fun exportFinancialYear(uri: String, yearsBack: Int) = dataAction { "Saved the ${actions.exportFinancialYear(uri, yearsBack)} summary as an Excel workbook." }
     fun exportCsv(uri: String) = dataAction { "Exported ${actions.exportCsv(uri)} entries as a spreadsheet file." }
 
     fun createBackup(uri: String, passphrase: String?) = dataAction {

@@ -1,5 +1,6 @@
 package app.expenses
 
+import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.storage.BackupCounts
 import app.expenses.core.storage.BackupData
 import app.expenses.core.storage.BackupException
@@ -39,6 +40,18 @@ class DataTransfer(private val platform: Platform, private val container: AppCon
         val (bytes, count) = container.write { ok -> ok.csv.xlsx(TimeZone.currentSystemDefault()) to ok.db.schemaQueries.entryCount().executeAsOne() } ?: throw BackupException("The data is not available.")
         writeAndVerify(uri, bytes)
         return count.toInt()
+    }
+
+    /** Writes the summary of a financial year as an Excel workbook; [yearsBack] 0 is the current year. Returns its label, like "FY 2025-26". */
+    suspend fun exportFinancialYear(uri: String, yearsBack: Int): String {
+        val zone = TimeZone.currentSystemDefault()
+        val (bytes, label) = container.write { ok ->
+            val fy = app.expenses.core.storage.FinancialYearExport(ok.reports)
+            val period = fy.yearOf(todayLocal(), yearsBack)
+            fy.xlsx(period, zone, BaseCurrency.current) to fy.label(period)
+        } ?: throw BackupException("The data is not available.")
+        writeAndVerify(uri, bytes)
+        return label
     }
 
     private suspend fun backupContents(passphrase: String?): Triple<ByteArray, BackupCounts, Boolean> {

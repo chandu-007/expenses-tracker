@@ -106,6 +106,10 @@ class BudgetStore(
         return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period, upcoming) })
     }
 
+    /** Spending in [period] that repeating items posted (planned: rent, EMIs, subscriptions), by category (null: uncategorised). */
+    fun plannedSpend(period: DatePeriod, zone: TimeZone, currency: Currency): Map<String?, Long> =
+        q.spendByCategoryFromRepeating(currency.code, period.startMillis(zone), period.endMillis(zone)).executeAsList().associate { it.category_id to (it.mine ?: 0L) }
+
     private fun liveScope(categoryId: String): String {
         val id = db.resolveCategory(categoryId)
         val row = q.categoryById(id).executeAsOneOrNull()

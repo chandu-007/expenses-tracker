@@ -136,7 +136,8 @@ class AlertsUiTest {
         listOf("billtrack:t:today", "card:amex:1:due", "budget:*:1:NEAR").forEach { waitShown(it) }
         val active = manager.activeNotifications
         fun actionsOf(key: String) = active.first { it.id == key.hashCode() }.notification.actions?.map { it.title.toString() }.orEmpty()
-        assertEquals(listOf("Mark paid", "In 3 hours"), actionsOf("billtrack:t:today"))
+        val now = java.time.LocalTime.now()
+        assertEquals(listOf("Mark paid", app.expenses.core.domain.Snooze.label(app.expenses.core.domain.Snooze.laterMode(now.hour * 60 + now.minute)), "Tomorrow"), actionsOf("billtrack:t:today"))
         assertEquals(listOf("Pay now"), actionsOf("card:amex:1:due"))
         assertEquals(emptyList(), actionsOf("budget:*:1:NEAR"), "a budget notice has no buttons")
     }
@@ -184,6 +185,42 @@ class AlertsUiTest {
         db { it.bills.add(bill("b1")); it.bills.add(bill("b2").copy(dueDate = java.time.LocalDate.now().minusDays(2).toString(), dedupeKey = "k2")); it.bills.add(bill("b3").copy(dueDate = java.time.LocalDate.now().plusDays(12).toString(), dedupeKey = "k3")) }
         launch(); waitFor("bills_banner")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("2 bills due this week"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theWeekLineAlsoCountsRepeatingItemsAndCardDueDatesAndCountsATrackedCardBillOnlyOnce() {
+        val today = java.time.LocalDate.now()
+        db { ok ->
+            ok.store.saveAccount(Account(AccountId("amex"), "Amex", AccountType.CREDIT_CARD, inr))
+            ok.store.save(Expense(EntryId("big"), System.currentTimeMillis() - 60L * 86_400_000, AccountId("amex"), Money(40_000, inr)), EntryDetails(merchant = "Phone"))
+            // due within the week whatever today's date is (or overdue, when that wraps past the 28th, which also counts)
+            ok.cards.save(CardTerms("amex", statementDay = 1, dueDay = today.plusDays(3).dayOfMonth.coerceAtMost(28)))
+            ok.recurring.save(app.expenses.core.domain.RecurringItem("rent", "Rent", Money(500_000, inr), app.expenses.core.domain.ledger.CategoryId("Bills"), AccountId("cash"), null,
+                app.expenses.core.domain.Schedule(app.expenses.core.domain.RepeatUnit.MONTH, 1, kotlinx.datetime.LocalDate(today.plusDays(1).year, today.plusDays(1).monthValue, today.plusDays(1).dayOfMonth)), false))
+        }
+        launch(); waitFor("bills_banner")
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("2 bills due this week"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("5,400.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } // 5,000 rent + 400 left on the card
+        scenario!!.close()
+        // the card's own bill, tracked, is the same thing: it is counted once, not twice
+        db { ok -> ok.bills.add(bill("cardbill").copy(kind = "CREDIT_CARD", dueDate = java.time.LocalDate.of(today.year, today.month, today.plusDays(3).dayOfMonth.coerceAtMost(28)).toString(), dedupeKey = "cb", amountMinor = 40_000)) }
+        launch(); waitFor("bills_banner")
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("2 bills due this week"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun food(id: String, millis: Long, minor: Long) = db { ok -> ok.store.save(Expense(EntryId(id), millis, AccountId("cash"), Money(minor, inr), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), Money(minor, inr)))), EntryDetails(merchant = id)) }
+
+    @Test
+    fun homeNamesTheCategoryRunningWellAboveItsUsualOnlyWithTwoEarlierMonthsToJudgeBy() {
+        val today = java.time.LocalDate.now()
+        food("now", millisOf(today), 300_000)
+        food("m1", millisOf(today.withDayOfMonth(1).minusMonths(1)), 100_000)
+        launch(); waitFor("month_spend")
+        assertTrue(!has("home_insight"), "one earlier month is too little to call anything usual")
+        scenario!!.close()
+        food("m2", millisOf(today.withDayOfMonth(1).minusMonths(2)), 100_000)
+        launch(); waitFor("home_insight")
+        assertEquals("Food is 200% above your usual (₹3,000.00 against ₹1,000.00 by now)", textOf("home_insight"))
     }
 }
 

@@ -10,6 +10,7 @@ import app.expenses.core.domain.ledger.Income
 import app.expenses.core.domain.ledger.PersonId
 import app.expenses.core.domain.ledger.Refund
 import app.expenses.core.domain.ledger.Settlement
+import app.expenses.core.domain.ledger.Share
 import app.expenses.core.domain.ledger.SettlementDirection
 import app.expenses.core.domain.ledger.Transfer
 
@@ -44,7 +45,19 @@ data class EntryDraft(
     val personId: String = "",
     /** For [DraftKind.LOAN]: true when the money went to the person (lent, or paid back), false when it came from them (borrowed, or paid to you). */
     val gave: Boolean = true,
+    /** For a new expense: the people the bill is shared equally with (their ids). The whole amount leaves the account; only your share is spending, and each of them owes theirs. */
+    val splitWith: List<String> = emptyList(),
 )
+
+/** Sharing one bill equally between you and some friends. */
+object BillSplit {
+    /** What each friend owes and what is left to you (the odd paise stay with you), for a bill of [totalMinor] shared with [friends] people. Null when it cannot be shared. */
+    fun shares(totalMinor: Long, friends: Int): Pair<Long, Long>? {
+        if (friends < 1 || totalMinor < friends + 1) return null
+        val each = totalMinor / (friends + 1)
+        return each to totalMinor - each * friends
+    }
+}
 
 sealed interface DraftResult {
     data class Ok(val entry: Entry) : DraftResult
@@ -91,7 +104,10 @@ object EntryDrafts {
     private fun expense(d: EntryDraft, id: EntryId, amount: Money, currency: Currency): DraftResult {
         if (!isSplit(d)) {
             val parts = if (d.category.isEmpty()) emptyList() else listOf(CategorySplit(CategoryId(d.category), amount))
-            return DraftResult.Ok(Expense(id, d.occurredAt, AccountId(d.accountId), amount, parts))
+            val friends = d.splitWith.distinct()
+            if (friends.isEmpty() || d.id != null) return DraftResult.Ok(Expense(id, d.occurredAt, AccountId(d.accountId), amount, parts))
+            val (each, mine) = BillSplit.shares(amount.minorUnits, friends.size) ?: return DraftResult.Problem("That amount is too small to share between ${friends.size + 1} people.")
+            return DraftResult.Ok(Expense(id, d.occurredAt, AccountId(d.accountId), amount, parts, listOf(Share(null, Money(mine, currency))) + friends.map { Share(PersonId(it), Money(each, currency)) }))
         }
         val parts = ArrayList<CategorySplit>()
         for ((i, s) in d.splits.withIndex()) {

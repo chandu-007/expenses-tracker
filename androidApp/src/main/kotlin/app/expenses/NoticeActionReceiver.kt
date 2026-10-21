@@ -11,6 +11,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
+import app.expenses.core.domain.Snooze
+import app.expenses.core.domain.SnoozeMode
 import app.expenses.core.storage.BillStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +33,11 @@ class NoticeActionReceiver : BroadcastReceiver() {
                         val bill = ok.bills.get(ref)
                         if (bill != null && bill.status == BillStatus.TRACKED) ok.bills.markPaid(ref, null, System.currentTimeMillis())
                     }
-                    ACTION_SNOOZE -> schedule(app, ref, intent.getStringExtra(EXTRA_TITLE).orEmpty(), intent.getStringExtra(EXTRA_TEXT).orEmpty(), intent.getStringExtra(EXTRA_KIND).orEmpty())
+                    ACTION_SNOOZE -> {
+                        val mode = runCatching { SnoozeMode.valueOf(intent.getStringExtra(EXTRA_MODE).orEmpty()) }.getOrDefault(SnoozeMode.HOURS3)
+                        val now = java.time.LocalTime.now()
+                        schedule(app, ref, intent.getStringExtra(EXTRA_TITLE).orEmpty(), intent.getStringExtra(EXTRA_TEXT).orEmpty(), intent.getStringExtra(EXTRA_KIND).orEmpty(), Snooze.delayMinutes(mode, now.hour * 60 + now.minute))
+                    }
                     else -> return@launch
                 }
                 NotificationManagerCompat.from(app).cancel(notificationId)
@@ -47,12 +53,13 @@ class NoticeActionReceiver : BroadcastReceiver() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_KIND = "kind"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
-        const val SNOOZE_HOURS = 3L
+        const val EXTRA_MODE = "mode"
+        const val EXTRA_DELAY_MINUTES = "delay_minutes"
         const val SNOOZE_TAG = "notice-snooze"
 
-        fun schedule(context: Context, ref: String, title: String, text: String, kind: String) {
+        fun schedule(context: Context, ref: String, title: String, text: String, kind: String, delayMinutes: Int = 180) {
             val data = Data.Builder().putString(EXTRA_REF, ref).putString(EXTRA_TITLE, title).putString(EXTRA_TEXT, text).putString(EXTRA_KIND, kind).build()
-            WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<SnoozedNoticeWorker>().setInitialDelay(SNOOZE_HOURS, TimeUnit.HOURS).setInputData(data).addTag(SNOOZE_TAG).build())
+            WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<SnoozedNoticeWorker>().setInitialDelay(delayMinutes.toLong(), TimeUnit.MINUTES).setInputData(data).addTag(SNOOZE_TAG).build())
         }
     }
 }

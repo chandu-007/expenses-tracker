@@ -130,4 +130,33 @@ class EntryDraftTest {
         assertEquals(m(300_00), ledger.personBalance(PersonId("chandu"), inr))
         assertEquals(m(9_700_00), ledger.balances().getValue(AccountId("bank")))
     }
+
+    // ---- a new expense shared equally with friends ----
+
+    @Test
+    fun theBillIsSharedEquallyWithTheOddPaiseLeftToYouAndTooSmallAnAmountIsRefused() {
+        assertEquals(30_000L to 30_001L, BillSplit.shares(90_001, 2))
+        assertEquals(50L to 50L, BillSplit.shares(100, 1))
+        assertEquals(null, BillSplit.shares(100, 0), "nobody to share with")
+        assertEquals(null, BillSplit.shares(2, 2), "two paise cannot be shared between three")
+        assertEquals(1L to 1L, BillSplit.shares(2, 1))
+    }
+
+    @Test
+    fun aDraftSharedWithFriendsBecomesOneExpenseWithTheirSharesAndAnEditedOneIsNotShared() {
+        val draft = EntryDraft(null, DraftKind.EXPENSE, "900.01", "Food", emptyList(), "bank", splitWith = listOf("asha", "ravi", "asha"))
+        val e = (EntryDrafts.build(draft, EntryId("e"), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(m(900_01), e.amount, "the whole bill leaves the account")
+        assertEquals(listOf(null, PersonId("asha"), PersonId("ravi")), e.shares.map { it.person }, "a repeated friend counts once")
+        assertEquals(listOf(30_001L, 30_000L, 30_000L), e.shares.map { it.amount.minorUnits })
+        assertEquals(m(300_01), e.myShare)
+        assertEquals(e.amount, e.shares.fold(Money.zero(inr)) { a, s -> a + s.amount }, "the shares add up to the bill")
+        val tiny = EntryDrafts.build(draft.copy(amountText = "0.02"), EntryId("e"), inr)
+        assertTrue(tiny is DraftResult.Problem && tiny.message.contains("too small"), tiny.toString())
+        val edited = (EntryDrafts.build(draft.copy(id = "existing"), EntryId("existing"), inr) as DraftResult.Ok).entry as Expense
+        assertTrue(edited.shares.isEmpty(), "sharing is for a new expense")
+        val plain = (EntryDrafts.build(draft.copy(splitWith = emptyList()), EntryId("p"), inr) as DraftResult.Ok).entry as Expense
+        assertTrue(plain.shares.isEmpty() && plain.myShare == m(900_01))
+    }
 }
+
