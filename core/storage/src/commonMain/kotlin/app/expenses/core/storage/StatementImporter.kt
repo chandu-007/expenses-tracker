@@ -27,6 +27,7 @@ data class ImportResult(val imported: Int, val alreadyThere: Int, val spendingMi
  * A row that matches an entry from **another source** (a captured text or notification, or one typed by hand) on the same account, direction and
  * amount within a day of the row's date is **not added again** and is counted in [ImportResult.matchedExisting] so the person is told. Each existing entry
  * answers for at most one row, so two real same-amount purchases on one day are not both swallowed by one entry.
+ * A row that carries its [StatementTxn.sourceText] (the line as it was in the file) keeps it as the entry's origin (kind STATEMENT).
  * Everything is saved in one transaction, oldest first (which also keeps the search index fast), so a failure saves nothing.
  *
  * Not thread-safe: call through the process-wide write lock.
@@ -63,6 +64,7 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
                 Flow.SPENDING -> { ledger.save(Expense(EntryId(id), at, account, money), details); spend += t.minor }
                 Flow.INCOME -> { ledger.save(Income(EntryId(id), at, account, money), details); income += t.minor }
             }
+            t.sourceText?.takeIf { it.isNotBlank() }?.let { q.putOrigin(id, OriginKind.STATEMENT.name, null, it.take(OriginStore.MAX_CHARS), null) }
             imported++
         }
         ImportResult(imported, there, spend, income, matched)

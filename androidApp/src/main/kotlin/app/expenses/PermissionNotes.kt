@@ -31,7 +31,7 @@ object PermissionNotes {
     /** Notification access is not a manifest permission but a setting the person turns on for an app; shown with the others because it is as sensitive. */
     fun notificationAccessRow(context: Context) = PermissionRow(
         "Notification access", NotificationCaptureService.accessGranted(context),
-        "Lets the app see notifications. It reads only Google Pay, PhonePe, Paytm and BHIM, only if you turn on payment app capture, and ignores every other app's without reading it. Nothing is sent anywhere.",
+        "Lets the app see notifications. It reads only Google Pay, PhonePe, Paytm and BHIM, only if you turn on payment app capture, and Gmail, Outlook and Yahoo Mail, only if you turn on email capture (it keeps only an email that reads like a bank alert), and ignores every other app's without reading it. Nothing is sent anywhere.",
     )
 
     fun rows(context: Context): List<PermissionRow> = declared(context).map { perm ->

@@ -20,6 +20,8 @@ activity-compose = "1.13.0"
 core-ktx = "1.19.1"
 lifecycle = "2.11.0"
 logback = "1.5.18"
+pdfbox-android = "2.0.27.0"
+mlkit-text-recognition = "16.0.1"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -62,6 +64,10 @@ ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negoti
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+# Statement import from PDF (text and password) and photos (on-device OCR). Neither reaches the network: see the INTERNET note in androidApp/src/main/AndroidManifest.xml.
+pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox-android" }
+# The BUNDLED recognizer (model inside the app), not the play-services one that downloads its model.
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

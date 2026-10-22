@@ -329,13 +329,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             refundOf = e.refundOf,
                             onHistory = e.draft.id?.let { id -> { viewModel.openHistory(id) } },
                             onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
+                            origin = e.origin,
                         )
                         }
                     }
                     k == 2 -> {
                         val e = (editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly)
                         BackHandler { viewModel.closeEditor() }
-                        ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor)
+                        ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor, e.origin)
                     }
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
@@ -359,6 +360,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             captureSettings, smsPermission, host.notificationAccessGranted(),
                             onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else sms.request() },
                             onToggleNotif = { on -> viewModel.setNotificationCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
+                            onToggleEmail = { on -> viewModel.setEmailCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
                             onOpenAccessSettings = { host.openNotificationAccessSettings() },
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                         )
@@ -465,7 +467,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             ImportScreen(
                                 state = statement, accounts = s.accounts,
                                 onAccount = viewModel::changeImportAccount, onMapping = viewModel::changeImportMapping,
-                                onImport = viewModel::confirmImport, onClose = viewModel::closeImport,
+                                onImport = viewModel::confirmImport, onClose = viewModel::closeImport, onPassword = viewModel::submitImportPassword,
                             )
                         } else {
                             BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }

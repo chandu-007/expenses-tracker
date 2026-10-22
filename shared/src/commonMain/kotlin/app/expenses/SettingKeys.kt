@@ -7,6 +7,7 @@ object CaptureKeys {
     const val SETTING_NOTIF_ON = "capture_notif_on"
     const val SETTING_EXTRA_ROOTS = "capture_extra_roots"
     const val SETTING_SMS_ON = "capture_sms_on"
+    const val SETTING_EMAIL_ON = "capture_email_on"
 }
 
 /** Settings keys and constants of automatic export. */

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import app.expenses.AccountUi
 import app.expenses.ImportUi
@@ -66,6 +70,7 @@ fun ImportScreen(
     onMapping: ((StatementMapping) -> StatementMapping) -> Unit,
     onImport: () -> Unit,
     onClose: () -> Unit,
+    onPassword: (String) -> Unit,
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Import a statement") }, navigationIcon = { TextButton(onClick = onClose, modifier = Modifier.testTag("import_close")) { Text(if (state.result != null) "Done" else "Cancel") } }) },
@@ -78,7 +83,11 @@ fun ImportScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (state.busy) CircularProgressIndicator(Modifier.testTag("import_busy"))
+            if (state.busy) {
+                CircularProgressIndicator(Modifier.testTag("import_busy"))
+                // reading a PDF or recognising a picture takes a while, and happens on this phone
+                if (state.readFrom != null) Text("Reading the ${state.readFrom} on this phone. Nothing leaves it.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("import_busy_note"))
+            }
             state.profileNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("import_profile_note")) }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import_error")) }
             state.result?.let { r ->
@@ -91,7 +100,26 @@ fun ImportScreen(
                 }
                 return@Column
             }
+            if (state.needsPassword) {
+                // the password is typed here, handed over once and cleared; it is not kept in the screen state or anywhere else
+                var password by remember { mutableStateOf("") }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("import_password_box")) {
+                    Text("This PDF is protected with a password", style = MaterialTheme.typography.titleMedium)
+                    Text("Banks often use a mix of your name, birth date or the last digits of the card or account; the statement email usually says which. It is used once, here on this phone, to open the file. It is not saved.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it }, label = { Text("PDF password") }, singleLine = true, isError = state.passwordError != null,
+                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        supportingText = { state.passwordError?.let { Text(it, modifier = Modifier.testTag("import_password_error")) } },
+                        modifier = Modifier.fillMaxWidth().testTag("import_password"),
+                    )
+                    Button(onClick = { val typed = password; password = ""; onPassword(typed) }, enabled = !state.busy && password.isNotEmpty(), modifier = Modifier.testTag("import_password_go")) { Text("Open the PDF") }
+                }
+                return@Column
+            }
             val m = state.mapping ?: return@Column
+            state.readFrom?.let {
+                Text("Read from a $it; check amounts before importing. ${state.readNote.orEmpty()}".trim(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("import_read_note"))
+            }
             if (state.damaged) Text("This file looks cut off or damaged (a quoted cell is never closed). Check it before importing.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import_damaged"))
 
             Text("Into which account?", style = MaterialTheme.typography.labelMedium)
@@ -105,6 +133,7 @@ fun ImportScreen(
                 Text("What I understood", style = MaterialTheme.typography.titleMedium)
                 Text("${state.txnCount} ${if (state.txnCount == 1) "transaction" else "transactions"}: spending ${state.spending}, income ${state.income}", modifier = Modifier.testTag("import_summary"))
                 if (state.repairedRows > 0) Text("${state.repairedRows} ${if (state.repairedRows == 1) "row" else "rows"} had commas inside the description (the file does not quote them) and were put back together.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("import_repaired"))
+                if (state.cardPayments > 0) Text("Skipped ${state.cardPayments} ${if (state.cardPayments == 1) "payment" else "payments"} to the card: paying the card's bill is not income, and the bank account it came from shows it as money out.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("import_card_payments"))
                 if (state.ignoredRows > 0) Text("${state.ignoredRows} ${if (state.ignoredRows == 1) "row" else "rows"} skipped (balances, totals or rows with no amount).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("import_ignored"))
                 state.preview.forEachIndexed { i, r ->
                     Row(Modifier.fillMaxWidth().testTag("preview_$i")) {

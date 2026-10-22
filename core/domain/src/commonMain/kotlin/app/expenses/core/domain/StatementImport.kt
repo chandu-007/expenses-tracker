@@ -155,8 +155,12 @@ object StatementParser {
         return out to repaired
     }
 
-    /** [lineOf] turns a row's position in [rows] (from 0) into the line shown to the user; by default the position plus one. */
-    fun parse(inputRows: List<List<String>>, m: StatementMapping, digits: Int = 2, lineOf: (Int) -> Int = { it + 1 }): ParsedStatement {
+    /**
+     * [lineOf] turns a row's position in [rows] (from 0) into the line shown to the user; by default the position plus one. [sourceOf] gives the text a row
+     * was read from when that is not simply its cells (a line of a PDF or a photo); by default the cells joined with ", ", kept as each transaction's
+     * [StatementTxn.sourceText].
+     */
+    fun parse(inputRows: List<List<String>>, m: StatementMapping, digits: Int = 2, lineOf: (Int) -> Int = { it + 1 }, sourceOf: (Int) -> String? = { null }): ParsedStatement {
         require(m.missing() == null) { m.missing()!! }
         val (rows, repairedRows) = rejoin(inputRows, m)
         val txns = ArrayList<StatementTxn>()
@@ -223,7 +227,7 @@ object StatementParser {
                 reason != null -> if ((dateText.isEmpty() && description.isEmpty()) || date == null) ignored++ else problems += StatementProblem(line, reason)
                 dateText.isEmpty() -> problems += StatementProblem(line, "The date is missing.")
                 date == null -> problems += StatementProblem(line, "The date '$dateText' is not a date in the chosen format.")
-                else -> txns += StatementTxn(line, date, flow!!, minor, description)
+                else -> txns += StatementTxn(line, date, flow!!, minor, description, sourceOf(index) ?: r.dropLastWhile { it.isBlank() }.joinToString(", "))
             }
         }
         return ParsedStatement(txns, problems, ignored, repairedRows)

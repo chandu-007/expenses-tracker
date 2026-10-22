@@ -158,6 +158,29 @@ CREATE TABLE entry_share (
     PRIMARY KEY (entry_id, position)
 );
 
+-- Where an entry was read from: the words of the text, notification, email notification or statement line it came from. Kept with the entry (not
+-- the inbox, which forgets the words once an item is added). [kind] is SMS, NOTIFICATION, EMAIL or STATEMENT; [sender] the sender name when there is one.
+CREATE TABLE entry_origin (
+    entry_id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    sender TEXT,
+    text TEXT NOT NULL,
+    received_at INTEGER
+);
+
+putOrigin:
+INSERT OR REPLACE INTO entry_origin(entry_id, kind, sender, text, received_at) VALUES (?, ?, ?, ?, ?);
+
+originOf:
+SELECT * FROM entry_origin WHERE entry_id = :entryId;
+
+deleteOrigin:
+DELETE FROM entry_origin WHERE entry_id = :entryId;
+
+-- Only those of live entries: a backup carries no deleted entry, so nothing for one.
+allLiveOrigins:
+SELECT o.* FROM entry_origin o JOIN entry e ON e.id = o.entry_id WHERE e.deleted = 0 ORDER BY o.entry_id;
+
 -- Someone the person lends to, borrows from or settles with. An entry refers to one by [id] (entry.person_id); the name lives only here.
 CREATE TABLE person (
     id TEXT NOT NULL PRIMARY KEY,

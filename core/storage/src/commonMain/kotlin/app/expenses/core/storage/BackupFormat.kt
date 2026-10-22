@@ -73,6 +73,8 @@ data class BackupRecurring(
     val accountLast4: String? = null, val reference: String? = null, val autoDebit: Boolean = false, val receivedAt: Long, val status: String, val paidAt: Long? = null, val dedupeKey: String,
 )
 
+@Serializable data class BackupOrigin(val entryId: String, val kind: String, val sender: String? = null, val text: String, val receivedAt: Long? = null)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -95,6 +97,8 @@ data class BackupData(
     val people: List<BackupPerson> = emptyList(),
     /** Bills found in texts, with what became of them. The message and the entry a payment made are not part of the file. Absent in a backup made before bills existed. */
     val bills: List<BackupBill> = emptyList(),
+    /** Where entries were read from (message, notification, email, statement line). Absent in a backup made before this existed. */
+    val origins: List<BackupOrigin> = emptyList(),
     /** Card networks, tiers and last four digits of accounts. Absent in a backup made before they existed. */
     val accountLooks: List<BackupAccountLook> = emptyList(),
     val settings: Map<String, String> = emptyMap(),

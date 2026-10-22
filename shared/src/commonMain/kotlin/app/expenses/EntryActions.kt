@@ -21,8 +21,11 @@ import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.storage.EntryDetails
+import app.expenses.core.storage.OriginKind
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+
+private val NAMES = mapOf("GPAY" to "Google Pay", "PHONEPE" to "PhonePe", "PAYTM" to "Paytm", "GMAIL" to "Gmail", "OUTLOOK" to "Outlook", "YAHOO" to "Yahoo Mail", "BHIM" to "BHIM", "AMAZONPAY" to "Amazon Pay")
 
 private const val LAST_CATEGORY = "last_category"
 private const val LAST_ACCOUNT = "last_account"
@@ -34,13 +37,16 @@ internal const val LAST_INCOME_CATEGORY = "last_income_category"
 data class HistoryUi(val entryId: String, val title: String, val revisions: List<HistoryRevisionUi>)
 data class HistoryRevisionUi(val index: Int, val whenText: String, val what: String, val lines: List<HistoryLine>, val canRestore: Boolean)
 
+/** Where an entry was read from, for its "Where this came from" section: [kindLabel] ("Text message from HDFCBK"), the original [text], and when it arrived ([whenText] is empty when not known). */
+data class OriginUi(val kindLabel: String, val text: String, val whenText: String)
+
 /** What the edit screen may do with an entry. */
 sealed interface Editable {
     /** An entry the form can edit (or, for a refund, create). [refundOf] is the title of the refunded expense; [canRefund] offers a refund from this expense. */
-    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false) : Editable
+    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false, val origin: OriginUi? = null) : Editable
 
     /** Shown read-only, with the reason it cannot be edited here yet, so nothing is changed by accident. */
-    data class ReadOnly(val id: String, val title: String, val reason: String) : Editable
+    data class ReadOnly(val id: String, val title: String, val reason: String, val origin: OriginUi? = null) : Editable
 }
 
 /**
@@ -87,8 +93,30 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         return true
     }
 
-    /** Decides how an entry can be edited. Null if it does not exist or is deleted. */
+    /** Decides how an entry can be edited. Null if it does not exist or is deleted. Carries where the entry was read from, when it was read from something. */
     fun editable(entryId: String): Editable? {
+        val e = editableCore(entryId) ?: return null
+        val o = originUi(entryId) ?: return e
+        return when (e) { is Editable.Form -> e.copy(origin = o); is Editable.ReadOnly -> e.copy(origin = o) }
+    }
+
+    /** The origin of [entryId] as the screen shows it, or null for an entry typed by hand. */
+    fun originUi(entryId: String): OriginUi? {
+        val o = ok.origins.get(entryId) ?: return null
+        val who = o.sender?.trim()?.takeIf { it.isNotEmpty() }
+        val label = when (o.kind) {
+            OriginKind.SMS -> if (who != null) "Text message from $who" else "Text message"
+            OriginKind.NOTIFICATION -> if (who != null) "Notification from ${friendlyName(who)}" else "Notification"
+            OriginKind.EMAIL -> if (who != null) "Email notification from ${friendlyName(who)}" else "Email notification"
+            OriginKind.STATEMENT -> "Statement line"
+        }
+        return OriginUi(label, o.text, o.receivedAt?.let { app.expenses.ui.dateTimeLabel(it) }.orEmpty())
+    }
+
+    /** "GMAIL" is shown as "Gmail", "PHONEPE" as "Phonepe": the capture side keeps sender names in capitals. A name with lower case in it is left as it is. */
+    private fun friendlyName(name: String) = if (name.any { it.isLowerCase() }) name else NAMES[name.uppercase()] ?: name.lowercase().replaceFirstChar { it.uppercase() }
+
+    private fun editableCore(entryId: String): Editable? {
         val q = ok.db.schemaQueries
         val row = q.entryById(entryId).executeAsOneOrNull()?.takeIf { it.deleted == 0L } ?: return null
         val title = row.merchant ?: row.note ?: row.kind.lowercase().replaceFirstChar { it.uppercase() }

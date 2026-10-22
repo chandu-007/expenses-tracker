@@ -29,6 +29,7 @@ class AndroidPlatform(context: Context) : Platform {
     private var activityRef: WeakReference<FragmentActivity>? = null
 
     private val authenticator: Authenticator by lazy { BiometricAuthenticator() }
+    private val pdfReader by lazy { PdfStatementReader(this.context) }
 
     override val supportsAppLock get() = true
     override val supportsBiometricLock get() = true
@@ -107,4 +108,6 @@ class AndroidPlatform(context: Context) : Platform {
     override fun decodeStatementText(bytes: ByteArray): String = StatementText.decode(bytes)
     override fun looksLikeXlsx(bytes: ByteArray): Boolean = XlsxReader.looksLikeZip(bytes)
     override fun readXlsx(bytes: ByteArray): List<List<String>> = XlsxReader.read(bytes)
+    override fun readPdfText(bytes: ByteArray, password: String?): PdfText = pdfReader.read(bytes, password)
+    override fun recognizeText(bytes: ByteArray): String = OcrStatementReader().use { it.recognize(bytes) }
 }

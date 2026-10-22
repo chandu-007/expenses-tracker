@@ -31,7 +31,7 @@ class DuplicatesTest {
         assertEquals(DupStrength.LIKELY, Duplicates.best(100, "R9", listOf(e("a", 100, "  ")))!!.strength, "a blank number on the entry is no number")
     }
 
-    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT", sender: String = id, fromApp: Boolean = false) = PendingKey(id, dir, amount, at, ref, sender, fromApp)
+    private fun p(id: String, at: Long, ref: String? = null, amount: Long = 500, dir: String = "DEBIT", sender: String = id, fromApp: Boolean = false, last4: String? = null) = PendingKey(id, dir, amount, at, ref, sender, fromApp, last4, fromMail = sender in setOf("GMAIL", "OUTLOOK", "YAHOO"))
 
     @Test
     fun aSecondTextForTheSamePaymentPointsAtTheFirstWithinTenMinutes() {
@@ -65,5 +65,42 @@ class DuplicatesTest {
         assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "PHONEPE", fromApp = true), p("b", 20_000, sender = "PHONEPE", fromApp = true))))
         assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "PHONEPE", fromApp = true), p("b", 20_000, "R2", sender = "PHONEPE", fromApp = true))), "two different references are still two payments")
         assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "PHONEPE", fromApp = true), p("b", 20_000, sender = "PHONEPE", fromApp = false))), "a text and a notification from one sender name: the same-sender rule stands")
+    }
+
+    @Test
+    fun aPaymentAppAlertAndABankEmailOrTextForTheSameSpendMeetWithinTenMinutes() {
+        val min = 60_000L
+        // senders differ (a payment app, a mail app naming no bank of its own, a bank's text header): no shared reference is needed
+        assertEquals(mapOf("mail" to "app"), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", fromApp = true), p("mail", 4 * min, sender = "GMAIL"))))
+        assertEquals(mapOf("sms" to "mail"), Duplicates.repeatsOfPending(listOf(p("mail", 0, sender = "GMAIL"), p("sms", 9 * min, sender = "HDFCBK"))))
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", fromApp = true), p("mail", 11 * min, sender = "GMAIL"))), "an email eleven minutes later: another spend")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", fromApp = true), p("mail", min, sender = "GMAIL", dir = "CREDIT"))), "money in is not the spend")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", fromApp = true), p("mail", min, sender = "GMAIL", amount = 50_000))))
+    }
+
+    @Test
+    fun twoMailsFromOneMailAppNeedTheSameReferenceUnlessTheyAreNotifications() {
+        val min = 60_000L
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "GMAIL"), p("b", min, sender = "GMAIL"))), "two bank emails of one amount with no reference: two payments")
+        assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "GMAIL"), p("b", min, "r1", sender = "GMAIL"))))
+    }
+
+    @Test
+    fun differentLastFourDigitsAreTwoPaymentsAndAMissingOneDoesNotSeparateThem() {
+        val min = 60_000L
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", last4 = "1234"), p("mail", min, sender = "GMAIL", last4 = "4321"))))
+        assertEquals(mapOf("mail" to "app"), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE", last4 = "1234"), p("mail", min, sender = "GMAIL", last4 = "1234"))))
+        assertEquals(mapOf("mail" to "app"), Duplicates.repeatsOfPending(listOf(p("app", 0, sender = "PHONEPE"), p("mail", min, sender = "GMAIL", last4 = "1234"))), "the app names no account")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK", last4 = "1111"), p("b", min, "R1", sender = "GMAIL", last4 = "2222"))), "even a shared reference: the digits differ")
+        assertEquals(mapOf("b" to "a"), Duplicates.repeatsOfPending(listOf(p("a", 0, sender = "HDFCBK", last4 = "1111"), p("b", min, sender = "ICICIB", last4 = "2222"))), "two banks' texts keep matching as before: one payment can touch two of a person's accounts")
+    }
+
+    @Test
+    fun theSameReferenceFromTwoSendersIsOnePaymentEvenWhenTheEmailCameHoursLater() {
+        val min = 60_000L; val hour = 60 * min
+        assertEquals(mapOf("mail" to "sms"), Duplicates.repeatsOfPending(listOf(p("sms", 0, "R1", sender = "HDFCBK"), p("mail", 5 * hour, "r1", sender = "GMAIL"))))
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("sms", 0, "R1", sender = "HDFCBK"), p("mail", 25 * hour, "R1", sender = "GMAIL"))), "a day and an hour later: the number may have come round again")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("sms", 0, "R1", sender = "HDFCBK"), p("mail", 5 * hour, null, sender = "GMAIL"))), "hours apart with no shared number: two payments")
+        assertEquals(emptyMap(), Duplicates.repeatsOfPending(listOf(p("a", 0, "R1", sender = "HDFCBK"), p("b", 5 * hour, "R1", sender = "HDFCBK"))), "one sender repeating a reference hours later keeps the ten-minute window")
     }
 }

@@ -28,6 +28,7 @@ import app.expenses.core.domain.ReportMath
 import app.expenses.core.domain.StatementDetector
 import app.expenses.core.domain.StatementMapping
 import app.expenses.core.domain.StatementParser
+import app.expenses.core.domain.StatementTextParser
 import app.expenses.core.domain.parseAmount
 import app.expenses.core.storage.SearchQuery
 import app.expenses.core.storage.searchFiltered
@@ -50,6 +51,7 @@ import app.expenses.core.domain.BaseCurrencyRules
 import app.expenses.core.domain.CaptureCount
 import app.expenses.core.domain.CaptureHealth
 import app.expenses.core.domain.CaptureHealthReport
+import app.expenses.core.parsers.AppSources
 import app.expenses.core.parsers.SenderRules
 import app.expenses.core.domain.DupEntry
 import app.expenses.core.domain.DupStrength
@@ -205,7 +207,7 @@ data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = empty
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
-data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false)
+data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false, val emailOn: Boolean = false)
 
 /**
  * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
@@ -351,6 +353,15 @@ data class ImportUi(
     /** Set when the layout was not guessed but remembered from an earlier file with the same column titles. */
     val profileNote: String? = null,
     val result: ImportResultUi? = null,
+    /** "PDF" or "photo" when the rows were read out of a PDF or a picture rather than a spreadsheet: the preview must then be checked. */
+    val readFrom: String? = null,
+    /** How money in and out was told apart in a PDF or a photo, in words. */
+    val readNote: String? = null,
+    /** Payments of a credit card's own bill found in a statement and left out, since they are not income. */
+    val cardPayments: Int = 0,
+    /** A PDF that is protected with a password: asks for it. [passwordError] says the one typed did not open it. The password itself is never kept in this state. */
+    val needsPassword: Boolean = false,
+    val passwordError: String? = null,
 )
 
 /** A search kept under a name, ready to apply. */
@@ -567,6 +578,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     val statement: StateFlow<ImportUi> = _import
     private var importTable: app.expenses.core.domain.CsvTable? = null
     private var importParsed: ParsedStatement? = null
+    /** For a PDF or a photo: what was read out of it, so another account (a card or not) can read it again; the statement text each row came from; the PDF itself while it waits for a password. */
+    private var importText: String? = null
+    private var importRawLines: List<String>? = null
+    private var importReadFrom: String? = null
+    private var importReadNote: String? = null
+    private var importCardPayments = 0
+    private var importConvention: StatementTextParser.Convention? = null
+    private var importProtectedPdf: ByteArray? = null
 
     private val _search = MutableStateFlow(SearchUi())
     val search: StateFlow<SearchUi> = _search
@@ -1267,7 +1286,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun loadInbox() = withStore { ok -> _inbox.value = inboxRows(ok) }
 
     fun loadCaptureSettings() = withStore { ok ->
-        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty(), ok.templates.setting(CaptureKeys.SETTING_NOTIF_ON) == "1")
+        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty(), ok.templates.setting(CaptureKeys.SETTING_NOTIF_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EMAIL_ON) == "1")
     }
 
     fun setSmsCapture(on: Boolean) = withStore { ok ->
@@ -1279,6 +1298,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun setNotificationCapture(on: Boolean) = withStore { ok ->
         ok.templates.putSetting(CaptureKeys.SETTING_NOTIF_ON, if (on) "1" else "0")
         _captureSettings.value = _captureSettings.value.copy(notifOn = on)
+    }
+
+    fun setEmailCapture(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(CaptureKeys.SETTING_EMAIL_ON, if (on) "1" else "0")
+        _captureSettings.value = _captureSettings.value.copy(emailOn = on)
     }
 
     fun setExtraHeaders(text: String) = withStore { ok ->
@@ -1510,7 +1534,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = systemZone()
         val fmt = DatePattern("d MMM")
         val items = ok.inbox.list()
-        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase(), it.source == CaptureKeys.NOTIFICATION) })
+        // a mail app's notification is not "an app posting the same notification twice": two emails of one amount from one mail app need the same reference to count as one
+        val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase(), it.source == CaptureKeys.NOTIFICATION && !AppSources.isEmailName(it.sender), it.accountLast4, AppSources.isEmailName(it.sender)) })
         val byId = items.associateBy { it.id }
         val dayMs = 86_400_000L
         return items.map { i ->
@@ -1530,7 +1555,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val first = repeats[i.id]?.let { byId[it] }
             val note = when {
                 match != null -> (if (match.strength == DupStrength.SAME_REFERENCE) "Already in your ledger: " else "Looks like one you already added: ") + "${match.entry.label} on ${fmt.format(localDateOfEpochDay(match.entry.day))}"
-                first != null -> "Probably the same payment as the text from ${first.issuer} above"
+                first != null -> "Probably the same payment as the ${if (AppSources.isEmailName(first.sender)) "email" else if (first.source == CaptureKeys.NOTIFICATION) "notification" else "text"} from ${first.issuer} above"
                 reverses != null -> "Carries the reference of ${if (isCredit) "the payment" else "the money received"} \"${reverses.merchant ?: "an entry"}\" on ${fmt.format(dateOfMillis(reverses.occurred_at, zone))}: looks like its refund or reversal, not a repeat"
                 else -> null
             }
@@ -1626,6 +1651,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     }
                     ok.store.atomically {
                         ok.store.save(entry, EntryDetails(merchant = payee, note = null, source = "sms", sourceRef = sourceRef))
+                        i.body?.let { ok.origins.put(entry.id.value, app.expenses.core.storage.OriginStore.kindOf(i.source, i.sender), i.sender, it, i.receivedAt) }
                         ok.inbox.confirm(id, entry.id.value)
                     }
                     if (treatment == "PAYMENT") ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
@@ -1823,6 +1849,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             try {
                 val bytes = platform.readBytes(uri)
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
+                // a PDF or a picture: the text is read on this device and turned into the same kind of table, so the rest of the screen works unchanged
+                if (platform.looksLikePdf(bytes) || platform.looksLikeImage(bytes)) { readTextStatement(bytes, null); return@launch }
+                clearTextImport()
                 val table = when {
                     platform.looksLikeXlsx(bytes) -> app.expenses.core.domain.CsvTable(platform.readXlsx(bytes), ',', false)
                     // the older Excel format (.xls), which many banks still hand out
@@ -1851,6 +1880,79 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
     }
 
+    /** The password for the PDF that asked for one. It is used once to open the file and is neither stored nor logged. */
+    fun submitImportPassword(password: String) {
+        val bytes = importProtectedPdf ?: return
+        _import.value = ImportUi(active = true, busy = true, readFrom = "PDF")
+        viewModelScope.launch(BACKGROUND) {
+            try {
+                readTextStatement(bytes, password)
+            } catch (e: IllegalArgumentException) {
+                _import.value = ImportUi(active = true, error = e.message)
+            } catch (e: Exception) {
+                _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.simpleName}")
+            }
+        }
+    }
+
+    private fun clearTextImport() {
+        importText = null; importRawLines = null; importReadFrom = null; importReadNote = null; importCardPayments = 0; importConvention = null; importProtectedPdf = null
+    }
+
+    /** Reads the text of a PDF (with [password] when it has one) or of a picture, and shows the rows found in it. Runs on the background dispatcher. */
+    private suspend fun readTextStatement(bytes: ByteArray, password: String?) {
+        clearTextImport()
+        val pdf = platform.looksLikePdf(bytes)
+        var kind = if (pdf) "PDF" else "photo"
+        val text = if (pdf) when (val r = platform.readPdfText(bytes, password)) {
+            is PdfText.Text -> { if (r.recognised) kind = "scanned PDF"; r.text }
+            PdfText.PasswordNeeded, PdfText.WrongPassword -> {
+                importProtectedPdf = bytes
+                _import.value = ImportUi(active = true, readFrom = kind, needsPassword = true, passwordError = if (r == PdfText.WrongPassword) "That password did not open the PDF. Check it and try again." else null)
+                return
+            }
+            is PdfText.Unreadable -> throw IllegalArgumentException(r.reason)
+        } else platform.recognizeText(bytes)
+        val accountId = importAccountId()
+        val convention = importConventionFor(accountId)
+        val read = StatementTextParser.parse(text, convention)
+        if (read.rowCount == 0) {
+            throw IllegalArgumentException(
+                if (pdf) "Could not find transactions in this PDF. Is it a scanned statement? Try a photo or the bank's CSV."
+                else "Could not find transactions in this photo. Try a sharper, straighter picture that shows whole lines, or the bank's CSV.",
+            )
+        }
+        importText = text; importReadFrom = kind
+        applyTextRead(read)
+        recomputeImport(StatementDetector.detect(read.table.rows), accountId)
+    }
+
+    private fun applyTextRead(read: StatementTextParser.Result) {
+        importTable = read.table; importRawLines = read.rawLines; importCardPayments = read.cardPayments; importReadNote = read.note; importConvention = read.convention
+    }
+
+    /** The account to start a statement on: the one used last, else the first. */
+    private suspend fun importAccountId(): String {
+        val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList().filter { a -> a.archived == 0L } }.orEmpty()
+        return (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()
+    }
+
+    /** A credit card account reads an amount with no mark as spending; for any other account the words in the statement decide (null). */
+    private suspend fun importConventionFor(accountId: String): StatementTextParser.Convention? =
+        if (container.write { ok -> ok.db.schemaQueries.selectAccounts().executeAsList().firstOrNull { it.id == accountId }?.type } == AccountType.CREDIT_CARD.name) StatementTextParser.Convention.CARD else null
+
+    /** The account was changed on a PDF or photo import: a card reads the same text the card way, so read it again. */
+    private fun rereadTextImport(accountId: String) {
+        val text = importText ?: return
+        viewModelScope.launch(BACKGROUND) {
+            val convention = importConventionFor(accountId)
+            val read = StatementTextParser.parse(text, convention)
+            if (read.convention == importConvention && read.cardPayments == importCardPayments) return@launch
+            applyTextRead(read)
+            recomputeImport(_import.value.mapping ?: StatementDetector.detect(read.table.rows), accountId)
+        }
+    }
+
     fun changeImportMapping(change: (StatementMapping) -> StatementMapping) {
         val m = _import.value.mapping ?: return
         viewModelScope.launch(BACKGROUND) { recomputeImport(change(m), _import.value.accountId) }
@@ -1858,13 +1960,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun changeImportAccount(id: String) {
         _import.update { it.copy(accountId = id) }
+        rereadTextImport(id)
     }
 
     private fun recomputeImport(mapping: StatementMapping, accountId: String, profileNote: String? = null) {
         val table = importTable ?: return
         val names = StatementDetector.columnNames(table.rows, mapping.headerRows)
         val missing = mapping.missing()
-        val parsed = if (missing == null) StatementParser.parse(table.rows, mapping, inr.minorUnitDigits) { table.lines[it] } else null
+        val raw = importRawLines
+        val parsed = if (missing == null) StatementParser.parse(table.rows, mapping, inr.minorUnitDigits, { table.lines[it] }, { raw?.getOrNull(it) }) else null
         importParsed = parsed
         val dateFmt = DatePattern("d MMM yyyy")
         fun sum(flow: Flow) = Money(parsed?.txns?.filter { it.flow == flow }?.sumOf { it.minor } ?: 0L, inr)
@@ -1877,6 +1981,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             txnCount = parsed?.txns?.size ?: 0, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
             problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
             ignoredRows = parsed?.ignoredRows ?: 0, repairedRows = parsed?.repairedRows ?: 0, mappingProblem = missing, profileNote = profileNote,
+            readFrom = importReadFrom, readNote = importReadNote, cardPayments = importCardPayments,
         )
     }
 
@@ -1892,7 +1997,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val r = ok.statements.import(parsed.txns, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
                     // Remember how this bank's file was read, now that it is known to have worked, for the next one with the same column titles.
                     val mapping = _import.value.mapping
-                    val signature = mapping?.takeIf { it.headerRows > 0 }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
+                    val signature = mapping?.takeIf { it.headerRows > 0 && importText == null }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
                     if (mapping != null && signature != null) ok.templates.putSettingIfChanged(signature, ImportProfiles.encode(mapping))
                     refresh(ok)
                     _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting)) }
@@ -1906,6 +2011,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun closeImport() {
         importTable = null
         importParsed = null
+        clearTextImport()
         _import.value = ImportUi()
     }
 

@@ -262,7 +262,7 @@ fun EntryListScreen(
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
                     )),
                     MoreSection("Capture", teal.top, teal.bottom, listOf(
-                        MoreRow("open_capture", Icons.Outlined.Sms, if (reads) "Capture from texts" else "Capture from payment apps", if (reads) "Bank texts and payment alerts, added only when you approve" else "Google Pay, PhonePe, Paytm and BHIM alerts, added only when you approve", onClick = onOpenCapture),
+                        MoreRow("open_capture", Icons.Outlined.Sms, if (reads) "Capture from texts" else "Capture from payment apps", if (reads) "Bank texts and payment alerts, added only when you approve" else "Google Pay, PhonePe, Paytm and BHIM alerts, and bank emails if you turn that on, added only when you approve", onClick = onOpenCapture),
                         MoreRow("open_notifications", Icons.Outlined.Notifications, "Notifications", "Bills, budgets and the weekly recap", onClick = onOpenNotifications),
                     )),
                     MoreSection("Make it yours", purple.top, purple.bottom, listOf(
@@ -402,11 +402,12 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
 /** Explains why an entry cannot be edited here yet, instead of offering a form that would lose information. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReadOnlyEntryScreen(title: String, reason: String, onBack: () -> Unit) {
+fun ReadOnlyEntryScreen(title: String, reason: String, onBack: () -> Unit, origin: app.expenses.OriginUi? = null) {
     Scaffold(topBar = { TopAppBar(title = { Text(title, maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Back") } }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Can't edit this entry here", style = MaterialTheme.typography.titleMedium)
             Text(reason, modifier = Modifier.testTag("read_only_reason"))
+            if (origin != null) OriginSection(origin)
         }
     }
 }

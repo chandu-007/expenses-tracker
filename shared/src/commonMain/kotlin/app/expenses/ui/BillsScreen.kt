@@ -93,7 +93,7 @@ fun BillsScreen(
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("No bills yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("bills_empty"))
                 Text(
-                    "When a text or a payment app's notification says a bill is due (a credit card statement, electricity, water, gas, mobile, broadband, an EMI or an insurance premium), it appears here and you are told. " +
+                    "When a text, a payment app's notification or a bank alert email (if you turned that on) says a bill is due (a credit card statement, electricity, water, gas, mobile, broadband, an EMI or an insurance premium), it appears here and you are told. " +
                         "Turn on Capture from texts in More if you have not.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

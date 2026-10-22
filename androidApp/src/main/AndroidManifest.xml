@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Restricted by Google Play: needs the SMS permissions declaration. Asked for at runtime only after the person turns SMS capture on. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- This app has no network permission, on purpose, and must never get one. ML Kit (the on-device text recognizer used to read statement photos) pulls in a
+         usage-statistics sender (datatransport) whose manifest adds INTERNET; both it and the backend that would send anything are removed here. The recognizer itself
+         works offline (its model is inside the app). Check the merged manifest of every build type after adding any library: it must list no INTERNET. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <!-- Phones are the target, but the app still installs without a telephony stack (tablets, Chromebooks): capture is just unavailable there. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
@@ -135,6 +139,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/quick_add_large_widget_info" />
         </receiver>
+
+        <!-- With no backend registered, the statistics events ML Kit queues are discarded instead of being scheduled for upload. -->
+        <service android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery" tools:node="remove" />
     </application>
 
 </manifest>

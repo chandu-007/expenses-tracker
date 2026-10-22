@@ -145,7 +145,14 @@ class StatementImportTest {
             listOf("06/10/2026", "ZERO", "0.00", ""),
         )
         val p = parse(rows, map(AmountLayout.SEPARATE_DEBIT_CREDIT, debit = 2, credit = 3))
-        assertEquals(listOf(StatementTxn(2, d(2026, 10, 1), Flow.SPENDING, 25000, "UPI-SWIGGY"), StatementTxn(3, d(2026, 10, 2), Flow.INCOME, 5000000, "SALARY")), p.txns)
+        assertEquals(
+            listOf(
+                StatementTxn(2, d(2026, 10, 1), Flow.SPENDING, 25000, "UPI-SWIGGY", "01/10/2026, UPI-SWIGGY, 250.00"),
+                StatementTxn(3, d(2026, 10, 2), Flow.INCOME, 5000000, "SALARY", "02/10/2026, SALARY, , 50,000.00"),
+            ),
+            p.txns,
+            "each transaction keeps the cells of its row, as the file had them, so the entry can show where it came from",
+        )
         assertEquals(listOf(5, 6, 7, 8), p.problems.map { it.row })
         assertTrue(p.problems.first { it.row == 5 }.reason.contains("Both"))
         assertTrue(p.problems.first { it.row == 6 }.reason.contains("'x'"))

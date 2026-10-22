@@ -42,6 +42,7 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS bill (id TEXT NOT NULL PRIMARY KEY, source TEXT NOT NULL, sender TEXT NOT NULL, issuer TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, amount_minor INTEGER NOT NULL, min_due_minor INTEGER, currency TEXT NOT NULL, due_date TEXT, account_last4 TEXT, reference TEXT, auto_debit INTEGER NOT NULL DEFAULT 0, received_at INTEGER NOT NULL, body TEXT, status TEXT NOT NULL DEFAULT 'FOUND', entry_id TEXT, paid_at INTEGER, dedupe_key TEXT NOT NULL UNIQUE)")
         run(driver, "CREATE INDEX IF NOT EXISTS bill_status ON bill(status, due_date)")
         run(driver, "CREATE TABLE IF NOT EXISTS person (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)")
+        run(driver, "CREATE TABLE IF NOT EXISTS entry_origin (entry_id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, sender TEXT, text TEXT NOT NULL, received_at INTEGER)")
     }
 
     private fun run(driver: SqlDriver, sql: String) { driver.execute(null, sql, 0) }

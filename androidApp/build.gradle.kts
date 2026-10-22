@@ -15,8 +15,8 @@ android {
         applicationId = "app.expenses"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.3.1"
+        versionCode = 9
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Test-data seeding through an intent extra exists only where this is true; never in release.
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
@@ -67,6 +67,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            // PDFBox brings BouncyCastle, whose post-quantum code ships ~9 MB of data tables. Nothing here uses it (R8 drops the classes; these files would remain).
+            excludes += "org/bouncycastle/pqc/**"
+        }
+    }
 }
 
 dependencies {
@@ -89,6 +96,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.glance.appwidget)
+    implementation(libs.pdfbox.android)
+    implementation(libs.mlkit.text.recognition)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

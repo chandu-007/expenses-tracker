@@ -141,8 +141,8 @@ fun DataScreen(
             }
 
             Text("Bring in a bank statement", style = MaterialTheme.typography.titleMedium)
-            Text("Import a CSV or Excel file downloaded from your bank or card. The way a bank's file was read is remembered for next time. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { pickers.openDocument(listOf("*/*")) { it?.let(onImportStatement) } }, enabled = !state.busy, modifier = Modifier.testTag("import_statement")) { Text("Import a statement (CSV or Excel)") }
+            Text("Import a CSV, Excel or PDF file downloaded from your bank or card, or a photo or screenshot of a statement (read on this phone, nothing is sent anywhere). The way a bank's file was read is remembered for next time. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { pickers.openDocument(listOf("*/*")) { it?.let(onImportStatement) } }, enabled = !state.busy, modifier = Modifier.testTag("import_statement")) { Text("Import a statement (CSV, Excel, PDF or photo)") }
             HorizontalDivider()
 
             Text("Backup", style = MaterialTheme.typography.titleMedium)

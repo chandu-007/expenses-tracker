@@ -14,7 +14,13 @@ enum class DupStrength {
 data class DupMatch(val entry: DupEntry, val strength: DupStrength)
 
 /** A pending item as far as matching two pending items goes. */
-data class PendingKey(val id: String, val direction: String, val amountMinor: Long, val receivedAt: Long, val reference: String?, val sender: String = id, val fromApp: Boolean = false)
+data class PendingKey(
+    val id: String, val direction: String, val amountMinor: Long, val receivedAt: Long, val reference: String?, val sender: String = id, val fromApp: Boolean = false,
+    /** The account or card digits the text names, when it names any. Two texts naming different ones are two payments. */
+    val last4: String? = null,
+    /** An email notification. Only an email's digits are held against another item: two banks' texts may name two accounts of one person for one payment. */
+    val fromMail: Boolean = false,
+)
 
 object Duplicates {
     /** How far apart (in days) two dates may be and still count as the same day's payment: banks date a transaction when it posts, people enter it when it happens. */
@@ -22,6 +28,12 @@ object Duplicates {
 
     /** Two texts about the same payment arrive together: a bank's alert and an app's, or a bank's alert and its own reminder. */
     const val PENDING_WINDOW_MS = 10 * 60_000L
+
+    /**
+     * Two items from different senders (a payment app and a bank's text or email) that carry the same bank reference are the same payment even when one arrived late:
+     * an email notification can reach the phone long after the text, for instance when the phone was offline.
+     */
+    const val SAME_REFERENCE_WINDOW_MS = 24 * 60 * 60_000L
 
     /**
      * The entry a captured transaction most likely is, if any. [entries] are those with the same amount and direction; the choice is the one with the
@@ -36,18 +48,24 @@ object Duplicates {
 
     /**
      * For each pending item, the older pending item it probably repeats: same direction and amount, received within [PENDING_WINDOW_MS], and not a
-     * different bank reference (two payments of the same amount with different references are two payments) and, for two texts from one sender, only when the
+     * different bank reference (two payments of the same amount with different references are two payments) and not different last four digits when both name them,
+     * and, for two texts from one sender, only when the
      * reference is the same: one bank rarely texts twice about one payment, but a person often pays the same amount twice. The exception is a payment app's
-     * notifications ([PendingKey.fromApp]): an app often posts the same notification twice, so two from one app are a likely repeat. The older item is the original.
+     * notifications ([PendingKey.fromApp]): an app often posts the same notification twice, so two from one app are a likely repeat. This is also how a payment app's
+     * alert and a bank's text or email about one spend meet: they have different senders, so no shared reference is needed, and when they do share one the window is
+     * [SAME_REFERENCE_WINDOW_MS]. The older item is the original.
      */
     fun repeatsOfPending(items: List<PendingKey>): Map<String, String> {
         val out = HashMap<String, String>()
         val sorted = items.sortedWith(compareBy({ it.receivedAt }, { it.id }))
         for ((i, later) in sorted.withIndex()) {
             val earlier = sorted.subList(0, i).lastOrNull { e ->
-                e.direction == later.direction && e.amountMinor == later.amountMinor && later.receivedAt - e.receivedAt <= PENDING_WINDOW_MS &&
-                    !(e.reference != null && later.reference != null && !e.reference.equals(later.reference, ignoreCase = true)) &&
-                    (e.sender != later.sender || (e.fromApp && later.fromApp) || (e.reference != null && later.reference != null))
+                val sameRef = e.reference != null && later.reference != null && e.reference.equals(later.reference, ignoreCase = true)
+                val window = if (sameRef && e.sender != later.sender) SAME_REFERENCE_WINDOW_MS else PENDING_WINDOW_MS
+                e.direction == later.direction && e.amountMinor == later.amountMinor && later.receivedAt - e.receivedAt <= window &&
+                    !(e.reference != null && later.reference != null && !sameRef) &&
+                    !((e.fromMail || later.fromMail) && e.last4 != null && later.last4 != null && e.last4 != later.last4) &&
+                    (e.sender != later.sender || (e.fromApp && later.fromApp) || sameRef)
             }
             if (earlier != null) out[later.id] = earlier.id
         }

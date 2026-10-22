@@ -27,7 +27,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 
 ## Payload
 
-`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `captureRules`, `merchantMap`, `people`, `bills`, `accountLooks`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
+`currencies`, `accounts`, `categories`, `entries`, `templates`, `budgets`, `budgetPeriod`, `recurring`, `recurringDone`, `savedSearches`, `cardTerms`, `captureRules`, `merchantMap`, `people`, `bills`, `origins`, `accountLooks`, `settings`. Deleted entries are not included; a deleted category that was merged into another is (`mergedInto`), so a late edit still finds its target.
 
 ### `currencies`: `code`, `digits`
 
@@ -60,6 +60,8 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 ### `people`: `id`, `name`, `deleted`. The people lent to and borrowed from. A lent-or-borrowed entry (`SETTLEMENT`) refers to one by `id` in its `personId`; the name lives only here. Absent in a backup made before they existed. Restored only where this phone has no person with the same id.
 
 ### `bills`: `id`, `issuer`, `kind` (`CREDIT_CARD`, `ELECTRICITY`, `WATER`, `GAS`, `MOBILE`, `BROADBAND`, `DTH`, `INSURANCE`, `LOAN_EMI`, `OTHER`), `title`, `amountMinor`, `minDueMinor`, `currency`, `dueDate` (`yyyy-MM-dd`), `accountLast4`, `reference` (a consumer or customer number), `autoDebit`, `receivedAt`, `status` (`TRACKED`, `PAID`, `DISMISSED`; a bill still `FOUND` is not written), `paidAt`, `dedupeKey` (what makes the same bill reminded again one bill). The text of the message and the entry a payment made are not in the file. Absent in a backup made before bills existed. Restored only where this phone has no bill with the same id or `dedupeKey`.
+
+### `origins`: `entryId`, `kind` (`SMS`, `NOTIFICATION`, `EMAIL` or `STATEMENT`), `sender` (the name the text or notification came from; absent for a statement line), `text` (the original words the entry was read from), `receivedAt` (epoch milliseconds, when it arrived; absent when not known). Written only for entries in the file. Absent in a backup made before they existed. Restored only for an entry that exists here and has no origin yet.
 
 ### `savedSearches`: `id`, `name`, `text`, `minRupees`, `maxRupees`, `categoryId`, `kind` (`ANY`, `EXPENSE`, `INCOME`), `range` (`ANY`, `LAST_30_DAYS`, `THIS_PERIOD`, `THIS_YEAR`), `tag`
 ### `settings`: a map of text to text (reminder preferences and similar).

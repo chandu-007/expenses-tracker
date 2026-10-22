@@ -186,7 +186,7 @@ object Guide {
                 "Export every entry as an Excel or CSV file, free, any time.",
                 "Make a backup file now and then: uninstalling the app deletes everything on this phone. A backup can be locked with a passphrase, and restoring it never overwrites what is already here.",
                 "Automatic copies can be saved into a folder you choose.",
-                "Bring in a bank statement (CSV or Excel) to add past entries.",
+                "Bring in a bank statement (CSV, Excel, PDF or a photo) to add past entries.",
             ),
             "More, then Your data", GuideTarget.DATA,
         ),

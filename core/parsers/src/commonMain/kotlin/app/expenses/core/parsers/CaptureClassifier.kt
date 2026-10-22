@@ -36,4 +36,20 @@ object CaptureClassifier {
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)
         }
     }
+
+    /**
+     * The email counterpart of [classify]. An email app's notification has no SMS header, so the bank is found from the email's sender name(s) ([senderNames], tried in
+     * order: the display name first) with [SenderRules.emailIssuer], and only then is the body read, by the very same rules as a text from that bank's header: a
+     * transaction, a bill, an OTP or neither. An email from nobody on the list is [IgnoreReason.NOT_ALLOWLISTED] with no root, and its words are never parsed.
+     */
+    fun classifyEmail(senderNames: List<String>, body: String, extraRoots: Set<String> = emptySet(), today: LocalDate = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date): CaptureOutcome {
+        val root = senderNames.firstNotNullOfOrNull { SenderRules.emailIssuer(it, extraRoots) } ?: return CaptureOutcome.Ignored(IgnoreReason.NOT_ALLOWLISTED, null)
+        return classify(root, withoutSafetyNotice(body), extraRoots, today)
+    }
+
+    /** "Never share your OTP, password or card details with anyone" closes many bank emails; read as it stands, the word OTP would make a real alert look like a one-time password. */
+    private val safetyNotice = Regex("""(?i)\b(?:do\s*n[o']?t|don't|never|not\s+to)\s+share\b[^.!?\n]*[.!?]?|\bnever\s+asks?\s+(?:you\s+)?for\b[^.!?\n]*[.!?]?""")
+
+    /** An email's words with those safety sentences taken out; the words kept on the pending item are the original ones. */
+    internal fun withoutSafetyNotice(body: String): String = safetyNotice.replace(body, " ")
 }

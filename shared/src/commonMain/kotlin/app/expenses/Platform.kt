@@ -25,6 +25,7 @@ import kotlin.time.Clock
  *   notification  notificationsAllowed(), showNotices(notices), notificationTimingNote
  *   app lock      authenticate(title, subtitle, onResult)
  *   statements    decodeStatementText(bytes), looksLikeXlsx(bytes), readXlsx(bytes)
+ *                 looksLikePdf / looksLikeImage (shared), readPdfText(bytes, password), recognizeText(bytes) (unsupported unless a platform overrides)
  * Top-level: nowMillis(), ioDispatcher (expect), rethrowUncaught(e) (expect), see Formatting.kt for dates.
  */
 interface Platform {
@@ -120,6 +121,51 @@ interface Platform {
 
     /** The rows of the first sheet of an .xlsx workbook. Throws [IllegalArgumentException] with a reason for a person when it cannot be read. */
     fun readXlsx(bytes: ByteArray): List<List<String>>
+
+    /** Whether [bytes] start like a PDF (the "%PDF-" mark, which may follow a little junk). */
+    fun looksLikePdf(bytes: ByteArray): Boolean = hasPdfMark(bytes)
+
+    /** Whether [bytes] are a JPEG, PNG or WebP picture. */
+    fun looksLikeImage(bytes: ByteArray): Boolean = hasImageMark(bytes)
+
+    /**
+     * The text of a PDF, read on the device. [password] is what the person typed for a protected file (null the first time). Where this platform cannot read
+     * PDFs, [PdfText.Unreadable] says so. Never throws for a bad file, never keeps or logs the password.
+     */
+    fun readPdfText(bytes: ByteArray, password: String?): PdfText = PdfText.Unreadable("This phone cannot read PDF statements yet. Download the statement as CSV or Excel from your bank instead.")
+
+    /** The text recognised in a picture of a statement, line by line, on the device. Throws [IllegalArgumentException] with a reason for a person when it cannot. */
+    fun recognizeText(bytes: ByteArray): String = throw IllegalArgumentException("This phone cannot read statements from pictures yet. Download the statement as CSV or Excel from your bank instead.")
+}
+
+/** What reading a PDF gave. */
+sealed interface PdfText {
+    /** The text, lines in reading order. [recognised] is true when the pages were pictures (a scanned statement) and the text was recognised, so it may hold mistakes. */
+    data class Text(val text: String, val recognised: Boolean) : PdfText
+
+    /** The file is protected and no password was given. */
+    data object PasswordNeeded : PdfText
+
+    /** A password was given and it did not open the file. */
+    data object WrongPassword : PdfText
+
+    /** [reason] is for a person to read. */
+    data class Unreadable(val reason: String) : PdfText
+}
+
+private fun hasPdfMark(bytes: ByteArray): Boolean {
+    val mark = "%PDF-"
+    val limit = minOf(bytes.size, 1024) - mark.length
+    for (start in 0..limit) if (mark.indices.all { bytes[start + it] == mark[it].code.toByte() }) return true
+    return false
+}
+
+private fun hasImageMark(bytes: ByteArray): Boolean {
+    fun at(i: Int, vararg v: Int) = bytes.size >= i + v.size && v.indices.all { bytes[i + it] == v[it].toByte() }
+    val jpeg = at(0, 0xFF, 0xD8, 0xFF)
+    val png = at(0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    val webp = at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)
+    return jpeg || png || webp
 }
 
 /** What copying an attachment in produced. */

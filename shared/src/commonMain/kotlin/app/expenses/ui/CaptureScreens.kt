@@ -220,7 +220,7 @@ private fun Callout(text: String, color: androidx.compose.ui.graphics.Color, mod
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureSettingsScreen(
-    settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
+    settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onToggleEmail: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
 ) {
     if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack); return }
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
@@ -247,6 +247,13 @@ fun CaptureSettingsScreen(
             Text("Reads the notification a payment app shows after a payment (Google Pay, PhonePe, Paytm, BHIM) and puts it in To review. Notifications from every other app are never read. This needs the phone's Notification access, which you turn on in its settings.", style = MaterialTheme.typography.bodyMedium)
             if (settings.notifOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_notif_access_missing"))
             OutlinedButton(onClick = onOpenAccessSettings, modifier = Modifier.testTag("capture_notif_settings")) { Text("Open notification access settings") }
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Read bank alert emails from Gmail and Outlook notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = settings.emailOn && notifAccess, onCheckedChange = onToggleEmail, modifier = Modifier.testTag("email_capture_switch"))
+            }
+            Text("Off by default. When a bank sends you an email, Gmail, Outlook or Yahoo Mail shows a notification, and this reads that notification (the sender's name, the subject and the start of the message the email app shows) on this phone. Only a notification from a bank or card issuer on the built-in list (or a name you add below) whose words read like a payment, a credit or a bill is kept, and it goes to To review for you to add or skip. Every other email, one-time passwords and mail from people are ignored. Nothing is sent anywhere. The email app's own notification has to show the text: Gmail shows the subject and the start of the message, so an alert whose amount comes later in the email, or a phone set to hide notification contents, is missed. This uses the same Notification access as above.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("email_capture_note"))
+            if (settings.emailOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("email_capture_access_missing"))
             HorizontalDivider()
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))

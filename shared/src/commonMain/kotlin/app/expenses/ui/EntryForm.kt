@@ -158,6 +158,8 @@ fun EntryFormScreen(
     /** The expense and income categories used last: where a draft lands when the kind is switched. */
     lastExpenseCategory: String = "",
     lastIncomeCategory: String = "",
+    /** Where the entry was read from (a text, notification, email, statement line); null for one typed by hand. */
+    origin: app.expenses.OriginUi? = null,
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -450,6 +452,7 @@ fun EntryFormScreen(
                     Text("Save as a quick entry")
                 }
             }
+            if (origin != null) OriginSection(origin)
             if (onHistory != null) {
                 OutlinedButton(onClick = onHistory, modifier = Modifier.testTag("history_open")) { Text("History of this entry") }
             }
