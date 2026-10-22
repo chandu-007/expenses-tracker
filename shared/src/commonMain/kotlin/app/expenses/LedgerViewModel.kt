@@ -1420,7 +1420,34 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val today = todayLocal()
         fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
-        return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), rows(app.expenses.core.storage.BillStatus.TRACKED, 100), rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true)
+        val coming = (rows(app.expenses.core.storage.BillStatus.TRACKED, 100) + cardDueRows(ok, accounts, today)).sortedBy { it.dueEpochDay ?: Long.MAX_VALUE }
+        return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), coming, rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true)
+    }
+
+    /** Prefix of the id of a credit card's statement shown among the bills although no message brought it (an imported statement, or entries typed in). */
+    private val CARD_DUE_PREFIX = "card:"
+
+    /**
+     * A card with something left on its latest statement is a bill too, whether or not a text said so: the home banner counts it, so the bills page lists it, with
+     * Mark paid. Not when the card's own bill from a message is already tracked for about the same day.
+     */
+    private fun cardDueRows(ok: AppContainer.Opened.Ok, accounts: List<app.expenses.core.storage.db.Account>, today: LocalDate): List<BillRowUi> {
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val cardBills = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED).filter { it.kind == "CREDIT_CARD" }.mapNotNull { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } }
+        val bank = accounts.firstOrNull { it.type == "BANK" && it.archived == 0L } ?: accounts.firstOrNull { it.type != "CREDIT_CARD" && it.archived == 0L }
+        return ok.cards.all().mapNotNull { terms ->
+            val account = accounts.firstOrNull { it.id == terms.accountId && it.archived == 0L } ?: return@mapNotNull null
+            val st = ok.cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 && it.cycle.dueDate < today.plusDays(45) } ?: return@mapNotNull null
+            if (cardBills.any { kotlin.math.abs(it.toEpochDays() - st.cycle.dueDate.toEpochDays()) <= 2 }) return@mapNotNull null
+            val days = st.cycle.dueDate.epochDay() - today.epochDay()
+            val dueIn = when { days == 0L -> "today"; days == 1L -> "tomorrow"; days > 1 -> "in $days days"; days == -1L -> "1 day overdue"; else -> "${-days} days overdue" }
+            val left = Money(st.remaining, inr)
+            BillRowUi(
+                CARD_DUE_PREFIX + account.id, account.name + " statement", BillKind.CREDIT_CARD.name, account.name, left.formatted(), left.toPlainString(),
+                st.minimumDue.takeIf { it > 0 && it < st.remaining }?.let { Money(it, inr).formatted() }, st.minimumDue.takeIf { it > 0 && it < st.remaining }?.let { Money(it, inr).toPlainString() },
+                "Due ${billDay.format(st.cycle.dueDate)}", dueIn, st.cycle.dueDate.epochDay(), days < 0, days in 0..3, false, null, "", "TRACKED", account.id, bank?.id.orEmpty(),
+            )
+        }
     }
 
     /** What the home banner shows: three small queries, whatever the size of the history. */
@@ -1486,6 +1513,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
+                    if (id.startsWith(CARD_DUE_PREFIX)) {
+                        // a card's statement with no message behind it: only the payment is recorded, as a transfer to the card, never as spending
+                        if (!record) return@write "Turn on entering the payment: there is no message to mark, so this is how it is paid."
+                        if (cardAccountId.isEmpty() || payFromId.isEmpty()) return@write "Choose the account it was paid from."
+                        val draft = EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, "Card bill payment", nowMillis())
+                        try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
+                        billsChanged(ok, "Recorded the payment to the card")
+                        return@write null
+                    }
                     val b = ok.bills.get(id) ?: return@write "That bill is no longer here."
                     if (b.status == app.expenses.core.storage.BillStatus.PAID || b.status == app.expenses.core.storage.BillStatus.DISMISSED) return@write "That bill was already handled."
                     var entryId: String? = null

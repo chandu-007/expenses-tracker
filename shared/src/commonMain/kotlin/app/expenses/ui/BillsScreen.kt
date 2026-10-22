@@ -158,11 +158,11 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
                 paid -> TextButton(onClick = { onUnpay(b.id) }, modifier = Modifier.testTag("bill_unpay_${b.id}")) { Text("Not paid after all") }
                 else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { onPay(b.id) }, modifier = Modifier.weight(1f).testTag("bill_pay_${b.id}")) { Text("Mark paid") }
-                    OutlinedButton(onClick = { onSkip(b.id) }, modifier = Modifier.testTag("bill_remove_${b.id}")) { Text("Remove") }
+                    if (!b.id.startsWith("card:")) OutlinedButton(onClick = { onSkip(b.id) }, modifier = Modifier.testTag("bill_remove_${b.id}")) { Text("Remove") }
                 }
             }
             if (!paid) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (b.dueEpochDay == null || b.overdue) TextButton(onClick = { onSetDate(b.id) }, modifier = Modifier.testTag("bill_setdate_${b.id}")) { Text(if (b.dueEpochDay == null) "Set the due date" else "Change the due date") }
+                if (!b.id.startsWith("card:") && (b.dueEpochDay == null || b.overdue)) TextButton(onClick = { onSetDate(b.id) }, modifier = Modifier.testTag("bill_setdate_${b.id}")) { Text(if (b.dueEpochDay == null) "Set the due date" else "Change the due date") }
                 if (found && b.body.isNotEmpty()) TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("bill_text_toggle_${b.id}")) { Text(if (showText) "Hide message" else "Show message") }
             }
             if (showText) Text(b.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("bill_text_${b.id}"))

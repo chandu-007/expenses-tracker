@@ -111,6 +111,26 @@ class BillsUiTest {
     }
 
     @Test
+    fun aCardWithMoneyLeftOnItsStatementIsListedWithNoMessageAndMarkingItPaidRecordsATransferNotSpending() {
+        val today = LocalDate.now()
+        runBlocking { container.write { ok ->
+            ok.store.saveAccount(Account(AccountId("amex"), "Amex", AccountType.CREDIT_CARD, Currency.INR))
+            ok.store.save(Expense(EntryId("big"), System.currentTimeMillis() - 60L * 86_400_000, AccountId("amex"), Money(40_000, Currency.INR)), EntryDetails(merchant = "Phone"))
+            ok.cards.save(app.expenses.core.domain.CardTerms("amex", statementDay = 1, dueDay = today.plusDays(3).dayOfMonth.coerceAtMost(28)))
+        } }
+        openBills()
+        waitFor("bill_card:amex")
+        compose.onNodeWithTag("bill_amount_card:amex", useUnmergedTree = true).assertTextContains("₹400.00", substring = true)
+        assertTrue(!has("bill_remove_card:amex"), "there is no message to remove")
+        tap("bill_pay_card:amex"); waitFor("bill_pay_amount"); tap("bill_pay_from_Bank"); tap("bill_pay_ok"); gone("bill_pay_ok"); gone("bill_card:amex")
+        val all = entries()
+        assertEquals(2, all.size)
+        val t = all.single { it.kind == "TRANSFER" }
+        assertEquals(40_000L, t.amount_minor); assertEquals("bank", t.account_id); assertEquals("amex", t.counter_account_id)
+        assertEquals(1, all.count { it.kind == "EXPENSE" }, "paying the card is not spending again: the purchase was already counted")
+    }
+
+    @Test
     fun anElectricityBillPaidWithRecordingIsAnExpenseInBillsAndMarkingItWithoutRecordingMakesNoEntry() {
         ingest(electricity); ingest(cardText(), at = System.currentTimeMillis() + 1)
         val ids = bills(BillStatus.FOUND).associate { it.kind to it.id }
