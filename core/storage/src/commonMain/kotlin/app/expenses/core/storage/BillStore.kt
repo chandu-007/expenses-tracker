@@ -6,8 +6,8 @@ enum class BillStatus { FOUND, TRACKED, PAID, DISMISSED }
 
 /**
  * A bill found in a text or notification. [kind] is the name of the parser's bill kind (kept as text so this module does not depend on the parsers),
- * [dueDate] is `yyyy-MM-dd` or null when the message gave none, [title] is how it is shown ("HDFC Bank credit card"). [body] is the message, kept only while
- * the bill is FOUND. [dedupeKey] identifies the bill across reminders.
+ * [dueDate] is `yyyy-MM-dd` or null when the message gave none, [title] is how it is shown ("HDFC Bank credit card"). [body] is the message, kept while the bill is FOUND or TRACKED (so an entry recorded from it keeps its words), cleared when it is paid or dismissed;
+  * [dedupeKey] identifies the bill across reminders.
  */
 data class Bill(
     val id: String, val source: String, val sender: String, val issuer: String, val kind: String, val title: String,

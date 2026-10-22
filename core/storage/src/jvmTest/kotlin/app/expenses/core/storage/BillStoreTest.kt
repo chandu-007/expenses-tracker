@@ -26,12 +26,12 @@ class BillStoreTest {
     }
 
     @Test
-    fun trackingKeepsTheFiguresAndForgetsTheTextAndOnlyAFoundBillCanBeTracked() {
+    fun trackingKeepsTheFiguresAndTheTextUntilItIsPaidAndOnlyAFoundBillCanBeTracked() {
         store.add(bill("a"))
         assertEquals("text a", store.get("a")!!.body)
         assertTrue(store.track("a"))
         val t = store.get("a")!!
-        assertEquals(BillStatus.TRACKED, t.status); assertNull(t.body, "the message is gone"); assertEquals(1_234_500L, t.amountMinor); assertEquals(61_700L, t.minDueMinor); assertEquals("2026-10-25", t.dueDate)
+        assertEquals(BillStatus.TRACKED, t.status); assertEquals("text a", t.body, "kept so that an entry recorded from the bill can show it"); assertTrue(store.dismiss("a")); assertNull(store.get("a")!!.body, "dismissed: the message is gone"); store.add(bill("z")); store.track("z"); store.markPaid("z", null, 5); assertNull(store.get("z")!!.body, "paid: the message is gone"); store.add(bill("a2", key = "ka2")); store.track("a2"); val t2 = store.get("a2")!!; assertEquals(1_234_500L, t.amountMinor); assertEquals(61_700L, t.minDueMinor); assertEquals("2026-10-25", t.dueDate)
         assertFalse(store.track("a"), "already tracked"); assertFalse(store.track("missing"))
     }
 

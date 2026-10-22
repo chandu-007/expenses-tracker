@@ -128,6 +128,19 @@ object StatementTextParser {
 
     private class Opening(val balance: Long)
 
+    /**
+     * HDFC Bank's card statement prints the rupee sign as the letter "C" ("C 2.00"), marks money back as "+ C 38,010.00" (while "+ 375" before the amount is reward
+     * points), and ends every line with a bullet that text extraction turns into a lone "l". Read as: ₹ amount, "Cr" after it, and no bullet. Only a "C" right before
+     * an amount with decimals is a rupee sign. Other banks' layouts were not seen.
+     */
+    private fun glyphs(line: String): String = line
+        .replace(Regex("(^|\\s)C\\s?(?=\\d[\\d,]*\\.\\d{2}(?!\\d))")) { it.groupValues[1] + "₹" }
+        .replace(Regex("\\+\\s*₹\\s?(\\d[\\d,]*\\.\\d{2})")) { "₹" + it.groupValues[1] + " Cr" }
+        .replace(Regex("(₹\\s?\\d[\\d,]*\\.\\d{2}(?:\\s*(?:Cr|Dr))?)\\s+[lI•]$")) { it.groupValues[1] }
+
+    /** A line that ends by opening a reference ("... -36 (Ref#"): the words belong to the transaction line that follows it, where the page printed them first. */
+    private val REF_OPEN = Regex("\\(\\s*Ref\\s*#?\\s*$", RegexOption.IGNORE_CASE)
+
     private fun normalise(line: String): String = line.replace(Regex("[\\u00A0\\u2007\\u202F\\t|]+"), " ").replace(Regex("\\s+"), " ").trim()
 
     /** The date at the start of [line] as written (month names spaced out), and how many characters it took; null when the line does not start with a real date. */
@@ -178,6 +191,9 @@ object StatementTextParser {
     private fun cleanDescription(text: String): String {
         var d = FOLDED.replace(text) { "${it.groupValues[1]} ${it.groupValues[2]}" }.replace(Regex("\\s+"), " ").trim()
         d = REF_AND_VALUE_DATE.replace(d, "")
+        d = Regex("\\(\\s*Ref\\s*#?[^)]*\\)?", RegexOption.IGNORE_CASE).replace(d, " ")
+        d = Regex("\\s*\\(?\\b[A-Za-z]*\\d{12,}\\)").replace(d, " ")
+        d = Regex("\\s+\\+\\s*\\d{1,6}$").replace(d.trim(), "")
         d = TRAILING_DATE.replace(d, "").trim()
         return d.trim('-', ':', ',', '/', ' ', '*').trim()
     }
@@ -193,11 +209,12 @@ object StatementTextParser {
         val card = effective == Convention.CARD
         val events = ArrayList<Any>()
         var pending: Item? = null
+        var precede: String? = null
         fun flush() { pending?.let { events += it }; pending = null }
 
         for ((index, rawLine) in text.lines().withIndex()) {
             val raw = rawLine.trim()
-            val line = normalise(rawLine)
+            val line = glyphs(normalise(rawLine))
             if (line.isEmpty()) continue
             val date = leadingDate(line)
             val summary = SUMMARY.containsMatchIn(line)
@@ -221,10 +238,12 @@ object StatementTextParser {
                     break
                 }
                 val (description, tokens) = peel(rest.trim())
-                pending = Item(date.first, index + 1, description, mutableListOf(raw), tokens)
+                pending = Item(date.first, index + 1, listOfNotNull(precede, description).joinToString(" "), mutableListOf(raw), tokens)
+                precede = null
                 continue
             }
-            // no date: the next line of a description that wrapped, unless it is page furniture
+            // no date: the words that open a reference belong to the next transaction line; otherwise the next line of a description that wrapped, unless it is page furniture
+            if (REF_OPEN.containsMatchIn(line) && !isHeader(line)) { flush(); precede = REF_OPEN.replace(line, "").trim().ifEmpty { null }; continue }
             val p = pending ?: continue
             if (isHeader(line) || PROSE.containsMatchIn(line) || line.length > MAX_CONTINUATION_CHARS || p.continued >= MAX_CONTINUATION) { flush(); continue }
             val (description, tokens) = peel(line)

@@ -670,7 +670,8 @@ allBills:
 SELECT * FROM bill;
 
 moveBill:
-UPDATE bill SET status = :to, body = NULL WHERE id = :id AND status = :from;
+-- a tracked bill keeps its message until it is paid or dismissed, so an entry recorded from it can show where it came from
+UPDATE bill SET status = :to, body = CASE WHEN :to = 'TRACKED' THEN body ELSE NULL END WHERE id = :id AND status = :from;
 
 payBill:
 UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL WHERE id = :id AND status IN ('FOUND', 'TRACKED');

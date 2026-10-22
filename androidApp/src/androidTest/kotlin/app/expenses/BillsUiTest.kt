@@ -97,7 +97,7 @@ class BillsUiTest {
         ingest(cardText()); val id = bills(BillStatus.FOUND).single().id
         openBills()
         tap("bill_add_$id"); gone("bill_add_$id"); waitFor("bill_pay_$id"); waitFor("bills_coming_title")
-        assertEquals(BillStatus.TRACKED, bills(BillStatus.TRACKED).single().status); assertEquals(null, bills(BillStatus.TRACKED).single().body, "the message is forgotten once added")
+        assertEquals(BillStatus.TRACKED, bills(BillStatus.TRACKED).single().status); assertTrue(bills(BillStatus.TRACKED).single().body!!.contains("Total Amt Due"), "the message is kept while the bill is waiting, so a payment recorded from it can show where it came from")
         tap("bill_pay_$id"); waitFor("bill_pay_amount")
         tap("bill_pay_min")                      // pay the minimum this time
         tap("bill_pay_card_Amex"); tap("bill_pay_ok")
@@ -106,6 +106,8 @@ class BillsUiTest {
         assertEquals("TRANSFER", e.kind); assertEquals(61_700L, e.amount_minor); assertEquals("amex", e.counter_account_id); assertEquals("bank", e.account_id)
         val paid = bills(BillStatus.PAID).single()
         assertEquals(e.id, paid.entryId)
+        val origin = runBlocking { container.write { it.origins.get(e.id) } }!!
+        assertTrue(origin.text.contains("Total Amt Due"), "a payment recorded from a bill that was tracked first keeps the bill's message: ${origin.text}")
     }
 
     @Test

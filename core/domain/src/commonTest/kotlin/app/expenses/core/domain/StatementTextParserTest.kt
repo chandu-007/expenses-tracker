@@ -435,5 +435,30 @@ class StatementTextParserTest {
         assertEquals(0, r.cardPayments, "a payment to a card is not skipped on a bank statement: it is money that left the account")
         assertTrue(r.table.rows.drop(1).none { "01/10/26" in it[1] && "SBIN" in it[1] }, "the reference number and its value date are not part of the description: ${r.table.rows[2][1]}")
     }
+
+    @kotlin.test.Test
+    fun aCardStatementThatPrintsTheRupeeSignAsCAndMarksMoneyBackWithAPlusIsReadWithItsWrappedReferences() {
+        // the layout of a real HDFC credit card statement (the owner's), with invented merchants and amounts
+        val t = """
+            Domestic Transactions
+            DATE & TIME TRANSACTION DESCRIPTION REWARDS AMOUNT PI
+            07/09/2026| 12:33 SHOP ONE Bangalore C 2.00 l
+            GST-VPS2725-RATE 18.0 -36 (Ref#
+            07/09/2026| 00:00 C 25.74 l
+            09999999980907000223617)
+            07/09/2026| 00:00 SHOP ONE Bangalore + C 3.00 l
+            BPPY CC PAYMENT BD016253BAMA (Ref#
+            10/09/2026| 11:00 + C 38,010.00 l
+            ST262540083000010184191)
+            24/09/2026| 13:00 EMI SHOP TWO Hyderabad + 375 C 15,000.00 l
+            Total Credit Limit Minimum Due Payment Due Date
+        """.trimIndent()
+        val r = StatementTextParser.parse(t)
+        assertEquals(Convention.CARD, r.convention)
+        assertEquals(listOf("2.00 Dr", "25.74 Dr", "3.00 Cr", "15000.00 Dr"), r.table.rows.drop(1).map { it[2] + " " + it[3] })
+        assertEquals(1, r.cardPayments, "the payment to the card is skipped, and it is the wrapped line before it that names it, not the refund above")
+        assertEquals("GST-VPS2725-RATE 18.0 -36", r.table.rows[2][1])
+        assertEquals("EMI SHOP TWO Hyderabad", r.table.rows[4][1], "reward points are not part of the name")
+    }
 }
 
