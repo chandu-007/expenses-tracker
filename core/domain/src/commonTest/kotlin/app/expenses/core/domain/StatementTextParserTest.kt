@@ -419,19 +419,19 @@ class StatementTextParserTest {
         val t = """
             From : 01/10/2026 To : 22/10/2026 Statement of account
             Date Narration Chq./Ref.No. Value Dt Withdrawal Amt. Deposit Amt. Closing Balance
-            01/10/26 NET BANKING SI -PPF SAV 000000000000000 01/10/26 1,000.00 952,588.13
+            01/10/26 NET BANKING SI -SAVINGS PLAN 000000000000000 01/10/26 1,000.00 99,000.00
             INGS FOR RETIREMENT
-            01/10/26 NEFT CR-SBIN0021998-ASHA RAO SBIN526274612968 01/10/26 135,000.00 1,087,588.13
+            01/10/26 NEFT CR-ABCD0000001-ASHA RAO ABCD500000000001 01/10/26 50,000.00 149,000.00
             SA
-            07/10/26 UPI-CHEQ CREDIT CARD 0000483917921105 07/10/26 21,333.57 1,066,254.56
+            07/10/26 UPI-CHEQ CREDIT CARD 0000000000000002 07/10/26 2,500.50 146,499.50
             STATEMENT SUMMARY :-
             Opening Balance Dr Count Cr Count Debits Credits Closing Balance
-            953,588.13 2 1 22,333.57 135,000.00 1,066,254.56
+            100,000.00 2 1 3,500.50 50,000.00 146,499.50
         """.trimIndent()
         val r = StatementTextParser.parse(t)
         assertEquals(Convention.BANK, r.convention)
         assertEquals(listOf("Dr", "Cr", "Dr"), r.table.rows.drop(1).map { it[3] }, "the opening balance in the summary settles the first line")
-        assertEquals(listOf("1000.00", "135000.00", "21333.57"), r.table.rows.drop(1).map { it[2] })
+        assertEquals(listOf("1000.00", "50000.00", "2500.50"), r.table.rows.drop(1).map { it[2] })
         assertEquals(0, r.cardPayments, "a payment to a card is not skipped on a bank statement: it is money that left the account")
         assertTrue(r.table.rows.drop(1).none { "01/10/26" in it[1] && "SBIN" in it[1] }, "the reference number and its value date are not part of the description: ${r.table.rows[2][1]}")
     }
@@ -447,9 +447,9 @@ class StatementTextParserTest {
             07/09/2026| 00:00 C 25.74 l
             09999999980907000223617)
             07/09/2026| 00:00 SHOP ONE Bangalore + C 3.00 l
-            BPPY CC PAYMENT BD016253BAMA (Ref#
-            10/09/2026| 11:00 + C 38,010.00 l
-            ST262540083000010184191)
+            BPPY CC PAYMENT BD000000TEST (Ref#
+            10/09/2026| 11:00 + C 12,345.00 l
+            ST000000000000000000001)
             24/09/2026| 13:00 EMI SHOP TWO Hyderabad + 375 C 15,000.00 l
             Total Credit Limit Minimum Due Payment Due Date
         """.trimIndent()
