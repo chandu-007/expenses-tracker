@@ -29,4 +29,13 @@ class ForeignAmountTest {
         assertEquals(1234.5, ForeignAmount.parseRate("1,234.5"))
         assertNull(ForeignAmount.parseRate("1.2.3"))
     }
+
+    @Test fun smallRatesAndYenAreExactToTheLastPaisaWithHalvesRoundedUp() {
+        assertEquals(Money(123, inr), ForeignAmount.convert("100", "0.0123", jpy, inr)!!.first, "100 yen at 0.0123 is 1.23 rupees")
+        assertEquals(Money(124, inr), ForeignAmount.convert("101", "0.0123", jpy, inr)!!.first, "1.2423 rupees rounds to 1.24")
+        assertEquals(Money(1, inr), ForeignAmount.convert("0.01", "0.5", usd, inr)!!.first)
+        assertEquals(83_250_000L, ForeignAmount.parseRateScaled("83.25")); assertEquals(null, ForeignAmount.parseRateScaled("1000001"))
+        assertEquals(null, ForeignAmount.convert("1000000000000", "999999", usd, inr), "too large to work out exactly: refused, never wrong")
+    }
 }
+

@@ -87,7 +87,7 @@ class BackupStore(
             people = q.allPeople().executeAsList().map { BackupPerson(it.id, it.name, it.deleted == 1L) },
             bills = q.allBills().executeAsList().map { BackupBill(it.id, it.issuer, it.kind, it.title, it.amount_minor, it.min_due_minor, it.currency, it.due_date, it.account_last4, it.reference, it.auto_debit == 1L, it.received_at, it.status, it.paid_at, it.dedupe_key) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
-            settings = (SETTINGS + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
+            settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
 
@@ -154,7 +154,7 @@ class BackupStore(
             val digits = l.last4?.takeIf { app.expenses.core.domain.AccountLooks.parseLast4(it).isSuccess }
             if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
         }
-        for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
+        for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX) || k.startsWith(RATE_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
         report
     }
 
@@ -203,5 +203,8 @@ class BackupStore(
 
         /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
         const val CARD_LIMIT_PREFIX = "card_limit:"
+
+        /** The rate chosen last for a foreign currency, kept as `rate_<CODE>`. */
+        const val RATE_PREFIX = "rate_"
     }
 }

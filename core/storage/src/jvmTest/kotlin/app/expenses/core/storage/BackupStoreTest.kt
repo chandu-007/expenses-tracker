@@ -267,5 +267,14 @@ class BackupStoreTest {
         val p = b.notifications.prefs()
         assertEquals(60, p.budgetNearPercent); assertEquals(false, p.budgetPace); assertEquals(false, p.cardLimit); assertEquals(false, p.billAhead1); assertEquals(false, p.budgetWrapUp); assertEquals(true, p.recap)
     }
+
+    @Test
+    fun theLastRateForEachForeignCurrencyAndTheGoalsTravelInABackup() {
+        val a = Device("a"); val b = Device("b")
+        a.db.schemaQueries.putSetting("rate_USD", "83.20"); a.db.schemaQueries.putSetting("goals", "g\tTrip\t5000000\t0\t\t")
+        b.backup.restore(a.backup.export())
+        assertEquals("83.20", b.db.schemaQueries.settingValue("rate_USD").executeAsOneOrNull())
+        assertEquals("g\tTrip\t5000000\t0\t\t", b.db.schemaQueries.settingValue("goals").executeAsOneOrNull())
+    }
 }
 

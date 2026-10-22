@@ -6,14 +6,18 @@ package app.expenses.core.domain
  * entry says exactly what you worked out, and the foreign amount is kept beside it.
  */
 object ForeignAmount {
-    private const val MAX_RATE = 1_000_000.0
 
     /** The rate as a number, or null when it is not a positive number with at most six decimals. */
-    fun parseRate(text: String): Double? {
+    fun parseRate(text: String): Double? = parseRateScaled(text)?.let { it / 1_000_000.0 }
+
+    /** The rate as a whole number of millionths ("83.25" is 83_250_000), exact; null when it is not a positive number with at most six decimals, or above a million. */
+    fun parseRateScaled(text: String): Long? {
         val clean = text.filter { it != ',' && !it.isWhitespace() }
         if (clean.isEmpty() || clean.count { it == '.' } > 1 || clean.any { !it.isDigit() && it != '.' } || clean.substringAfter('.', "").length > 6) return null
-        val v = clean.toDoubleOrNull() ?: return null
-        return v.takeIf { it > 0 && it <= MAX_RATE }
+        val whole = clean.substringBefore('.').ifEmpty { "0" }
+        if (whole.length > 7) return null
+        val v = (whole + clean.substringAfter('.', "").padEnd(6, '0')).toLongOrNull() ?: return null
+        return v.takeIf { it > 0 && it <= 1_000_000L * 1_000_000L }
     }
 
     /**
@@ -22,11 +26,14 @@ object ForeignAmount {
      */
     fun convert(foreignText: String, rateText: String, foreign: Currency, base: Currency): Pair<Money, Money>? {
         val paid = parseAmount(foreignText, foreign)?.takeIf { it.minorUnits > 0 } ?: return null
-        val rate = parseRate(rateText) ?: return null
-        var scale = 1.0; repeat(foreign.minorUnitDigits) { scale *= 10 }
-        var baseScale = 1.0; repeat(base.minorUnitDigits) { baseScale *= 10 }
-        val minor = kotlin.math.floor(paid.minorUnits / scale * rate * baseScale + 0.5)
-        if (minor < 1 || minor > 1e15) return null
-        return Money(minor.toLong(), base) to paid
+        val rate = parseRateScaled(rateText) ?: return null
+        // whole-number arithmetic, as everywhere money is added up: minor_foreign x rate(millionths) x 10^base digits / (10^6 x 10^foreign digits), halves up
+        var up = 1L; repeat(base.minorUnitDigits) { up *= 10 }
+        var down = 1_000_000L; repeat(foreign.minorUnitDigits) { down *= 10 }
+        val factor = rate * up
+        if (factor <= 0 || paid.minorUnits > Long.MAX_VALUE / factor) return null // too large to work out exactly
+        val minor = (paid.minorUnits * factor + down / 2) / down
+        if (minor < 1 || minor > 1_000_000_000_000_000L) return null
+        return Money(minor, base) to paid
     }
 }

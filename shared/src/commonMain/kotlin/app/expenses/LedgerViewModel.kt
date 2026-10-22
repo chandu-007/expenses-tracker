@@ -2066,14 +2066,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val names = ok.db.schemaQueries.allAccounts().executeAsList().associate { it.id to it.name }
         val dayFmt = DatePattern("d MMM yyyy")
         val rows = goalsOf(ok).map { g ->
-            val saved = (g.accountId?.let { balances[AccountId(it)]?.minorUnits } ?: g.savedMinor).coerceAtLeast(0)
+            val linked = g.accountId?.takeIf { it in names } // a goal restored on a phone without that account keeps what was put aside by hand
+            val saved = (linked?.let { balances[AccountId(it)]?.minorUnits } ?: g.savedMinor).coerceAtLeast(0)
             val monthly = GoalMath.monthly(saved, g.targetMinor, g.dueDay, today)
             GoalRowUi(
                 g.id, g.name, Money(saved, inr).formatted(), Money(g.targetMinor, inr).formatted(), GoalMath.percent(saved, g.targetMinor),
                 if (saved >= g.targetMinor) "Reached" else Money(GoalMath.remaining(saved, g.targetMinor), inr).formatted() + " to go",
                 g.dueDay?.let { "by " + dayFmt.format(localDateOfEpochDay(it.toLong())) }.orEmpty(),
                 monthly?.let { Money(it, inr).formatted() + " a month to get there" }.orEmpty(),
-                g.accountId?.let { names[it] }.orEmpty(), g.accountId.orEmpty(), Money(g.targetMinor, inr).toPlainString(),
+                linked?.let { names[it] }.orEmpty(), linked.orEmpty(), Money(g.targetMinor, inr).toPlainString(),
                 g.dueDay?.let { ((it - today + 29) / 30).coerceAtLeast(1).toString() }.orEmpty(),
             )
         }
