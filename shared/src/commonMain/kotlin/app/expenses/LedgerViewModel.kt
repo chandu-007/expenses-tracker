@@ -1497,6 +1497,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         else EntryDraft(null, DraftKind.EXPENSE, amountText, billsCategory, emptyList(), payFromId, "", b.title, nowMillis())
                         entryId = try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
                     }
+                    // the bill's words are cleared once it is paid, so an entry recorded from it keeps them first
+                    if (entryId != null) b.body?.let { ok.origins.put(entryId, app.expenses.core.storage.OriginStore.kindOf(b.source, b.sender), b.sender, it, b.receivedAt) }
                     ok.bills.markPaid(id, entryId, nowMillis())
                     billsChanged(ok, if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
                     null

@@ -127,7 +127,7 @@ class PdfImportUiTest {
         waitAnyText("Imported 3 transactions")
         val rows = entries()
         // PDFBox sometimes puts a space inside a word of a PdfDocument-drawn PDF ("S WIGGY"), so the words are compared without spaces; a real bank PDF was not available to check
-        assertEquals(listOf("AMAZONPAYINDIAMUMBAI", "SWIGGYBANGALORE", "AMAZONREFUNDMUMBAI"), rows.map { it.merchant!!.replace(" ", "") })
+        assertEquals(listOf("AMAZON PAY INDIA MUMBAI", "SWIGGY BANGALORE", "AMAZON REFUND MUMBAI"), rows.map { it.merchant })
         assertEquals(listOf(129_900L, 45_050L, 79_900L), rows.map { it.amount_minor })
         // the refund is money in; the line it came from is kept as the entry's origin
         val origin = runBlocking { container.write { ok -> ok.origins.get(rows[2].id) } }!!

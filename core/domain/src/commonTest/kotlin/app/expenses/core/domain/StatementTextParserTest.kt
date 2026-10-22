@@ -362,7 +362,8 @@ class StatementTextParserTest {
     @Test
     fun valueDateAtTheEndOfTheDescriptionIsDropped() {
         val r = StatementTextParser.parse("01/09/25 UPI-AMAZON 0000123456789 02/09/25 500.00 Dr")
-        assertEquals(listOf("01/09/25 | UPI-AMAZON 0000123456789 | 500.00 | Dr"), rows(r))
+        // the bank's reference number goes with its value date: it differs on every line, so left in it would stop the same shop being recognised twice
+        assertEquals(listOf("01/09/25 | UPI-AMAZON | 500.00 | Dr"), rows(r))
     }
 
     // ---- through the importer ----
@@ -411,4 +412,28 @@ class StatementTextParserTest {
         """.trimIndent()
         assertEquals(listOf("12/09/2025 | AMAZON PAY INDIA | 1299.00 | Dr", "13/09/2025 | SWIGGY | 450.50 | Dr"), rows(StatementTextParser.parse(text)))
     }
+
+    @kotlin.test.Test
+    fun aBankAccountStatementWithWithdrawalAndDepositColumnsIsNotMistakenForACardOneByAPaymentToACard() {
+        // the layout of a real HDFC savings statement (the owner's), with invented names and numbers
+        val t = """
+            From : 01/10/2026 To : 22/10/2026 Statement of account
+            Date Narration Chq./Ref.No. Value Dt Withdrawal Amt. Deposit Amt. Closing Balance
+            01/10/26 NET BANKING SI -PPF SAV 000000000000000 01/10/26 1,000.00 952,588.13
+            INGS FOR RETIREMENT
+            01/10/26 NEFT CR-SBIN0021998-ASHA RAO SBIN526274612968 01/10/26 135,000.00 1,087,588.13
+            SA
+            07/10/26 UPI-CHEQ CREDIT CARD 0000483917921105 07/10/26 21,333.57 1,066,254.56
+            STATEMENT SUMMARY :-
+            Opening Balance Dr Count Cr Count Debits Credits Closing Balance
+            953,588.13 2 1 22,333.57 135,000.00 1,066,254.56
+        """.trimIndent()
+        val r = StatementTextParser.parse(t)
+        assertEquals(Convention.BANK, r.convention)
+        assertEquals(listOf("Dr", "Cr", "Dr"), r.table.rows.drop(1).map { it[3] }, "the opening balance in the summary settles the first line")
+        assertEquals(listOf("1000.00", "135000.00", "21333.57"), r.table.rows.drop(1).map { it[2] })
+        assertEquals(0, r.cardPayments, "a payment to a card is not skipped on a bank statement: it is money that left the account")
+        assertTrue(r.table.rows.drop(1).none { "01/10/26" in it[1] && "SBIN" in it[1] }, "the reference number and its value date are not part of the description: ${r.table.rows[2][1]}")
+    }
 }
+

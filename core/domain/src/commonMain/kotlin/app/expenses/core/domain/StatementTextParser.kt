@@ -101,7 +101,24 @@ object StatementTextParser {
     private const val MAX_CONTINUATION_CHARS = 70
 
     /** Whether the words of the statement say it is a credit card statement. */
-    fun looksLikeCardStatement(text: String): Boolean = CARD_WORDS.containsMatchIn(text)
+    fun looksLikeCardStatement(text: String): Boolean = CARD_WORDS.containsMatchIn(text) && !BANK_COLUMNS.containsMatchIn(text)
+
+    /** A bank account statement names a withdrawal and a deposit column. A narration such as "UPI-... CREDIT CARD" (a payment to a card) must not make it a card statement. */
+    private val BANK_COLUMNS = Regex("withdrawal[^\\n]{0,40}deposit", RegexOption.IGNORE_CASE)
+
+    /** A bank's reference number and the value date printed after it, inside the narration: "SBIN526274612968 01/10/26". */
+    private val REF_AND_VALUE_DATE = Regex("\\s+[A-Za-z]*\\d{12,}\\s+\\d{1,2}[/.\\-]\\d{1,2}[/.\\-](?:\\d{4}|\\d{2})(?=\\s|$)")
+
+    /** The opening balance a statement's summary prints under "Opening Balance ... Closing Balance": the first number on the line after that heading. */
+    private fun summaryOpening(text: String): Long? {
+        val lines = text.lines().map { normalise(it) }
+        val at = lines.indexOfFirst { OPENING.containsMatchIn(it) && Regex("closing\\s*bal", RegexOption.IGNORE_CASE).containsMatchIn(it) && TAIL.find(it) == null }
+        if (at < 0) return null
+        val next = lines.drop(at + 1).firstOrNull { it.isNotEmpty() } ?: return null
+        val first = Regex("^\\(?-?[\\d,]+\\.\\d{2}").find(next)?.value ?: return null
+        val tok = token(first)
+        return if (tok.valid) (if (tok.negative) -tok.minor else tok.minor) else null
+    }
 
     // ---- reading ----
 
@@ -160,6 +177,7 @@ object StatementTextParser {
 
     private fun cleanDescription(text: String): String {
         var d = FOLDED.replace(text) { "${it.groupValues[1]} ${it.groupValues[2]}" }.replace(Regex("\\s+"), " ").trim()
+        d = REF_AND_VALUE_DATE.replace(d, "")
         d = TRAILING_DATE.replace(d, "").trim()
         return d.trim('-', ':', ',', '/', ' ', '*').trim()
     }
@@ -229,7 +247,7 @@ object StatementTextParser {
         val lineNumbers = ArrayList<Int>()
         rows += HEADER; raws += ""; lineNumbers += 0
         var payments = 0
-        var previousBalance: Long? = null
+        var previousBalance: Long? = if (card) null else summaryOpening(text)
         var usedBalance = false
 
         for (e in events) {

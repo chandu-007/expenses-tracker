@@ -34,7 +34,7 @@ class PdfStatementReader(private val context: Context) {
             val pages = doc.numberOfPages
             if (pages == 0) return PdfText.Unreadable("That PDF has no pages.")
             val text = try {
-                PDFTextStripper().apply { sortByPosition = true; endPage = MAX_PAGES }.getText(doc)
+                PDFTextStripper().apply { sortByPosition = true; endPage = MAX_PAGES; spacingTolerance = 1.0f }.getText(doc)
             } catch (e: IOException) {
                 ""
             } catch (e: RuntimeException) {
