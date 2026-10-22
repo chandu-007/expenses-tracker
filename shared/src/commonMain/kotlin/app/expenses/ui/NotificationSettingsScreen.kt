@@ -53,7 +53,7 @@ private fun TimeRow(label: String, minute: Int, tag: String, enabled: Boolean, o
 @Composable
 private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) { // room before the switch, so a long line at a large text size never runs into it
             Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
