@@ -48,6 +48,8 @@ object GenericAlertParser {
     private val creditWords = Regex("""(?i)\b(?:credited|received|deposited|refund(?:ed)?|reversed|reversal|added|earned)\b|\bCr\b\.?""")
     /** "sent by RAVI", "paid by RAVI": the other person did it, so the money came in. The words are taken out before the direction is read. */
     private val doneByOther = Regex("""(?i)\b(?:sent|paid|transferred)\s+by\b""")
+    /** "Chandu. sent ₹10 to you", "Anita paid you ₹120", "Ravi sent you Rs.50": the other person paid, so the money came in. Read as "received" before the direction is decided. */
+    private val doneToYou = Regex("""(?i)\b(?:sent|paid|transferred)\s+(?:you\b|(?:₹|rs\.?|inr)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+to\s+you\b)""")
     private val debitWords = Regex("""(?i)\b(?:debited|spent|sent|paid|withdrawn|purchase|transferred|deducted|used|redeemed)\b|\bDr\b\.?""")
     /** HDFC Bank only (any of its header roots, HDFCBK or HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
     private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
@@ -80,16 +82,17 @@ object GenericAlertParser {
         if (dueNotice.containsMatchIn(text) && !creditWords.containsMatchIn(text) && !debitWords.containsMatchIn(text)) {
             return ParseResult.NotATransaction("due notice")
         }
-        val directional = doneByOther.replace(text, " by ")
+        val readAs = doneToYou.replace(text, " received ")
+        val directional = doneByOther.replace(readAs, " by ")
         val direction = when {
             declined.containsMatchIn(text) -> Direction.DECLINED
             else -> {
-                val c = creditWords.find(text)?.range?.first
+                val c = creditWords.find(readAs)?.range?.first
                 // the passive wording only settles a text that also has a credit word: "paid by your card at X" alone is still a debit
-                val d = (if (c != null) debitWords.find(directional) else debitWords.find(text))?.range?.first
+                val d = (if (c != null) debitWords.find(directional) else debitWords.find(readAs))?.range?.first
                 when {
                     c == null && d == null -> if (senderRoot?.let { SenderRules.BUILT_IN[it] } == "HDFC Bank" && cardTxn.containsMatchIn(text)) Direction.DEBIT else return ParseResult.NotATransaction("no direction")
-                    c != null && outgoingCreditPhrase.containsMatchIn(text) -> Direction.DEBIT
+                    c != null && outgoingCreditPhrase.containsMatchIn(readAs) -> Direction.DEBIT
                     c == null -> Direction.DEBIT
                     d == null -> Direction.CREDIT
                     c < d -> Direction.CREDIT
