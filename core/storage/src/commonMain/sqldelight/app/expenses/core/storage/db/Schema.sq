@@ -464,6 +464,12 @@ expenseSamples:
 SELECT COALESCE(merchant, note) AS name, occurred_at, amount_minor FROM entry
 WHERE deleted = 0 AND kind = 'EXPENSE' AND currency = :currency AND occurred_at >= :fromMillis AND COALESCE(merchant, note) IS NOT NULL;
 
+-- The newest expense under a merchant name (compared without capitals or edge spaces): its account, to start a repeating item from it.
+latestExpenseNamed:
+SELECT id, account_id FROM entry
+WHERE deleted = 0 AND kind = 'EXPENSE' AND currency = :currency AND lower(trim(COALESCE(merchant, note))) = :key
+ORDER BY occurred_at DESC, seq DESC LIMIT 1;
+
 -- What was posted by repeating items (rent, EMIs, subscriptions): planned spending, left out when judging whether spending runs ahead of the month.
 spendByCategoryFromRepeating:
 SELECT s.category_id AS category_id, SUM(s.mine_minor) AS mine
@@ -598,6 +604,15 @@ SELECT s.person_id AS person_id, SUM(s.amount_minor) AS owed, COUNT(*) AS n, MAX
 FROM entry_share s JOIN entry e ON e.id = s.entry_id
 WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND e.currency = ? AND s.person_id IS NOT NULL
 GROUP BY s.person_id;
+
+-- What you owe friends for bills they paid (the part of it that was yours).
+friendPaidOwed:
+SELECT person_id, SUM(amount_minor) AS owed, COUNT(*) AS n, MAX(occurred_at) AS last_at
+FROM entry WHERE kind = 'FRIEND_PAID' AND deleted = 0 AND currency = ? AND person_id IS NOT NULL
+GROUP BY person_id;
+
+friendPaidOfPerson:
+SELECT * FROM entry WHERE kind = 'FRIEND_PAID' AND person_id = ? AND deleted = 0 ORDER BY occurred_at DESC, seq DESC;
 
 sharedEntriesOfPerson:
 SELECT e.id AS id, e.occurred_at AS occurred_at, e.currency AS currency, e.account_id AS account_id, e.merchant AS merchant, e.note AS note, s.amount_minor AS share_minor

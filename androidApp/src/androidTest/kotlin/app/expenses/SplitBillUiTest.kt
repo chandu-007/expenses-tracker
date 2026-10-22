@@ -62,4 +62,33 @@ class SplitBillUiTest {
         compose.onNodeWithTag("loans_owed").assertTextContains("600.00", substring = true) // the box keeps its text in children: read merged
         tap("loan_row_Asha"); compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Their share of", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
+
+    private fun newPerson(name: String, tag: String) { tap(tag); type("new_person_name", name); tap("new_person_ok") }
+
+    @Test
+    fun aBillSplitByTypedAmountsLeavesYouTheRestAndAFriendWhoPaidIsOwedYourShareWithNoAccountMoving() {
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
+        tap("add"); waitFor("amount"); type("amount", "1000"); tap("category_chip_Food"); tap("split_toggle"); tap("split_mode_1")
+        newPerson("Asha", "split_new_person"); waitFor("split_amount_Asha"); type("split_amount_Asha", "250")
+        newPerson("Ravi", "split_new_person"); waitFor("split_amount_Ravi"); type("split_amount_Ravi", "400")
+        compose.waitUntil(10_000) { textOf("split_summary").startsWith("You pay ₹350.00 of it") }
+        tap("save"); waitFor("add")
+        runBlocking { container.write { ok ->
+            val e = ok.db.schemaQueries.recentEntries(5).executeAsList().single()
+            assertEquals(100_000L, e.amount_minor)
+            assertEquals(listOf(35_000L, 25_000L, 40_000L), ok.db.schemaQueries.sharesOf(e.id).executeAsList().map { it.amount_minor })
+        } }
+        // a different bill that Asha paid: the amount is your share, she is owed it, and no account of yours moves
+        tap("add"); waitFor("amount"); type("amount", "300"); tap("category_chip_Food"); tap("split_toggle"); tap("split_mode_2"); tap("split_payer_Asha")
+        compose.waitUntil(10_000) { textOf("split_summary").startsWith("You owe Asha") }
+        tap("save"); waitFor("add")
+        runBlocking { container.write { ok ->
+            assertEquals(-100_000L, ok.store.balances().values.sumOf { it.minorUnits }, "only the first bill moved money out of your accounts; the one Asha paid moved none")
+            assertEquals(2, ok.db.schemaQueries.recentEntries(5).executeAsList().size)
+        } }
+        compose.openMore(); tap("open_loans"); waitFor("loan_row_Asha")
+        // 250 owed to you less 300 owed to her: net she is owed 50
+        compose.waitUntil(10_000) { textOf("loan_state_Asha") == "you owe" }
+        compose.onNodeWithTag("loans_owe").assertTextContains("50.00", substring = true)
+    }
 }

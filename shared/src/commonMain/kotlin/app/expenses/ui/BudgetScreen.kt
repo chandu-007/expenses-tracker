@@ -134,6 +134,7 @@ fun BudgetScreen(
     onSetPeriod: (BudgetPeriod) -> Unit,
     onShiftStartDay: (Int) -> Unit,
     onShiftCustomDays: (Int) -> Unit = {},
+    onRollover: (Boolean) -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editingOverall by rememberSaveable { mutableStateOf(false) }
@@ -149,6 +150,15 @@ fun BudgetScreen(
     }
     Scaffold(topBar = { AreaTopBar("Budget", Area.MONEY, Icons.Outlined.Savings, onBack, "budget_back") }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Carry over what is left")
+                        Text(if (budget.rollover && budget.carriedText.isNotEmpty()) "${budget.carriedText} came over from last time, and is in the limit below." else "Whatever was not spent last time is added to this time's limit. It does not pile up beyond one period.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_carried"))
+                    }
+                    androidx.compose.material3.Switch(checked = budget.rollover, onCheckedChange = onRollover, modifier = Modifier.testTag("budget_rollover"))
+                }
+            }
             item {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Period", style = MaterialTheme.typography.labelMedium)

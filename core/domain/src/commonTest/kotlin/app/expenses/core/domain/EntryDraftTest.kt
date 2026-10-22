@@ -6,6 +6,7 @@ import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.domain.ledger.FriendPaid
 import app.expenses.core.domain.ledger.Income
 import app.expenses.core.domain.ledger.Ledger
 import app.expenses.core.domain.ledger.PersonId
@@ -157,6 +158,47 @@ class EntryDraftTest {
         assertTrue(edited.shares.isEmpty(), "sharing is for a new expense")
         val plain = (EntryDrafts.build(draft.copy(splitWith = emptyList()), EntryId("p"), inr) as DraftResult.Ok).entry as Expense
         assertTrue(plain.shares.isEmpty() && plain.myShare == m(900_01))
+    }
+
+    // ---- an expense paid in another currency ----
+
+    @Test
+    fun aDraftPaidInAnotherCurrencyLeavesTheAccountAtTheRateAndKeepsWhatWasPaid() {
+        val draft = EntryDraft(null, DraftKind.EXPENSE, "ignored", "Food", emptyList(), "bank", foreignCode = "USD", foreignAmount = "25", foreignRate = "83.20")
+        val e = (EntryDrafts.build(draft, EntryId("e"), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(m(2_080_00), e.amount, "what left the account, from the foreign amount and the rate, not from the typed amount")
+        assertEquals(Money(2_500, Currency("USD", 2)), e.original)
+        assertEquals(m(2_080_00), e.myShare)
+        val missingRate = EntryDrafts.build(draft.copy(foreignRate = ""), EntryId("e"), inr)
+        assertTrue(missingRate is DraftResult.Problem && missingRate.message.contains("rate"), missingRate.toString())
+        val edited = (EntryDrafts.build(draft.copy(id = "x", amountText = "100"), EntryId("x"), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(null, edited.original, "an existing entry is edited as it is; this is for a new one")
+        val shared = (EntryDrafts.build(draft.copy(splitWith = listOf("a")), EntryId("s"), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(Money(2_500, Currency("USD", 2)), shared.original); assertEquals(2, shared.shares.size)
+    }
+
+    // ---- unequal shares and a friend who paid ----
+
+    @Test
+    fun typedPartsForFriendsLeaveYouTheRestAndMustLeaveYouSomething() {
+        val d = EntryDraft(null, DraftKind.EXPENSE, "1000", "Food", emptyList(), "bank", splitWith = listOf("asha", "ravi"), splitAmounts = listOf("250", "400"))
+        val e = (EntryDrafts.build(d, EntryId("e"), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(listOf(null, PersonId("asha"), PersonId("ravi")), e.shares.map { it.person }); assertEquals(listOf(350_00L, 250_00L, 400_00L), e.shares.map { it.amount.minorUnits })
+        assertEquals(m(350_00), e.myShare); assertEquals(m(1_000_00), e.amount)
+        for (bad in listOf(listOf("600", "400"), listOf("700", "400"))) assertTrue(EntryDrafts.build(d.copy(splitAmounts = bad), EntryId("e"), inr) is DraftResult.Problem, "friends owing $bad leaves nothing for you")
+        assertTrue(EntryDrafts.build(d.copy(splitAmounts = listOf("250", "")), EntryId("e"), inr).let { it is DraftResult.Problem && it.message.contains("friend 2") }, "a part left blank is asked for")
+        assertTrue(EntryDrafts.build(d.copy(splitAmounts = listOf("", "")), EntryId("e"), inr) is DraftResult.Problem, "amounts mode with nothing typed is not silently an equal split")
+        assertEquals(null, BillSplit.mineAfter(100, emptyList())); assertEquals(null, BillSplit.mineAfter(100, listOf(0, 10)))
+    }
+
+    @Test
+    fun aBillAFriendPaidIsYourShareOwedToThemWithNoAccountMovement() {
+        val d = EntryDraft(null, DraftKind.EXPENSE, "300", "Food", emptyList(), "bank", paidBy = "asha")
+        val e = (EntryDrafts.build(d, EntryId("f"), inr) as DraftResult.Ok).entry as FriendPaid
+        assertEquals(PersonId("asha"), e.payer); assertEquals(m(300_00), e.myShare); assertEquals(listOf(CategoryId("Food")), e.splits.map { it.category })
+        val ledger = Ledger.EMPTY.addAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, inr, 5_000_00L)).add(e)
+        assertEquals(m(5_000_00), ledger.balances().getValue(AccountId("bank")), "no account moved")
+        assertEquals(m(-300_00), ledger.personBalance(PersonId("asha"), inr), "you owe them")
     }
 }
 

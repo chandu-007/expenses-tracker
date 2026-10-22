@@ -3,6 +3,10 @@ package app.expenses
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
@@ -134,7 +138,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
-            Surface(Modifier.imePadding()) {
+            // on a wide screen (a tablet, an unfolded foldable, a phone on its side) the app keeps a comfortable width in the middle instead of stretching every line across it
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+            Surface(Modifier.widthIn(max = app.expenses.ui.MAX_CONTENT_WIDTH).fillMaxHeight().imePadding()) {
             val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(Unit) { platform.trace("first composition") }
             var adding by rememberSaveable { mutableStateOf(false) }
@@ -176,6 +182,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var reporting by rememberSaveable { mutableStateOf(false) }
             var calendaring by rememberSaveable { mutableStateOf(false) }
             var subscribing by rememberSaveable { mutableStateOf(false) }
+            var goaling by rememberSaveable { mutableStateOf(false) }
             var searching by rememberSaveable { mutableStateOf(false) }
             var securing by rememberSaveable { mutableStateOf(false) }
             val lock = host.lock
@@ -207,6 +214,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val attachmentList by viewModel.attachments.collectAsStateWithLifecycle(context = MAIN)
             val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle(context = MAIN)
             val stagedList by viewModel.stagedAttachments.collectAsStateWithLifecycle(context = MAIN)
+            val foreignRates by viewModel.foreignRates.collectAsStateWithLifecycle(context = MAIN)
             // closing the add form without saving deletes the files chosen for it (a save takes them first)
             LaunchedEffect(adding) { if (!adding) viewModel.discardStaged() }
 
@@ -223,10 +231,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 var tourIndex by rememberSaveable { mutableIntStateOf(0) }
                 // back to the home screen, with nothing of the tour left open
                 val closeEverything = {
-                    adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
+                    adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; goaling = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
                     billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
                     privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false
-                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeReports(); viewModel.cancelRestore()
+                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                 }
                 val tourStep = guide?.steps?.getOrNull(tourIndex.coerceAtLeast(0))
@@ -250,6 +258,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         app.expenses.core.domain.GuideTarget.NOTIFICATIONS -> alerts = true
                         app.expenses.core.domain.GuideTarget.PRIVACY -> privacyOpen = true
                         app.expenses.core.domain.GuideTarget.DATA -> yourData = true
+                        app.expenses.core.domain.GuideTarget.SUBSCRIPTIONS -> { subscribing = true; viewModel.openSubscriptions() }
+                        app.expenses.core.domain.GuideTarget.GOALS -> { goaling = true; viewModel.openGoals() }
                     }
                 }
                 guide?.let { g ->
@@ -266,7 +276,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
                 val screenKey = listOf(
                     history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing,
+                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling,
                 ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
@@ -425,7 +435,12 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 24 -> {
                         val subs by viewModel.subscriptions.collectAsStateWithLifecycle(context = MAIN)
                         BackHandler { subscribing = false; viewModel.closeSubscriptions() }
-                        app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions)
+                        app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions, onRepeat = viewModel::repeatSubscription)
+                    }
+                    k == 25 -> {
+                        val goalState by viewModel.goals.collectAsStateWithLifecycle(context = MAIN)
+                        BackHandler { goaling = false; viewModel.closeGoals() }
+                        app.expenses.ui.GoalsScreen(goalState, onBack = { goaling = false; viewModel.closeGoals() }, onSave = viewModel::saveGoal, onAdjust = viewModel::adjustGoal, onDelete = viewModel::deleteGoal)
                     }
                     k == 16 -> {
                         val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
@@ -491,6 +506,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onSetPeriod = viewModel::setBudgetPeriod,
                             onShiftStartDay = viewModel::shiftBudgetStartDay,
                             onShiftCustomDays = viewModel::shiftCustomDays,
+                            onRollover = viewModel::setBudgetRollover,
                         )
                     }
                     k == 21 -> {
@@ -509,6 +525,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             lastExpenseCategory = s.lastCategory, lastIncomeCategory = s.lastIncomeCategory,
                             allTags = s.tags,
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
+                            lastRates = foreignRates,
                             onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
                             onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
                         )
@@ -554,6 +571,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenReports = { reporting = true; viewModel.openReports() },
                         onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                         onOpenSubscriptions = { subscribing = true; viewModel.openSubscriptions() },
+                        onOpenGoals = { goaling = true; viewModel.openGoals() },
                         onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                         onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
                         onOpenGuide = viewModel::openGuide,
@@ -581,6 +599,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     )
                 }
                 } }
+            }
             }
             }
         }

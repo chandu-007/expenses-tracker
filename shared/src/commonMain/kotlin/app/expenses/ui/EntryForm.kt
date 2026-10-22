@@ -87,6 +87,7 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.DraftResult
 import app.expenses.core.domain.BillSplit
+import app.expenses.core.domain.parseAmount
 import app.expenses.core.domain.EntryDraft
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.Money
@@ -116,10 +117,10 @@ internal fun categoryFor(all: List<CategoryUi>, income: Boolean, current: String
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith, d.foreignCode, d.foreignAmount, d.foreignRate, d.splitAmounts, d.paidBy) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>))
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>), l[15] as String, l[16] as String, l[17] as String, @Suppress("UNCHECKED_CAST") (l[18] as List<String>), l[19] as String)
     },
 )
 
@@ -151,6 +152,8 @@ fun EntryFormScreen(
     onRemoveAttachment: (app.expenses.AttachmentUi) -> Unit = {},
     attachmentProblem: String? = null,
     people: List<app.expenses.PersonUi> = emptyList(),
+    /** The rate used last for each foreign currency (units of the ledger's currency for one), to start the next entry in it from. */
+    lastRates: Map<String, String> = emptyMap(),
     onCreatePerson: (name: String, onCreated: (String) -> Unit) -> Unit = { _, _ -> },
     /** The expense and income categories used last: where a draft lands when the kind is switched. */
     lastExpenseCategory: String = "",
@@ -162,6 +165,7 @@ fun EntryFormScreen(
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
     var pickingCategory by rememberSaveable { mutableStateOf(false) }
     var creatingPerson by rememberSaveable { mutableStateOf(false) }
+    var splitMode by rememberSaveable { mutableStateOf(if (start.paidBy.isNotEmpty()) 2 else if (start.splitAmounts.isNotEmpty()) 1 else 0) } // 0 equally, 1 by typed amounts, 2 a friend paid
     val currency = BaseCurrency.current
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
@@ -188,7 +192,7 @@ fun EntryFormScreen(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { creatingPerson = false }, title = { Text("Who is it?") },
             text = { OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.testTag("new_person_name")) },
-            confirmButton = { TextButton(onClick = { onCreatePerson(name) { id -> draft = if (draft.kind == DraftKind.EXPENSE) draft.copy(splitWith = (draft.splitWith + id).distinct()) else draft.copy(personId = id) }; creatingPerson = false }, enabled = name.isNotBlank(), modifier = Modifier.testTag("new_person_ok")) { Text("Add") } },
+            confirmButton = { TextButton(onClick = { onCreatePerson(name) { id -> draft = if (draft.kind == DraftKind.EXPENSE && splitMode == 2) draft.copy(paidBy = id) else if (draft.kind == DraftKind.EXPENSE) draft.copy(splitWith = (draft.splitWith + id).distinct(), splitAmounts = if (splitMode == 1) draft.splitAmounts + "" else draft.splitAmounts) else draft.copy(personId = id) }; creatingPerson = false }, enabled = name.isNotBlank(), modifier = Modifier.testTag("new_person_ok")) { Text("Add") } },
             dismissButton = { TextButton(onClick = { creatingPerson = false }) { Text("Cancel") } },
         )
     }
@@ -354,23 +358,78 @@ fun EntryFormScreen(
                 }
                 Text("Moving money between your own accounts is not spending or income: use it for an ATM withdrawal, paying a card bill, or topping up a wallet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            // a new expense can be shared equally with friends: the whole amount leaves the account, your share is the spending, and each of them owes theirs
+            // a new expense paid in another currency (travel): what was paid there and the rate you worked out; the app never looks a rate up
+            if (draft.kind == DraftKind.EXPENSE && draft.id == null) {
+                var abroad by rememberSaveable { mutableStateOf(draft.foreignCode.isNotEmpty()) }
+                FilterChip(selected = abroad, onClick = { abroad = !abroad; if (!abroad) draft = draft.copy(foreignCode = "", foreignAmount = "", foreignRate = "") }, label = { Text("Paid in another currency") }, modifier = Modifier.testTag("foreign_toggle"))
+                if (abroad) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        app.expenses.core.domain.CurrencyChoices.ALL.filter { it.code != currency.code }.forEach { c ->
+                            FilterChip(selected = draft.foreignCode == c.code, onClick = { draft = draft.copy(foreignCode = c.code, foreignRate = draft.foreignRate.ifEmpty { lastRates[c.code].orEmpty() }) }, label = { Text(c.code) }, modifier = Modifier.testTag("foreign_cur_${c.code}"))
+                        }
+                    }
+                    if (draft.foreignCode.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(draft.foreignAmount, { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(foreignAmount = v) }, label = { Text("Paid (${draft.foreignCode})") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("foreign_amount"))
+                            OutlinedTextField(draft.foreignRate, { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(foreignRate = v) }, label = { Text("1 ${draft.foreignCode} = ${currency.code}") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("foreign_rate"))
+                        }
+                        val converted = app.expenses.core.domain.ForeignAmount.convert(draft.foreignAmount, draft.foreignRate, app.expenses.core.domain.CurrencyChoices.byCode(draft.foreignCode), currency)?.first
+                        // the amount above follows what is worked out here
+                        androidx.compose.runtime.LaunchedEffect(converted) { if (converted != null && draft.amountText != converted.toPlainString()) draft = draft.copy(amountText = converted.toPlainString()) }
+                        Text(
+                            converted?.let { "That is ${it.formatted()} from your account, at the rate you chose." } ?: "Enter what you paid and your rate. The rate is yours: the app does not look rates up.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("foreign_summary"),
+                        )
+                    }
+                }
+            }
+
+            // a new expense shared with friends: split equally, split by amounts you type, or paid by a friend (then the amount is your share)
             if (draft.kind == DraftKind.EXPENSE && draft.id == null && !split) {
-                var sharing by rememberSaveable { mutableStateOf(draft.splitWith.isNotEmpty()) }
-                FilterChip(selected = sharing, onClick = { sharing = !sharing; if (!sharing) draft = draft.copy(splitWith = emptyList()) }, label = { Text("Split with friends") }, modifier = Modifier.testTag("split_toggle"))
+                var sharing by rememberSaveable { mutableStateOf(draft.splitWith.isNotEmpty() || draft.paidBy.isNotEmpty()) }
+                val mode = splitMode
+                FilterChip(selected = sharing, onClick = { sharing = !sharing; if (!sharing) draft = draft.copy(splitWith = emptyList(), splitAmounts = emptyList(), paidBy = "") }, label = { Text("Split with friends") }, modifier = Modifier.testTag("split_toggle"))
                 if (sharing) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Equally" to 0, "My amounts" to 1, "A friend paid" to 2).forEach { (label, m) ->
+                            FilterChip(selected = mode == m, onClick = { splitMode = m; draft = draft.copy(splitWith = emptyList(), splitAmounts = emptyList(), paidBy = "") }, label = { Text(label) }, modifier = Modifier.testTag("split_mode_$m"))
+                        }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         people.forEach { p ->
-                            val on = p.id in draft.splitWith
-                            FilterChip(selected = on, onClick = { draft = draft.copy(splitWith = if (on) draft.splitWith - p.id else draft.splitWith + p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("split_person_${p.name}"))
+                            if (mode == 2) FilterChip(selected = draft.paidBy == p.id, onClick = { draft = draft.copy(paidBy = if (draft.paidBy == p.id) "" else p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("split_payer_${p.name}"))
+                            else {
+                                val at = draft.splitWith.indexOf(p.id)
+                                FilterChip(
+                                    selected = at >= 0,
+                                    onClick = {
+                                        draft = if (at >= 0) draft.copy(splitWith = draft.splitWith - p.id, splitAmounts = if (mode == 1) draft.splitAmounts.filterIndexed { i, _ -> i != at } else emptyList())
+                                        else draft.copy(splitWith = draft.splitWith + p.id, splitAmounts = if (mode == 1) draft.splitAmounts + "" else emptyList())
+                                    },
+                                    label = { Text(p.name) }, modifier = Modifier.testTag("split_person_${p.name}"),
+                                )
+                            }
                         }
                         AssistChip(onClick = { creatingPerson = true }, label = { Text("+ New person") }, modifier = Modifier.testTag("split_new_person"))
                     }
+                    if (mode == 1) draft.splitWith.forEachIndexed { i, id ->
+                        val name = people.firstOrNull { it.id == id }?.name.orEmpty()
+                        OutlinedTextField(
+                            draft.splitAmounts.getOrElse(i) { "" }, { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(splitAmounts = draft.splitAmounts.toMutableList().also { l -> while (l.size <= i) l += ""; l[i] = v }) },
+                            label = { Text("$name owes") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag("split_amount_$name"),
+                        )
+                    }
+                    val owed = draft.splitAmounts.map { parseAmount(it, currency)?.minorUnits ?: 0L }
                     val shares = amount?.let { BillSplit.shares(it.minorUnits, draft.splitWith.size) }
+                    val mineCustom = amount?.let { BillSplit.mineAfter(it.minorUnits, owed) }
                     Text(
-                        if (draft.splitWith.isEmpty()) "Choose who shares this bill. Everyone pays an equal part."
-                        else if (shares == null) "Enter the whole bill to see each share."
-                        else "You pay ${Money(shares.second, currency).formatted()} of it; each of the ${draft.splitWith.size} owes ${Money(shares.first, currency).formatted()}. The whole bill leaves your account.",
+                        when {
+                            mode == 2 -> if (draft.paidBy.isEmpty()) "Choose who paid. Enter your share of the bill as the amount; you will owe them that, and no account of yours moves." else "You owe ${people.firstOrNull { it.id == draft.paidBy }?.name.orEmpty()} ${amount?.formatted() ?: "your share"}. No account of yours moves."
+                            draft.splitWith.isEmpty() -> "Choose who shares this bill."
+                            mode == 1 -> if (mineCustom == null) "Enter the whole bill, then what each friend owes. Your part is what is left." else "You pay ${Money(mineCustom, currency).formatted()} of it. The whole bill leaves your account."
+                            shares == null -> "Enter the whole bill to see each share."
+                            else -> "You pay ${Money(shares.second, currency).formatted()} of it; each of the ${draft.splitWith.size} owes ${Money(shares.first, currency).formatted()}. The whole bill leaves your account."
+                        },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("split_summary"),
                     )
                 }

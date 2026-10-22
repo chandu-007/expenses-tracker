@@ -1,7 +1,7 @@
 package app.expenses.core.domain
 
 /** The screen a tour step is shown on. Each platform maps these to its own navigation. A step with no screen is shown on the home screen. */
-enum class GuideTarget { ADD, SEARCH, REPORTS, INBOX, CAPTURE, BILLS, ACCOUNTS, CATEGORIES, BUDGET, RECURRING, LOANS, CALENDAR, NOTIFICATIONS, PRIVACY, DATA, MORE }
+enum class GuideTarget { ADD, SEARCH, REPORTS, INBOX, CAPTURE, BILLS, ACCOUNTS, CATEGORIES, BUDGET, RECURRING, LOANS, CALENDAR, NOTIFICATIONS, PRIVACY, DATA, MORE, SUBSCRIPTIONS, GOALS }
 
 /**
  * One stop of the tour: the app opens the real screen ([target], or home when null), highlights a real control on it when there is one ([spot], a name the
@@ -26,7 +26,7 @@ data class GuidePlan(val mode: GuideMode, val steps: List<GuideStep>)
  * are then offered just those pages, once.
  */
 object Guide {
-    const val VERSION = 2
+    const val VERSION = 3
 
     val steps: List<GuideStep> = listOf(
         GuideStep(
@@ -126,13 +126,31 @@ object Guide {
         ),
         GuideStep(
             "budget", "Budget", "Set a limit for the month and always know what is left.",
-            listOf("Pick a monthly limit; Home shows what is left and what you can spend a day.", "You can be told when you are close to it."),
+            listOf("Pick a monthly limit; Home shows what is left and what you can spend a day.", "You can be told when you are close to it.", "Carry over what is left: whatever you did not spend last time is added to this time's limit."),
             "The budget card on Home, or More, then Budget", GuideTarget.BUDGET,
         ),
         GuideStep(
             "recurring", "Repeating expenses", "Rent, subscriptions and EMIs that come every month.",
             listOf("Set how often, and the next date.", "Be reminded when one is due, then add it with a tap, or let it be added by itself.", "Edit or stop it any time."),
             "More, then Repeating expenses", GuideTarget.RECURRING,
+        ),
+        GuideStep(
+            "subscriptions", "Subscriptions", "Charges that keep coming, found from your own entries, with what each costs a year.",
+            listOf(
+                "A charge shows up once the same merchant has taken about the same amount three times, a month or so apart (twice, a year apart).",
+                "Remind me turns it into a repeating expense, so you are told when the next one is due. Not one hides a wrong guess.",
+                "It only looks at what you have entered, on the phone.",
+            ),
+            "More, then Subscriptions", GuideTarget.SUBSCRIPTIONS, since = 3,
+        ),
+        GuideStep(
+            "goals", "Savings goals", "Save up for something: a trip, a laptop, an emergency fund.",
+            listOf(
+                "Give it a name, how much, and optionally how many months to reach it: the page says what to put aside each month.",
+                "Put money in by hand, or let the goal follow a savings account so it moves with the balance.",
+                "A goal is a note of what you are saving; it never moves money between your accounts.",
+            ),
+            "More, then Savings goals", GuideTarget.GOALS, since = 3,
         ),
         GuideStep(
             "loans", "Lent and borrowed", "Keep track of who owes you and whom you owe.",
@@ -143,6 +161,15 @@ object Guide {
             "reminders", "Reminders", "Bills, budgets and a weekly summary, on your terms.",
             listOf("Choose which reminders you want, and the hour you want them.", "Quiet hours keep them silent at night.", "With Hide amounts on, notifications carry no figures."),
             "More, then Notifications", GuideTarget.NOTIFICATIONS,
+        ),
+        GuideStep(
+            "smart_alerts", "Smarter alerts", "Choose how early a budget warns you, and what a bill or a card says.",
+            listOf(
+                "Budget: pick the level you want to be warned at (50 to 90%). You can also hear when spending runs ahead of the month, and at the start of a month how last month went.",
+                "Bills: a heads-up 3 days and 1 day before, the day itself, then once a day for a week if it is overdue. Mark paid, or put it off until this evening or tomorrow, right from the notification.",
+                "Cards: when a statement is made, near the credit limit you enter, and when it is paid. Pay now opens the form with what is left.",
+            ),
+            "More, then Notifications", GuideTarget.NOTIFICATIONS, since = 3,
         ),
         GuideStep(
             "privacy", "Privacy and App lock", "Your money stays private, on the phone and in front of other people.",
@@ -162,6 +189,20 @@ object Guide {
                 "Bring in a bank statement (CSV or Excel) to add past entries.",
             ),
             "More, then Your data", GuideTarget.DATA,
+        ),
+        GuideStep(
+            "sharing", "Share a bill, or pay abroad", "Two more things the Add form can do.",
+            listOf(
+                "Split with friends: share a bill equally, set what each owes, or say a friend paid. Only your share is spending; what friends owe shows under Lent and borrowed.",
+                "Paid in another currency: type what you paid there and the rate you worked out. The app never looks a rate up; the amount that left your account is that, and the foreign amount is kept beside it.",
+                "Both are options at the bottom of the Add form, under the account chips.",
+            ),
+            "The Add button on Home", GuideTarget.ADD, since = 3,
+        ),
+        GuideStep(
+            "year", "Financial year summary", "One page for your records or an accountant: income, spending, by category and by month, April to March.",
+            listOf("It is an Excel file, for this year or last.", "A summary of what you entered, not tax advice."),
+            "More, then Your data", GuideTarget.DATA, since = 3,
         ),
         GuideStep(
             "more", "Everything else is under More", "More holds every part you just saw, grouped, plus Appearance, Customise home, Currency and this tour.",

@@ -65,4 +65,19 @@ class SubscriptionsUiTest {
         spend("a", "Cafe", 20_000, 3)
         open(); waitFor("subscriptions_empty")
     }
+
+    @Test
+    fun remindMeMakesARepeatingExpenseLikeTheLatestChargeOnItsNextDateAndOnlyOnce() {
+        for ((i, ago) in listOf(95, 65, 35, 5).withIndex()) spend("n$i", "Netflix", 64_900, ago)
+        open(); tap("subscription_repeat_Netflix"); waitFor("subscription_repeats_Netflix")
+        assertTrue(!has("subscription_repeat_Netflix"), "no second button once set")
+        val item = runBlocking { container.write { ok -> ok.recurring.list().single() } }!!
+        assertEquals("Netflix", item.name); assertEquals(Money(64_900, inr), item.amount); assertEquals("cash", item.account.value)
+        assertEquals(app.expenses.core.domain.RepeatUnit.MONTH, item.schedule.unit); assertEquals(1, item.schedule.every)
+        assertEquals(false, item.auto, "it reminds, it does not post by itself")
+        val today = java.time.LocalDate.now()
+        assertTrue(item.schedule.start.toEpochDays() >= today.toEpochDay(), "the first date is not in the past: ${item.schedule.start}")
+        assertTrue(item.schedule.start.toEpochDays() - today.toEpochDay() <= 31, "and is the next one on the usual gap")
+    }
 }
+

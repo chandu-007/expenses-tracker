@@ -10,6 +10,9 @@ import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.InsightLine
+import app.expenses.core.domain.Goal
+import app.expenses.core.domain.GoalCodec
+import app.expenses.core.domain.GoalMath
 import app.expenses.core.domain.PeriodCompare
 import app.expenses.core.domain.SubscriptionFinder
 import app.expenses.core.domain.SubscriptionSample
@@ -221,9 +224,18 @@ data class AccountRowUi(
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
 /** One charge that keeps coming, as the Subscriptions screen shows it. */
-data class SubscriptionRowUi(val key: String, val name: String, val amountText: String, val cadenceText: String, val nextText: String, val yearlyText: String)
+data class SubscriptionRowUi(val key: String, val name: String, val amountText: String, val cadenceText: String, val nextText: String, val yearlyText: String, /** A repeating item with this name already exists, so no reminder needs making. */ val repeats: Boolean = false)
 
 data class SubscriptionsUi(val rows: List<SubscriptionRowUi> = emptyList(), val monthlyText: String = "", val yearlyText: String = "", val ignored: Int = 0)
+
+/** One savings goal as the Goals screen shows it. */
+data class GoalRowUi(
+    val id: String, val name: String, val savedText: String, val targetText: String, val percent: Int, val leftText: String, val dueText: String, val monthlyText: String,
+    /** The name of the account this goal follows, or empty when the amount is kept by hand. */
+    val accountName: String, val accountId: String, val targetPlain: String, val monthsPlain: String,
+)
+
+data class GoalsUi(val rows: List<GoalRowUi> = emptyList(), val accounts: List<AccountUi> = emptyList())
 
 data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "")
 
@@ -276,6 +288,10 @@ data class BudgetUi(
     val daysLeft: Int,
     /** How many category limits are near or over. */
     val categoriesNeedingAttention: Int,
+    /** The limits gain what was left unspent last period. */
+    val rollover: Boolean = false,
+    /** What the overall limit gained from last period (e.g. "₹2,000.00"), or empty. */
+    val carriedText: String = "",
 )
 
 /** A repeating expense waiting to be posted or skipped. [amount] is null when the amount differs each time and must be asked for. */
@@ -507,6 +523,7 @@ private const val SETTING_HOME_LAYOUT = "home_layout"
 private const val SETTING_HIDE_AMOUNTS = "hide_amounts"
 private const val SETTING_RECENT_SEARCHES = "recent_searches"
 private const val SETTING_SUBS_IGNORED = "subs_ignored"
+private const val SETTING_GOALS = "goals"
 private const val RECENT_SEARCHES_KEPT = 6
 private const val SETTING_APPEARANCE = "appearance"
 /** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
@@ -596,6 +613,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val startedAt = TimeSource.Monotonic.markNow()
         val id = try { EntryActions(ok).save(draft) } catch (e: Exception) { restoreStaged(carried); throw e } // a refused save keeps what was chosen, to try again
         carried.forEach { ok.attachments.add(it.id, id, it.name, it.mime, it.sizeBytes, it.sha256) }
+        if (draft.foreignCode.isNotEmpty() && draft.id == null) { ok.templates.putSetting("rate_${draft.foreignCode}", draft.foreignRate.trim()); loadRates(ok) }
         val amount = parseAmount(draft.amountText, inr)!!
         if (saveAsTemplate && draft.kind == DraftKind.EXPENSE && draft.id == null && !EntryDrafts.isSplit(draft)) {
             val name = draft.note.trim().ifEmpty { draft.category }
@@ -1230,7 +1248,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val shares = ok.db.schemaQueries.sharedEntriesOfPerson(s.id).executeAsList().map { e ->
                 e.occurred_at to LoanEntryUi(e.id, dateFormat.format(e.occurred_at), Money(e.share_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), true, e.account_id?.let { accountNames[it] }.orEmpty(), "Their share of " + (e.merchant ?: e.note ?: "a bill"))
             }
-            (lent + shares).sortedByDescending { it.first }.map { it.second }
+            val paidForYou = ok.db.schemaQueries.friendPaidOfPerson(s.id).executeAsList().map { e ->
+                e.occurred_at to LoanEntryUi(e.id, dateFormat.format(e.occurred_at), Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(), false, "", "They paid; your share of " + (e.merchant ?: e.note ?: "a bill"))
+            }
+            (lent + shares + paidForYou).sortedByDescending { it.first }.map { it.second }
         }.orEmpty()
         _loans.value = LoansUi(rows, Money(rows.filter { it.minor > 0 }.sumOf { it.minor }, inr).formatted(), Money(rows.filter { it.minor < 0 }.sumOf { -it.minor }, inr).formatted(), selected, history)
     }
@@ -1993,11 +2014,115 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val shown = all.filter { it.key !in ignored }
         val dayFmt = DatePattern("d MMM")
         fun cadence(d: Int) = when (d) { 30 -> "every month"; 91 -> "every 3 months"; else -> "every year" }
+        val existing = ok.recurring.list().map { SubscriptionFinder.keyOf(it.name) }.toSet()
         return SubscriptionsUi(
-            shown.map { SubscriptionRowUi(it.key, it.name, Money(it.amountMinor, inr).formatted(), cadence(it.cadenceDays), "next about " + dayFmt.format(localDateOfEpochDay(it.nextDay.toLong())), Money(it.yearlyMinor, inr).formatted() + " a year") },
+            shown.map { SubscriptionRowUi(it.key, it.name, Money(it.amountMinor, inr).formatted(), cadence(it.cadenceDays), "next about " + dayFmt.format(localDateOfEpochDay(it.nextDay.toLong())), Money(it.yearlyMinor, inr).formatted() + " a year", repeats = it.key in existing) },
             Money(shown.sumOf { it.monthlyMinor }, inr).formatted(), Money(shown.sumOf { it.yearlyMinor }, inr).formatted(), all.size - shown.size,
         )
     }
+
+    /**
+     * Makes a charge that keeps coming into a repeating expense, so the app reminds about it when it is due (it is not posted by itself): same name, amount,
+     * category and account as the latest one, on its usual gap from its next expected date. Does nothing when one with that name is already there.
+     */
+    fun repeatSubscription(key: String) = withStore { ok ->
+        val today = todayLocal()
+        val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
+        val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
+        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt()).firstOrNull { it.key == key } ?: return@withStore
+        if (ok.recurring.list().any { SubscriptionFinder.keyOf(it.name) == key }) return@withStore
+        val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, key).executeAsOneOrNull() ?: return@withStore
+        val category = ok.db.schemaQueries.splitsOf(latest.id).executeAsList().firstOrNull()?.category_id
+        val (unit, every) = when (sub.cadenceDays) { 30 -> RepeatUnit.MONTH to 1; 91 -> RepeatUnit.MONTH to 3; else -> RepeatUnit.YEAR to 1 }
+        // the next date on the gap that is not in the past
+        var start = localDateOfEpochDay(sub.nextDay.toLong())
+        while (start < today) start = if (unit == RepeatUnit.YEAR) start.plus(1, kotlinx.datetime.DateTimeUnit.YEAR) else start.plus(every, kotlinx.datetime.DateTimeUnit.MONTH)
+        ok.recurring.save(RecurringItem(Uuid.random().toString(), sub.name, Money(sub.amountMinor, inr), category?.let(::CategoryId), AccountId(latest.account_id ?: return@withStore), sub.name, Schedule(unit, every, start)))
+        _subscriptions.value = subscriptionsUi(ok)
+        refresh(ok)
+    }
+
+    // ---- the rates chosen last for each foreign currency ----
+
+    private val _rates = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** The rate used last for each foreign currency, to start the next entry in it from. */
+    val foreignRates: StateFlow<Map<String, String>> get() = _rates
+
+    private fun loadRates(ok: AppContainer.Opened.Ok) { _rates.value = CurrencyChoices.ALL.mapNotNull { c -> ok.templates.setting("rate_${c.code}")?.takeIf { it.isNotBlank() }?.let { c.code to it } }.toMap() }
+
+    // ---- savings goals ----
+
+    private val _goals = MutableStateFlow<GoalsUi?>(null)
+    val goals: StateFlow<GoalsUi?> get() = _goals
+
+    private fun goalsOf(ok: AppContainer.Opened.Ok) = GoalCodec.decode(ok.templates.setting(SETTING_GOALS))
+    private fun putGoals(ok: AppContainer.Opened.Ok, goals: List<Goal>) { ok.templates.putSetting(SETTING_GOALS, GoalCodec.encode(goals)); _goals.value = goalsUi(ok) }
+
+    private fun goalsUi(ok: AppContainer.Opened.Ok): GoalsUi {
+        val today = todayLocal().toEpochDays().toInt()
+        val balances = ok.store.balances()
+        val names = ok.db.schemaQueries.allAccounts().executeAsList().associate { it.id to it.name }
+        val dayFmt = DatePattern("d MMM yyyy")
+        val rows = goalsOf(ok).map { g ->
+            val saved = (g.accountId?.let { balances[AccountId(it)]?.minorUnits } ?: g.savedMinor).coerceAtLeast(0)
+            val monthly = GoalMath.monthly(saved, g.targetMinor, g.dueDay, today)
+            GoalRowUi(
+                g.id, g.name, Money(saved, inr).formatted(), Money(g.targetMinor, inr).formatted(), GoalMath.percent(saved, g.targetMinor),
+                if (saved >= g.targetMinor) "Reached" else Money(GoalMath.remaining(saved, g.targetMinor), inr).formatted() + " to go",
+                g.dueDay?.let { "by " + dayFmt.format(localDateOfEpochDay(it.toLong())) }.orEmpty(),
+                monthly?.let { Money(it, inr).formatted() + " a month to get there" }.orEmpty(),
+                g.accountId?.let { names[it] }.orEmpty(), g.accountId.orEmpty(), Money(g.targetMinor, inr).toPlainString(),
+                g.dueDay?.let { ((it - today + 29) / 30).coerceAtLeast(1).toString() }.orEmpty(),
+            )
+        }
+        return GoalsUi(rows, ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L && AccountType.valueOf(it.type) != AccountType.CREDIT_CARD }.map { AccountUi(it.id, it.name, it.type) })
+    }
+
+    fun openGoals() = withStore { ok -> _goals.value = goalsUi(ok) }
+    fun closeGoals() { _goals.value = null }
+
+    /** Adds a goal ([id] null) or changes one. [monthsText] is how many months from now to reach it by, or empty. Reports a problem as text, null when saved. */
+    fun saveGoal(id: String?, name: String, targetText: String, monthsText: String, accountId: String?, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = container.write { ok ->
+                val clean = GoalCodec.clean(name)
+                val target = parseAmount(targetText, inr)?.minorUnits
+                val months = monthsText.trim().takeIf { it.isNotEmpty() }?.let { it.toIntOrNull()?.takeIf { m -> m in 1..600 } ?: return@write "Months must be a whole number from 1 to 600, or empty." }
+                when {
+                    clean.isEmpty() -> "Give the goal a name."
+                    target == null || target <= 0 -> "Enter how much you want to reach, like 50000."
+                    else -> {
+                        val goals = goalsOf(ok)
+                        val old = goals.firstOrNull { it.id == id }
+                        val due = months?.let { todayLocal().toEpochDays().toInt() + it * 30 }
+                        val goal = Goal(old?.id ?: Uuid.random().toString(), clean, target, old?.savedMinor ?: 0, due, accountId?.ifEmpty { null })
+                        putGoals(ok, if (old == null) goals + goal else goals.map { if (it.id == old.id) goal else it })
+                        null
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** Puts money towards a goal kept by hand ([add]) or takes some back; this is a note of what is set aside, no entry is made. */
+    fun adjustGoal(id: String, amountText: String, add: Boolean, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = container.write { ok ->
+                val amount = parseAmount(amountText, inr)?.minorUnits?.takeIf { it > 0 } ?: return@write "Enter an amount like 2000."
+                val goals = goalsOf(ok)
+                val g = goals.firstOrNull { it.id == id } ?: return@write "That goal is gone."
+                if (g.accountId != null) return@write "This goal follows an account; its money moves with that account."
+                putGoals(ok, goals.map { if (it.id == id) it.copy(savedMinor = (it.savedMinor + if (add) amount else -amount).coerceAtLeast(0)) else it })
+                null
+            }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    fun deleteGoal(id: String) = withStore { ok -> putGoals(ok, goalsOf(ok).filterNot { it.id == id }) }
 
     fun openSubscriptions() = withStore { ok -> _subscriptions.value = subscriptionsUi(ok) }
     fun closeSubscriptions() { _subscriptions.value = null }
@@ -2246,6 +2371,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         refresh(ok)
     }
 
+    fun setBudgetRollover(on: Boolean) = withStore { ok -> ok.budgets.setRollover(on); refresh(ok) }
+
     fun setBudgetPeriod(period: BudgetPeriod) = withStore { ok ->
         ok.budgets.setPeriod(period)
         refresh(ok)
@@ -2459,6 +2586,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             billsUseItAll = status.safeToSpend?.let { it.available.minorUnits <= 0 && it.remaining.minorUnits > 0 } ?: false,
             daysLeft = status.safeToSpend?.daysLeft ?: 0,
             categoriesNeedingAttention = status.progress.count { it.categoryId != null && it.state != BudgetState.OK },
+            rollover = ok.budgets.rollover(),
+            carriedText = status.carried[null]?.formatted().orEmpty(),
         )
     }
 
@@ -2502,7 +2631,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
         subtitle = dateFormat.format(e.occurred_at) +
             (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
-            (if (e.kind == "SETTLEMENT") " · " + (if (e.direction == "PAID_TO_PERSON") "Gave" else "Got") else ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: "")),
+            (if (e.kind == "SETTLEMENT") " · " + (if (e.direction == "PAID_TO_PERSON") "Gave" else "Got") else ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: "")) +
+            (e.original_amount_minor?.let { minor -> e.original_currency?.let { code -> " · " + Money(minor, Currency(code, currencyDigits[code] ?: CurrencyChoices.byCode(code).minorUnitDigits)).formatted() } }.orEmpty()),
         amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
         inflow = e.kind == "INCOME" || e.kind == "REFUND" || (e.kind == "SETTLEMENT" && e.direction == "RECEIVED_FROM_PERSON"),
         day = dateOfMillis(e.occurred_at).epochDay(),
@@ -2520,7 +2650,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
                 is AppContainer.Opened.Ok -> {
-                    container.write { ok -> refresh(ok); offerGuide(ok) }; platform.trace("open: first page loaded")
+                    container.write { ok -> refresh(ok); offerGuide(ok); loadRates(ok) }; platform.trace("open: first page loaded")
                     viewModelScope.launch(BACKGROUND) { platform.captureChanges.collect { container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) } } }
                     // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
                     container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }

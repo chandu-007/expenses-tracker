@@ -199,7 +199,7 @@ class BackupStore(
     companion object {
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
         val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots",
-            "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit")
+            "goals", "budget_rollover", "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit")
 
         /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
         const val CARD_LIMIT_PREFIX = "card_limit:"

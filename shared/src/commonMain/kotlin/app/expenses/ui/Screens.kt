@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -137,6 +138,7 @@ fun EntryListScreen(
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenSubscriptions: () -> Unit = {},
+    onOpenGoals: () -> Unit = {},
     onOpenLoans: () -> Unit,
     onOpenBills: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
@@ -255,6 +257,7 @@ fun EntryListScreen(
                         MoreRow("manage_categories", Icons.Outlined.Label, "Categories", "${visible.count { it.kind.forExpense }} for expenses \u00B7 ${visible.count { it.kind.forIncome }} for income", onClick = onManageCategories),
                         MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
+                        MoreRow("open_goals", Icons.Outlined.Flag, "Savings goals", "Save up for a trip or a laptop", onClick = onOpenGoals),
                         MoreRow("open_subscriptions", Icons.Outlined.Autorenew, "Subscriptions", "Charges that keep coming, and what they cost a year", onClick = onOpenSubscriptions),
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
                     )),

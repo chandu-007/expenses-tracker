@@ -1,6 +1,7 @@
 package app.expenses.core.storage
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.NoticeKind
@@ -261,6 +262,29 @@ class NotificationServiceTest {
         assertTrue(service.check(LocalDate(2026, 10, 15), noon, zone).notices.none { it.kind == NoticeKind.BUDGET_PACE }, "rent is planned")
         spend("b", 300, "Food") // 30% unplanned: still not ahead of the month
         assertTrue(service.check(LocalDate(2026, 10, 15), noon, zone).notices.none { it.kind == NoticeKind.BUDGET_PACE })
+    }
+
+    // ---- budget rollover ----
+
+    private fun spendOn(id: String, date: LocalDate, rupees: Long, category: String) =
+        ledger.save(Expense(EntryId(id), date.atStartOfDayIn(zone).toEpochMilliseconds() + 3_600_000, bank.id, m(rupees * 100), listOf(CategorySplit(CategoryId(category), m(rupees * 100)))))
+
+    @Test
+    fun rolloverAddsWhatWasLeftLastPeriodToEachLimitOnlyOnceAndNeverWhatWasOverspent() {
+        budgets.setLimit(null, m(100_000)); budgets.setLimit("Food", m(50_000))
+        spendOn("aug", LocalDate(2026, 8, 10), 100, "Food")  // August: not carried twice
+        spendOn("sep1", LocalDate(2026, 9, 10), 600, "Food") // September: 400 left overall, 0 left on Food (500 limit, 600 spent)
+        val off = budgets.status(today, zone, inr)
+        assertTrue(off.carried.isEmpty() && off.progress.first { it.categoryId == null }.limit == m(100_000), "off by default")
+        budgets.setRollover(true)
+        val on = budgets.status(today, zone, inr)
+        assertEquals(m(40_000), on.carried[null]); assertEquals(m(140_000), on.progress.first { it.categoryId == null }.limit, "1,000 and the 400 left in September, not August's 900 too")
+        assertEquals(null, on.carried["Food"], "Food was overspent last time: nothing is carried, and nothing is taken off")
+        assertEquals(m(50_000), on.progress.first { it.categoryId == "Food" }.limit)
+        spendOn("oct", today, 1_300, "Food")
+        assertTrue(budgets.status(today, zone, inr).progress.first { it.categoryId == null }.state != BudgetState.OVER, "1,300 is under the 1,400 it now has")
+        budgets.setRollover(false)
+        assertEquals(BudgetState.OVER, budgets.status(today, zone, inr).progress.first { it.categoryId == null }.state, "and over the plain 1,000")
     }
 }
 

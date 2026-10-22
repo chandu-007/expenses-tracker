@@ -133,5 +133,20 @@ class PeopleStoreTest {
         assertEquals(30_000L, other.ledger.spendByCategory(Currency.INR)[app.expenses.core.domain.ledger.CategoryId("Food")]?.minorUnits, "only your share is spending on the other device too")
         assertEquals(3, other.db.schemaQueries.allShares().executeAsList().size)
     }
+
+    @Test
+    fun aBillAFriendPaidIsYourShareOwedToThemOnlyYourShareIsSpentAndNoAccountMovesAndItSurvivesABackup() {
+        val a = people.create("Asha")
+        d.ledger.save(app.expenses.core.domain.ledger.FriendPaid(EntryId("fp"), 1_000, PersonId(a.id), m(30_000), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), m(30_000)))))
+        assertEquals(-30_000L, owed(a), "you owe her your share")
+        assertEquals(30_000L, d.ledger.spendByCategory(Currency.INR)[app.expenses.core.domain.ledger.CategoryId("Food")]?.minorUnits, "your share is spending")
+        assertEquals(null, d.ledger.balances()[AccountId("bank")]?.minorUnits?.takeIf { it != 0L }, "no account moved")
+        assertFailsWith<IllegalArgumentException> { people.remove(a.id) }
+        gave("repay", a, 30_000, 2_000)
+        assertEquals(0L, owed(a), "paying her back settles it")
+        val other = Device("b"); other.backup.restore(d.backup.export())
+        assertEquals(0L, PeopleStore(other.db).balances("INR").first { it.person.name == "Asha" }.minor)
+        assertEquals(30_000L, other.ledger.spendByCategory(Currency.INR)[app.expenses.core.domain.ledger.CategoryId("Food")]?.minorUnits)
+    }
 }
 

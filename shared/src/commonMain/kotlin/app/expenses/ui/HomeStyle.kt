@@ -244,3 +244,6 @@ fun FadeIn(content: @Composable () -> Unit) {
     LaunchedEffect(Unit) { progress.animateTo(1f, tween(durationMillis = Motion.STANDARD)) }
     Box(Modifier.graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 12.dp.toPx() }) { content() }
 }
+
+/** The widest the app is drawn: wider screens (tablets, unfolded foldables) get margins either side, so lines of text and rows stay a readable length. */
+val MAX_CONTENT_WIDTH = 720.dp

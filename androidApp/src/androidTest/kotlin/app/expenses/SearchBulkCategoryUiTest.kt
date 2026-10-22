@@ -54,7 +54,7 @@ class SearchBulkCategoryUiTest {
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
-    private fun hold(tag: String) { waitFor(tag); node(tag).performTouchInput { longClick() } }
+    private fun hold(tag: String) { waitFor(tag); compose.waitForIdle(); node(tag).performTouchInput { longClick() } } // idle first: a long press while the list is still settling (keyboard going, rows animating) is not always taken
     private fun textOf(tag: String): String {
         waitFor(tag)
         return node(tag).fetchSemanticsNode().config.let { c -> if (c.contains(SemanticsProperties.Text)) c[SemanticsProperties.Text].joinToString(" ") { it.text } else "" }

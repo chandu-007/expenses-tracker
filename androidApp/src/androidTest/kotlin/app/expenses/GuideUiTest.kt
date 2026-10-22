@@ -52,6 +52,7 @@ class GuideUiTest {
         GuideTarget.CAPTURE -> "capture_back"; GuideTarget.INBOX -> "inbox_back"; GuideTarget.BILLS -> "bills_back"; GuideTarget.ACCOUNTS -> "back"
         GuideTarget.CATEGORIES -> "categories_back"; GuideTarget.BUDGET -> "budget_back"; GuideTarget.RECURRING -> "recurring_back"; GuideTarget.LOANS -> "loans_back"
         GuideTarget.NOTIFICATIONS -> "notif_back"; GuideTarget.PRIVACY -> "privacy_back"; GuideTarget.DATA -> "data_back"
+        GuideTarget.SUBSCRIPTIONS -> "subscriptions_back"; GuideTarget.GOALS -> "goals_back"
         GuideTarget.MORE -> "open_data" // the More page
     }
     private val everyScreenTag get() = (GuideTarget.entries.map { screenTag(it) } + "add").toSet()
@@ -181,4 +182,21 @@ class GuideUiTest {
         tap("guide_skip"); gone("guide")
         assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN))
     }
+
+    @Test
+    fun someoneWhoSawVersionTwoIsOfferedExactlyTheNewStopsInTourOrder() {
+        put(GuideSettings.SEEN, "2")
+        launch(); waitFor("guide_whatsnew")
+        val fresh = Guide.steps.filter { it.since > 2 }
+        assertEquals(listOf("subscriptions", "goals", "smart_alerts", "sharing", "year"), fresh.map { it.id })
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("guide_counter") and androidx.compose.ui.test.hasText("1 of ${fresh.size}", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        for ((i, step) in fresh.withIndex()) {
+            compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("guide_counter") and androidx.compose.ui.test.hasText("${i + 1} of ${fresh.size}", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("guide_title", useUnmergedTree = true).assertTextContains(step.title, substring = true)
+            compose.waitUntil(10_000) { has(screenTag(step.target)) }
+            if (i < fresh.lastIndex) tap("guide_next") else tap("guide_done")
+        }
+        gone("guide"); assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN))
+    }
 }
+

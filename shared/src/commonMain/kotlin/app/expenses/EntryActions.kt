@@ -100,7 +100,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
                 val splits = q.splitsOf(entryId).executeAsList()
                 when {
                     q.sharesOf(entryId).executeAsList().isNotEmpty() -> readOnly("This expense is shared with other people, which can't be edited here yet.")
-                    row.original_amount_minor != null -> readOnly("This expense has a foreign-currency amount, which can't be edited here yet.")
+                    row.original_amount_minor != null -> readOnly("This expense was paid in ${row.original_currency} (${Money(row.original_amount_minor!!, app.expenses.core.domain.CurrencyChoices.byCode(row.original_currency)).formatted()}) and entered at the rate you chose. Changing it is not possible yet: delete it and add it again to correct it.")
                     q.hasLiveRefunds(entryId).executeAsOne() -> readOnly("This expense has refunds. Delete the refunds first to edit it.")
                     else -> Editable.Form(
                         base.copy(

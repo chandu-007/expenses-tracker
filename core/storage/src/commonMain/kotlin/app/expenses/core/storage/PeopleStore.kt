@@ -37,9 +37,10 @@ class PeopleStore(private val db: ExpensesDb) {
     fun balances(currency: String): List<LoanBalance> {
         val by = q.loanBalances(currency).executeAsList().associateBy { it.person_id }
         val shared = q.sharesOwed(currency).executeAsList().associateBy { it.person_id } // bills shared with them: their part is owed to you
+        val paidForYou = q.friendPaidOwed(currency).executeAsList().associateBy { it.person_id } // bills they paid: your part of it is owed to them
         return list().map { p ->
-            val b = by[p.id]; val s = shared[p.id]
-            LoanBalance(p, (b?.balance ?: 0L) + (s?.owed ?: 0L), ((b?.n ?: 0L) + (s?.n ?: 0L)).toInt(), maxOf(b?.last_at ?: 0L, s?.last_at ?: 0L))
+            val b = by[p.id]; val s = shared[p.id]; val f = paidForYou[p.id]
+            LoanBalance(p, (b?.balance ?: 0L) + (s?.owed ?: 0L) - (f?.owed ?: 0L), ((b?.n ?: 0L) + (s?.n ?: 0L) + (f?.n ?: 0L)).toInt(), maxOf(b?.last_at ?: 0L, s?.last_at ?: 0L, f?.last_at ?: 0L))
         }
             .sortedWith(compareByDescending<LoanBalance> { kotlin.math.abs(it.minor) }.thenBy { it.person.name.lowercase() })
     }

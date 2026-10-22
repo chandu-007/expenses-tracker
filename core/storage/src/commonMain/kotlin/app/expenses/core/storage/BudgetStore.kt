@@ -14,12 +14,15 @@ import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 
 /** The current budget period with where every limit stands. [safeToSpend] is null when there is no overall limit. */
-data class BudgetStatus(val period: DatePeriod, val progress: List<BudgetProgress>, val safeToSpend: SafeToSpend?)
+/** [carried] is what each limit gained from the period before when rollover is on (by category; null is the overall limit); empty otherwise. */
+data class BudgetStatus(val period: DatePeriod, val progress: List<BudgetProgress>, val safeToSpend: SafeToSpend?, val carried: Map<String?, Money> = emptyMap())
 
 /** The scope of the overall limit in the `budget` table. */
 private const val OVERALL = ""
+private const val ROLLOVER = "budget_rollover"
 
 /**
  * Spending limits: one overall cap and any number of per-category caps, all for one period type (monthly from a chosen day, or weekly).
@@ -93,22 +96,34 @@ class BudgetStore(
      */
     fun status(today: LocalDate, zone: TimeZone, currency: Currency): BudgetStatus {
         val period = period().containing(today)
-        val limits = limits().filter { it.limit.currency == currency }
+        val base = limits().filter { it.limit.currency == currency }
+        val children = q.liveCategories().executeAsList().filter { it.parent_id != null }.groupBy({ it.parent_id!! }, { it.id })
+        // with rollover on, what was left unspent under each limit in the period before is added to it (only that one period: it does not pile up)
+        val carried = if (rollover()) {
+            val before = period().containing(period.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
+            val spentBefore = ledger.spendByCategory(currency, from = before.startMillis(zone), until = before.endMillis(zone)).mapKeys { it.key?.value }
+            BudgetMath.progress(base, spentBefore, children).filter { it.remaining.minorUnits > 0 }.associate { it.categoryId to it.remaining }
+        } else emptyMap()
+        val limits = base.map { b -> carried[b.categoryId]?.let { BudgetLimit(b.categoryId, b.limit + it) } ?: b }
         val spent = ledger.spendByCategory(currency, from = period.startMillis(zone), until = period.endMillis(zone))
             .mapKeys { it.key?.value }
-        val children = q.liveCategories().executeAsList().filter { it.parent_id != null }.groupBy({ it.parent_id!! }, { it.id })
         val progress = BudgetMath.progress(limits, spent, children)
         val overall = progress.firstOrNull { it.categoryId == null }
         // Repeating expenses still waiting in this period (past-due ones are included: they will post dated inside it).
         // Only expenses are spending still to come; a repeating income or a transfer between own accounts is not set aside.
         val upcoming = recurring.unhandled(period.start, period.endExclusive).filter { it.item.kind == RecurringKind.EXPENSE }.mapNotNull { it.item.amount }.filter { it.currency == currency }
             .fold(Money.zero(currency)) { a, m -> a + m }
-        return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period, upcoming) })
+        return BudgetStatus(period, progress, overall?.let { BudgetMath.safeToSpend(it, today, period, upcoming) }, carried)
     }
 
     /** Spending in [period] that repeating items posted (planned: rent, EMIs, subscriptions), by category (null: uncategorised). */
     fun plannedSpend(period: DatePeriod, zone: TimeZone, currency: Currency): Map<String?, Long> =
         q.spendByCategoryFromRepeating(currency.code, period.startMillis(zone), period.endMillis(zone)).executeAsList().associate { it.category_id to (it.mine ?: 0L) }
+
+    /** Whether what is left unspent from the last period is added to this period's limits. Off unless the person turns it on. */
+    fun rollover(): Boolean = q.settingValue(ROLLOVER).executeAsOneOrNull() == "1"
+
+    fun setRollover(on: Boolean) { q.putSetting(ROLLOVER, if (on) "1" else "0") }
 
     private fun liveScope(categoryId: String): String {
         val id = db.resolveCategory(categoryId)

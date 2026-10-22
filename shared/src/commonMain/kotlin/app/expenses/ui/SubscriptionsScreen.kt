@@ -24,7 +24,7 @@ import app.expenses.SubscriptionsUi
 
 /** Charges that keep coming (found from your own entries): what each costs, when it is next expected, and what they add up to. */
 @Composable
-fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (String) -> Unit, onShowIgnored: () -> Unit) {
+fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (String) -> Unit, onShowIgnored: () -> Unit, onRepeat: (String) -> Unit = {}) {
     Scaffold(topBar = { AreaTopBar("Subscriptions", Area.MONEY, Icons.Outlined.Autorenew, onBack, "subscriptions_back") }) { padding ->
         if (state == null) return@Scaffold
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("subscriptions_list")) {
@@ -48,7 +48,11 @@ fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (
                         Text("${r.amountText} ${r.cadenceText} · ${r.nextText}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(r.yearlyText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
-                    TextButton(onClick = { onNotOne(r.key) }, modifier = Modifier.testTag("subscription_not_${r.name}")) { Text("Not one") }
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (r.repeats) Text("Reminder set", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp).testTag("subscription_repeats_${r.name}"))
+                        else TextButton(onClick = { onRepeat(r.key) }, modifier = Modifier.testTag("subscription_repeat_${r.name}")) { Text("Remind me") }
+                        TextButton(onClick = { onNotOne(r.key) }, modifier = Modifier.testTag("subscription_not_${r.name}")) { Text("Not one") }
+                    }
                 }
             }
             if (state.ignored > 0) item {
