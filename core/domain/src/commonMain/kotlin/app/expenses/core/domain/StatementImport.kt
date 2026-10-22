@@ -118,7 +118,8 @@ data class StatementMapping(
     }
 }
 
-data class StatementTxn(val row: Int, val date: LocalDate, val flow: Flow, val minor: Long, val description: String)
+/** [sourceText] is the statement line this was read from, exactly as the file had it, kept with the entry so the person can see where it came from. */
+data class StatementTxn(val row: Int, val date: LocalDate, val flow: Flow, val minor: Long, val description: String, val sourceText: String? = null)
 
 /** A row that looked like a transaction but could not be read. [row] is its line number in the file's table, counting from 1. */
 data class StatementProblem(val row: Int, val reason: String)
