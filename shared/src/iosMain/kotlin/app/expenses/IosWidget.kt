@@ -110,32 +110,39 @@ object IosSharedTextsDebug {
 }
 
 /**
- * Taps on the Quick add widget's buttons. The widget (Swift, apart from the app, with no way into its database) queues "templateId<TAB>millis" in the App Group's
+ * Taps on the Quick add widget's buttons. The widget (Swift, apart from the app, with no way into its database) queues "uuid<TAB>templateId<TAB>millis" in the App Group's
  * preferences; the app records each one as the saved quick entry's expense, stamped with the time of the tap, the next time it runs (it comes forward, or iOS
  * lets it refresh in the background). So a tapped entry reaches the ledger and the totals only then, which the widget says; Undo works while the tap is still queued.
  */
 internal object IosQuickAdds {
     private const val KEY = "quick_adds"
 
-    /** Records the queued taps and takes off only those it read. Returns how many entries were recorded. */
-    suspend fun drain(container: AppContainer): Int {
+    /**
+     * Records the queued taps, then takes off exactly the strings it read (the widget's Undo may have removed others meanwhile, so a prefix is not assumed). A tap is
+     * "uuid<TAB>templateId<TAB>millis"; its entry's id is derived from the uuid, so a tap that is read twice (a crash between recording and clearing, or two runs
+     * that overlap) is recorded once, and one the person deleted is not brought back. All of it is inside the write lock, so two runs in this process take turns.
+     * Returns how many entries were recorded.
+     */
+    suspend fun drain(container: AppContainer): Int = container.write { ok ->
         val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
         val queued = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty()
-        if (queued.isEmpty()) return 0
-        val rest = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty().drop(queued.size)
-        if (rest.isEmpty()) defaults.removeObjectForKey(KEY) else defaults.setObject(rest, forKey = KEY)
-        defaults.removeObjectForKey("last_added") // the taps are in the ledger now: the widget's Undo no longer applies
+        if (queued.isEmpty()) return@write 0
         var recorded = 0
-        container.write { ok ->
-            for (tap in queued) {
-                val id = tap.substringBefore('\t')
-                val at = tap.substringAfter('\t', "").toLongOrNull() ?: nowMillis()
-                if (EntryActions(ok).quickAdd(id, occurredAt = at.coerceAtMost(nowMillis())) != null) recorded++
-            }
+        for (tap in queued) {
+            val parts = tap.split('\t')
+            if (parts.size < 3) continue
+            val id = "qa:" + parts[0]
+            if (ok.db.schemaQueries.entryById(id).executeAsOneOrNull() != null) continue // recorded already (even if since deleted)
+            val at = parts[2].toLongOrNull() ?: nowMillis()
+            if (EntryActions(ok).quickAdd(parts[1], occurredAt = at.coerceAtMost(nowMillis()), id = id) != null) recorded++
         }
+        val remaining = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty().toMutableList()
+        for (tap in queued) remaining.remove(tap)
+        if (remaining.isEmpty()) defaults.removeObjectForKey(KEY) else defaults.setObject(remaining, forKey = KEY)
+        defaults.removeObjectForKey("last_added") // the taps are in the ledger now: the widget's Undo no longer applies
         if (recorded > 0) MessageIngest.changes.value += 1 // an open Home shows them at once
-        return recorded
-    }
+        recorded
+    } ?: 0
 }
 
 /** Test entry: a tap queued the way the widget queues it, and the app taking it. */
@@ -146,9 +153,10 @@ object IosQuickAddsDebug {
         }
     }
 
-    fun tap(id: String, at: Long) {
+    /** Queues a tap as the widget does; [uuid] identifies it. */
+    fun tap(uuid: String, id: String, at: Long) {
         val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
-        defaults.setObject((defaults.stringArrayForKey("quick_adds").orEmpty() + "$id\t$at"), forKey = "quick_adds")
+        defaults.setObject((defaults.stringArrayForKey("quick_adds").orEmpty() + "$uuid\t$id\t$at"), forKey = "quick_adds")
     }
 
     suspend fun drain(host: IosHostServices): Int = IosQuickAdds.drain(IosCore.get(host).container)

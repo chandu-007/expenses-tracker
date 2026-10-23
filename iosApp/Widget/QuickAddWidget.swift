@@ -55,9 +55,10 @@ struct QuickAddIntent: AppIntent {
         guard let d = UserDefaults(suiteName: group) else { return .result() }
         let at = Int64(Date().timeIntervalSince1970 * 1000)
         var queue = d.stringArray(forKey: queueKey) ?? []
-        queue.append("\(templateId)\t\(at)")
+        let uuid = UUID().uuidString
+        queue.append("\(uuid)\t\(templateId)\t\(at)")
         d.set(Array(queue.suffix(50)), forKey: queueKey)
-        d.set("\(templateId)\t\(label)\t\(at)", forKey: lastKey)
+        d.set("\(uuid)\t\(label)\t\(at)", forKey: lastKey)
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }
@@ -71,7 +72,8 @@ struct UndoQuickAddIntent: AppIntent {
         let p = l.components(separatedBy: "\t")
         if p.count >= 3 {
             var queue = d.stringArray(forKey: queueKey) ?? []
-            if let i = queue.lastIndex(of: "\(p[0])\t\(p[2])") { queue.remove(at: i) }
+            // the queued string starts with this tap's uuid (p[0]) and ends with its time (p[2])
+            if let i = queue.lastIndex(where: { $0.hasPrefix(p[0] + "\t") && $0.hasSuffix("\t" + p[2]) }) { queue.remove(at: i) }
             if queue.isEmpty { d.removeObject(forKey: queueKey) } else { d.set(queue, forKey: queueKey) }
         }
         d.removeObject(forKey: lastKey)

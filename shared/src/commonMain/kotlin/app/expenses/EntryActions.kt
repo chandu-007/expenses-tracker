@@ -61,8 +61,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     data class Added(val entryId: String, val text: String)
 
     /** Records an expense and remembers its category and account as the next defaults. Returns its id. */
-    fun recordExpense(amount: Money, category: String, note: String?, accountId: String, occurredAt: Long = now()): String {
-        val id = Uuid.random().toString()
+    fun recordExpense(amount: Money, category: String, note: String?, accountId: String, occurredAt: Long = now(), id: String = Uuid.random().toString()): String {
         ok.store.save(
             Expense(EntryId(id), occurredAt, AccountId(accountId), amount, listOf(CategorySplit(CategoryId(category), amount))),
             EntryDetails(merchant = note),
@@ -73,10 +72,10 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     }
 
     /** Records the expense of a saved quick entry. Null if it does not exist or has no fixed amount. */
-    fun quickAdd(templateId: String, occurredAt: Long = now()): Added? {
+    fun quickAdd(templateId: String, occurredAt: Long = now(), id: String = Uuid.random().toString()): Added? {
         val t = ok.templates.list().firstOrNull { it.id == templateId } ?: return null
         val amount = t.amount ?: return null
-        val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value, occurredAt)
+        val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value, occurredAt, id)
         ok.templates.recordUse(templateId)
         return Added(id, "Added ${t.name} ${amount.formatted()}")
     }
