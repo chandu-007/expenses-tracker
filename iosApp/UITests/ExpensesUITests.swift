@@ -18,27 +18,21 @@ final class ExpensesUITests: XCTestCase {
 
     private func tap(_ app: XCUIApplication, _ id: String, file: StaticString = #filePath, line: UInt = #line) {
         let e = el(app, id)
+        // a long list draws only the rows on screen, so a row further down does not exist until the list is scrolled to it
+        if !e.waitForExistence(timeout: 4) { scrollToExist(app, e) }
         XCTAssertTrue(e.waitForExistence(timeout: 15), "No element \(id)\n" + app.debugDescription, file: file, line: line)
         reveal(app, e)
+        settle(e)
         e.tap()
     }
 
-    /// Scrolls the screen up until [e] is inside the visible part (above the keyboard when it is up). A control below the fold or behind the keyboard
-    /// is not hittable in any useful sense: a tap there would land on the keyboard.
-    private func reveal(_ app: XCUIApplication, _ e: XCUIElement) {
-        for _ in 0..<25 {
-            let keyboard = app.keyboards.firstMatch
-            let limit = keyboard.exists ? keyboard.frame.minY : app.frame.maxY
-            if e.frame.minY >= 100 && e.frame.maxY <= limit - 4 && e.isHittable { return }
-            // Drag inside the part above the keyboard: a swipe that starts on the keyboard would type.
-            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: min(0.55, (limit - 20) / app.frame.height)))
-            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-            from.press(forDuration: 0.05, thenDragTo: to)
-            sleep(1) // let the fling settle: a tap on content that is still moving only stops it
-        }
+    /// Whether [id] is (or, after scrolling down, comes to be) on the screen.
+    private func appears(_ app: XCUIApplication, _ id: String, timeout: TimeInterval = 15) -> Bool {
+        let e = el(app, id)
+        if e.waitForExistence(timeout: min(timeout, 4)) { return true }
+        if timeout > 5 { scrollToExist(app, e) }
+        return e.waitForExistence(timeout: timeout)
     }
-
-    private func appears(_ app: XCUIApplication, _ id: String, timeout: TimeInterval = 15) -> Bool { el(app, id).waitForExistence(timeout: timeout) }
 
     private func gone(_ app: XCUIApplication, _ id: String, timeout: TimeInterval = 15) -> Bool {
         let e = el(app, id)
@@ -55,6 +49,7 @@ final class ExpensesUITests: XCTestCase {
     /// Types into a Compose text field: tap it, then type. The field's text is its accessibility value.
     private func type(_ app: XCUIApplication, _ id: String, _ text: String) {
         let f = el(app, id)
+        if !f.waitForExistence(timeout: 4) { scrollToExist(app, f) }
         XCTAssertTrue(f.waitForExistence(timeout: 15), "No field \(id)\n" + app.debugDescription)
         reveal(app, f)
         // Focus takes a moment (Compose moves it, the keyboard changes layout); tap again if it did not arrive.
@@ -198,7 +193,7 @@ final class ExpensesUITests: XCTestCase {
     func testEveryMoreScreenOpens() {
         _ = launch()
         let tiles = ["open_inbox", "open_capture", "manage_accounts", "manage_categories", "open_recurring", "open_calendar", "open_loans", "open_bills",
-                     "open_appearance", "open_home_layout", "open_currency", "open_notifications", "open_security", "open_privacy", "open_data", "open_guide"]
+                     "open_goals", "open_subscriptions", "open_appearance", "open_home_layout", "open_currency", "open_notifications", "open_security", "open_privacy", "open_data", "open_guide"]
         for tile in tiles {
             let app = launch(reset: false)
             tap(app, "more_menu")

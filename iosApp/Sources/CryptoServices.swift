@@ -2,6 +2,7 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 import Shared
+import WidgetKit
 
 /// The crypto primitives behind passphrase-protected backups. The file layout is written once, in Kotlin (IosBackupCipher), identical to the Android
 /// BackupCrypto; this only does PBKDF2-HMAC-SHA256 and AES-256-GCM.
@@ -27,6 +28,8 @@ final class CryptoServices: NSObject, IosHostServices {
         let box = try! AES.GCM.seal(plain, using: SymmetricKey(data: key), nonce: AES.GCM.Nonce(data: nonce), authenticating: aad)
         return box.ciphertext + box.tag
     }
+
+    func reloadWidgets() { WidgetCenter.shared.reloadAllTimelines() }
 
     func unseal(key: Data, nonce: Data, aad: Data, sealed: Data) -> Data? {
         guard sealed.count >= 16, let nonce = try? AES.GCM.Nonce(data: nonce) else { return nil }

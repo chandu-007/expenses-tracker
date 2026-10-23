@@ -46,7 +46,7 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val supportsCaptureSources get() = false
     override val supportsSmsCapture get() = false
     override val supportsNotificationCapture get() = false
-    override val supportsWidget get() = false
+    override val supportsWidget get() = true
     override val seedingEnabled get() = false
     override val autoExportKeep get() = AutoExportKeys.KEEP
     override val backupMinPassphrase get() = IosBackupCipher.MIN_PASSPHRASE
@@ -149,4 +149,6 @@ class IosPlatform(host: IosHostServices) : Platform {
     override fun decodeStatementText(bytes: ByteArray): String = IosStatementText.decode(bytes)
     override fun looksLikeXlsx(bytes: ByteArray): Boolean = bytes.size > 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
     override fun readXlsx(bytes: ByteArray): List<List<String>> = IosXlsx.read(bytes)
+    override fun readPdfText(bytes: ByteArray, password: String?): PdfText = IosPdf.read(bytes, password)
+    override fun recognizeText(bytes: ByteArray): String = IosOcr.recognize(bytes)
 }

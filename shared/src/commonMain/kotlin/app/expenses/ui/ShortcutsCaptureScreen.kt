@@ -42,6 +42,14 @@ internal val SHORTCUTS_STEPS = listOf(
     "Tap Done. From now on a text containing those words is handed to this app, which reads it on this phone.",
 )
 
+/** The same for a bank's alert email: Shortcuts has a "When I get an email" automation, and the action Capture bank email hands the email to the app. */
+internal val SHORTCUTS_EMAIL_STEPS = listOf(
+    "In Shortcuts make a new shortcut called Capture bank email, tap Add Action, search for Expenses and choose Capture bank email.",
+    "In the action, tap Email and choose Shortcut Input (its Content), tap Sender and choose Shortcut Input (its Sender), and Subject the same way.",
+    "Tap Edit, then Automation, and choose the Email trigger. Under Sender, choose your bank's alert address (a bank's name is enough: it is matched to the list of banks).",
+    "Turn on Allow Running When Locked in the shortcut's Privacy and choose Always Allow, as for texts. Only emails from known banks are kept; any other email is dropped unread.",
+)
+
 /**
  * "Capture from texts" on a phone where the system gives no access to texts (iPhone): what is possible instead (a Shortcuts automation that hands each bank
  * text to the app), the steps to set it up, how to test it, what happens to the words, and the limits stated plainly. The sender-names, rules and health
@@ -62,6 +70,13 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             }
             Button(onClick = { platform.openExternalUrl("shortcuts://") }, modifier = Modifier.testTag("shortcuts_open")) { Text("Open Shortcuts") }
             Text("Add expense and Capture bank message also appear in Shortcuts and in Siri without any setup, and Add expense can be put on the Action button.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider()
+            Text("Bank emails", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("shortcuts_email_title"))
+            Text("The same way works for the alert emails a bank sends for each transaction. iPhone does not let an app read your mailbox or another app's notifications, but Shortcuts can hand each new email from your bank to this app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.testTag("shortcuts_email_steps"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SHORTCUTS_EMAIL_STEPS.forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_email_step_${i + 1}")) }
+            }
+            Text("For a text or an email you already have: in Shortcuts, make a shortcut with the action Capture bank message and turn on Show in Share Sheet, then Share the text to it from any app. Or copy it and use Paste in To review.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             Text("Send a test message", style = MaterialTheme.typography.labelMedium)
             Text("Have someone send you (or send yourself from another phone) a text such as: Rs.250.00 debited from a/c XX1234 on 18-10-26 at TEST SHOP. Ref 123456789012. -HDFC Bank. A minute later it should be in To review. If you filled in Sender, a text from a phone number counts as a text from a person and is ignored, which \"How capture is doing\" shows as a count: leave Sender empty to test with a friend's phone. You can also copy any bank message and press Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_test"))

@@ -84,7 +84,7 @@ object MessageIngest {
      * Without one, [PasteRules] decides from the words whether it is a bank message at all. Works on the database through [container]'s write lock.
      */
     @OptIn(ExperimentalUuidApi::class)
-    suspend fun ingest(container: AppContainer, sender: String?, body: String, receivedAt: Long = nowMillis(), source: String = CaptureKeys.SMS): MessageResult {
+    suspend fun ingest(container: AppContainer, sender: String?, body: String, receivedAt: Long = nowMillis(), source: String = CaptureKeys.SMS, emailNames: List<String>? = null): MessageResult {
         val text = body.take(MAX_BODY)
         val named = sender?.trim().orEmpty()
         return container.write { ok ->
@@ -93,7 +93,12 @@ object MessageIngest {
             val arrived = dateOfMillis(receivedAt)
             val verdict: CaptureOutcome
             val storedSender: String
-            if (named.isNotEmpty()) {
+            if (emailNames != null) {
+                // an email: the bank is found from the sender's names, and an email from nobody on the list is any email at all, so it is not even counted
+                storedSender = named
+                verdict = CaptureClassifier.classifyEmail(emailNames, text, extra, arrived)
+                if (verdict is CaptureOutcome.Ignored && verdict.reason == IgnoreReason.NOT_ALLOWLISTED && verdict.headerRoot == null) return@write MessageResult(CaptureEventOutcome.NOT_ALLOWLISTED, wording(CaptureEventOutcome.NOT_ALLOWLISTED))
+            } else if (named.isNotEmpty()) {
                 storedSender = named
                 verdict = CaptureClassifier.classify(named, text, extra, arrived)
             } else {
@@ -133,7 +138,7 @@ object MessageIngest {
                     val a = verdict.alert
                     val item = InboxItem(
                         Uuid.random().toString(), source, storedSender, verdict.issuer, receivedAt, a.direction.name, a.amountMinor, a.currency, a.date?.toString(), a.reference,
-                        a.accountLast4, a.viaUpi, a.confidence.name, normalised(text).take(600), InboxStatus.PENDING, null,
+                        a.accountLast4, a.viaUpi, a.confidence.name, normalised(text).take(BODY_CAP), InboxStatus.PENDING, null,
                     )
                     if (ok.inbox.add(item, fingerprint(source, receivedAt, text))) CaptureEventOutcome.CAPTURED.also {
                         detail = (if (a.direction == Direction.CREDIT) "Credit of " else "Debit of ") + Money(a.amountMinor, Currency(a.currency, 2)).formatted() + " from ${verdict.issuer}"
@@ -160,6 +165,9 @@ object MessageIngest {
 
     /** A message is at most this long when it is read: bank texts are a few hundred characters, and a pasted page of something else is not one. */
     const val MAX_BODY = 4000
+
+    /** The words kept on a pending item, as on Android: an email can be long. */
+    const val BODY_CAP = 2000
 }
 
 /**

@@ -11,7 +11,8 @@ TEAM="${TEAM:-9V2G5RH624}"
 DEST='platform=iOS Simulator,name=iPhone 17,OS=26.5'
 VERSION="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' iosApp/project.yml)"
 
-framework() { ./gradlew :shared:assembleSharedXCFramework -PenableIos=true -q; }
+# The Kotlin/Native link runs inside the Gradle daemon, so that daemon needs the memory (gradle.properties keeps it small for Android builds).
+framework() { ./gradlew -Dorg.gradle.jvmargs="-Xmx12g -Dfile.encoding=UTF-8" :shared:assembleSharedXCFramework -PenableIos=true -q; }
 project() { (cd iosApp && DEVELOPMENT_TEAM="$TEAM" xcodegen generate -q); }
 
 mode="${1:-test}"

@@ -50,6 +50,20 @@ final class CaptureTests: XCTestCase {
         for r in [otp, person, notice] { XCTAssertFalse(r.kept); XCTAssertEqual(r.pending, before) }
     }
 
+    // The email wordings are plausible, not copied from a real bank email.
+    func testAnEmailFromAKnownBankIsReadLikeItsTextAndAnyOtherEmailIsDropped() async throws {
+        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+        let debit = try await IosCapture.shared.captureEmail(host: host, sender: "HDFC Bank InstaAlerts <alerts@hdfcbank.net>", subject: "Transaction alert", message: "Dear Customer, Rs.450.00 is debited from your a/c XX1234 on 18-10-26 to TEST SHOP. Ref \(ref()). Never share your OTP with anyone.")
+        XCTAssertEqual(debit.code, "CAPTURED")
+        XCTAssertEqual(debit.pending, before + 1)
+        let credit = try await IosCapture.shared.captureEmail(host: host, sender: "HDFC Bank", subject: "Credit alert", message: "Your a/c XX1234 has been credited with INR 5,000.00 on 18-10-26. Ref \(ref()).")
+        XCTAssertEqual(credit.code, "CAPTURED")
+        let other = try await IosCapture.shared.captureEmail(host: host, sender: "Friendly Shop <offers@shop.example>", subject: "Sale", message: "Rs.450.00 debited from a/c XX1234 for the sale you missed \(ref())")
+        XCTAssertEqual(other.code, "NOT_ALLOWLISTED")
+        XCTAssertFalse(other.kept)
+        XCTAssertEqual(other.pending, before + 2)
+    }
+
     func testUnknownSenderIsNotReadButAHeaderTheListMissesIsOfferedByCountOnly() async throws {
         let r = try await IosCapture.shared.captureMessage(host: host, sender: "AX-NOSUCHBK-S", message: bank())
         XCTAssertEqual(r.code, "NOT_ALLOWLISTED")

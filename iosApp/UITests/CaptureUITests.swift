@@ -27,22 +27,12 @@ final class CaptureUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: e)], timeout: timeout) == .completed
     }
 
-    private func reveal(_ app: XCUIApplication, _ e: XCUIElement) {
-        for _ in 0..<25 {
-            let keyboard = app.keyboards.firstMatch
-            let limit = keyboard.exists ? keyboard.frame.minY : app.frame.maxY
-            if e.frame.minY >= 100 && e.frame.maxY <= limit - 4 && e.isHittable { return }
-            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: min(0.55, (limit - 20) / app.frame.height)))
-            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-            from.press(forDuration: 0.05, thenDragTo: to)
-            sleep(1)
-        }
-    }
-
     private func tap(_ app: XCUIApplication, _ id: String, file: StaticString = #filePath, line: UInt = #line) {
         let e = el(app, id)
+        if !e.waitForExistence(timeout: 4) { scrollToExist(app, e) }
         XCTAssertTrue(e.waitForExistence(timeout: 15), "No element \(id)\n" + app.debugDescription, file: file, line: line)
         reveal(app, e)
+        settle(e)
         e.tap()
     }
 
@@ -50,9 +40,10 @@ final class CaptureUITests: XCTestCase {
     private func go(_ app: XCUIApplication, _ id: String, expecting next: String, file: StaticString = #filePath, line: UInt = #line) {
         for _ in 0..<4 {
             let e = el(app, id)
+            if !e.waitForExistence(timeout: 4) { scrollToExist(app, e) }
             XCTAssertTrue(e.waitForExistence(timeout: 15), "No element \(id)\n" + app.debugDescription, file: file, line: line)
             reveal(app, e)
-            sleep(1)
+            settle(e)
             e.tap()
             if appears(app, next, timeout: 6) { return }
         }
@@ -83,8 +74,13 @@ final class CaptureUITests: XCTestCase {
         try? s.pngRepresentation.write(to: URL(fileURLWithPath: "/tmp/ios-shots/\(name).png"))
     }
 
+    /// More stays open under the screens opened from it, and its button toggles: open it only when it is not already up.
+    private func ensureMore(_ app: XCUIApplication) {
+        if !el(app, "more_page").waitForExistence(timeout: 2) { tap(app, "more_menu") }
+    }
+
     private func openInbox(_ app: XCUIApplication) {
-        tap(app, "more_menu")
+        ensureMore(app)
         tap(app, "open_inbox")
         XCTAssertTrue(appears(app, "inbox_paste"), "To review shows the paste button on iPhone\n" + app.debugDescription)
     }
@@ -92,7 +88,7 @@ final class CaptureUITests: XCTestCase {
     private func count(_ app: XCUIApplication, _ outcome: String) -> String { el(app, "health_count_\(outcome)").label }
 
     private func openHealth(_ app: XCUIApplication) {
-        tap(app, "more_menu")
+        ensureMore(app)
         tap(app, "open_capture")
         go(app, "open_health", expecting: "health_headline")
     }
@@ -115,6 +111,7 @@ final class CaptureUITests: XCTestCase {
         shot("capture-to-review")
         // and it is nowhere near the ledger until the person adds it
         tap(app, "inbox_back")
+        tap(app, "more_menu") // closes More, which stays open under the screens opened from it
         XCTAssertEqual(el(app, "month_spend").label, "₹0.00")
     }
 
@@ -167,6 +164,24 @@ final class CaptureUITests: XCTestCase {
         XCTAssertEqual(el(app, "inbox_count").label, "1 to review")
     }
 
+    // (f) the entry made from a captured text keeps the text and shows it
+    func testAnAddedTextShowsWhereItCameFrom() {
+        let app = launch([(hdfc, debit)])
+        openInbox(app)
+        let add = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'inbox_add_'")).firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 15), app.debugDescription)
+        reveal(app, add); settle(add)
+        add.tap()
+        XCTAssertTrue(appears(app, "inbox_empty"), "the item left To review\n" + app.debugDescription)
+        tap(app, "inbox_back")
+        tap(app, "more_menu") // closes More
+        tap(app, "row_TEST SHOP")
+        XCTAssertTrue(appears(app, "entry_origin_kind"), "the entry says where it came from\n" + app.debugDescription)
+        XCTAssertTrue(el(app, "entry_origin_kind").label.contains("Text message from AX-HDFCBK-S"), el(app, "entry_origin_kind").label)
+        XCTAssertTrue(el(app, "entry_origin_text").label.contains("Ref 123456789012"), el(app, "entry_origin_text").label)
+        shot("entry-origin")
+    }
+
     // (e) the Capture from texts screen is the Shortcuts setup guide on iPhone, and has none of the Android switches
     func testTheSetupGuideShowsOnIPhone() {
         let app = launch()
@@ -180,6 +195,10 @@ final class CaptureUITests: XCTestCase {
         XCTAssertTrue(el(app, "shortcuts_step_5").label.contains("Message Contains"), el(app, "shortcuts_step_5").label)
         XCTAssertTrue(el(app, "shortcuts_step_2").label.contains("Capture bank message"), el(app, "shortcuts_step_5").label)
         shot("capture-setup-top")
+        // bank alert emails come the same way, by a Shortcuts automation on the Email trigger
+        reveal(app, el(app, "shortcuts_email_steps"))
+        XCTAssertTrue(el(app, "shortcuts_email_title").exists)
+        XCTAssertTrue(el(app, "shortcuts_email_step_1").label.contains("Capture bank email"), el(app, "shortcuts_email_step_1").label)
         reveal(app, el(app, "shortcuts_limits"))
         XCTAssertTrue(el(app, "shortcuts_privacy").exists)
         XCTAssertTrue(el(app, "shortcuts_limits").label.contains("Unknown Senders"))

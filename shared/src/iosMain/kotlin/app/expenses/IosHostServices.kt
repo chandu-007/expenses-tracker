@@ -16,4 +16,7 @@ interface IosHostServices {
 
     /** The inverse of [seal], or null when the tag does not match (wrong key or damaged data). */
     fun unseal(key: NSData, nonce: NSData, aad: NSData, sealed: NSData): NSData?
+
+    /** Asks the system to redraw the Home Screen widgets from what the app just wrote ([IosWidgetData]); WidgetKit is Swift-only. */
+    fun reloadWidgets()
 }

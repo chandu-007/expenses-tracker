@@ -11,7 +11,10 @@ final class NotificationsUITests: XCTestCase {
 
     private func tap(_ app: XCUIApplication, _ id: String) {
         let e = el(app, id)
+        if !e.waitForExistence(timeout: 4) { scrollToExist(app, e) }
         XCTAssertTrue(e.waitForExistence(timeout: 20), "No element \(id)\n" + app.debugDescription)
+        reveal(app, e)
+        settle(e)
         e.tap()
     }
 

@@ -27,6 +27,22 @@ object IosCapture {
      */
     suspend fun captureMessage(host: IosHostServices, sender: String?, message: String): CaptureReply = ingest(IosCore.get(host), sender, message)
 
+    /**
+     * One email from a Shortcuts automation ("When I get an email"): [sender] is the sender's name or address, [subject] and [message] its words. Like Android's
+     * email capture, only an email whose sender is a known bank is kept, and it is read by the same rules as a text from that bank; any other email is dropped
+     * without even a count. The pending item shows "Mail" as where it came from.
+     */
+    suspend fun captureEmail(host: IosHostServices, sender: String?, subject: String?, message: String): CaptureReply {
+        val core = IosCore.get(host)
+        val names = listOfNotNull(sender?.trim()?.takeIf { it.isNotEmpty() }) + Regex("[\\w.+-]+@[\\w.-]+").findAll(sender.orEmpty() + " " + message.take(400)).map { it.value }.toList()
+        val words = listOfNotNull(subject?.trim()?.takeIf { it.isNotEmpty() }, message.trim().takeIf { it.isNotEmpty() }).joinToString(". ")
+        val r = MessageIngest.ingest(core.container, MAIL_APP, words, source = CaptureKeys.NOTIFICATION, emailNames = names)
+        val pending = core.container.write { it.inbox.pendingCount() } ?: 0L
+        return CaptureReply(r.message, r.outcome?.name ?: "FAILED", r.kept, pending)
+    }
+
+    private const val MAIL_APP = "MAIL"
+
     internal suspend fun ingest(core: IosCore, sender: String?, message: String): CaptureReply {
         val r = MessageIngest.ingest(core.container, sender, message)
         val pending = core.container.write { it.inbox.pendingCount() } ?: 0L

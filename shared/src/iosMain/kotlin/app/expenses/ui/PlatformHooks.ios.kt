@@ -14,7 +14,17 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
+import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.writeToURL
+import platform.Foundation.NSUUID
 import platform.UIKit.UIDocumentPickerDelegateProtocol
+import platform.UIKit.UIImage
+import platform.UIKit.UIImageJPEGRepresentation
+import platform.UIKit.UIImagePickerController
+import platform.UIKit.UIImagePickerControllerDelegateProtocol
+import platform.UIKit.UIImagePickerControllerOriginalImage
+import platform.UIKit.UIImagePickerControllerSourceType
+import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeFolder
@@ -55,6 +65,29 @@ private class PickerDelegate(private val onPicked: (String?) -> Unit) : NSObject
 
 private object PickerHolder { var active: PickerDelegate? = null }
 
+private class CameraDelegate(private val onPicked: (String?) -> Unit) : NSObject(), UIImagePickerControllerDelegateProtocol, UINavigationControllerDelegateProtocol {
+    override fun imagePickerController(picker: UIImagePickerController, didFinishPickingMediaWithInfo: Map<Any?, *>) {
+        val image = didFinishPickingMediaWithInfo[UIImagePickerControllerOriginalImage] as? UIImage
+        val data = image?.let { UIImageJPEGRepresentation(it, 0.85) }
+        var uri: String? = null
+        if (data != null) {
+            val url = NSURL.fileURLWithPath(NSTemporaryDirectory().trimEnd('/') + "/photo-" + NSUUID().UUIDString + ".jpg")
+            if (data.writeToURL(url, atomically = true)) uri = url.absoluteString
+        }
+        picker.dismissViewControllerAnimated(true, completion = null)
+        finish(uri)
+    }
+
+    override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
+        picker.dismissViewControllerAnimated(true, completion = null)
+        finish(null)
+    }
+
+    private fun finish(uri: String?) { CameraHolder.active = null; onPicked(uri) }
+}
+
+private object CameraHolder { var active: CameraDelegate? = null }
+
 private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) -> Unit) {
     val top = app.expenses.topViewController()
     if (top == null) { onPicked(null); return }
@@ -76,6 +109,20 @@ private object IosFilePickers : FilePickers {
     }
 
     override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) = onPicked(app.expenses.IosExport.stagingFile(suggestedName))
+
+    override val canTakePhoto: Boolean get() = UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera)
+
+    /** The system camera (iOS asks for permission the first time, with the reason in Info.plist). The picture is saved as a JPEG in the temporary folder and its address handed back. */
+    override fun takePhoto(onPicked: (String?) -> Unit) {
+        val top = app.expenses.topViewController()
+        if (top == null || !canTakePhoto) { onPicked(null); return }
+        val picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera
+        val delegate = CameraDelegate(onPicked)
+        CameraHolder.active = delegate
+        picker.delegate = delegate
+        top.presentViewController(picker, animated = true, completion = null)
+    }
 
     override fun openFolder(onPicked: (String?) -> Unit) {
         present(UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false), onPicked)

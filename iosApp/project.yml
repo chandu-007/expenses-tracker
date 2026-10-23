@@ -9,8 +9,8 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.4.3"
+    CURRENT_PROJECT_VERSION: "13"
 targets:
   Expenses:
     type: application
@@ -18,7 +18,13 @@ targets:
     sources:
       - Sources
       - path: Resources
+    entitlements:
+      path: Resources/Expenses.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.expenses.tracker.ios]
     dependencies:
+      - target: ExpensesWidget
+        embed: true
       # Built by ./gradlew :shared:assembleSharedXCFramework -PenableIos=true (tools/ios_build.sh does it). Static, so it is linked, not embedded.
       - framework: ../shared/build/XCFrameworks/release/Shared.xcframework
         embed: false
@@ -34,7 +40,9 @@ targets:
         # Reminders: iOS may wake the app now and then to look for what is due (BGAppRefreshTask; the time is the system's choice).
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [app.expenses.tracker.ios.refresh]
+        CFBundleURLTypes: [{CFBundleURLName: app.expenses.tracker.ios, CFBundleURLSchemes: [expenses]}]
         NSFaceIDUsageDescription: Face ID unlocks Expenses when you turn on the app lock. Your face is checked by the iPhone; the app never sees it.
+        NSCameraUsageDescription: Take a photo of a bill to keep it with an expense. The photo stays on this iPhone.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.expenses.tracker.ios
@@ -43,6 +51,26 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         OTHER_LDFLAGS: "$(inherited) -lsqlite3 -lz"
+  ExpensesWidget:
+    type: app-extension
+    platform: iOS
+    sources: [Widget]
+    entitlements:
+      path: Resources/ExpensesWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.expenses.tracker.ios]
+    info:
+      path: Resources/ExpensesWidget-Info.plist
+      properties:
+        CFBundleDisplayName: Expenses
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.expenses.tracker.ios.widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
   ExpensesTests:
     type: bundle.unit-test
     platform: iOS

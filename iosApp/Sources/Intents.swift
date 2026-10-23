@@ -28,6 +28,34 @@ struct CaptureBankMessageIntent: AppIntent {
     }
 }
 
+/// The same for a bank's alert email. Shortcuts has an automation "When I get an email" (Mail app); its action hands the email here. Only an email whose sender
+/// is a known bank is kept, and it is read by the same rules as a text from that bank. Any other email is dropped without being read or counted.
+struct CaptureBankEmailIntent: AppIntent {
+    static var title: LocalizedStringResource = "Capture bank email"
+    static var description = IntentDescription(
+        "Hands a bank's alert email to Expenses. It is read on this phone: a transaction goes to To review, a bill to Bills, anything else is thrown away.",
+        categoryName: "Expenses")
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Email", description: "The words of the email: choose Shortcut Input (its Content).")
+    var message: String
+
+    @Parameter(title: "Sender", description: "Who sent it, from Shortcut Input (its Sender). Needed: only emails from known banks are kept.")
+    var sender: String?
+
+    @Parameter(title: "Subject", description: "The email's subject, from Shortcut Input. Optional.")
+    var subject: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Capture bank email \(\.$message) from \(\.$sender) with subject \(\.$subject)")
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let reply = try await IosCapture.shared.captureEmail(host: CryptoServices(), sender: sender, subject: subject, message: message)
+        return .result(dialog: IntentDialog(stringLiteral: reply.message))
+    }
+}
+
 /// Records an expense now, with no screen: for Siri ("Add expense in Expenses"), the Action button and Shortcuts. The amount is text so that "250", "99.50" or
 /// "₹250" all work; the category is optional (the one used last is used when it is empty) and must be one that exists.
 struct AddExpenseIntent: AppIntent {
@@ -64,6 +92,11 @@ struct ExpensesShortcuts: AppShortcutsProvider {
             phrases: ["Capture bank message in \(.applicationName)", "Capture a bank message with \(.applicationName)"],
             shortTitle: "Capture bank message",
             systemImageName: "text.bubble")
+        AppShortcut(
+            intent: CaptureBankEmailIntent(),
+            phrases: ["Capture bank email in \(.applicationName)", "Capture a bank email with \(.applicationName)"],
+            shortTitle: "Capture bank email",
+            systemImageName: "envelope")
         AppShortcut(
             intent: AddExpenseIntent(),
             phrases: ["Add expense in \(.applicationName)", "Add an expense to \(.applicationName)", "Log an expense in \(.applicationName)"],

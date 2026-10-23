@@ -11,6 +11,8 @@ struct ExpensesApp: App {
             SharedRoot()
                 // Compose lays itself out under the status bar, the home indicator and the keyboard and applies those insets itself.
                 .ignoresSafeArea(.all)
+                // the Today widget's "+ Add" (expenses://add) opens the Add screen
+                .onOpenURL { url in if url.scheme == "expenses" && url.host == "add" { IosLinks.shared.openAdd() } }
         }
     }
 }

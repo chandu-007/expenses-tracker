@@ -7,10 +7,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.ComposeUIViewController
 import app.expenses.ui.PermissionRow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import platform.Foundation.NSLog
 import platform.Foundation.NSURL
+import platform.Foundation.writeToURL
 import platform.QuickLook.QLPreviewController
 import platform.QuickLook.QLPreviewControllerDataSourceProtocol
 import platform.QuickLook.QLPreviewItemProtocol
@@ -33,13 +41,23 @@ fun MainViewController(host: IosHostServices): UIViewController {
     }
 }
 
-internal class IosApp private constructor(host: IosHostServices) {
+@OptIn(FlowPreview::class)
+internal class IosApp private constructor(private val host: IosHostServices) {
     private val core = IosCore.get(host)
     val platform = core.platform
     private val lock = IosAppLock()
     val container = core.container
     val viewModel = LedgerViewModel(container, platform)
     val rootHost: RootHost = IosRootHost(platform, lock)
+
+    init {
+        // the Today widget lives outside this process: whenever what the app shows changes, what the widget shows is written for it and it is redrawn
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            viewModel.state.filterIsInstance<UiState.Ready>().debounce(800).collect {
+                runCatching { IosWidgetData.publish(container, lock.settings.value.enabled); host.reloadWidgets() }
+            }
+        }
+    }
 
     companion object {
         private var instance: IosApp? = null
@@ -53,7 +71,7 @@ internal class IosApp private constructor(host: IosHostServices) {
 }
 
 private class IosRootHost(override val platform: Platform, override val lock: AppLockPort) : RootHost {
-    override val addRequests: StateFlow<Int> = MutableStateFlow(0)
+    override val addRequests: StateFlow<Int> = IosLinks.addCount
     override val billsRequests: StateFlow<Int> = IosNotifications.billsRequests
 
     override fun openAttachment(uri: String, mime: String) {
@@ -66,6 +84,14 @@ private class IosRootHost(override val platform: Platform, override val lock: Ap
             preview.dataSource = source
             top.presentViewController(preview, animated = true, completion = null)
         }
+    }
+
+    override val canShareFiles: Boolean get() = true
+
+    /** The share sheet (Save to Files, AirDrop, Mail, Drive, WhatsApp) for a file made now; the staging copy goes when the sheet closes ([IosExport]). */
+    override fun shareFile(name: String, mime: String, bytes: ByteArray) {
+        val url = NSURL.URLWithString(IosExport.stagingFile(name)) ?: return
+        if (bytes.toNSData().writeToURL(url, atomically = true)) IosExport.offer(url)
     }
 
     override fun onDarkChanged(dark: Boolean) {}
