@@ -79,5 +79,8 @@ struct TodayWidget: Widget {
 
 @main
 struct ExpensesWidgets: WidgetBundle {
-    var body: some Widget { TodayWidget() }
+    var body: some Widget {
+        TodayWidget()
+        QuickAddWidget()
+    }
 }

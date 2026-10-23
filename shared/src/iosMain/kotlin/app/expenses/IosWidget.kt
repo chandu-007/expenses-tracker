@@ -56,6 +56,13 @@ internal object IosWidgetData {
             defaults.setObject(perDay?.let { real(it) + " a day left" } ?: "", forKey = "today_per_day")
             defaults.setObject(AmountMask.mask(spent.formatted()), forKey = "today_spent_masked")
             defaults.setObject(perDay?.let { AmountMask.mask(it.formatted()) + " a day left" } ?: "", forKey = "today_per_day_masked")
+            // the month's total and the quick entries for the Quick add widget (up to six, the amount masked while amounts are hidden)
+            val monthStart = today.let { kotlinx.datetime.LocalDate(it.year, it.month, 1) }.atStartOfDayIn(zone).toEpochMilliseconds()
+            val month = ok.store.spendByCategory(currency, from = monthStart).values.fold(Money.zero(currency)) { a, m -> a + m }
+            defaults.setObject(real(month), forKey = "month_spent")
+            defaults.setObject(AmountMask.mask(month.formatted()), forKey = "month_spent_masked")
+            val buttons = ok.templates.list().filter { it.amount != null }.take(6).map { t -> listOf(t.id, t.name, if (hide) AmountMask.mask(t.amount!!.formatted()) else t.amount!!.formatted()).joinToString("\t") }
+            defaults.setObject(buttons, forKey = "quick_buttons")
             defaults.setBool(canToggle, forKey = "can_toggle")
             defaults.setObject(nowMillis().toString(), forKey = "published_at")
         }
@@ -100,4 +107,55 @@ object IosSharedTextsDebug {
     }
 
     suspend fun drain(host: IosHostServices): Int = IosSharedTexts.drain(IosCore.get(host).container)
+}
+
+/**
+ * Taps on the Quick add widget's buttons. The widget (Swift, apart from the app, with no way into its database) queues "templateId<TAB>millis" in the App Group's
+ * preferences; the app records each one as the saved quick entry's expense, stamped with the time of the tap, the next time it runs (it comes forward, or iOS
+ * lets it refresh in the background). So a tapped entry reaches the ledger and the totals only then, which the widget says; Undo works while the tap is still queued.
+ */
+internal object IosQuickAdds {
+    private const val KEY = "quick_adds"
+
+    /** Records the queued taps and takes off only those it read. Returns how many entries were recorded. */
+    suspend fun drain(container: AppContainer): Int {
+        val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
+        val queued = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty()
+        if (queued.isEmpty()) return 0
+        val rest = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty().drop(queued.size)
+        if (rest.isEmpty()) defaults.removeObjectForKey(KEY) else defaults.setObject(rest, forKey = KEY)
+        defaults.removeObjectForKey("last_added") // the taps are in the ledger now: the widget's Undo no longer applies
+        var recorded = 0
+        container.write { ok ->
+            for (tap in queued) {
+                val id = tap.substringBefore('\t')
+                val at = tap.substringAfter('\t', "").toLongOrNull() ?: nowMillis()
+                if (EntryActions(ok).quickAdd(id, occurredAt = at.coerceAtMost(nowMillis())) != null) recorded++
+            }
+        }
+        if (recorded > 0) MessageIngest.changes.value += 1 // an open Home shows them at once
+        return recorded
+    }
+}
+
+/** Test entry: a tap queued the way the widget queues it, and the app taking it. */
+object IosQuickAddsDebug {
+    suspend fun saveTemplate(host: IosHostServices, id: String, name: String, rupees: Long) {
+        IosCore.get(host).container.write { ok ->
+            ok.templates.save(app.expenses.core.domain.Template(id, name, Money(rupees * 100, BaseCurrency.current), app.expenses.core.domain.ledger.CategoryId("Food"), app.expenses.core.domain.ledger.AccountId("cash"), null))
+        }
+    }
+
+    fun tap(id: String, at: Long) {
+        val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
+        defaults.setObject((defaults.stringArrayForKey("quick_adds").orEmpty() + "$id\t$at"), forKey = "quick_adds")
+    }
+
+    suspend fun drain(host: IosHostServices): Int = IosQuickAdds.drain(IosCore.get(host).container)
+
+    /** What the widget would be given: the buttons ("id<TAB>name<TAB>amount") as the app wrote them. */
+    suspend fun buttons(host: IosHostServices): List<String> {
+        IosWidgetData.publish(IosCore.get(host).container, lockEnabled = false)
+        return NSUserDefaults(suiteName = IosWidgetData.GROUP).stringArrayForKey("quick_buttons").orEmpty().filterIsInstance<String>()
+    }
 }

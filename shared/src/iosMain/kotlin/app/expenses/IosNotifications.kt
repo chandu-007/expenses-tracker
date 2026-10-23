@@ -95,7 +95,15 @@ object IosNotifications {
 
     /** [runCheck] on a background thread; [done] gets the count (0 on failure or when cancelled). */
     fun checkAsync(done: (Int) -> Unit) {
-        running = scope.launch { done(checkNow()) }
+        running = scope.launch {
+            // what the extensions left for the app while it was away: texts shared to Expenses and taps on the Quick add widget (foreground or background refresh alike)
+            host?.let { h ->
+                val c = IosCore.get(h).container
+                runCatching { IosSharedTexts.drain(c) }
+                runCatching { if (IosQuickAdds.drain(c) > 0) h.reloadWidgets() }
+            }
+            done(checkNow())
+        }
     }
 
     /** The system said the background time is up. */
@@ -109,8 +117,6 @@ object IosNotifications {
         checkAsync { }
         // a due automatic copy to the chosen folder is made now too: iOS may not run a background refresh for days
         scope.launch { host?.let { runCatching { IosAutoExport.runIfDue(IosCore.get(it).container) } } }
-        // and so are the texts handed over by "Share to Expenses" while the app was away
-        scope.launch { host?.let { runCatching { IosSharedTexts.drain(IosCore.get(it).container) } } }
     }
 
     /**

@@ -73,10 +73,10 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     }
 
     /** Records the expense of a saved quick entry. Null if it does not exist or has no fixed amount. */
-    fun quickAdd(templateId: String): Added? {
+    fun quickAdd(templateId: String, occurredAt: Long = now()): Added? {
         val t = ok.templates.list().firstOrNull { it.id == templateId } ?: return null
         val amount = t.amount ?: return null
-        val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value)
+        val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value, occurredAt)
         ok.templates.recordUse(templateId)
         return Added(id, "Added ${t.name} ${amount.formatted()}")
     }
