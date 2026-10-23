@@ -20,6 +20,12 @@ object IosLinks {
     internal val addRequests = MutableStateFlow(0)
     val addCount: StateFlow<Int> get() = addRequests
     fun openAdd() { addRequests.value += 1 }
+
+    internal val payRequests = MutableStateFlow<PayCardRequest?>(null)
+    val payCount: StateFlow<PayCardRequest?> get() = payRequests
+
+    /** Pay now on a card notice: the Add screen opens as a transfer to card [accountId]. */
+    fun payCard(accountId: String) { payRequests.value = PayCardRequest((payRequests.value?.n ?: 0) + 1, accountId) }
 }
 
 /**
@@ -63,4 +69,33 @@ object IosWidgetDebug {
 
     /** Turns Hide amounts on or off, as its switch in More does. */
     suspend fun setHideAmounts(host: IosHostServices, on: Boolean) { IosCore.get(host).container.write { it.templates.putSetting("hide_amounts", if (on) "1" else "0") } }
+}
+
+/**
+ * Words handed over by the Share extension ("Share to Expenses" from Messages, Mail or any app). The extension only queues them in the App Group's preferences;
+ * the app reads the queue whenever it comes forward and judges each text as a pasted one ([MessageIngest.ingest] with no sender): a bank transaction goes to To review,
+ * a bill to Bills, anything else is dropped with only a count kept.
+ */
+internal object IosSharedTexts {
+    private const val KEY = "shared_texts"
+
+    /** Reads and clears the queue. Returns how many texts were taken. */
+    suspend fun drain(container: AppContainer): Int {
+        val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
+        val queued = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty()
+        if (queued.isEmpty()) return 0
+        defaults.removeObjectForKey(KEY)
+        for (text in queued) MessageIngest.ingest(container, null, text)
+        return queued.size
+    }
+}
+
+/** Test entry: queues a text the way the Share extension does, and drains it the way the app does. */
+object IosSharedTextsDebug {
+    fun queue(text: String) {
+        val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
+        defaults.setObject((defaults.stringArrayForKey("shared_texts").orEmpty() + text), forKey = "shared_texts")
+    }
+
+    suspend fun drain(host: IosHostServices): Int = IosSharedTexts.drain(IosCore.get(host).container)
 }

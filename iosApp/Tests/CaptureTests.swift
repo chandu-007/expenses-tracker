@@ -116,3 +116,21 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(platform.supportsShortcutsCapture)
     }
 }
+
+/// "Share to Expenses": the Share extension queues the words, the app takes them when it comes forward.
+final class SharedTextTests: XCTestCase {
+    private let host = CryptoServices()
+    private func ref() -> String { String((0..<12).map { _ in "0123456789".randomElement()! }) }
+
+    func testASharedBankTextGoesToToReviewAndASharedOrdinaryTextIsThrownAway() async throws {
+        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+        IosSharedTextsDebug.shared.queue(text: "Rs.320.00 debited from a/c XX1234 on 18-10-26 to SHARE SHOP. Ref \(ref()). Not you? Call 1800 000 000 -HDFC Bank")
+        IosSharedTextsDebug.shared.queue(text: "See you at lunch tomorrow, bring the notes")
+        let taken = try await IosSharedTextsDebug.shared.drain(host: host)
+        XCTAssertEqual(taken.intValue, 2)
+        let after = try await IosCapture.shared.pendingCount(host: host).int64Value
+        XCTAssertEqual(after, before + 1, "only the bank text is kept")
+        let again = try await IosSharedTextsDebug.shared.drain(host: host)
+        XCTAssertEqual(again.intValue, 0, "the queue was emptied")
+    }
+}

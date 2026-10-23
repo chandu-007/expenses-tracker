@@ -42,7 +42,7 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val supportsAppLock get() = true
     override val supportsBiometricLock get() = true
     override val supportsNotifications get() = true
-    override val supportsAutoExport get() = false
+    override val supportsAutoExport get() = true
     override val supportsCaptureSources get() = false
     override val supportsSmsCapture get() = false
     override val supportsNotificationCapture get() = false
@@ -122,7 +122,7 @@ class IosPlatform(host: IosHostServices) : Platform {
 
     override val backupCipher: BackupCipher = IosBackupCipher(host)
 
-    override suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean) {}
+    override suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean) = IosAutoExport.run(container, folderUri, nowMillis, force)
 
     // Bank messages reach the iPhone app by a Shortcuts automation or by pasting ([IosCapture]); either one bumps this so an open To review refreshes.
     override val captureChanges: Flow<Unit> = MessageIngest.changes.map { }

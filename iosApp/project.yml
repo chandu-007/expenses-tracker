@@ -25,6 +25,8 @@ targets:
     dependencies:
       - target: ExpensesWidget
         embed: true
+      - target: ExpensesShare
+        embed: true
       # Built by ./gradlew :shared:assembleSharedXCFramework -PenableIos=true (tools/ios_build.sh does it). Static, so it is linked, not embedded.
       - framework: ../shared/build/XCFrameworks/release/Shared.xcframework
         embed: false
@@ -68,6 +70,30 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.expenses.tracker.ios.widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+  ExpensesShare:
+    type: app-extension
+    platform: iOS
+    sources: [ShareExtension]
+    entitlements:
+      path: Resources/ExpensesShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.expenses.tracker.ios]
+    info:
+      path: Resources/ExpensesShare-Info.plist
+      properties:
+        CFBundleDisplayName: Expenses
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.expenses.tracker.ios.share
         TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO

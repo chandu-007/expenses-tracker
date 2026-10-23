@@ -17,14 +17,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
-/** A folder the user chose, as far as automatic export cares. [write] returns the name the file really got (the system may add " (1)"), or null. */
-interface ExportFolder {
-    fun names(): List<String>
-    fun write(name: String, mime: String, bytes: ByteArray): String?
-    fun read(name: String): ByteArray?
-    fun delete(name: String): Boolean
-}
-
 /** The user's chosen folder through the system's document provider (Drive, local storage, ...). The permission was kept when it was chosen. */
 class SafFolder(private val context: Context, private val tree: Uri) : ExportFolder {
     private val cr get() = context.contentResolver
@@ -65,41 +57,9 @@ object AutoExport {
 
     data class Result(val ran: Boolean, val ok: Boolean, val text: String)
 
-    private fun dayOf(now: Long) = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().toString()
-
-    /** Runs the export if it is due (or [force]d). Never throws: the outcome is recorded for the screen and returned. */
-    suspend fun run(container: AppContainer, folder: ExportFolder?, now: Long, force: Boolean = false): Result {
-        val settings = container.write { ok -> Triple(ok.templates.setting(S_FREQ), ok.templates.setting(S_LAST_AT)?.toLongOrNull(), ok.templates.setting(S_FOLDER)) } ?: return Result(false, false, "The data is not available.")
-        val freq = AutoExportFrequency.entries.firstOrNull { it.name == settings.first } ?: AutoExportFrequency.OFF
-        if (!force && !AutoExportRules.isDue(freq, settings.second, now)) return Result(false, true, "")
-        if (settings.third == null || folder == null) return record(container, now, Result(true, false, "Choose a folder first."), false)
-        return try {
-            val day = dayOf(now)
-            val (backup, xlsx) = container.write { ok -> BackupFile.encode(ok.backup.export(), now) to ok.csv.xlsx(TimeZone.currentSystemDefault()) } ?: throw IllegalStateException("The data is not available.")
-            val files = listOf(Triple("$BACKUP_PREFIX-$day.expbak", "application/octet-stream", backup), Triple("$XLSX_PREFIX-$day.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx))
-            for ((name, mime, bytes) in files) {
-                // A file of the same name from earlier today is replaced, so running twice in a day leaves one file, not two.
-                if (name in folder.names()) folder.delete(name)
-                val written = folder.write(name, mime, bytes) ?: throw IllegalStateException("The folder could not be written to.")
-                val back = folder.read(written)
-                if (back == null || back.size != bytes.size || Sha256.hex(back) != Sha256.hex(bytes)) throw IllegalStateException("A file was not saved correctly.")
-            }
-            val names = folder.names()
-            AutoExportRules.filesToDelete(names, BACKUP_PREFIX, "expbak", KEEP).forEach { folder.delete(it) }
-            AutoExportRules.filesToDelete(names, XLSX_PREFIX, "xlsx", KEEP).forEach { folder.delete(it) }
-            record(container, now, Result(true, true, "Saved $day: a backup and an Excel file."), true)
-        } catch (e: Exception) {
-            record(container, now, Result(true, false, "Could not save: ${e.message ?: e::class.java.simpleName}"), false)
-        }
-    }
-
-    private suspend fun record(container: AppContainer, now: Long, r: Result, success: Boolean): Result {
-        container.write { ok ->
-            ok.templates.putSetting(S_STATUS, (if (r.ok) "ok|" else "fail|") + r.text)
-            if (success) ok.templates.putSetting(S_LAST_AT, now.toString())
-        }
-        return r
-    }
+    /** Runs the export if it is due (or [force]d). Never throws: the outcome is recorded for the screen and returned. The work is [AutoExportRunner], shared with iPhone. */
+    suspend fun run(container: AppContainer, folder: ExportFolder?, now: Long, force: Boolean = false): Result =
+        AutoExportRunner.run(container, folder, now, force).let { Result(it.ran, it.ok, it.text) }
 
     fun folderOf(context: Context, uriText: String?): ExportFolder? = uriText?.let { SafFolder(context, Uri.parse(it)) }
 }

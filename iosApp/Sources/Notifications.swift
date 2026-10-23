@@ -94,7 +94,16 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        IosNotifications.shared.opened(key: response.notification.request.identifier)
-        completionHandler()
+        let request = response.notification.request
+        let action = response.actionIdentifier
+        if action == UNNotificationDefaultActionIdentifier || action == UNNotificationDismissActionIdentifier {
+            IosNotifications.shared.opened(key: request.identifier)
+            completionHandler()
+            return
+        }
+        // a button on the notification: Mark paid, the two snoozes, Pay now
+        let info = request.content.userInfo
+        IosNotifications.shared.performAction(action: action, key: request.identifier, ref: info["ref"] as? String, kind: (info["kind"] as? String) ?? "",
+                                              title: request.content.title, body: request.content.body) { completionHandler() }
     }
 }

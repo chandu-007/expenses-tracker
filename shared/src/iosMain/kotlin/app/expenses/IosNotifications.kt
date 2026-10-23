@@ -44,6 +44,9 @@ import platform.UserNotifications.UNAuthorizationStatusNotDetermined
 import platform.UserNotifications.UNAuthorizationStatusProvisional
 import platform.UserNotifications.UNCalendarNotificationTrigger
 import platform.UserNotifications.UNMutableNotificationContent
+import platform.UserNotifications.UNNotificationAction
+import platform.UserNotifications.UNNotificationActionOptionForeground
+import platform.UserNotifications.UNTimeIntervalNotificationTrigger
 import platform.UserNotifications.UNNotification
 import platform.UserNotifications.UNNotificationCategory
 import platform.UserNotifications.UNNotificationRequest
@@ -104,6 +107,40 @@ object IosNotifications {
         if (now - lastForegroundCheck < 20_000) return
         lastForegroundCheck = now
         checkAsync { }
+        // a due automatic copy to the chosen folder is made now too: iOS may not run a background refresh for days
+        scope.launch { host?.let { runCatching { IosAutoExport.runIfDue(IosCore.get(it).container) } } }
+        // and so are the texts handed over by "Share to Expenses" while the app was away
+        scope.launch { host?.let { runCatching { IosSharedTexts.drain(IosCore.get(it).container) } } }
+    }
+
+    /**
+     * A button on a notification was pressed (the Swift delegate calls this with what the notification carried). Mark paid marks the tracked bill paid and records nothing in the
+     * ledger, as on Android; the two snoozes show the same notice again later; Pay now opens the Add form as a transfer to the card. [done] runs when it is finished.
+     */
+    fun performAction(action: String, key: String, ref: String?, kind: String, title: String, body: String, done: () -> Unit) {
+        scope.launch {
+            try {
+                when (action) {
+                    IosNotificationCenter.ACTION_MARK_PAID -> if (ref != null) {
+                        val h = host
+                        if (h != null) IosCore.get(h).container.write { ok -> if (ok.bills.get(ref)?.status == app.expenses.core.storage.BillStatus.TRACKED) ok.bills.markPaid(ref, null, nowMillis()) }
+                    }
+                    IosNotificationCenter.ACTION_SNOOZE_LATER, IosNotificationCenter.ACTION_SNOOZE_TOMORROW -> if (ref != null) {
+                        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                        val minute = now.hour * 60 + now.minute
+                        val mode = if (action == IosNotificationCenter.ACTION_SNOOZE_TOMORROW) app.expenses.core.domain.SnoozeMode.TOMORROW else app.expenses.core.domain.Snooze.laterMode(minute)
+                        IosNotificationCenter.snooze(Notice("snooze:$ref:${nowMillis()}", runCatching { NoticeKind.valueOf(kind) }.getOrDefault(NoticeKind.BILL_TRACKED), title, body, ref), app.expenses.core.domain.Snooze.delayMinutes(mode, minute))
+                    }
+                    IosNotificationCenter.ACTION_PAY_CARD -> if (ref != null) IosLinks.payCard(ref)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                NSLog("Expenses: notification action failed: %@", e.stackTraceToString())
+            } finally {
+                done()
+            }
+        }
     }
 
     /** A notification was tapped. Bill notices that wait on the Bills page open it (as on Android); everything else only opens the app. */
@@ -198,6 +235,14 @@ object IosNotifications {
 internal object IosNotificationCenter {
     private const val CATEGORY_OPEN = "open"
     private const val CATEGORY_PRIVATE = "private"
+    private const val CATEGORY_BILL = "bill"
+    private const val CATEGORY_BILL_PRIVATE = "bill_private"
+    private const val CATEGORY_CARD = "card"
+    private const val CATEGORY_CARD_PRIVATE = "card_private"
+    const val ACTION_MARK_PAID = "mark_paid"
+    const val ACTION_SNOOZE_LATER = "snooze_later"
+    const val ACTION_SNOOZE_TOMORROW = "snooze_tomorrow"
+    const val ACTION_PAY_CARD = "pay_card"
     private const val AHEAD_KEY = "notif_ahead"
     private const val AHEAD_DAYS = 7
     private val center get() = UNUserNotificationCenter.currentNotificationCenter()
@@ -235,7 +280,20 @@ internal object IosNotificationCenter {
     fun registerCategories() {
         val open = UNNotificationCategory.categoryWithIdentifier(CATEGORY_OPEN, emptyList<Any>(), emptyList<Any>(), "", 0uL)
         val private = UNNotificationCategory.categoryWithIdentifier(CATEGORY_PRIVATE, emptyList<Any>(), emptyList<Any>(), "Open the app to see it", 0uL)
-        center.setNotificationCategories(setOf(open, private))
+        // the buttons of Android's notices: a tracked bill can be marked paid or reminded about again, a card notice has Pay now (which opens the app)
+        val bill = listOf(
+            UNNotificationAction.actionWithIdentifier(ACTION_MARK_PAID, "Mark paid", 0uL),
+            UNNotificationAction.actionWithIdentifier(ACTION_SNOOZE_LATER, "Later today", 0uL),
+            UNNotificationAction.actionWithIdentifier(ACTION_SNOOZE_TOMORROW, "Tomorrow", 0uL),
+        )
+        val card = listOf(UNNotificationAction.actionWithIdentifier(ACTION_PAY_CARD, "Pay now", UNNotificationActionOptionForeground))
+        center.setNotificationCategories(setOf(
+            open, private,
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_BILL, bill, emptyList<Any>(), "", 0uL),
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_BILL_PRIVATE, bill, emptyList<Any>(), "Open the app to see it", 0uL),
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_CARD, card, emptyList<Any>(), "", 0uL),
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_CARD_PRIVATE, card, emptyList<Any>(), "Open the app to see it", 0uL),
+        ))
     }
 
     private fun content(n: Notice, hidden: Boolean) = UNMutableNotificationContent().apply {
@@ -244,11 +302,23 @@ internal object IosNotificationCenter {
         // the recap is the quiet kind (Android's low-importance channel)
         setSound(if (n.kind == NoticeKind.WEEKLY_RECAP) null else UNNotificationSound.defaultSound)
         setThreadIdentifier(when (n.kind) {
-            NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> "budgets"
+            NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER, NoticeKind.BUDGET_PACE, NoticeKind.BUDGET_WRAPUP -> "budgets"
             NoticeKind.WEEKLY_RECAP -> "recap"
             else -> "bills"
         })
-        setCategoryIdentifier(if (hidden) CATEGORY_PRIVATE else CATEGORY_OPEN)
+        val ref = n.ref
+        val buttons = when {
+            ref == null -> ""
+            n.kind == NoticeKind.BILL_TRACKED -> "bill"
+            n.kind == NoticeKind.CARD_DUE || n.kind == NoticeKind.CARD_STATEMENT || n.kind == NoticeKind.CARD_LIMIT -> "card"
+            else -> ""
+        }
+        if (ref != null) setUserInfo(mapOf("ref" to ref, "kind" to n.kind.name))
+        setCategoryIdentifier(when (buttons) {
+            "bill" -> if (hidden) CATEGORY_BILL_PRIVATE else CATEGORY_BILL
+            "card" -> if (hidden) CATEGORY_CARD_PRIVATE else CATEGORY_CARD
+            else -> if (hidden) CATEGORY_PRIVATE else CATEGORY_OPEN
+        })
     }
 
     private fun add(requests: List<UNNotificationRequest>): Set<String> {
@@ -271,6 +341,13 @@ internal object IosNotificationCenter {
         val kinds = notices.associateBy { it.key }
         val accepted = add(notices.map { UNNotificationRequest.requestWithIdentifier(it.key, content(it, it.kind.isBillPrivate() || it.key in privateKeys), null) })
         return accepted.mapNotNull { kinds[it] }
+    }
+
+    /** Shows [n] again [minutes] from now (the same words, under a new identifier, so the first one is not replaced). */
+    fun snooze(n: Notice, minutes: Int) {
+        if (!allowed()) return
+        val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval((minutes * 60).toDouble(), false)
+        add(listOf(UNNotificationRequest.requestWithIdentifier(n.key, content(n, n.kind == NoticeKind.BILL_TRACKED), trigger)))
     }
 
     private fun NoticeKind.isBillPrivate() = this == NoticeKind.BILL_FOUND || this == NoticeKind.BILL_TRACKED
@@ -328,4 +405,23 @@ internal object IosNotificationCenter {
         val accepted = add(requests)
         saveAhead(planned.filter { it.first.key in accepted }.associate { (n, day) -> n.key to day.atTime(at / 60, at % 60).toInstant(tz).toEpochMilliseconds() })
     }
+}
+
+/** Test entry for the Swift unit tests: a tracked bill to press the notification buttons on, and what became of it. */
+object IosNotificationsDebug {
+    /** Hands the app a card statement text, adds the bill found to the ones tracked, and returns its id. [dueDay] is a date like 25-12-2026; the amount is made unique by [seed]. */
+    suspend fun trackedBill(host: IosHostServices, dueDay: String, seed: Int): String {
+        val core = IosCore.get(host)
+        MessageIngest.ingest(core.container, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 0862 statement is generated. Total Amt Due Rs.${12_000 + seed}.00, Min Amt Due Rs.617.00, Due Date $dueDay")
+        return core.container.write { ok ->
+            val b = ok.bills.list(app.expenses.core.storage.BillStatus.FOUND).first { it.amountMinor == (12_000L + seed) * 100 }
+            ok.bills.track(b.id)
+            b.id
+        }!!
+    }
+
+    suspend fun billStatus(host: IosHostServices, id: String): String = IosCore.get(host).container.write { it.bills.get(id)?.status?.name ?: "GONE" } ?: "NO_DATA"
+
+    /** The card the latest Pay now asked for, or empty. */
+    fun payRequestFor(): String = IosLinks.payRequests.value?.accountId.orEmpty()
 }

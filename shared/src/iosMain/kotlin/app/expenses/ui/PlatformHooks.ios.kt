@@ -57,8 +57,13 @@ actual val supportsBlur: Boolean = true
 actual fun rememberKeyboardOpen(): Boolean = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
 /** Receives the picker's answer once. UIKit holds a delegate weakly, so [PickerHolder] keeps it alive until it has answered. */
-private class PickerDelegate(private val onPicked: (String?) -> Unit) : NSObject(), UIDocumentPickerDelegateProtocol {
-    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) = finish((didPickDocumentsAtURLs.firstOrNull() as? NSURL)?.absoluteString)
+private class PickerDelegate(private val onPicked: (String?) -> Unit, private val remember: Boolean = false) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        // a folder chosen for automatic copies is kept as a bookmark while the system still lets the app into it
+        if (remember && url != null) app.expenses.IosAutoExport.remember(url)
+        finish(url?.absoluteString)
+    }
     override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = finish(null)
     private fun finish(uri: String?) { PickerHolder.active = null; onPicked(uri) }
 }
@@ -88,10 +93,10 @@ private class CameraDelegate(private val onPicked: (String?) -> Unit) : NSObject
 
 private object CameraHolder { var active: CameraDelegate? = null }
 
-private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) -> Unit) {
+private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) -> Unit, remember: Boolean = false) {
     val top = app.expenses.topViewController()
     if (top == null) { onPicked(null); return }
-    val delegate = PickerDelegate(onPicked)
+    val delegate = PickerDelegate(onPicked, remember)
     PickerHolder.active = delegate
     picker.delegate = delegate
     top.presentViewController(picker, animated = true, completion = null)
@@ -125,7 +130,7 @@ private object IosFilePickers : FilePickers {
     }
 
     override fun openFolder(onPicked: (String?) -> Unit) {
-        present(UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false), onPicked)
+        present(UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeFolder), asCopy = false), onPicked, remember = true)
     }
 }
 

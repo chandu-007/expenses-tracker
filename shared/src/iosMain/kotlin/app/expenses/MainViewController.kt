@@ -72,6 +72,7 @@ internal class IosApp private constructor(private val host: IosHostServices) {
 
 private class IosRootHost(override val platform: Platform, override val lock: AppLockPort) : RootHost {
     override val addRequests: StateFlow<Int> = IosLinks.addCount
+    override val payCardRequests: StateFlow<PayCardRequest?> = IosLinks.payCount
     override val billsRequests: StateFlow<Int> = IosNotifications.billsRequests
 
     override fun openAttachment(uri: String, mime: String) {
