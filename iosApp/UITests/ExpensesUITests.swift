@@ -152,7 +152,9 @@ final class ExpensesUITests: XCTestCase {
         XCTAssertTrue(el(app, "create_backup").exists)
         XCTAssertTrue(el(app, "open_backup").exists)
         XCTAssertTrue(el(app, "import_statement").exists)
-        XCTAssertTrue(appears(app, "auto_unavailable"), "Automatic export is explained as not on iPhone\n" + app.debugDescription)
+        // automatic copies to a folder from the Files app are on iPhone now: the folder button is there, not the "not available" note
+        XCTAssertTrue(appears(app, "auto_folder"), "Automatic export offers a folder\n" + app.debugDescription)
+        XCTAssertFalse(el(app, "auto_unavailable").exists)
         shot("data")
         tap(app, "data_back")
         XCTAssertTrue(appears(app, "more_page"), "Back returns to More, as on Android")

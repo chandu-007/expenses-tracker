@@ -196,10 +196,14 @@ final class CaptureUITests: XCTestCase {
         XCTAssertTrue(el(app, "shortcuts_step_2").label.contains("Capture bank message"), el(app, "shortcuts_step_5").label)
         shot("capture-setup-top")
         // bank alert emails come the same way, by a Shortcuts automation on the Email trigger
-        reveal(app, el(app, "shortcuts_email_steps"))
+        let emailSteps = el(app, "shortcuts_email_steps")
+        if !emailSteps.waitForExistence(timeout: 3) { scrollToExist(app, emailSteps) }
+        reveal(app, emailSteps)
         XCTAssertTrue(el(app, "shortcuts_email_title").exists)
         XCTAssertTrue(el(app, "shortcuts_email_step_1").label.contains("Capture bank email"), el(app, "shortcuts_email_step_1").label)
-        reveal(app, el(app, "shortcuts_limits"))
+        let limits = el(app, "shortcuts_limits")
+        if !limits.waitForExistence(timeout: 3) { scrollToExist(app, limits) }
+        reveal(app, limits)
         XCTAssertTrue(el(app, "shortcuts_privacy").exists)
         XCTAssertTrue(el(app, "shortcuts_limits").label.contains("Unknown Senders"))
         shot("capture-setup-limits")
