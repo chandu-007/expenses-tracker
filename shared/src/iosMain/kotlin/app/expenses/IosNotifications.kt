@@ -154,6 +154,9 @@ object IosNotifications {
             NoticeKind.BILL_DUE -> n.copy(text = "Open the app to post or skip it")
             NoticeKind.CARD_DUE -> n.copy(text = "Open the app to see what to pay")
             NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> n.copy(text = "Open the app to see how much is left")
+            NoticeKind.BUDGET_PACE -> n.copy(text = "Open the app to see how your spending is going")
+            NoticeKind.BUDGET_WRAPUP -> n.copy(text = "Open the app to see how last month went")
+            NoticeKind.CARD_STATEMENT, NoticeKind.CARD_LIMIT, NoticeKind.CARD_CLEARED -> n.copy(text = "Open the app to see your card")
             NoticeKind.WEEKLY_RECAP -> n.copy(title = "Your weekly recap", text = "Open the app to see how last week went")
             NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED -> n
         }

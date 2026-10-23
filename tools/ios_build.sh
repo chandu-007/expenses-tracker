@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEAM="${TEAM:-9V2G5RH624}"
-DEST='platform=iOS Simulator,name=iPhone 17'
+DEST='platform=iOS Simulator,name=iPhone 17,OS=26.5'
 VERSION="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' iosApp/project.yml)"
 
 framework() { ./gradlew :shared:assembleSharedXCFramework -PenableIos=true -q; }
