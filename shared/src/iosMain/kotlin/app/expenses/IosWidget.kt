@@ -84,7 +84,9 @@ internal object IosSharedTexts {
         val defaults = NSUserDefaults(suiteName = IosWidgetData.GROUP)
         val queued = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty()
         if (queued.isEmpty()) return 0
-        defaults.removeObjectForKey(KEY)
+        // only what was read is taken off: a text the extension queued since then stays for the next time
+        val rest = defaults.stringArrayForKey(KEY)?.filterIsInstance<String>().orEmpty().drop(queued.size)
+        if (rest.isEmpty()) defaults.removeObjectForKey(KEY) else defaults.setObject(rest, forKey = KEY)
         for (text in queued) MessageIngest.ingest(container, null, text)
         return queued.size
     }

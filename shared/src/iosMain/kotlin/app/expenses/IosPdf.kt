@@ -3,6 +3,13 @@
 package app.expenses
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
+import kotlinx.cinterop.usePinned
+import platform.CoreGraphics.CGDataProviderCreateWithData
+import platform.CoreGraphics.CGDataProviderRelease
+import platform.CoreGraphics.CGPDFDocumentCreateWithProvider
+import platform.CoreGraphics.CGPDFDocumentRelease
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGSizeMake
 import app.expenses.core.domain.OcrPiece
@@ -39,8 +46,25 @@ internal object IosPdf {
         return if (pieces.isEmpty()) page.string.orEmpty() else OcrRows.group(pieces)
     }
 
+    /** Whether the system can make a PDF of [bytes] at all (a protected file counts: it opens once unlocked). */
+    private fun parses(bytes: ByteArray): Boolean {
+        if (bytes.size < 8) return false
+        return bytes.usePinned { pin ->
+            val provider = CGDataProviderCreateWithData(null, pin.addressOf(0), bytes.size.convert(), null)
+            val doc = CGPDFDocumentCreateWithProvider(provider)
+            CGDataProviderRelease(provider)
+            (doc != null).also { CGPDFDocumentRelease(doc) }
+        }
+    }
+
     fun read(bytes: ByteArray, password: String?): PdfText {
-        val doc = PDFDocument(data = bytes.toNSData()) ?: return PdfText.Unreadable("That PDF could not be read. It may be damaged or not a PDF.")
+        // PDFKit answers nil for a damaged file, which Kotlin/Native does not allow for a constructor (it would take the app down), so the file is checked first
+        if (!parses(bytes)) return PdfText.Unreadable("That PDF could not be read. It may be damaged or not a PDF.")
+        val doc = try {
+            PDFDocument(data = bytes.toNSData())
+        } catch (e: Throwable) {
+            return PdfText.Unreadable("That PDF could not be read. It may be damaged or not a PDF.")
+        }
         if (doc.isLocked() && !doc.unlockWithPassword(password.orEmpty())) return if (password == null) PdfText.PasswordNeeded else PdfText.WrongPassword
         val pages = doc.pageCount.toInt()
         if (pages == 0) return PdfText.Unreadable("That PDF has no pages.")

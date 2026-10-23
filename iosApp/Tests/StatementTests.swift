@@ -71,4 +71,12 @@ final class StatementTests: XCTestCase {
         let answer = IosStatementDebug.shared.picture(data: Data([1, 2, 3, 4]))
         XCTAssertTrue(answer.hasPrefix("UNREADABLE"), answer)
     }
+
+    func testADamagedPdfIsRefusedInWordsAndTheAppStaysUp() {
+        for bytes in [Data("%PDF-1.4\n garbage".utf8), Data("%PDF-".utf8), Data()] {
+            let answer = IosStatementDebug.shared.pdf(data: bytes, password: nil)
+            XCTAssertTrue(answer.hasPrefix("UNREADABLE"), answer)
+        }
+    }
 }
+

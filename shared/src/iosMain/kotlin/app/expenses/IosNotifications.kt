@@ -123,7 +123,7 @@ object IosNotifications {
                 when (action) {
                     IosNotificationCenter.ACTION_MARK_PAID -> if (ref != null) {
                         val h = host
-                        if (h != null) IosCore.get(h).container.write { ok -> if (ok.bills.get(ref)?.status == app.expenses.core.storage.BillStatus.TRACKED) ok.bills.markPaid(ref, null, nowMillis()) }
+                        if (h != null) IosCore.get(h).container.write { ok -> if (ok.bills.get(ref)?.status == app.expenses.core.storage.BillStatus.TRACKED) ok.bills.markPaid(ref, null, nowMillis()); IosNotificationCenter.dropStaleSnoozes { it != ref } }
                     }
                     IosNotificationCenter.ACTION_SNOOZE_LATER, IosNotificationCenter.ACTION_SNOOZE_TOMORROW -> if (ref != null) {
                         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
@@ -162,6 +162,8 @@ object IosNotifications {
             val minute = now.hour * 60 + now.minute
             IosCore.get(h).container.write { ok ->
                 IosNotificationCenter.reconcile(ok.notifications)
+                // a snoozed reminder waiting in the system is taken back when its bill was paid or removed in the meantime (Android checks as it fires)
+                IosNotificationCenter.dropStaleSnoozes { ref -> ok.bills.get(ref)?.status == app.expenses.core.storage.BillStatus.TRACKED }
                 val result = ok.notifications.check(now.date, minute, tz)
                 val hide = ok.templates.setting("hide_amounts") == "1"
                 val shown = IosNotificationCenter.show(result.notices.map { masked(it, hide) }, privateKeys(result.notices, hide))
@@ -341,6 +343,12 @@ internal object IosNotificationCenter {
         val kinds = notices.associateBy { it.key }
         val accepted = add(notices.map { UNNotificationRequest.requestWithIdentifier(it.key, content(it, it.kind.isBillPrivate() || it.key in privateKeys), null) })
         return accepted.mapNotNull { kinds[it] }
+    }
+
+    /** Removes the waiting snoozed reminders ("snooze:<bill>:<time>") whose bill [stillOpen] says is no longer one to be reminded about. */
+    fun dropStaleSnoozes(stillOpen: (String) -> Boolean) {
+        val stale = pendingIds().orEmpty().filter { it.startsWith("snooze:") && !stillOpen(it.removePrefix("snooze:").substringBeforeLast(':')) }
+        if (stale.isNotEmpty()) center.removePendingNotificationRequestsWithIdentifiers(stale)
     }
 
     /** Shows [n] again [minutes] from now (the same words, under a new identifier, so the first one is not replaced). */
