@@ -35,6 +35,12 @@ Short description may say: "Private expense tracker that reads your bank alerts 
 ## Demo video (Google may ask)
 Screen-record, about 1 minute, on a phone with the SMS build: (1) More > Capture from texts; (2) turn on "Read bank texts" and show the disclosure; tap Agree; (3) show Android's permission dialog and Allow; (4) send a test bank text to the phone (from another phone, or `adb emu sms send 'AX-HDFCBK-S' 'Rs.250.00 debited from a/c XX1234 on 18-10-26 to TEST SHOP. Ref 123456789012'` on an emulator); (5) show it in To review; add it; (6) show a text from a person is not captured (capture health counts it, no words); (7) More > Privacy shows the app has no internet access.
 
+## Version codes
+`Expenses-0.5.0-play-sms.aab` is code 16 and the no-SMS fallback `Expenses-0.5.0-play-no-sms-code17.aab` is code 17 (Play accepts each code once). The repo's next build is code 18 or higher.
+
+## Where the form is
+The "SMS and Call Log permissions" declaration may not be listed under App content until a bundle that requests the permission has been uploaded to a track: Play Console finds the permission in the upload and then asks for the declaration (as a task in the release, or under App content > Sensitive app permissions). Upload the SMS bundle first, then look for it.
+
 ## Steps for you
 1. Update the store listing description and privacy policy URL content (above).
 2. Play Console > App content > Sensitive app permissions: submit the SMS declaration with the text above, and the demo video if the form asks.

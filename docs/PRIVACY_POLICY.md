@@ -1,6 +1,6 @@
 # Privacy Policy for Expenses
 
-Effective 18 October 2026. Applies to the Expenses app for Android and iPhone ("the app"), published by Chandrashekhar Nelluri ("I", "me").
+Effective 24 October 2026. Applies to the Expenses app for Android and iPhone ("the app"), published by Chandrashekhar Nelluri ("I", "me").
 
 **In one sentence: everything you enter stays on your phone, the app has no way to send it anywhere, and I collect nothing about you.**
 

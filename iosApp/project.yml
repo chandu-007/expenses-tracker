@@ -10,7 +10,7 @@ settings:
     DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.5.0"
-    CURRENT_PROJECT_VERSION: "16"
+    CURRENT_PROJECT_VERSION: "18"
 targets:
   Expenses:
     type: application
