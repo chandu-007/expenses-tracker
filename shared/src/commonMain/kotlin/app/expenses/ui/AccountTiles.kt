@@ -64,7 +64,7 @@ private fun designOf(a: AccountRowUi): CardDesign =
  * [compact] is the small tile of the home strip; the full one is for the accounts page.
  */
 @Composable
-fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, stripAmount: Float = 0f) {
     val d = designOf(a)
     val ink = Color(d.text)
     val accent = Color(d.accent)
@@ -91,7 +91,12 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
             drawCircle(Color.White.copy(alpha = 0.05f), radius = size.width * 0.4f, center = Offset(size.width * 0.1f, size.height * 1.15f))
             if (a.tier == CardTier.PREMIUM.name && isCard) drawRoundRect(accent.copy(alpha = 0.55f), size = size, cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (compact) 18.dp.toPx() else 22.dp.toPx()), style = Stroke(width = 1.5.dp.toPx()))
         }
-        Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.SpaceBetween) {
+        // in a stack, the edge that shows is a line of its own: the name, the last digits and the balance ([stripAmount] 0 to 1 is how much of the card is still folded under the next)
+        if (stripAmount > 0f) Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 18.dp).graphicsLayer { alpha = stripAmount }, verticalAlignment = Alignment.CenterVertically) {
+            Text(a.name + (a.last4?.let { "  ••$it" } ?: ""), color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text((if (a.owed) "owed " else "") + a.balanceText, color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+        }
+        Column(Modifier.fillMaxSize().padding(pad).graphicsLayer { alpha = 1f - stripAmount }, verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(a.name, color = ink, style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 val kindLine = if (isCard) listOfNotNull(network?.takeIf { it != CardNetwork.OTHER }?.label, a.tier?.let { t -> CardTier.entries.firstOrNull { it.name == t }?.label?.takeIf { _ -> !compact } }).joinToString(" · ").ifEmpty { "Credit card" } else a.typeLabel
@@ -150,7 +155,8 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
     val gap = 12.dp
     val n = accounts.size
     // the edge of each card that shows while stacked: less when there are many, so the stack never grows tall
-    val peek = if (n <= 1) 0.dp else minOf(48.dp, 190.dp / (n - 1))
+    // each card's edge is a whole line (name, digits, balance), however many cards there are: the stack grows with them instead of squeezing the lines out
+    val peek = if (n <= 1) 0.dp else 46.dp
     val stackedH = cardH + peek * (n - 1)
     val spreadH = (cardH + gap) * n - gap
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -164,6 +170,7 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
                 val y = with(density) { (peek.toPx() * i + ((cardH + gap).toPx() * i - peek.toPx() * i) * open.value).toDp() }
                 AccountTile(
                     a, compact = false, onClick = { if (expanded) onOpen(a) else expanded = true },
+                    stripAmount = if (i == n - 1) 0f else (1f - open.value).coerceIn(0f, 1f),
                     modifier = Modifier.fillMaxWidth().height(cardH).offset(y = y).shadow(if (i == 0) 0.dp else 8.dp, RoundedCornerShape(22.dp), clip = false),
                 )
             }
