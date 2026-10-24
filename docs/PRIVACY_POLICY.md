@@ -20,7 +20,7 @@ Nothing. The app has no account, no sign-in, no advertising, no analytics, no cr
 - **Files you choose.** Export (CSV or Excel), backup and import use files you pick or save yourself. A backup can be protected with a passphrase you choose; if you forget it the file cannot be opened, by me or anyone. Where you save or send a file (Drive, Mail, AirDrop) is your choice and that service's own policy applies to it.
 
 ## Permissions (Android)
-Notifications (reminders), fingerprint or face unlock (app lock), start after restart and short background work (reminders and scheduled export), and, only in the directly installed version, receiving texts. Notification access is a setting you turn on yourself. None of them sends data anywhere.
+Notifications (reminders), fingerprint or face unlock (app lock), start after restart and short background work (reminders and scheduled export), and receiving texts (RECEIVE_SMS, only if you turn on Read bank texts and agree on the screen that explains it). Notification access is a setting you turn on yourself. None of them sends data anywhere.
 
 ## Retention and deleting your data
 Your data stays on your phone until you delete it. You can delete entries in the app, wipe everything with **Start fresh**, or uninstall the app, which removes its data. Because I hold no copy, I cannot recover or delete anything for you.
