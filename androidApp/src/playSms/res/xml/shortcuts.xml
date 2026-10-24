@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_expense"
+        android:enabled="true"
+        android:icon="@drawable/ic_add"
+        android:shortcutShortLabel="@string/add_expense"
+        android:shortcutLongLabel="@string/add_expense">
+        <intent
+            android:action="app.expenses.action.ADD_EXPENSE"
+            android:targetClass="app.expenses.MainActivity"
+            android:targetPackage="io.github.chandu007.expenses" />
+    </shortcut>
+</shortcuts>

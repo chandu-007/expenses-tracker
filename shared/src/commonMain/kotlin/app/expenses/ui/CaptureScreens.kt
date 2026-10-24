@@ -228,12 +228,27 @@ fun CaptureSettingsScreen(
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture
+    // Google Play's rule for the text permission: a prominent disclosure, answered with a tap, before Android's own permission question
+    var disclosing by rememberSaveable { mutableStateOf(false) }
+    if (disclosing) AlertDialog(
+        onDismissRequest = { disclosing = false },
+        title = { Text("Allow Expenses to read your bank texts?", modifier = Modifier.testTag("sms_disclosure")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("This app uses the permission to receive text messages (RECEIVE_SMS) for one purpose: to find the payments, credits and bills in texts from your bank, card or biller, and put them in a list for you to approve, so you can track your money.")
+                Text("Each text is read on this phone, and the sender is checked first. Texts from people, one-time passwords and senders that are not a known bank or biller are ignored and thrown away: only a count is kept. Nothing is sent anywhere: the app has no internet access at all.")
+                Text("You can turn this off in this screen at any time. Android will ask you next; if you say no, the app works as before and you can add entries by hand.")
+            }
+        },
+        confirmButton = { TextButton(onClick = { disclosing = false; onToggle(true) }, modifier = Modifier.testTag("sms_disclosure_agree")) { Text("Agree and continue") } },
+        dismissButton = { TextButton(onClick = { disclosing = false }, modifier = Modifier.testTag("sms_disclosure_decline")) { Text("No thanks") } },
+    )
     Scaffold(topBar = { AreaTopBar(if (readsTexts) "Capture from texts" else "Capture from payment apps", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (readsTexts) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Read bank texts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = settings.smsOn && permissionGranted, onCheckedChange = onToggle, modifier = Modifier.testTag("capture_sms_switch"))
+                Switch(checked = settings.smsOn && permissionGranted, onCheckedChange = { on -> if (on && !permissionGranted) disclosing = true else onToggle(on) }, modifier = Modifier.testTag("capture_sms_switch"))
             }
             Text("What this does", style = MaterialTheme.typography.labelMedium)
             Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. If it says a bill is due (a card statement, electricity, water, gas, mobile, broadband, an EMI, an insurance premium), it is shown on the Bills page and you are told. You decide whether to add either.", style = MaterialTheme.typography.bodyMedium)

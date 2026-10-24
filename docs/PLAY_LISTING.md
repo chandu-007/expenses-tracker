@@ -30,7 +30,7 @@ Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is alre
   - Can users request deletion: data is only on the device; they delete it in the app or by uninstalling.
   - Security practices: data encrypted at rest on the device.
 - **Permissions declarations:**
-  - **SMS / call log:** none declared in this build, so no declaration form.
+  - **SMS / call log:** the ordinary build (`bundlePlay`) declares none. The build with text capture (`bundlePlaySms`) uses RECEIVE_SMS under Google's "SMS-based money management" exception: see `docs/PLAY_SMS_DECLARATION.md` for the declaration text, the listing wording, the demo video and the steps.
   - **Notification access (BIND_NOTIFICATION_LISTENER_SERVICE):** the app has a notification listener that is off until the person turns it on, and reads only four payment apps, and Gmail, Outlook and Yahoo Mail only after a second, separate opt-in switch (it keeps only an email that reads like a bank alert). Google may ask you to justify this. Use: "Core function: lets the user capture payments from payment-app notifications into a review list. Opt-in, explained on a screen before the system settings page opens, reads only Google Pay, PhonePe, Paytm and BHIM (and, behind a second opt-in switch, Gmail, Outlook and Yahoo Mail, keeping only emails that read like a bank transaction alert), ignores all others unread, nothing leaves the device." I have not been able to confirm that Google will accept this for an expense tracker; if it is rejected, the fallback is to remove the notification listener from the Play build too (a small manifest change like the SMS one).
   - **Exact alarms / full-screen / background location / photos:** none used.
 - **Prominent disclosure:** the Capture screen explains what is read, before the switch and before Android's settings page; keep it unchanged.
@@ -42,6 +42,6 @@ Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is alre
 4. Registration of the package for Android developer verification (free limited-distribution or full account) is separate: see `docs/ANDROID_INSTALL.md`.
 
 ## Limits to know
-- The Play build has no SMS reading; the "Capture from texts" tile reads "Capture from payment apps" there. Wording elsewhere that mentions texts (the To review help line, bills help, capture health) still says "texts" in the Play build.
+- The ordinary Play build (`bundlePlay`) has no SMS reading (the SMS build, `bundlePlaySms`, does, once its declaration is approved); the "Capture from texts" tile reads "Capture from payment apps" there. Wording elsewhere that mentions texts (the To review help line, bills help, capture health) still says "texts" in the Play build.
 - The app targets Android 16 (API 36); Play requires a recent target level each year: check the warning in Console before each upload.
 - The `.aab` is signed with the same key as the APKs you already shared. If you instead let Play generate the app signing key, installs of the direct APK and the Play build will not update each other (different signatures).

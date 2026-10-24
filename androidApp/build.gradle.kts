@@ -15,8 +15,8 @@ android {
         applicationId = "app.expenses"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.4.5"
+        versionCode = 16
+        versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Test-data seeding through an intent extra exists only where this is true; never in release.
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
@@ -53,6 +53,14 @@ android {
             signingConfigs.findByName("release")?.let { signingConfig = it }
             matchingFallbacks += "release"
             buildConfigField("boolean", "SMS_CAPTURE", "false")
+        }
+        // The Google Play build WITH text capture, for the SMS permissions declaration (Play's exception for SMS-based money management): the same as "play" but the text
+        // permission and receiver stay in. `./gradlew :androidApp:bundlePlaySms`. Upload it only after the declaration form is approved (see docs/PLAY_SMS_DECLARATION.md).
+        create("playSms") {
+            initWith(getByName("release"))
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "SMS_CAPTURE", "true")
         }
         // Release code (R8, not debuggable) signed with the debug key, for measuring startup and scrolling honestly.
         create("benchmark") {
@@ -115,4 +123,5 @@ dependencies {
 // The directly installed build keeps `app.expenses`, so testers who have it keep their data and update in place.
 androidComponents {
     onVariants(selector().withBuildType("play")) { variant -> variant.applicationId.set("io.github.chandu007.expenses") }
+    onVariants(selector().withBuildType("playSms")) { variant -> variant.applicationId.set("io.github.chandu007.expenses") }
 }
