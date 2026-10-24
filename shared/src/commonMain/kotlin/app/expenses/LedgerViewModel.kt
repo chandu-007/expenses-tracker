@@ -502,6 +502,8 @@ sealed interface UiState {
         val lastIncomeCategory: String,
         val lastAccountId: String,
         val endReached: Boolean,
+        /** The account Home's list is narrowed to, or null for everything. */
+        val homeAccountId: String? = null,
         val message: String? = null,
         val undo: UndoUi? = null,
     ) : UiState
@@ -882,6 +884,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         refresh(ok, undo = UndoUi(row.id, "Deleted ${row.title} ${row.amount}", restore = true))
     }
 
+    /** The account Home's list shows, or null for all of them. Read and changed only under the write lock. */
+    @Volatile private var homeAccount: String? = null
+
+    private fun recentRows(q: app.expenses.core.storage.db.SchemaQueries, want: Long) =
+        homeAccount?.let { q.recentEntriesOfAccount(it, want).executeAsList() } ?: q.recentEntries(want).executeAsList()
+
+    /** Narrows Home's list to one account (what went out of it or into it), or back to every account with null. */
+    fun showAccountOnHome(accountId: String?) {
+        viewModelScope.launch(BACKGROUND) {
+            container.write { ok ->
+                homeAccount = accountId
+                loaded = mutableListOf() // start the list from the top for the new view
+                refresh(ok)
+            }
+        }
+    }
+
     fun loadMore() {
         val current = _state.value as? UiState.Ready ?: return
         if (endReached) return
@@ -891,7 +910,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             container.write { ok ->
                 if (endReached) return@write
                 val last = loaded.lastOrNull() ?: return@write
-                val page = ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
+                val page = homeAccount?.let { ok.db.schemaQueries.entriesBeforeOfAccount(it, last.occurred_at, last.seq, PAGE).executeAsList() } ?: ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
                 if (page.size < PAGE) endReached = true
                 if (page.isEmpty()) return@write
                 loaded.addAll(page)
@@ -2600,7 +2619,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         if (current == null) { refresh(ok, undo); return }
         val q = ok.db.schemaQueries
         val want = maxOf(loaded.size.toLong(), PAGE)
-        loaded = q.recentEntries(want).executeAsList().toMutableList()
+        loaded = recentRows(q, want).toMutableList()
         endReached = loaded.size < want
         loadedCategory = firstCategories(ok, loaded)
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
@@ -2626,7 +2645,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         currencyDigits = q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() }
         // Reload as many rows as are already shown, so a change does not throw the user back to the top of a long list.
         val want = maxOf(loaded.size.toLong(), PAGE)
-        loaded = q.recentEntries(want).executeAsList().toMutableList()
+        loaded = recentRows(q, want).toMutableList()
         endReached = loaded.size < want
         val zone = systemZone()
         val today = todayLocal(zone)
@@ -2690,6 +2709,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             lastIncomeCategory = lastIncomeCategory,
             lastAccountId = lastAccount,
             endReached = endReached,
+            homeAccountId = homeAccount,
             undo = undo,
         )
     }

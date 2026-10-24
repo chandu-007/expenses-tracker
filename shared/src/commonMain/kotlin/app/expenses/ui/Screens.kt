@@ -131,6 +131,8 @@ fun EntryListScreen(
     onDelete: (RowUi) -> Unit,
     onManageCategories: () -> Unit,
     onManageAccounts: () -> Unit,
+    /** Tapping an account on Home's strip: show only its entries (null: all). */
+    onFilterAccount: (String?) -> Unit = {},
     onOpenBudget: () -> Unit,
     onOpenRecurring: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -310,7 +312,7 @@ fun EntryListScreen(
                     HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
                     HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                     // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
-                    HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, onManageAccounts)
+                    HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) })
                     HomeSection.QUICK_ENTRIES -> {
                 if (state.templates.isNotEmpty()) {
                     LazyRow(
@@ -333,7 +335,15 @@ fun EntryListScreen(
             }
             }
             Spacer(Modifier.height(4.dp))
-            if (state.rows.isEmpty()) {
+            val filtered = state.accountRows.firstOrNull { it.id == state.homeAccountId }
+            if (filtered != null) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Showing only ${filtered.name}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f).testTag("account_filter_note"))
+                TextButton(onClick = onManageAccounts, modifier = Modifier.testTag("account_filter_manage")) { Text("Edit account") }
+                TextButton(onClick = { onFilterAccount(null) }, modifier = Modifier.testTag("account_filter_clear")) { Text("Show all") }
+            }
+            if (state.rows.isEmpty() && filtered != null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nothing in ${filtered.name} yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_filter_empty")) }
+            } else if (state.rows.isEmpty()) {
                 if (state.showWelcome) {
                     WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
                 } else {

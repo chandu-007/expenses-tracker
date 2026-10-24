@@ -218,4 +218,18 @@ final class ExpensesUITests: XCTestCase {
         shot("reports")
         XCTAssertFalse(el(app, "open_reports").isSelected && el(app, "month_spend").exists)
     }
+
+    /// Tapping an account on Home narrows the list to it; the same tile again, or Show all, brings everything back.
+    func testTappingAnAccountOnHomeShowsOnlyItsEntries() {
+        let app = launch()
+        file(app, amount: "111", note: "OnlyCash", category: "Food")
+        XCTAssertTrue(appears(app, "row_OnlyCash"), app.debugDescription)
+        tap(app, "balance_chip_Bank")
+        XCTAssertTrue(appears(app, "account_filter_note"), app.debugDescription)
+        XCTAssertTrue(el(app, "account_filter_note").label.contains("Bank"), el(app, "account_filter_note").label)
+        tap(app, "account_filter_clear")
+        XCTAssertTrue(gone(app, "account_filter_note"), app.debugDescription)
+        XCTAssertTrue(appears(app, "row_OnlyCash"), app.debugDescription)
+    }
 }
+

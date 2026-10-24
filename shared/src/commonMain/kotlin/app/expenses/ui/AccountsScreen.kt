@@ -61,6 +61,8 @@ fun AccountsScreen(
     onSaveCard: (id: String, statementDay: String, dueDay: String, minPercent: String, remindDays: String, done: (String?) -> Unit) -> Unit,
     onClearCard: (String) -> Unit,
     onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
+    /** "See its transactions": Home's list narrowed to this account. */
+    onShowEntries: ((String) -> Unit)? = null,
 ) {
     var editing by remember { mutableStateOf<AccountRowUi?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -89,7 +91,7 @@ fun AccountsScreen(
         }
     }
     if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit)
-    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit) }
+    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit, onShowEntries) }
 }
 
 @Composable
@@ -121,6 +123,7 @@ private fun AccountDialog(
     onSaveCard: (String, String, String, String, String, (String?) -> Unit) -> Unit,
     onClearCard: (String) -> Unit,
     onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
+    onShowEntries: ((String) -> Unit)? = null,
 ) {
     var cardOpen by remember { mutableStateOf(false) }
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
@@ -180,6 +183,7 @@ private fun AccountDialog(
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("account_problem")) }
                 if (existing != null) {
                     Spacer(Modifier.height(4.dp))
+                    if (onShowEntries != null && !existing.archived) TextButton(onClick = { onShowEntries(existing.id); onClose() }, modifier = Modifier.testTag("account_show_entries")) { Text("See its transactions on Home") }
                     if (existing.archived) TextButton(onClick = { onArchive(existing.id, false); onClose() }, modifier = Modifier.testTag("account_unarchive")) { Text("Restore to the pickers") }
                     else TextButton(onClick = { onArchive(existing.id, true); onClose() }, enabled = !onlyActive && existing.savedItems == 0L, modifier = Modifier.testTag("account_archive")) { Text(if (onlyActive) "Archive (keep one active account)" else "Archive: hide it, keep its history") }
                     if (!existing.archived && existing.savedItems > 0L) Text("${existing.savedItems} repeating items or quick entries post to it. Change them first, then archive it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_saved_note"))

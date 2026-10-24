@@ -443,6 +443,14 @@ SELECT COUNT(*) FROM entry WHERE deleted = 0;
 recentEntries:
 SELECT * FROM entry WHERE deleted = 0 ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 
+-- Home's list narrowed to one account: what was paid from it or into it, a transfer on either side.
+recentEntriesOfAccount:
+SELECT * FROM entry WHERE deleted = 0 AND (account_id = :account OR counter_account_id = :account) ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+entriesBeforeOfAccount:
+SELECT * FROM entry WHERE deleted = 0 AND (account_id = :account OR counter_account_id = :account) AND (occurred_at, seq) < (:occurredAt, :seq)
+ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
 -- Keyset paging: pass the occurred_at and seq of the last row already shown. Unlike OFFSET, the cost does not
 -- grow with how far the user has scrolled (24 ms at row 100,000 with OFFSET on an emulator, measured).
 entriesBefore:

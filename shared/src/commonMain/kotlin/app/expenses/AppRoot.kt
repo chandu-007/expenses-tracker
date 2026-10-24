@@ -384,6 +384,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             rows = s.accountRows, onBack = { managingAccounts = false },
                             onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
                             onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms, onSetCreditLimit = viewModel::setCreditLimit,
+                            onShowEntries = { id -> viewModel.showAccountOnHome(id); managingAccounts = false; moreOpen = false },
                         )
                     }
                     k == 12 -> {
@@ -567,6 +568,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onDelete = viewModel::deleteEntry,
                         onManageCategories = { managingCategories = true },
                         onManageAccounts = { managingAccounts = true },
+                        onFilterAccount = viewModel::showAccountOnHome,
                         onOpenBudget = { budgeting = true },
                         onOpenRecurring = { repeating = true },
                         onOpenNotifications = { alerts = true },
