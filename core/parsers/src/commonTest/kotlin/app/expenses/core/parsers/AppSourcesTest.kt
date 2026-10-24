@@ -53,5 +53,14 @@ class AppSourcesTest {
         assertEquals(Direction.DEBIT, r.alert.direction); assertEquals(34_900L, r.alert.amountMinor)
         assertEquals("8968", r.alert.accountLast4); assertEquals("202551680195", r.alert.reference)
     }
+
+    @Test
+    fun aBareFigureIsTheAmountOnlyRightAfterAMoneyWordAndNeverABalance() {
+        val r = CaptureClassifier.classify("AX-SBIUPI-S", "A/C X8968 debited by 349.00 on 18Oct26 trf to SHOP Refno 202551680195. Avl bal 12,345.00") as CaptureOutcome.Transaction
+        assertEquals(34_900L, r.alert.amountMinor, "the balance is not the amount")
+        // a figure with no money word before it, and no Rs, is still not an amount
+        val n = CaptureClassifier.classify("AX-SBIUPI-S", "Dear customer your A/C X8968 balance is 12,345.00 as on 18Oct26")
+        assertTrue(n !is CaptureOutcome.Transaction, n.toString())
+    }
 }
 
