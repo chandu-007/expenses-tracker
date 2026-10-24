@@ -221,8 +221,10 @@ private fun Callout(text: String, color: androidx.compose.ui.graphics.Color, mod
 @Composable
 fun CaptureSettingsScreen(
     settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onToggleEmail: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
+    /** Runs a text through the same reading as a message from the Shortcuts automation (iPhone's setup page uses it for "Send a test now"). */
+    onTestMessage: ((String, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
 ) {
-    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack); return }
+    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage); return }
     var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture

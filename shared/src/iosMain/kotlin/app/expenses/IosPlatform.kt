@@ -135,6 +135,8 @@ class IosPlatform(host: IosHostServices) : Platform {
         return if (board.hasStrings) board.string?.takeIf { it.isNotBlank() } else null
     }
 
+    override fun copyText(text: String): Boolean { UIPasteboard.generalPasteboard.string = text; return true }
+
     override fun openExternalUrl(url: String): Boolean {
         val target = NSURL.URLWithString(url) ?: return false
         UIApplication.sharedApplication.openURL(target, options = emptyMap<Any?, Any?>(), completionHandler = null)

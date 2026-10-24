@@ -96,6 +96,9 @@ interface Platform {
     /** The text on the clipboard, or null when there is none (or this platform does not offer it). Only called when the person pressed a paste button. */
     fun readClipboardText(): String? = null
 
+    /** Puts [text] on the clipboard. False where that is not offered. */
+    fun copyText(text: String): Boolean = false
+
     /** Opens [url] in the app that handles it (iPhone: `shortcuts://`). False when nothing could be opened. */
     fun openExternalUrl(url: String): Boolean = false
 

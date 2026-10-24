@@ -182,6 +182,24 @@ final class CaptureUITests: XCTestCase {
         shot("entry-origin")
     }
 
+    // (g) the setup page helps: copy the trigger words, send a test text through the same reading as the automation
+    func testTheSetupPageCopiesTriggerWordsAndSendsATest() {
+        let app = launch()
+        tap(app, "more_menu")
+        tap(app, "open_capture")
+        XCTAssertTrue(appears(app, "shortcuts_title"), app.debugDescription)
+        tap(app, "shortcuts_copy_debited")
+        XCTAssertTrue(appears(app, "shortcuts_copied"), app.debugDescription)
+        XCTAssertTrue(el(app, "shortcuts_copied").label.contains("debited"), el(app, "shortcuts_copied").label)
+        tap(app, "shortcuts_test")
+        XCTAssertTrue(appears(app, "shortcuts_test_result"), app.debugDescription)
+        XCTAssertTrue(el(app, "shortcuts_test_result").label.contains("Captured"), el(app, "shortcuts_test_result").label)
+        tap(app, "capture_back")
+        tap(app, "open_inbox")
+        XCTAssertTrue(appears(app, "inbox_count"), "the test text waits in To review\n" + app.debugDescription)
+        XCTAssertEqual(el(app, "inbox_count").label, "1 to review")
+    }
+
     // (e) the Capture from texts screen is the Shortcuts setup guide on iPhone, and has none of the Android switches
     func testTheSetupGuideShowsOnIPhone() {
         let app = launch()

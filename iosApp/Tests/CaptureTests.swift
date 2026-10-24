@@ -64,6 +64,16 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(other.pending, before + 2)
     }
 
+    func testAnSbiUpiTextWithNoRupeeSignIsCapturedWithOrWithoutASender() async throws {
+        let text = "Dear UPI user A/C X8968 debited by 349.00 on date 18Oct26 trf to MYJIO Refno \(ref()) If not u? call-1800111109 for other services-18001234-SBI"
+        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+        let a = try await IosCapture.shared.captureMessage(host: host, sender: "AX-SBIUPI-S", message: text)
+        XCTAssertEqual(a.code, "CAPTURED")
+        let pasted = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: text.replacingOccurrences(of: "MYJIO", with: "MYJIO2"))
+        XCTAssertEqual(pasted.code, "CAPTURED", "pasted with no sender, the words still say it is SBI's")
+        XCTAssertEqual(pasted.pending, before + 2)
+    }
+
     func testUnknownSenderIsNotReadButAHeaderTheListMissesIsOfferedByCountOnly() async throws {
         let r = try await IosCapture.shared.captureMessage(host: host, sender: "AX-NOSUCHBK-S", message: bank())
         XCTAssertEqual(r.code, "NOT_ALLOWLISTED")

@@ -46,4 +46,12 @@ class AppSourcesTest {
         assertNull(dir("Your OTP is 123456"))
         assertNull(dir("Payment of ₹250 failed"))
     }
+
+    @Test
+    fun anSbiUpiTextWithNoCurrencyMarkIsADebitOfTheRightAmountOnTheRightAccount() {
+        val r = CaptureClassifier.classify("AX-SBIUPI-S", "Dear UPI user A/C X8968 debited by 349.00 on date 18Oct26 trf to MYJIO Refno 202551680195 If not u? call-1800111109 for other services-18001234-SBI") as CaptureOutcome.Transaction
+        assertEquals(Direction.DEBIT, r.alert.direction); assertEquals(34_900L, r.alert.amountMinor)
+        assertEquals("8968", r.alert.accountLast4); assertEquals("202551680195", r.alert.reference)
+    }
 }
+

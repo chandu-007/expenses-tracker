@@ -363,6 +363,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onToggleEmail = { on -> viewModel.setEmailCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
                             onOpenAccessSettings = { host.openNotificationAccessSettings() },
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
+                            onTestMessage = { text, done -> viewModel.pasteMessage(text, done) },
                         )
                     }
                     k == 8 -> {

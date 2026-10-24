@@ -185,7 +185,7 @@ object PasteRules {
         data object None : Evidence
     }
 
-    private val amount = Regex("""(?i)(?:rs\.?|inr|₹)\s*[0-9]""")
+    private val amount = Regex("""(?i)(?:rs\.?|inr|₹)\s*[0-9]|\b(?:debited|credited|spent|withdrawn)\s+(?:by|for|of|with)\s+[0-9][0-9,]*\.[0-9]{2}\b""")
     private val moved = Regex("""(?i)\b(?:debited|credited|withdrawn|deposited|spent)\b""")
     private val mask = Regex("""(?i)(?:\b(?:a/?c|acct|account|card)\b\s*(?:no\.?)?\s*(?:ending(?:\s+in|\s+with)?)?\s*[:*]?\s*[x*]*[0-9]{3,6}\b|\bending\s+(?:in\s+|with\s+)?[0-9]{4}\b|\b[x*]{2,}[0-9]{3,6}\b)""")
 
