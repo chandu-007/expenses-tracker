@@ -129,6 +129,9 @@ CREATE TABLE entry (
 CREATE INDEX entry_time ON entry(occurred_at DESC, seq DESC) WHERE deleted = 0;
 CREATE INDEX entry_account_time ON entry(account_id, occurred_at DESC) WHERE deleted = 0;
 -- Account balances read only these two indexes (no table rows), so the home screen's balances stay cheap on a big ledger.
+-- Home narrowed to one account reads these two in time order (see recentEntriesByAccount)
+CREATE INDEX entry_account_time_seq ON entry(account_id, occurred_at DESC, seq DESC) WHERE deleted = 0;
+CREATE INDEX entry_counter_time ON entry(counter_account_id, occurred_at DESC, seq DESC) WHERE counter_account_id IS NOT NULL AND deleted = 0;
 CREATE INDEX entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0;
 CREATE INDEX entry_transfer_in ON entry(counter_account_id, to_amount_minor) WHERE kind = 'TRANSFER' AND deleted = 0;
 CREATE INDEX entry_refunds ON entry(refunds_entry) WHERE refunds_entry IS NOT NULL;
@@ -443,13 +446,19 @@ SELECT COUNT(*) FROM entry WHERE deleted = 0;
 recentEntries:
 SELECT * FROM entry WHERE deleted = 0 ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 
--- Home's list narrowed to one account: what was paid from it or into it, a transfer on either side.
-recentEntriesOfAccount:
-SELECT * FROM entry WHERE deleted = 0 AND (account_id = :account OR counter_account_id = :account) ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+-- Home's list narrowed to one account: what was paid from it (first query of each pair) and what a transfer put into it (second). Each is one indexed lookup
+-- in time order, so a rarely used account costs as little as a busy one; the two are merged by the caller (a single OR would scan the whole ledger).
+recentEntriesByAccount:
+SELECT * FROM entry WHERE deleted = 0 AND account_id = :account ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 
-entriesBeforeOfAccount:
-SELECT * FROM entry WHERE deleted = 0 AND (account_id = :account OR counter_account_id = :account) AND (occurred_at, seq) < (:occurredAt, :seq)
-ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+recentEntriesByCounter:
+SELECT * FROM entry WHERE deleted = 0 AND counter_account_id = :account ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+entriesBeforeByAccount:
+SELECT * FROM entry WHERE deleted = 0 AND account_id = :account AND (occurred_at, seq) < (:occurredAt, :seq) ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
+
+entriesBeforeByCounter:
+SELECT * FROM entry WHERE deleted = 0 AND counter_account_id = :account AND (occurred_at, seq) < (:occurredAt, :seq) ORDER BY occurred_at DESC, seq DESC LIMIT :limit;
 
 -- Keyset paging: pass the occurred_at and seq of the last row already shown. Unlike OFFSET, the cost does not
 -- grow with how far the user has scrolled (24 ms at row 100,000 with OFFSET on an emulator, measured).

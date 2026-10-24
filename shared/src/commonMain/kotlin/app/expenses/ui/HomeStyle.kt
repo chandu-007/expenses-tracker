@@ -202,6 +202,9 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
 enum class Flow3 { OUT, IN, MOVE }
 
 fun flowOf(kind: String, inflow: Boolean): Flow3 = when {
+    // Home narrowed to one account: a transfer is money in or out for that account
+    kind == "TRANSFER_IN" -> Flow3.IN
+    kind == "TRANSFER_OUT" -> Flow3.OUT
     kind == "TRANSFER" -> Flow3.MOVE
     inflow -> Flow3.IN
     else -> Flow3.OUT

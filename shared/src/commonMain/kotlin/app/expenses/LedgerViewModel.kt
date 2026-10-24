@@ -888,7 +888,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     @Volatile private var homeAccount: String? = null
 
     private fun recentRows(q: app.expenses.core.storage.db.SchemaQueries, want: Long) =
-        homeAccount?.let { q.recentEntriesOfAccount(it, want).executeAsList() } ?: q.recentEntries(want).executeAsList()
+        homeAccount?.let { a -> merged(q.recentEntriesByAccount(a, want).executeAsList(), q.recentEntriesByCounter(a, want).executeAsList(), want) } ?: q.recentEntries(want).executeAsList()
+
+    /** The two indexed lookups of an account's entries (paid from it, transferred into it) as one list in the order of Home's list, [limit] long. */
+    private fun merged(a: List<app.expenses.core.storage.db.Entry>, b: List<app.expenses.core.storage.db.Entry>, limit: Long) =
+        (a + b).sortedWith(compareByDescending<app.expenses.core.storage.db.Entry> { it.occurred_at }.thenByDescending { it.seq }).take(limit.toInt())
 
     /** Narrows Home's list to one account (what went out of it or into it), or back to every account with null. */
     fun showAccountOnHome(accountId: String?) {
@@ -910,7 +914,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             container.write { ok ->
                 if (endReached) return@write
                 val last = loaded.lastOrNull() ?: return@write
-                val page = homeAccount?.let { ok.db.schemaQueries.entriesBeforeOfAccount(it, last.occurred_at, last.seq, PAGE).executeAsList() } ?: ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
+                val page = homeAccount?.let { a -> val q = ok.db.schemaQueries; merged(q.entriesBeforeByAccount(a, last.occurred_at, last.seq, PAGE).executeAsList(), q.entriesBeforeByCounter(a, last.occurred_at, last.seq, PAGE).executeAsList(), PAGE) } ?: ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
                 if (page.size < PAGE) endReached = true
                 if (page.isEmpty()) return@write
                 loaded.addAll(page)
@@ -2790,7 +2794,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private val dateFormat = DatePattern("d MMM yyyy")
 
-    private fun toRow(e: Entry, firstCategory: Map<String, String> = loadedCategory): RowUi = RowUi(
+    private fun toRow(e: Entry, firstCategory: Map<String, String> = loadedCategory): RowUi = homeAccount.let { shown ->
+        val row = toRowPlain(e, firstCategory)
+        // narrowed to one account, a transfer says which way it went for that account: into it is money in, out of it is money out
+        if (shown != null && e.kind == "TRANSFER") row.copy(kind = if (e.counter_account_id == shown) "TRANSFER_IN" else "TRANSFER_OUT") else row
+    }
+
+    private fun toRowPlain(e: Entry, firstCategory: Map<String, String>): RowUi = RowUi(
         seq = e.seq,
         id = e.id,
         title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },

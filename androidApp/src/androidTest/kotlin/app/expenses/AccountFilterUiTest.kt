@@ -41,6 +41,8 @@ class AccountFilterUiTest {
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
 
+    private fun amountOf(title: String): String = compose.onNodeWithTag("amount_$title", useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
+
     private fun spend(id: String, merchant: String, account: String, ago: Long) = runBlocking {
         container.write { ok -> ok.store.save(Expense(EntryId(id), System.currentTimeMillis() - ago, AccountId(account), Money(10_000, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(10_000, Currency.INR)))), EntryDetails(merchant = merchant)) }
     }
@@ -54,9 +56,14 @@ class AccountFilterUiTest {
         tap("balance_chip_Cash")
         waitFor("account_filter_note"); waitGone("row_FromBank")
         assertTrue(has("row_FromCash") && has("row_BankToCash"), "cash shows its own entry and the transfer into it")
+        assertTrue(amountOf("BankToCash").startsWith("+"), "into Cash it is money in: ${amountOf("BankToCash")}")
         tap("balance_chip_Cash") // again: back to everything
         waitFor("row_FromBank"); waitGone("account_filter_note")
         tap("balance_chip_Bank"); waitGone("row_FromCash"); assertTrue(has("row_FromBank") && has("row_BankToCash"))
+        assertTrue(amountOf("BankToCash").startsWith("-"), "out of Bank it is money out: ${amountOf("BankToCash")}")
+        tap("account_filter_clear"); waitFor("row_FromCash")
+        assertTrue(!amountOf("BankToCash").startsWith("+") && !amountOf("BankToCash").startsWith("-"), "unfiltered, a transfer has no sign: ${amountOf("BankToCash")}")
+        tap("balance_chip_Bank")
         tap("account_filter_clear"); waitFor("row_FromCash"); waitFor("row_FromBank")
     }
 

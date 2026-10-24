@@ -21,6 +21,8 @@ object SchemaUpgrade {
         }
         if ("kind" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN kind TEXT NOT NULL DEFAULT 'EXPENSE'")
         if ("to_account_id" !in columns(driver, "recurring")) run(driver, "ALTER TABLE recurring ADD COLUMN to_account_id TEXT")
+        run(driver, "CREATE INDEX IF NOT EXISTS entry_account_time_seq ON entry(account_id, occurred_at DESC, seq DESC) WHERE deleted = 0")
+        run(driver, "CREATE INDEX IF NOT EXISTS entry_counter_time ON entry(counter_account_id, occurred_at DESC, seq DESC) WHERE counter_account_id IS NOT NULL AND deleted = 0")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_account_sums ON entry(account_id, kind, direction, amount_minor) WHERE deleted = 0")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_transfer_in ON entry(counter_account_id, to_amount_minor) WHERE kind = 'TRANSFER' AND deleted = 0")
         run(driver, "CREATE TABLE IF NOT EXISTS attachment (id TEXT NOT NULL PRIMARY KEY, entry_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size_bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at INTEGER NOT NULL)")
