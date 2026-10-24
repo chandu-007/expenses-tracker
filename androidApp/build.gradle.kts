@@ -15,8 +15,8 @@ android {
         applicationId = "app.expenses"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.4.3"
+        versionCode = 14
+        versionName = "0.4.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Test-data seeding through an intent extra exists only where this is true; never in release.
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
