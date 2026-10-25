@@ -30,7 +30,7 @@ class LoansUiTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    @Before fun fresh() { runBlocking { container.startFresh() } }
+    @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } } }
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

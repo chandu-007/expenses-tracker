@@ -106,6 +106,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
             Column {
                 if (a.last4 != null) Text("••••  ${a.last4}", color = ink.copy(alpha = 0.85f), style = (if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium).copy(fontFamily = FontFamily.Monospace, letterSpacing = 1.sp))
                 if (!compact) a.card?.statusText?.takeIf { it.isNotEmpty() }?.let { Text(it, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall, maxLines = 2, modifier = Modifier.testTag("card_status_${a.name}")) }
+                if (!compact && a.hasCardSummary) a.card?.let { CardSummaryLines(it, Triple("tile_cycle_spend_${a.name}", "tile_limit_use_${a.name}", "tile_due_line_${a.name}"), ink.copy(alpha = 0.9f), Modifier.padding(top = 6.dp)) }
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
@@ -154,11 +155,13 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
     val cardH = 168.dp
     val gap = 12.dp
     val n = accounts.size
+    // a credit card with its summary is taller than the others; the stack and the spread lay each card out by its own height
+    val heights = accounts.map { a -> cardH + (if (a.hasCardSummary) a.card?.let(::cardSummaryExtra) ?: 0.dp else 0.dp) }
     // the edge of each card that shows while stacked: less when there are many, so the stack never grows tall
     // each card's edge is a whole line (name, digits, balance), however many cards there are: the stack grows with them instead of squeezing the lines out
     val peek = if (n <= 1) 0.dp else 46.dp
-    val stackedH = cardH + peek * (n - 1)
-    val spreadH = (cardH + gap) * n - gap
+    val stackedH = (heights.lastOrNull() ?: cardH) + peek * (n - 1)
+    val spreadH = heights.fold(0.dp) { sum, h -> sum + h + gap } - gap
     val density = androidx.compose.ui.platform.LocalDensity.current
     Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("accounts_stack")) {
         androidx.compose.animation.AnimatedVisibility(expanded && n > 1) {
@@ -167,11 +170,12 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
         val shown = with(density) { (stackedH.toPx() + (spreadH.toPx() - stackedH.toPx()) * open.value).toDp() }
         Box(Modifier.fillMaxWidth().height(shown)) {
             accounts.forEachIndexed { i, a ->
-                val y = with(density) { (peek.toPx() * i + ((cardH + gap).toPx() * i - peek.toPx() * i) * open.value).toDp() }
+                val spreadY = heights.take(i).fold(0.dp) { sum, h -> sum + h + gap }
+                val y = with(density) { (peek.toPx() * i + (spreadY.toPx() - peek.toPx() * i) * open.value).toDp() }
                 AccountTile(
                     a, compact = false, onClick = { if (expanded) onOpen(a) else expanded = true },
                     stripAmount = if (i == n - 1) 0f else (1f - open.value).coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxWidth().height(cardH).offset(y = y).shadow(if (i == 0) 0.dp else 8.dp, RoundedCornerShape(22.dp), clip = false),
+                    modifier = Modifier.fillMaxWidth().height(heights[i]).offset(y = y).shadow(if (i == 0) 0.dp else 8.dp, RoundedCornerShape(22.dp), clip = false),
                 )
             }
         }

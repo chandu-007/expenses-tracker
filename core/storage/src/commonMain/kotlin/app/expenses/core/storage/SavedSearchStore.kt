@@ -3,13 +3,18 @@ package app.expenses.core.storage
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
 
-/** A search kept under a name. [kind] is ANY, EXPENSE or INCOME and [range] is ANY, LAST_30_DAYS, THIS_PERIOD or THIS_YEAR (the screen's own names). */
+/**
+ * A search kept under a name. [kind] is ANY, EXPENSE or INCOME and [range] is ANY, LAST_30_DAYS, THIS_PERIOD or THIS_YEAR (the screen's own names).
+ * [fromDay] and [toDay] are chosen dates (days since 1970-01-01, both included; either may be left open) and [accountId] limits the search to one account;
+ * searches kept before these existed read as null for all three.
+ */
 data class SavedSearch(
     val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "",
     val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null,
+    val fromDay: Long? = null, val toDay: Long? = null, val accountId: String? = null,
 ) {
     /** A search with nothing in it would match everything, which is not worth keeping. */
-    val hasConditions: Boolean get() = text.isNotBlank() || minRupees.isNotBlank() || maxRupees.isNotBlank() || categoryId != null || kind != "ANY" || range != "ANY" || tag != null
+    val hasConditions: Boolean get() = text.isNotBlank() || minRupees.isNotBlank() || maxRupees.isNotBlank() || categoryId != null || kind != "ANY" || range != "ANY" || tag != null || fromDay != null || toDay != null || accountId != null
 }
 
 /** Names of saved searches: 1 to [MAX_NAME] characters, each different ignoring case and spacing. */
@@ -28,11 +33,12 @@ class SavedSearchStore(private val db: ExpensesDb, private val clock: HlcClock, 
             val clash = list().firstOrNull { it.id != search.id && it.name.trim().replace(Regex("\\s+"), " ").equals(name, ignoreCase = true) }
             require(clash == null) { "You already have a saved search called \"${clash!!.name}\"." }
             val before = q.savedSearchById(search.id).executeAsOneOrNull()
-            q.upsertSavedSearch(search.id, name, search.text.trim(), search.minRupees.trim(), search.maxRupees.trim(), search.categoryId, search.kind, search.range, search.tag)
+            q.upsertSavedSearch(search.id, name, search.text.trim(), search.minRupees.trim(), search.maxRupees.trim(), search.categoryId, search.kind, search.range, search.tag, search.fromDay, search.toDay, search.accountId)
             val after = q.savedSearchById(search.id).executeAsOne()
             fun log(field: String, old: String?, new: String?) { if (before == null || old != new) q.insertOp(clock.now(nowMillis()).encode(), "saved_search", search.id, field, new) }
             log("name", before?.name, after.name); log("text", before?.text, after.text); log("min_rupees", before?.min_rupees, after.min_rupees); log("max_rupees", before?.max_rupees, after.max_rupees)
             log("category_id", before?.category_id, after.category_id); log("kind", before?.kind, after.kind); log("range_kind", before?.range_kind, after.range_kind); log("tag", before?.tag, after.tag)
+            log("from_day", before?.from_day?.toString(), after.from_day?.toString()); log("to_day", before?.to_day?.toString(), after.to_day?.toString()); log("account_id", before?.account_id, after.account_id)
         }
     }
 
@@ -45,7 +51,7 @@ class SavedSearchStore(private val db: ExpensesDb, private val clock: HlcClock, 
         }
     }
 
-    private fun of(r: app.expenses.core.storage.db.Saved_search) = SavedSearch(r.id, r.name, r.text, r.min_rupees, r.max_rupees, r.category_id, r.kind, r.range_kind, r.tag)
+    private fun of(r: app.expenses.core.storage.db.Saved_search) = SavedSearch(r.id, r.name, r.text, r.min_rupees, r.max_rupees, r.category_id, r.kind, r.range_kind, r.tag, r.from_day, r.to_day, r.account_id)
 
     companion object { const val MAX_NAME = 40 }
 }

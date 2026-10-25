@@ -75,7 +75,7 @@ class Device(node: String) {
         recurring.save(RecurringItem("pay", "Pay", m(5_000_000), CategoryId("Other"), AccountId("bank"), "Acme", Schedule(RepeatUnit.MONTH, 1, LocalDate(2026, 9, 1)), auto = true, kind = RecurringKind.INCOME))
         recurring.post("rent", LocalDate(2026, 8, 31), TimeZone.UTC)
         recurring.skip("power", LocalDate(2026, 9, 1))
-        SavedSearchStore(db, clock) { 5_000L }.save(SavedSearch("ss", "Big food", text = "swiggy", minRupees = "500", categoryId = "Food", kind = "EXPENSE", range = "THIS_YEAR", tag = "Trip"))
+        SavedSearchStore(db, clock) { 5_000L }.save(SavedSearch("ss", "Big food", text = "swiggy", minRupees = "500", categoryId = "Food", kind = "EXPENSE", range = "THIS_YEAR", tag = "Trip", fromDay = 20_362, toDay = 20_376, accountId = "cash"))
         templates.putSetting("hide_amounts", "1")
         templates.putSetting("home_layout", "QUICK_ENTRIES,BUDGET,BILLS,BALANCES;BILLS")
         notifications.setPrefs(NotificationPrefs(bills = false, quietStartMinute = 23 * 60 + 30, billHour = 18))

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
@@ -114,6 +115,7 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.formatted
 import androidx.compose.ui.graphics.Color
+import app.expenses.core.domain.FirstWeekStep
 import app.expenses.core.domain.parseAmount
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -133,6 +135,10 @@ fun EntryListScreen(
     onManageAccounts: () -> Unit,
     /** Tapping an account on Home's strip: show only its entries (null: all). */
     onFilterAccount: (String?) -> Unit = {},
+    /** While Home shows one account: limit it to a month, or all dates. */
+    onSetHomePeriod: (app.expenses.HomePeriod) -> Unit = {},
+    /** Opens Search limited to this account. */
+    onSearchAccount: (String) -> Unit = {},
     onOpenBudget: () -> Unit,
     onOpenRecurring: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -160,6 +166,7 @@ fun EntryListScreen(
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
     onSnoozeBackupNudge: () -> Unit,
+    onDismissFirstWeek: () -> Unit = {},
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
     onBulkCategory: (List<String>, String) -> Unit,
@@ -237,6 +244,7 @@ fun EntryListScreen(
         if (moreOpen) {
             // a page of its own (not a pop-up over the list): everything the app can do, grouped. Opening a place keeps this page underneath, so Back comes back to it
             val platform = LocalPlatform.current
+            var feedbackFailed by remember { mutableStateOf(false) }
             val money = Area.MONEY; val teal = Area.CAPTURE; val purple = Area.LOOK; val green = Area.PRIVACY; val amber = Area.HELP
             val reads = platform.supportsSmsCapture || platform.supportsShortcutsCapture
             val activeAccounts = state.accountRows.filter { !it.archived }
@@ -280,6 +288,7 @@ fun EntryListScreen(
                     )),
                     MoreSection("Help", amber.top, amber.bottom, listOf(
                         MoreRow("open_guide", Icons.Outlined.Info, "How to use this app", "A two-minute tour of the real screens", onClick = onOpenGuide),
+                        MoreRow("open_feedback", Icons.Outlined.Feedback, "Send feedback", if (feedbackFailed) FEEDBACK_NO_MAIL_APP else "Opens your mail app with the version and phone model filled in. You send it", onClick = { feedbackFailed = !sendFeedback(platform) }),
                     )),
                 ),
             )
@@ -307,6 +316,7 @@ fun EntryListScreen(
             Column(Modifier.foldAway(fold)) {
             if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
             if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
+            FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
             state.homeLayout.visible().forEach { section ->
                 when (section) {
                     HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
@@ -341,8 +351,15 @@ fun EntryListScreen(
                 TextButton(onClick = onManageAccounts, modifier = Modifier.testTag("account_filter_manage")) { Text("Edit account") }
                 TextButton(onClick = { onFilterAccount(null) }, modifier = Modifier.testTag("account_filter_clear")) { Text("Show all") }
             }
+            // narrow the account's list by date; searching inside it is one tap away
+            if (filtered != null) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(Triple(app.expenses.HomePeriod.THIS_MONTH, "This month", "account_period_this"), Triple(app.expenses.HomePeriod.LAST_MONTH, "Last month", "account_period_last"), Triple(app.expenses.HomePeriod.ALL, "All", "account_period_all")).forEach { (p, label, tag) ->
+                    FilterChip(selected = state.homePeriod == p, onClick = { onSetHomePeriod(p) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
+                }
+                TextButton(onClick = { onSearchAccount(filtered.id) }, modifier = Modifier.testTag("account_search")) { Text("Search") }
+            }
             if (state.rows.isEmpty() && filtered != null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nothing in ${filtered.name} yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_filter_empty")) }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(if (state.homePeriod == app.expenses.HomePeriod.ALL) "Nothing in ${filtered.name} yet." else "Nothing in ${filtered.name} in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_filter_empty")) }
             } else if (state.rows.isEmpty()) {
                 if (state.showWelcome) {
                     WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)

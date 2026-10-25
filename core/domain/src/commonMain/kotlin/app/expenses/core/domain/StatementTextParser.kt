@@ -31,7 +31,27 @@ object StatementTextParser {
      * [table] has the header row and one row per dated line; [rawLines] holds, for each row of [table] (the header's is empty), the statement text it was
      * read from, and [cardPayments] counts the payments to the card that were left out. [note] says in words how the direction was read.
      */
-    data class Result(val table: CsvTable, val rawLines: List<String>, val cardPayments: Int, val convention: Convention, val note: String) {
+    data class Result(
+        val table: CsvTable, val rawLines: List<String>, val cardPayments: Int, val convention: Convention, val note: String,
+        /** What the statement prints as its own totals, when [StatementSummary] could read them. */
+        val summary: StatementSummary.Summary? = null,
+        /** The sum of the payments to the card that were left out ([cardPayments] of them); on a card statement they are part of the printed credits. */
+        val cardPaymentMinor: Long = 0,
+    ) {
+        /**
+         * A sentence for the person when the totals the statement prints differ from what [found] adds up to (a card's left-out payments count as credits), else
+         * null. [found] are the transactions the importer kept, after any change to the columns.
+         */
+        fun check(found: List<StatementTxn>): String? {
+            val debits = found.filter { it.flow == Flow.SPENDING }
+            val credits = found.filter { it.flow == Flow.INCOME }
+            val card = convention == Convention.CARD
+            return StatementSummary.check(
+                summary, debits.sumOf { it.minor }, debits.size,
+                credits.sumOf { it.minor } + if (card) cardPaymentMinor else 0L, credits.size + if (card) cardPayments else 0,
+            )
+        }
+
         /** Rows after the header. Some of them may have no amount or no direction; the importer counts those separately. */
         val rowCount: Int get() = table.rows.size - 1
     }
@@ -124,7 +144,10 @@ object StatementTextParser {
 
     private class Tok(val minor: Long, val negative: Boolean, val marker: Flow?, val raw: String, val valid: Boolean)
 
-    private class Item(val date: String, val firstLine: Int, var description: String, val raw: MutableList<String>, var tokens: List<Tok>, var continued: Int = 0)
+    /** [parts] are the pieces of the description as the statement wrapped it, joined by [StatementDescriptions.join] once the whole statement has been read. */
+    private class Item(val date: String, val firstLine: Int, description: String, val raw: MutableList<String>, var tokens: List<Tok>, var continued: Int = 0) {
+        val parts = mutableListOf(description)
+    }
 
     private class Opening(val balance: Long)
 
@@ -249,31 +272,42 @@ object StatementTextParser {
             val (description, tokens) = peel(line)
             if (p.tokens.isEmpty() && tokens.isNotEmpty()) {
                 p.tokens = tokens
-                p.description = "${p.description} $description"
+                p.parts += description
             } else if (tokens.isNotEmpty()) {
                 flush() // another line with amounts and no date: a total or a note, not part of this one
                 continue
-            } else p.description = "${p.description} $description"
+            } else p.parts += description
             p.raw += raw
             p.continued++
         }
         flush()
 
         val items = events.filterIsInstance<Item>()
+        // the width the bank cut its narration at: the longest piece that has another piece after it, and how many pieces reached it
+        val wrapped = items.flatMap { it.parts.dropLast(1) }
+        val wrapWidth = wrapped.maxOfOrNull { it.length } ?: 0
+        val wrapFilled = wrapped.count { it.length >= wrapWidth - 1 }
+        val known = StatementDescriptions.words(text)
         val anyDirection = items.any { i -> i.tokens.firstOrNull()?.let { it.marker != null || it.negative } == true }
         val rows = ArrayList<List<String>>()
         val raws = ArrayList<String>()
         val lineNumbers = ArrayList<Int>()
         rows += HEADER; raws += ""; lineNumbers += 0
         var payments = 0
+        var paymentMinor = 0L
         var previousBalance: Long? = if (card) null else summaryOpening(text)
         var usedBalance = false
 
         for (e in events) {
             if (e is Opening) { previousBalance = e.balance; continue }
             val item = e as Item
-            val description = cleanDescription(item.description)
-            if (card && PAYMENT_TO_CARD.containsMatchIn(description)) { payments++; continue }
+            val joined = cleanDescription(StatementDescriptions.join(item.parts, wrapWidth, wrapFilled, known))
+            if (card && PAYMENT_TO_CARD.containsMatchIn(joined)) {
+                payments++
+                item.tokens.firstOrNull()?.takeIf { it.valid }?.let { paymentMinor += it.minor }
+                continue
+            }
+            val description = StatementDescriptions.tidy(joined).ifEmpty { joined }
             val tokens = item.tokens
             var amount: Tok? = null
             var flow: Flow? = null
@@ -331,6 +365,6 @@ object StatementTextParser {
             anyDirection -> "Money in or out was read from the Dr/Cr marks and minus signs."
             else -> "The statement does not say which lines are money in or out, so every amount is read as spending."
         }
-        return Result(CsvTable(rows, ',', false, lineNumbers), raws, payments, effective, note)
+        return Result(CsvTable(rows, ',', false, lineNumbers), raws, payments, effective, note, StatementSummary.find(text), paymentMinor)
     }
 }

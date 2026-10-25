@@ -29,7 +29,7 @@ class OriginUiTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    private fun resetApp() { runBlocking { container.startFresh() } }
+    private fun resetApp() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 

@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import app.expenses.AccountUi
 import app.expenses.BillRowUi
 import app.expenses.BillsUi
+import app.expenses.core.domain.Money
 
 private val AMBER = Color(0xFFB26A00)
 
@@ -72,7 +73,13 @@ fun BillsScreen(
     ui: BillsUi, accounts: List<AccountUi>, onBack: () -> Unit,
     onAdd: (String) -> Unit, onSkip: (String) -> Unit, onSetDue: (String, Long) -> Unit, onUnpay: (String) -> Unit,
     onPay: (id: String, payFromId: String, cardId: String, amount: String, record: Boolean, done: (String?) -> Unit) -> Unit,
+    onPostRepeat: (itemId: String, epochDay: Long, amount: Money?) -> Unit, onSkipRepeat: (itemId: String, epochDay: Long) -> Unit,
 ) {
+    var askingFor by remember { mutableStateOf<BillRowUi?>(null) }
+    askingFor?.let { r -> AmountDialog("Amount for ${r.title}", onConfirm = { onPostRepeat(r.repeatItemId, r.repeatDay, it); askingFor = null }, onDismiss = { askingFor = null }) }
+    // a waiting repeating item: Post it posts the occurrence as Home does (asking the amount when it differs each time), Skip drops it for good
+    val postIt: (BillRowUi) -> Unit = { r -> if (r.amountPlain.isEmpty()) askingFor = r else onPostRepeat(r.repeatItemId, r.repeatDay, null) }
+    val skipIt: (BillRowUi) -> Unit = { r -> onSkipRepeat(r.repeatItemId, r.repeatDay) }
     var paying by rememberSaveable { mutableStateOf<String?>(null) }
     var dating by rememberSaveable { mutableStateOf<String?>(null) }
     val all = ui.found + ui.coming
@@ -105,7 +112,7 @@ fun BillsScreen(
             }
             if (ui.coming.isNotEmpty()) {
                 item(key = "coming") { Section("Coming up", "Sorted by due date. You are reminded three days before, on the day, and if it is overdue.", "bills_coming_title", Modifier.animateItem()) }
-                items(ui.coming, key = { "c" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem()) }
+                items(ui.coming, key = { "c" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem(), onPostRepeat = postIt, onSkipRepeat = skipIt) }
             }
             if (ui.paid.isNotEmpty()) {
                 item(key = "paid") { Section("Paid", null, "bills_paid_title", Modifier.animateItem()) }
@@ -125,7 +132,7 @@ private fun Section(title: String, note: String?, tag: String, modifier: Modifie
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> Unit, onPay: (String) -> Unit, onSetDate: (String) -> Unit, onUnpay: (String) -> Unit, modifier: Modifier = Modifier, flourish: Boolean = false) {
+private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> Unit, onPay: (String) -> Unit, onSetDate: (String) -> Unit, onUnpay: (String) -> Unit, modifier: Modifier = Modifier, flourish: Boolean = false, onPostRepeat: (BillRowUi) -> Unit = {}, onSkipRepeat: (BillRowUi) -> Unit = {}) {
     var showText by rememberSaveable(b.id) { mutableStateOf(false) }
     val found = b.status == "FOUND"; val paid = b.status == "PAID"
     val tint = when { b.overdue && !paid -> MaterialTheme.colorScheme.error; b.soon && !paid -> AMBER; else -> MaterialTheme.colorScheme.primary }
@@ -155,6 +162,10 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
                     Button(onClick = { onAdd(b.id) }, modifier = Modifier.weight(1f).testTag("bill_add_${b.id}")) { Text("Add to my bills") }
                     OutlinedButton(onClick = { onSkip(b.id) }, modifier = Modifier.testTag("bill_skip_${b.id}")) { Text("Skip") }
                 }
+                b.isRepeat -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { onPostRepeat(b) }, modifier = Modifier.weight(1f).testTag("bill_pay_${b.id}")) { Text("Post it") }
+                    OutlinedButton(onClick = { onSkipRepeat(b) }, modifier = Modifier.testTag("bill_remove_${b.id}")) { Text("Skip") }
+                }
                 paid -> TextButton(onClick = { onUnpay(b.id) }, modifier = Modifier.testTag("bill_unpay_${b.id}")) { Text("Not paid after all") }
                 else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { onPay(b.id) }, modifier = Modifier.weight(1f).testTag("bill_pay_${b.id}")) { Text("Mark paid") }
@@ -162,7 +173,7 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
                 }
             }
             if (!paid) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (!b.id.startsWith("card:") && (b.dueEpochDay == null || b.overdue)) TextButton(onClick = { onSetDate(b.id) }, modifier = Modifier.testTag("bill_setdate_${b.id}")) { Text(if (b.dueEpochDay == null) "Set the due date" else "Change the due date") }
+                if (!b.id.startsWith("card:") && !b.isRepeat && (b.dueEpochDay == null || b.overdue)) TextButton(onClick = { onSetDate(b.id) }, modifier = Modifier.testTag("bill_setdate_${b.id}")) { Text(if (b.dueEpochDay == null) "Set the due date" else "Change the due date") }
                 if (found && b.body.isNotEmpty()) TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("bill_text_toggle_${b.id}")) { Text(if (showText) "Hide message" else "Show message") }
             }
             if (showText) Text(b.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("bill_text_${b.id}"))

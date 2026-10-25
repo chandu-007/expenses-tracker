@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
@@ -31,6 +33,11 @@ import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberDatePickerState
+import app.expenses.core.domain.SearchDates
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -98,6 +105,8 @@ fun SearchScreen(
     onRemember: (String) -> Unit = {},
     onForgetRecent: (String) -> Unit = {},
     onClearRecent: () -> Unit = {},
+    /** An account to search inside from the start (Home's "Search this account"); the person may change it. */
+    initialAccountId: String? = null,
 ) {
     var savingName by rememberSaveable { mutableStateOf<String?>(null) }
     var savingProblem by remember { mutableStateOf<String?>(null) }
@@ -127,18 +136,39 @@ fun SearchScreen(
     var kind by rememberSaveable { mutableStateOf(SearchKind.ANY) }
     var range by rememberSaveable { mutableStateOf(SearchRange.ANY) }
     var tag by rememberSaveable { mutableStateOf<String?>(null) }
+    // chosen days (since 1970-01-01, both included, either may be open) and the one account searched in
+    var fromDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var toDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
+    var pickingDay by rememberSaveable { mutableStateOf<String?>(null) }
+    val dateProblem = SearchDates.problem(fromDay, toDay)
     var tagMenu by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag) {
+    fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag, fd: Long? = fromDay, td: Long? = toDay, ac: String? = accountId) {
         selected = emptyList() // the results are about to be different: a selection made on the old ones would be of entries no longer listed
-        text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g
-        onChange(SearchInput(t, lo, hi, c, k, r, g))
+        text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g; fromDay = fd; toDay = td; accountId = ac
+        onChange(SearchInput(t, lo, hi, c, k, r, g, fd, td, ac))
     }
-    fun changedAll(i: SearchInput) = changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag)
+    fun changedAll(i: SearchInput) = changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId)
     // The screen may be re-created (rotation) with its inputs restored: search again so the results match what is shown.
-    LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null) onChange(SearchInput(text, min, max, categoryId, kind, range, tag)) }
+    LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null || fromDay != null || toDay != null || accountId != null) onChange(SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)) }
+
+    pickingDay?.let { which ->
+        // the date picker counts days as UTC midnights
+        val picker = rememberDatePickerState(initialSelectedDateMillis = (if (which == "from") fromDay else toDay)?.times(86_400_000L))
+        DatePickerDialog(
+            onDismissRequest = { pickingDay = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    picker.selectedDateMillis?.let { ms -> val d = ms.floorDiv(86_400_000L); if (which == "from") changed(r = SearchRange.ANY, fd = d) else changed(r = SearchRange.ANY, td = d) }
+                    pickingDay = null
+                }, modifier = Modifier.testTag("search_date_ok")) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickingDay = null }) { Text("Cancel") } },
+        ) { DatePicker(state = picker) }
+    }
 
     savingName?.let { n ->
         androidx.compose.material3.AlertDialog(
@@ -149,7 +179,7 @@ fun SearchScreen(
                     savingProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("saved_problem")) }
                 }
             },
-            confirmButton = { TextButton(onClick = { onSaveSearch(n, SearchInput(text, min, max, categoryId, kind, range, tag)) { p -> if (p == null) { savingName = null; savingProblem = null } else savingProblem = p } }, modifier = Modifier.testTag("saved_ok")) { Text("Save") } },
+            confirmButton = { TextButton(onClick = { onSaveSearch(n, SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)) { p -> if (p == null) { savingName = null; savingProblem = null } else savingProblem = p } }, modifier = Modifier.testTag("saved_ok")) { Text("Save") } },
             dismissButton = { TextButton(onClick = { savingName = null; savingProblem = null }) { Text("Cancel") } },
         )
     }
@@ -220,6 +250,11 @@ fun SearchScreen(
                 }
                 FilterChip(selected = kind == SearchKind.EXPENSE, onClick = { changed(k = if (kind == SearchKind.EXPENSE) SearchKind.ANY else SearchKind.EXPENSE) }, label = { Text("Expenses") }, modifier = Modifier.testTag("search_kind_expense"))
                 FilterChip(selected = kind == SearchKind.INCOME, onClick = { changed(k = if (kind == SearchKind.INCOME) SearchKind.ANY else SearchKind.INCOME) }, label = { Text("Income") }, modifier = Modifier.testTag("search_kind_income"))
+                // one account (what was paid from it and what was moved into it), or any; in the same row as the kind so the results keep their room
+                if (accounts.size > 1 || accountId != null) {
+                    FilterChip(selected = accountId == null, onClick = { changed(ac = null) }, label = { Text("Any account") }, modifier = Modifier.testTag("search_account_any"))
+                    accounts.forEach { a -> FilterChip(selected = accountId == a.id, onClick = { changed(ac = if (accountId == a.id) null else a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("search_account_${a.name}")) }
+                }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (state.hasConditions && state.problem == null) androidx.compose.material3.AssistChip(
@@ -227,20 +262,26 @@ fun SearchScreen(
                     modifier = Modifier.testTag("save_search"),
                 )
                 listOf(SearchRange.LAST_30_DAYS to "Last 30 days", SearchRange.THIS_PERIOD to "This period", SearchRange.THIS_YEAR to "This year").forEach { (r, label) ->
-                    FilterChip(selected = range == r, onClick = { changed(r = if (range == r) SearchRange.ANY else r) }, label = { Text(label) }, trailingIcon = if (range == r) ({ Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null, modifier = Modifier.testTag("search_range_${r.name}"))
+                    FilterChip(selected = range == r, onClick = { changed(r = if (range == r) SearchRange.ANY else r, fd = null, td = null) }, label = { Text(label) }, trailingIcon = if (range == r) ({ Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null, modifier = Modifier.testTag("search_range_${r.name}"))
                 }
+                // specific days: either end may be left open; the first and the last day are both included
+                DayField("From", fromDay, onPick = { pickingDay = "from" }, onClear = { changed(fd = null) }, tag = "search_date_from")
+                DayField("To", toDay, onPick = { pickingDay = "to" }, onClear = { changed(td = null) }, tag = "search_date_to")
             }
+            if (dateProblem != null) Text(dateProblem, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp).testTag("search_date_problem"))
+            else SearchDates.summary(fromDay, toDay)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("search_date_summary")) }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = min, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(lo = v) }, label = { Text("From ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_min"))
                 OutlinedTextField(value = max, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(hi = v) }, label = { Text("To ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_max"))
             }
             HorizontalDivider(Modifier.padding(top = 4.dp))
             when {
+                dateProblem != null -> Spacer(Modifier.height(0.dp)) // the message under the dates says it
                 state.problem != null -> Text(state.problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp).testTag("search_problem"))
                 !state.hasConditions -> SearchStart(
                     recent = recent, categories = categories,
                     onPick = { t -> changed(t = t) }, onForget = onForgetRecent, onClearRecent = onClearRecent,
-                    onTry = { i -> changedAll(i) },
+                    onTry = { i -> changedAll(i.copy(accountId = accountId)) },
                 )
                 state.searching -> Text("Searching…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_working"))
                 state.results.isEmpty() -> SearchEmpty("Nothing found.", "search_none")
@@ -297,6 +338,15 @@ fun SearchScreen(
             }
         }
     }
+}
+
+/** One end of the chosen days: a button showing the day (or "From"/"To" while open) that opens the picker, and a way to clear it. */
+@Composable
+private fun DayField(label: String, day: Long?, onPick: () -> Unit, onClear: () -> Unit, tag: String) {
+    OutlinedButton(onClick = onPick, modifier = Modifier.testTag(tag)) {
+        Text(if (day == null) "$label date" else "$label ${SearchDates.summary(day, day)}")
+    }
+    if (day != null) IconButton(onClick = onClear, modifier = Modifier.testTag(tag + "_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the $label date") }
 }
 
 /** What shows before anything is typed: the hint, the words searched for lately, and a few searches to start from. */

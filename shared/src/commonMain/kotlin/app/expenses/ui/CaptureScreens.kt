@@ -1,6 +1,7 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.Label
@@ -65,6 +70,10 @@ fun InboxScreen(
     // and an ordinary payment (a transfer or refund asks to be looked at)
     val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" }
     val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val easyIds = easy.map { it.id }.toSet()
+    // items from the same payee (or, with no payee, the same bank): "Add all from <payee>" on their cards adds the ones among them that need no decision
+    val byPayee = rows.groupBy { inboxGroupKey(it) }
+    fun addTogether(list: List<InboxRowUi>) { refused.clear(); list.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }
     val cur = app.expenses.core.domain.BaseCurrency.current
     fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit }.sumOf { it.amountMinor }, cur).formatted()
     if (confirmingAll) AlertDialog(
@@ -99,19 +108,34 @@ fun InboxScreen(
                     Text("${total(rows, false)} out · ${total(rows, true)} in. Check each one, or add the clear ones together.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (refused.isNotEmpty()) Text("${refused.size} could not be added: ${refused.first()}", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_add_all_problem"))
                     if (easy.size >= 2) Button(onClick = { confirmingAll = true }, modifier = Modifier.testTag("inbox_add_all")) { Text("Add all ${easy.size} clear ones") }
+                    if (easy.isNotEmpty()) Text("Clear ones can also be swiped: right to add, left to skip.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_swipe_hint"))
                 }
             }
-            items(rows, key = { it.id }) { r -> InboxCard(r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem()) }
+            items(rows, key = { it.id }) { r ->
+                val same = byPayee[inboxGroupKey(r)].orEmpty()
+                InboxCard(
+                    r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem(),
+                    swipeable = r.id in easyIds,
+                    payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
+                )
+            }
         }
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** What items are grouped by for "Add all from <payee>": the payee, or the bank when the text named none. */
+private fun inboxGroupKey(r: InboxRowUi): String = (r.payee?.takeIf { it.isNotBlank() } ?: r.issuer).trim().lowercase()
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
     onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Needs no decision (see [InboxScreen]): can be swiped, right to add as the Add button would, left to skip. Other cards do not move. */
+    swipeable: Boolean = false,
+    /** The items from this card's payee that need no decision, when two or more pending items share the payee; empty otherwise (no button). */
+    payeeGroup: List<InboxRowUi> = emptyList(), onAddPayee: (List<InboxRowUi>) -> Unit = {},
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
@@ -127,8 +151,39 @@ private fun InboxCard(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val credit = r.direction == "CREDIT"
     val flow = if (credit) Flow3.IN else Flow3.OUT
+    var snapBack by remember { mutableStateOf(0) }
+    val swipe = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                // the same as the Add button on this card; when it is refused the card slides back and says why
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                    onConfirm(r.id, account, if (credit) "" else category, "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
+                    true
+                }
+                SwipeToDismissBoxValue.EndToStart -> { onDismiss(r.id); true }
+                else -> false
+            }
+        },
+    )
+    LaunchedEffect(snapBack) { if (snapBack > 0) swipe.snapTo(SwipeToDismissBoxValue.Settled) }
+    SwipeToDismissBox(
+        state = swipe,
+        enableDismissFromStartToEnd = swipeable,
+        enableDismissFromEndToStart = swipeable,
+        modifier = modifier,
+        backgroundContent = {
+            val adding = swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            val skipping = swipe.dismissDirection == SwipeToDismissBoxValue.EndToStart
+            if (swipeable && (adding || skipping)) Box(
+                Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                    .background(if (adding) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 24.dp),
+                contentAlignment = if (adding) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd,
+            ) { Text(if (adding) "Add" else "Skip", style = MaterialTheme.typography.titleMedium, color = if (adding) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
+        },
+    ) {
     androidx.compose.material3.Card(
-        modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        Modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -198,6 +253,7 @@ private fun InboxCard(
                 if (r.duplicateNote != null) TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
                 if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
                 TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
+                if (payeeGroup.isNotEmpty()) TextButton(onClick = { onAddPayee(payeeGroup) }, modifier = Modifier.testTag("inbox_add_payee_${r.id}")) { Text("Add all from ${r.payee?.takeIf { it.isNotBlank() } ?: r.issuer} (${payeeGroup.size})") }
                 if (r.nameable) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
                 TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("inbox_text_toggle_${r.id}")) { Text(if (showText) "Hide message" else "Show message") }
             }
@@ -216,6 +272,7 @@ private fun InboxCard(
                 }
             }
         }
+    }
     }
 }
 

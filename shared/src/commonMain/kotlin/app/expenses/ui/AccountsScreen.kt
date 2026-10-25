@@ -158,6 +158,10 @@ private fun AccountDialog(
                     if (existing != null && existing.type == "CREDIT_CARD") {
                         TextButton(onClick = { cardOpen = true }, modifier = Modifier.testTag("card_dates")) { Text(if (existing.card == null) "Set billing dates and reminders" else "Billing dates: ${existing.card.termsText}") }
                     } else Text("Save the card first, then add its billing dates to get due-date reminders.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (existing != null && existing.hasCardSummary) existing.card?.let { c ->
+                        Text("Card summary", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("card_summary_title"))
+                        CardSummaryLines(c, Triple("card_cycle_spend", "card_limit_use", "card_due_line"), MaterialTheme.colorScheme.onSurface, barColor = limitBarColors(), trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                    }
                 
                     Text("Card network", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

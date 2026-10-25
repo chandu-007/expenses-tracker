@@ -274,7 +274,7 @@ class StatementTextParserTest {
         val r = StatementTextParser.parse(text)
         assertEquals(
             listOf(
-                "12/09/2025 | UPI/DR/123456789/AMAZON PAY INDIA MUMBAI | 1299.00 | Dr", "13/09/2025 | NEFT TO RAVI KUMAR REF 998877 HDFC0001234 | 500.00 | Dr",
+                "12/09/2025 | AMAZON PAY INDIA MUMBAI | 1299.00 | Dr", "13/09/2025 | NEFT TO RAVI KUMAR REF 998877 HDFC0001234 | 500.00 | Dr",
                 "14/09/2025 | SWIGGY | 90.00 | Dr",
             ),
             rows(r),
@@ -318,7 +318,7 @@ class StatementTextParserTest {
     fun aBankStatementWithoutMarksIsReadFromItsRunningBalance() {
         val r = StatementTextParser.parse(bank)
         assertEquals(Convention.BANK, r.convention)
-        assertEquals(listOf("02/09/2025 | UPI-SWIGGY-123 | 450.00 | Dr", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | ATM WDL | 5000.00 | Dr"), rows(r))
+        assertEquals(listOf("02/09/2025 | SWIGGY | 450.00 | Dr", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | ATM WDL | 5000.00 | Dr"), rows(r))
         assertTrue(r.note.contains("balance"), r.note)
     }
 
@@ -326,7 +326,7 @@ class StatementTextParserTest {
     fun withoutAnOpeningBalanceOnlyTheFirstLineIsUnknownAndIsReportedNotGuessed() {
         val text = bank.lines().filterNot { it.contains("Opening") }.joinToString("\n")
         val r = StatementTextParser.parse(text)
-        assertEquals(listOf("02/09/2025 | UPI-SWIGGY-123 | 450.00 | ?", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | ATM WDL | 5000.00 | Dr"), rows(r))
+        assertEquals(listOf("02/09/2025 | SWIGGY | 450.00 | ?", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | ATM WDL | 5000.00 | Dr"), rows(r))
         val p = import(text)
         assertEquals(2, p.txns.size)
         assertEquals(1, p.problems.size)
@@ -347,7 +347,7 @@ class StatementTextParserTest {
             03/09/2025 SALARY ACME CORP 0.00 50,000.00 59,550.00
             04/09/2025 BOTH 10.00 10.00 59,550.00
         """.trimIndent()
-        assertEquals(listOf("02/09/2025 | UPI-SWIGGY-123 | 450.00 | Dr", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | BOTH | 10.00 | ?"), rows(StatementTextParser.parse(text)))
+        assertEquals(listOf("02/09/2025 | SWIGGY | 450.00 | Dr", "03/09/2025 | SALARY ACME CORP | 50000.00 | Cr", "04/09/2025 | BOTH | 10.00 | ?"), rows(StatementTextParser.parse(text)))
     }
 
     @Test
@@ -363,7 +363,7 @@ class StatementTextParserTest {
     fun valueDateAtTheEndOfTheDescriptionIsDropped() {
         val r = StatementTextParser.parse("01/09/25 UPI-AMAZON 0000123456789 02/09/25 500.00 Dr")
         // the bank's reference number goes with its value date: it differs on every line, so left in it would stop the same shop being recognised twice
-        assertEquals(listOf("01/09/25 | UPI-AMAZON | 500.00 | Dr"), rows(r))
+        assertEquals(listOf("01/09/25 | AMAZON | 500.00 | Dr"), rows(r))
     }
 
     // ---- through the importer ----

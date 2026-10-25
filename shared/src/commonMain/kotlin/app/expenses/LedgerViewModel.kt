@@ -63,6 +63,7 @@ import app.expenses.core.domain.SimilarEntries
 import app.expenses.core.domain.SuggestionSource
 import app.expenses.core.domain.CardTerms
 import app.expenses.core.domain.CardText
+import app.expenses.core.domain.CardSummaryText
 import app.expenses.core.domain.CurrencyChoices
 import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.AttachmentRules
@@ -70,6 +71,10 @@ import app.expenses.core.domain.ImportProfiles
 import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.core.storage.SavedSearch
 import app.expenses.core.storage.resolveCategory
+import app.expenses.core.domain.FirstWeek
+import app.expenses.core.domain.FirstWeekCapture
+import app.expenses.core.domain.FirstWeekInputs
+import app.expenses.core.domain.FirstWeekItem
 import app.expenses.core.domain.HomeLayout
 import app.expenses.core.domain.HomeSection
 import app.expenses.core.storage.DrillLine
@@ -194,7 +199,13 @@ data class BillRowUi(
     val id: String, val title: String, val kind: String, val issuer: String, val amountText: String, val amountPlain: String, val minDueText: String?, val minDuePlain: String?,
     val dueText: String, val dueIn: String, val dueEpochDay: Long?, val overdue: Boolean, val soon: Boolean, val autoDebit: Boolean, val last4: String?,
     val body: String, val status: String, val cardAccountId: String, val payFromId: String, val paidText: String = "",
-)
+    /** Set on a row that is a repeating item waiting for the person (kind [BILL_KIND_REPEATING]): the item and the day of the occurrence, for Post it and Skip. */
+    val repeatItemId: String = "", val repeatDay: Long = 0,
+) { val isRepeat get() = repeatItemId.isNotEmpty() }
+
+/** [BillRowUi.kind] of a repeating expense listed with the bills. */
+const val BILL_KIND_REPEATING = "REPEATING"
+
 
 /** The bills page: found in messages, being tracked (soonest first), and recently paid. */
 data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<BillRowUi> = emptyList(), val paid: List<BillRowUi> = emptyList(), val loaded: Boolean = false)
@@ -207,7 +218,11 @@ data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = empty
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
-data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false, val emailOn: Boolean = false)
+/**
+ * [lastReceivedText] is when the last text (or email) reached capture, in words ("3 days ago"), or null when none ever did; [lastReceivedFresh] says it was in the last 7 days.
+ * A message sent with "Send a test now" counts as received: it goes through the same door.
+ */
+data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false, val emailOn: Boolean = false, val lastReceivedText: String? = null, val lastReceivedFresh: Boolean = false)
 
 /**
  * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
@@ -239,7 +254,9 @@ data class GoalRowUi(
 
 data class GoalsUi(val rows: List<GoalRowUi> = emptyList(), val accounts: List<AccountUi> = emptyList())
 
-data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "")
+data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "",
+    /** The card summary (worked out in [app.expenses.core.domain.CardSummaries]): charges since the statement, the limit use (empty without a limit; [limitFraction] is then 0) and what is left to pay with its due date. */
+    val cycleText: String = "", val limitText: String = "", val limitFraction: Float = 0f, val dueLineText: String = "")
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
@@ -359,6 +376,8 @@ data class ImportUi(
     val readNote: String? = null,
     /** Payments of a credit card's own bill found in a statement and left out, since they are not income. */
     val cardPayments: Int = 0,
+    /** For a PDF or photo: a sentence saying the statement's own printed totals differ from what was found, else null. */
+    val totalsNote: String? = null,
     /** A PDF that is protected with a password: asks for it. [passwordError] says the one typed did not open it. The password itself is never kept in this state. */
     val needsPassword: Boolean = false,
     val passwordError: String? = null,
@@ -370,6 +389,9 @@ data class SavedSearchUi(val id: String, val name: String, val input: SearchInpu
 enum class SearchKind { ANY, EXPENSE, INCOME }
 enum class SearchRange { ANY, LAST_30_DAYS, THIS_PERIOD, THIS_YEAR }
 
+/** The dates Home's list is limited to while it shows one account: everything, this calendar month, or last calendar month. */
+enum class HomePeriod { ALL, THIS_MONTH, LAST_MONTH }
+
 /** What the user has typed and chosen on the search screen. Amounts are rupees as typed ("250", "99.50"); empty means no limit. */
 data class SearchInput(
     val text: String = "",
@@ -379,6 +401,11 @@ data class SearchInput(
     val kind: SearchKind = SearchKind.ANY,
     val range: SearchRange = SearchRange.ANY,
     val tag: String? = null,
+    /** Chosen days (since 1970-01-01, both included, either may be open). Take the place of [range] when either is set. */
+    val fromDay: Long? = null,
+    val toDay: Long? = null,
+    /** Only what was paid from this account or moved into it. */
+    val accountId: String? = null,
 )
 
 /** [problem] explains input that cannot be searched; [hasConditions] is false until something is typed or chosen. */
@@ -482,6 +509,8 @@ sealed interface UiState {
         val inboxPending: Int,
         val inboxPeek: InboxPeekUi = InboxPeekUi(),
         val billPeek: BillPeekUi = BillPeekUi(),
+        /** The first-week checklist on Home (see [FirstWeek]); empty when it should not show. */
+        val firstWeek: List<FirstWeekItem> = emptyList(),
         val spark: SparkUi = SparkUi(),
         /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
         val reduceMotion: Boolean = false,
@@ -504,6 +533,8 @@ sealed interface UiState {
         val endReached: Boolean,
         /** The account Home's list is narrowed to, or null for everything. */
         val homeAccountId: String? = null,
+        /** The dates Home's list is limited to while it is narrowed to one account. */
+        val homePeriod: HomePeriod = HomePeriod.ALL,
         val message: String? = null,
         val undo: UndoUi? = null,
     ) : UiState
@@ -547,6 +578,9 @@ private const val SETTING_MOTION_SPEED = "motion_speed"
 private const val SETTING_SIMILAR_OFF = "similar_off:"
 private const val SIMILAR_DELAY_MS = 1_200L
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
+/** The first-week checklist: "pending" while the ledger has had no entry yet (a new install), then when the first one was noticed; "0" on a ledger that already had entries before the checklist existed. */
+private const val SETTING_FIRST_WEEK_STARTED = "first_week_started"
+private const val SETTING_FIRST_WEEK_DISMISSED = "first_week_dismissed"
 private const val MAX_STATEMENT_BYTES = 20_000_000
 private const val MAX_STATEMENT_ROWS = 200_000
 private const val PREVIEW_ROWS = 6
@@ -586,6 +620,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var importReadFrom: String? = null
     private var importReadNote: String? = null
     private var importCardPayments = 0
+    private var importRead: StatementTextParser.Result? = null
     private var importConvention: StatementTextParser.Convention? = null
     private var importProtectedPdf: ByteArray? = null
 
@@ -887,8 +922,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** The account Home's list shows, or null for all of them. Read and changed only under the write lock. */
     @Volatile private var homeAccount: String? = null
 
+    /** The dates Home's list is limited to while it shows one account. Read and changed only under the write lock. */
+    @Volatile private var homePeriod: HomePeriod = HomePeriod.ALL
+
+    /** `[from, until)` in epoch milliseconds for the chosen [homePeriod] in the phone's zone as of now, or null for every date. */
+    private fun homePeriodRange(): Pair<Long, Long>? = when (homePeriod) {
+        HomePeriod.ALL -> null
+        HomePeriod.THIS_MONTH -> app.expenses.core.domain.SearchDates.monthMillis(todayLocal(), 0, systemZone())
+        HomePeriod.LAST_MONTH -> app.expenses.core.domain.SearchDates.monthMillis(todayLocal(), 1, systemZone())
+    }
+
     private fun recentRows(q: app.expenses.core.storage.db.SchemaQueries, want: Long) =
-        homeAccount?.let { a -> merged(q.recentEntriesByAccount(a, want).executeAsList(), q.recentEntriesByCounter(a, want).executeAsList(), want) } ?: q.recentEntries(want).executeAsList()
+        homeAccount?.let { a ->
+            val r = homePeriodRange()
+            if (r == null) merged(q.recentEntriesByAccount(a, want).executeAsList(), q.recentEntriesByCounter(a, want).executeAsList(), want)
+            else merged(q.recentEntriesByAccountInRange(a, r.first, r.second, want).executeAsList(), q.recentEntriesByCounterInRange(a, r.first, r.second, want).executeAsList(), want)
+        } ?: q.recentEntries(want).executeAsList()
 
     /** The two indexed lookups of an account's entries (paid from it, transferred into it) as one list in the order of Home's list, [limit] long. */
     private fun merged(a: List<app.expenses.core.storage.db.Entry>, b: List<app.expenses.core.storage.db.Entry>, limit: Long) =
@@ -899,7 +948,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) {
             container.write { ok ->
                 homeAccount = accountId
+                homePeriod = HomePeriod.ALL // a period belongs to the account view it was chosen in
                 loaded = mutableListOf() // start the list from the top for the new view
+                refresh(ok)
+            }
+        }
+    }
+
+    /** Limits Home's list, while it shows one account, to a month (or lifts the limit with [HomePeriod.ALL]). Does nothing on Home's all-accounts list. */
+    fun setHomePeriod(period: HomePeriod) {
+        viewModelScope.launch(BACKGROUND) {
+            container.write { ok ->
+                if (homeAccount == null) return@write
+                homePeriod = period
+                loaded = mutableListOf()
                 refresh(ok)
             }
         }
@@ -914,7 +976,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             container.write { ok ->
                 if (endReached) return@write
                 val last = loaded.lastOrNull() ?: return@write
-                val page = homeAccount?.let { a -> val q = ok.db.schemaQueries; merged(q.entriesBeforeByAccount(a, last.occurred_at, last.seq, PAGE).executeAsList(), q.entriesBeforeByCounter(a, last.occurred_at, last.seq, PAGE).executeAsList(), PAGE) } ?: ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
+                val page = homeAccount?.let { a ->
+                    val q = ok.db.schemaQueries
+                    val r = homePeriodRange()
+                    if (r == null) merged(q.entriesBeforeByAccount(a, last.occurred_at, last.seq, PAGE).executeAsList(), q.entriesBeforeByCounter(a, last.occurred_at, last.seq, PAGE).executeAsList(), PAGE)
+                    else merged(q.entriesBeforeByAccountInRange(a, r.first, r.second, last.occurred_at, last.seq, PAGE).executeAsList(), q.entriesBeforeByCounterInRange(a, r.first, r.second, last.occurred_at, last.seq, PAGE).executeAsList(), PAGE)
+                } ?: ok.db.schemaQueries.entriesBefore(last.occurred_at, last.seq, PAGE).executeAsList()
                 if (page.size < PAGE) endReached = true
                 if (page.isEmpty()) return@write
                 loaded.addAll(page)
@@ -1086,7 +1153,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 if (shownOpening == 0L) "" else Money(shownOpening, inr).toPlainString(), ok.store.accountUsage(AccountId(a.id)),
                 ok.db.schemaQueries.accountSavedItemUsage(a.id).executeAsOne(),
                 if (type != AccountType.CREDIT_CARD) null else ok.cards.terms(a.id)?.let { t ->
-                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty())
+                    val summary = ok.cards.summary(a.id, today, zone)
+                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty(),
+                        summary?.let { CardSummaryText.cycle(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.let { CardSummaryText.limit(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.limitFraction ?: 0f,
+                        summary?.let { CardSummaryText.due(it) { m -> Money(m, inr).formatted() } }.orEmpty())
                 },
                 looks[a.id]?.network?.name, looks[a.id]?.tier?.name, looks[a.id]?.last4,
             )
@@ -1194,7 +1264,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
                 container.write { ok ->
-                    ok.savedSearches.save(SavedSearch(Uuid.random().toString(), name, input.text, input.minRupees, input.maxRupees, input.categoryId, input.kind.name, input.range.name, input.tag))
+                    ok.savedSearches.save(SavedSearch(Uuid.random().toString(), name, input.text, input.minRupees, input.maxRupees, input.categoryId, input.kind.name, input.range.name, input.tag, input.fromDay, input.toDay, input.accountId))
                     refresh(ok)
                 }
                 null
@@ -1309,7 +1379,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun loadInbox() = withStore { ok -> _inbox.value = inboxRows(ok) }
 
     fun loadCaptureSettings() = withStore { ok ->
-        _captureSettings.value = CaptureSettingsUi(ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty(), ok.templates.setting(CaptureKeys.SETTING_NOTIF_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EMAIL_ON) == "1")
+        // the capture log keeps 90 days: the newest event of any outcome is the last time something arrived
+        val now = nowMillis()
+        val lastAt = ok.db.schemaQueries.captureEventCounts(0).executeAsList().mapNotNull { it.last_at }.maxOrNull()
+        _captureSettings.value = CaptureSettingsUi(
+            ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty(), ok.templates.setting(CaptureKeys.SETTING_NOTIF_ON) == "1", ok.templates.setting(CaptureKeys.SETTING_EMAIL_ON) == "1",
+            lastReceivedText = lastAt?.let { app.expenses.core.domain.RelativeTime.ago(it, now) }, lastReceivedFresh = lastAt != null && app.expenses.core.domain.RelativeTime.within(lastAt, now, 7),
+        )
     }
 
     fun setSmsCapture(on: Boolean) = withStore { ok ->
@@ -1321,11 +1397,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun setNotificationCapture(on: Boolean) = withStore { ok ->
         ok.templates.putSetting(CaptureKeys.SETTING_NOTIF_ON, if (on) "1" else "0")
         _captureSettings.value = _captureSettings.value.copy(notifOn = on)
+        refresh(ok) // the first-week checklist on Home ticks "capture" from this switch
     }
 
     fun setEmailCapture(on: Boolean) = withStore { ok ->
         ok.templates.putSetting(CaptureKeys.SETTING_EMAIL_ON, if (on) "1" else "0")
         _captureSettings.value = _captureSettings.value.copy(emailOn = on)
+        refresh(ok) // the first-week checklist on Home ticks "capture" from this switch
     }
 
     fun setExtraHeaders(text: String) = withStore { ok ->
@@ -1443,7 +1521,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
         val today = todayLocal()
         fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
-        val coming = (rows(app.expenses.core.storage.BillStatus.TRACKED, 100) + cardDueRows(ok, accounts, today)).sortedBy { it.dueEpochDay ?: Long.MAX_VALUE }
+        val coming = (rows(app.expenses.core.storage.BillStatus.TRACKED, 100) + cardDueRows(ok, accounts, today) + repeatingRows(ok, today)).sortedBy { it.dueEpochDay ?: Long.MAX_VALUE }
         return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), coming, rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true)
     }
 
@@ -1471,6 +1549,28 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 "Due ${billDay.format(st.cycle.dueDate)}", dueIn, st.cycle.dueDate.epochDay(), days < 0, days in 0..3, false, null, "", "TRACKED", account.id, bank?.id.orEmpty(),
             )
         }
+    }
+
+    /** Prefix of the id of a repeating item's occurrence listed among the bills: `rec:<item id>_<epoch day>`. */
+    private val REPEAT_DUE_PREFIX = "rec:"
+
+    /**
+     * The repeating expenses that wait for the person (not ones that post by themselves), from two weeks back to a week ahead: the home banner counts exactly these
+     * ([weekAhead]) and the bills page lists exactly these ([repeatingRows]), so the two always agree.
+     */
+    private fun waitingRepeats(ok: AppContainer.Opened.Ok, today: LocalDate) =
+        ok.recurring.unhandled(today.minusDays(14), today.plusDays(8)).filter { !it.item.auto && it.item.kind == app.expenses.core.domain.RecurringKind.EXPENSE }
+
+    /** A waiting repeating expense as a bill row with Post it and Skip; an item whose amount differs each time has no amount until posted. */
+    private fun repeatingRows(ok: AppContainer.Opened.Ok, today: LocalDate): List<BillRowUi> = waitingRepeats(ok, today).map { due ->
+        val days = due.date.epochDay() - today.epochDay()
+        val dueIn = when { days == 0L -> "today"; days == 1L -> "tomorrow"; days > 1 -> "in $days days"; days == -1L -> "1 day overdue"; else -> "${-days} days overdue" }
+        val amount = due.item.amount
+        BillRowUi(
+            REPEAT_DUE_PREFIX + due.item.id + "_" + due.date.epochDay(), due.item.name, BILL_KIND_REPEATING, due.item.name, amount?.formatted() ?: "Amount?", amount?.toPlainString().orEmpty(), null, null,
+            "Due ${billDay.format(due.date)}", dueIn, due.date.epochDay(), days < 0, days in 0..3, false, null, "", "TRACKED", "", "",
+            repeatItemId = due.item.id, repeatDay = due.date.epochDay(),
+        )
     }
 
     /** What the home banner shows: three small queries, whatever the size of the history. */
@@ -1502,7 +1602,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val trackedBills = ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED)
         val trackedDue = trackedBills.mapNotNull { b -> b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { d -> b to d } }
         trackedDue.filter { (_, d) -> d < until }.forEach { (b, _) -> count++; if (b.currency == inr.code) total += b.amountMinor }
-        ok.recurring.unhandled(today.minusDays(14), until).filter { !it.item.auto && it.item.kind == app.expenses.core.domain.RecurringKind.EXPENSE }.forEach { due ->
+        waitingRepeats(ok, today).forEach { due ->
             count++; due.item.amount?.takeIf { it.currency == inr }?.let { total += it.minorUnits }
         }
         val cardBills = trackedDue.filter { (b, _) -> b.kind == "CREDIT_CARD" }.map { it.second }
@@ -1957,7 +2057,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     private fun clearTextImport() {
-        importText = null; importRawLines = null; importReadFrom = null; importReadNote = null; importCardPayments = 0; importConvention = null; importProtectedPdf = null
+        importText = null; importRawLines = null; importReadFrom = null; importReadNote = null; importCardPayments = 0; importConvention = null; importProtectedPdf = null; importRead = null
     }
 
     /** Reads the text of a PDF (with [password] when it has one) or of a picture, and shows the rows found in it. Runs on the background dispatcher. */
@@ -1989,7 +2089,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     private fun applyTextRead(read: StatementTextParser.Result) {
-        importTable = read.table; importRawLines = read.rawLines; importCardPayments = read.cardPayments; importReadNote = read.note; importConvention = read.convention
+        importTable = read.table; importRawLines = read.rawLines; importCardPayments = read.cardPayments; importReadNote = read.note; importConvention = read.convention; importRead = read
     }
 
     /** The account to start a statement on: the one used last, else the first. */
@@ -2043,6 +2143,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
             ignoredRows = parsed?.ignoredRows ?: 0, repairedRows = parsed?.repairedRows ?: 0, mappingProblem = missing, profileNote = profileNote,
             readFrom = importReadFrom, readNote = importReadNote, cardPayments = importCardPayments,
+            totalsNote = if (importReadFrom != null && parsed != null) importRead?.check(parsed.txns) else null,
         )
     }
 
@@ -2085,7 +2186,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val min = input.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
         val max = input.maxRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) ?: return problem("Enter amounts as numbers, like 250 or 99.50") }
         if (min != null && max != null && min.minorUnits > max.minorUnits) return problem("The smallest amount is above the largest")
-        val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY || input.tag != null
+        app.expenses.core.domain.SearchDates.problem(input.fromDay, input.toDay)?.let { return problem(it) }
+        val conditions = input.text.isNotBlank() || min != null || max != null || input.categoryId != null || input.kind != SearchKind.ANY || input.range != SearchRange.ANY || input.tag != null ||
+            input.fromDay != null || input.toDay != null || input.accountId != null
         if (!conditions) { _search.value = SearchUi(); return }
         _search.update { it.copy(searching = true, hasConditions = true, problem = null) }
         searchJob = viewModelScope.launch(BACKGROUND) {
@@ -2109,7 +2212,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         val t = todayLocal()
         val today = t
-        val period: app.expenses.core.domain.DatePeriod? = when (input.range) {
+        val period: app.expenses.core.domain.DatePeriod? = if (input.fromDay != null || input.toDay != null) null else when (input.range) {
             SearchRange.ANY -> null
             SearchRange.LAST_30_DAYS -> app.expenses.core.domain.DatePeriod(today.minus(29, kotlinx.datetime.DateTimeUnit.DAY), today.plus(1, kotlinx.datetime.DateTimeUnit.DAY))
             SearchRange.THIS_PERIOD -> ReportMath.periodAt(ok.budgets.period(), today, 0)
@@ -2121,7 +2224,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val query = SearchQuery(
             text = input.text, minMinor = min?.minorUnits, maxMinor = max?.minorUnits, currency = if (min != null || max != null) inr.code else null,
             tag = input.tag, categoryIds = categoryIds, kind = when (input.kind) { SearchKind.ANY -> null; SearchKind.EXPENSE -> "EXPENSE"; SearchKind.INCOME -> "INCOME" },
-            fromMillis = period?.startMillis(zone) ?: Long.MIN_VALUE, untilMillis = period?.endMillis(zone) ?: Long.MAX_VALUE,
+            accountId = input.accountId,
+            // chosen days take the place of the period chips: the first day from its start, the last day to its end (both in the phone's zone)
+            fromMillis = if (period == null) app.expenses.core.domain.SearchDates.fromMillis(input.fromDay, zone) else period.startMillis(zone),
+            untilMillis = if (period == null) app.expenses.core.domain.SearchDates.untilMillis(input.toDay, zone) else period.endMillis(zone),
         )
         val found = ok.db.searchFiltered(query, SEARCH_LIMIT + 1)
         val shown = found.take(SEARCH_LIMIT.toInt())
@@ -2440,6 +2546,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun createBackup(uri: String, passphrase: String?) = dataAction {
         val saved = actions.backup(uri, passphrase)
+        container.write { ok -> refresh(ok) } // the first-week checklist on Home ticks "backup" from this
         "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories" + if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private."
     }
 
@@ -2692,12 +2799,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             allAccounts = accounts.map { AccountUi(it.id, it.name, it.type) },
             accountRows = accountRowsCache,
             recentSearches = ok.templates.setting(SETTING_RECENT_SEARCHES).orEmpty().split('\n').filter { it.isNotBlank() },
-            savedSearches = ok.savedSearches.list().map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag)) },
+            savedSearches = ok.savedSearches.list().let { kept -> val known = ok.db.schemaQueries.selectAccounts().executeAsList().map { x -> x.id }.toSet(); kept.map { SavedSearchUi(it.id, it.name, SearchInput(it.text, it.minRupees, it.maxRupees, it.categoryId?.let { c -> ok.db.resolveCategory(c) }, SearchKind.valueOf(it.kind), SearchRange.valueOf(it.range), it.tag, it.fromDay, it.toDay, it.accountId?.takeIf { a -> a in known })) } },
             appearance = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)),
             baseCurrency = BaseCurrency.current,
             inboxPending = ok.inbox.pendingCount().toInt(),
             inboxPeek = inboxPeek(ok),
             billPeek = billPeek(ok),
+            firstWeek = firstWeekUi(ok, accounts),
             spark = sparkCache,
             reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
             motionSpeed = if (ok.templates.setting(SETTING_REDUCE_MOTION) == "1") "off" else ok.templates.setting(SETTING_MOTION_SPEED) ?: "relaxed",
@@ -2714,6 +2822,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             lastAccountId = lastAccount,
             endReached = endReached,
             homeAccountId = homeAccount,
+            homePeriod = homePeriod,
             undo = undo,
         )
     }
@@ -2758,6 +2867,49 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             rollover = ok.budgets.rollover(),
             carriedText = status.carried[null]?.formatted().orEmpty(),
         )
+    }
+
+    /**
+     * The first-week checklist for Home. Cheap on purpose (this runs on every refresh): a few setting reads and existence checks. The clock starts when the first
+     * entry is noticed on a ledger that was empty when this version first looked at it; a ledger that already had entries then belongs to someone who is not new, so
+     * the card is never shown for it.
+     */
+    private fun firstWeekUi(ok: AppContainer.Opened.Ok, accounts: List<app.expenses.core.storage.db.Account>): List<FirstWeekItem> {
+        val t = ok.templates
+        val q = ok.db.schemaQueries
+        if (t.setting(SETTING_FIRST_WEEK_DISMISSED) == "1") return emptyList()
+        val hasEntry = q.entryCountEver().executeAsOne()
+        val marker = t.setting(SETTING_FIRST_WEEK_STARTED)
+        val now = nowMillis()
+        val started: Long = when {
+            marker == null -> { t.putSetting(SETTING_FIRST_WEEK_STARTED, if (hasEntry) "0" else "pending"); if (hasEntry) 0L else return emptyList() }
+            marker == "pending" -> if (hasEntry) now.also { t.putSetting(SETTING_FIRST_WEEK_STARTED, it.toString()) } else return emptyList()
+            else -> marker.toLongOrNull() ?: return emptyList()
+        }
+        if (now - started >= FirstWeek.DAYS * 86_400_000L) return emptyList() // the common case for an old ledger: nothing more to read
+        val live = accounts.filter { it.archived == 0L }.map { it.id }.toSet()
+        val capture = when {
+            platform.supportsShortcutsCapture -> FirstWeekCapture.SHORTCUT
+            platform.supportsSmsCapture || platform.supportsNotificationCapture || platform.supportsCaptureSources -> FirstWeekCapture.SWITCH
+            else -> FirstWeekCapture.NONE
+        }
+        val captureOn = if (capture == FirstWeekCapture.SHORTCUT) q.captureEventCounts(0L).executeAsList().isNotEmpty()
+        else listOf(CaptureKeys.SETTING_SMS_ON, CaptureKeys.SETTING_NOTIF_ON, CaptureKeys.SETTING_EMAIL_ON).any { t.setting(it) == "1" }
+        val folderChosen = t.setting(AutoExportKeys.FOLDER) != null && t.setting(AutoExportKeys.FREQ) != AutoExportFrequency.OFF.name
+        return FirstWeek.items(FirstWeekInputs(
+            startedAtMillis = started, nowMillis = now, dismissed = false,
+            accountWithDigits = ok.looks.all().any { it.accountId in live && !it.last4.isNullOrBlank() },
+            budgetSet = ok.budgets.limits().isNotEmpty(),
+            capture = capture, captureOn = captureOn,
+            backupDone = t.setting(DataTransfer.SETTING_BACKUP_AT)?.toLongOrNull() != null || folderChosen,
+            hasEntry = hasEntry,
+        ))
+    }
+
+    /** The close button on the first-week card: it is not shown again. */
+    fun dismissFirstWeek() = withStore { ok ->
+        ok.templates.putSetting(SETTING_FIRST_WEEK_DISMISSED, "1")
+        refresh(ok)
     }
 
     private fun dueUi(ok: AppContainer.Opened.Ok, today: LocalDate): List<DueUi> {

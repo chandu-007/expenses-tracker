@@ -79,7 +79,7 @@ class BackupStore(
             recurring = q.liveRecurring().executeAsList().map {
                 BackupRecurring(it.id, it.name, it.amount_minor, it.currency, it.category_id, it.account_id, it.merchant, it.unit, it.every.toInt(), it.start_day, it.end_kind, it.end_value, it.auto == 1L, it.kind, it.to_account_id)
             },
-            savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag) },
+            savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag, it.from_day, it.to_day, it.account_id) },
             cardTerms = q.allCardTerms().executeAsList().map { BackupCardTerms(it.account_id, it.statement_day.toInt(), it.due_day.toInt(), it.min_due_percent.toInt(), it.remind_days.toInt()) },
             accountLooks = q.allAccountLooks().executeAsList().map { BackupAccountLook(it.account_id, it.network, it.tier, it.last4) },
             captureRules = q.allCaptureRules().executeAsList().map { BackupCaptureRule(it.id, it.position.toInt(), it.pattern, it.category_id) },
@@ -142,7 +142,7 @@ class BackupStore(
         for (r in data.recurring) if (q.recurringById(r.id).executeAsOneOrNull() == null) recurring.save(toRecurring(r, ::currency))
         for (d in data.recurringDone) if (q.doneRow(d.recurringId, d.day).executeAsOneOrNull() == null) q.putDone(d.recurringId, d.day, d.outcome, d.entryId)
         // Added as they are (a search with the same name as one here is kept too, rather than the restore refusing).
-        for (s in data.savedSearches) if (q.savedSearchById(s.id).executeAsOneOrNull() == null) q.upsertSavedSearch(s.id, s.name, s.text, s.minRupees, s.maxRupees, s.categoryId, s.kind, s.range, s.tag)
+        for (s in data.savedSearches) if (q.savedSearchById(s.id).executeAsOneOrNull() == null) q.upsertSavedSearch(s.id, s.name, s.text, s.minRupees, s.maxRupees, s.categoryId, s.kind, s.range, s.tag, s.fromDay, s.toDay, s.accountId)
         // Rules and learned payees are added as they are where this phone has none with the same id or key (a restore never overrides a choice made here).
         val haveRules = q.allCaptureRules().executeAsList().map { it.id }.toSet()
         for (r in data.captureRules) if (r.id !in haveRules && q.categoryById(r.categoryId).executeAsOneOrNull() != null) q.upsertCaptureRule(r.id, r.position.toLong(), r.pattern, r.categoryId)

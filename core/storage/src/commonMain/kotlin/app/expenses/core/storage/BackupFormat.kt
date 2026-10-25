@@ -64,7 +64,7 @@ data class BackupRecurring(
 /** How an account looks and its last four digits. Both network and tier are names from the app's lists; an unknown name is ignored on restore. */
 @Serializable data class BackupAccountLook(val accountId: String, val network: String? = null, val tier: String? = null, val last4: String? = null)
 @Serializable data class BackupCardTerms(val accountId: String, val statementDay: Int, val dueDay: Int, val minDuePercent: Int = 5, val remindDaysBefore: Int = 3)
-@Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null)
+@Serializable data class BackupSavedSearch(val id: String, val name: String, val text: String = "", val minRupees: String = "", val maxRupees: String = "", val categoryId: String? = null, val kind: String = "ANY", val range: String = "ANY", val tag: String? = null, val fromDay: Long? = null, val toDay: Long? = null, val accountId: String? = null)
 
 @Serializable data class BackupPerson(val id: String, val name: String, val deleted: Boolean = false)
 

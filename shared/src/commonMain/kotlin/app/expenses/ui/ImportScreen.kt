@@ -120,6 +120,7 @@ fun ImportScreen(
             state.readFrom?.let {
                 Text("Read from a $it; check amounts before importing. ${state.readNote.orEmpty()}".trim(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("import_read_note"))
             }
+            state.totalsNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import_totals_warning")) }
             if (state.damaged) Text("This file looks cut off or damaged (a quoted cell is never closed). Check it before importing.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import_damaged"))
 
             Text("Into which account?", style = MaterialTheme.typography.labelMedium)

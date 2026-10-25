@@ -58,13 +58,15 @@ data class SearchQuery(
     val untilMillis: Long = Long.MAX_VALUE,
     /** Only entries carrying this tag (ignoring case). */
     val tag: String? = null,
+    /** Only what was paid from this account or transferred into it (the same entries Home shows for it). */
+    val accountId: String? = null,
 ) {
     init {
         require((minMinor == null && maxMinor == null) || currency != null) { "An amount range needs a currency" }
         require(categoryIds == null || categoryIds.isNotEmpty()) { "An empty category list matches nothing; leave it null for any category" }
     }
 
-    val hasAnyCondition: Boolean get() = text.isNotBlank() || minMinor != null || maxMinor != null || categoryIds != null || kind != null || fromMillis != Long.MIN_VALUE || untilMillis != Long.MAX_VALUE || tag != null
+    val hasAnyCondition: Boolean get() = text.isNotBlank() || minMinor != null || maxMinor != null || categoryIds != null || kind != null || fromMillis != Long.MIN_VALUE || untilMillis != Long.MAX_VALUE || tag != null || accountId != null
 }
 
 /**
@@ -81,22 +83,22 @@ fun ExpensesDb.searchFiltered(query: SearchQuery, limit: Long = 50): List<Entry>
         // Entries with a tag are usually few, so take them all through the tag index and apply the text here, with the same rule as the index:
         // every word has to appear (ignoring case) somewhere in the merchant or note.
         val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }.map { it.lowercase() }
-        val rows = q.searchTagged(query.tag, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, TAGGED_SCAN_LIMIT).executeAsList()
+        val rows = q.searchTagged(query.tag, query.currency, query.minMinor, query.maxMinor, query.kind, query.accountId, query.fromMillis, query.untilMillis, filterCats, ids, TAGGED_SCAN_LIMIT).executeAsList()
         return rows.asSequence().filter { r -> val hay = ((r.merchant ?: "") + " " + (r.note ?: "")).lowercase(); words.all { it in hay } }.take(limit.toInt()).toList()
     }
     if (text.isEmpty()) {
-        return q.searchFilteredNoText(query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+        return q.searchFilteredNoText(query.currency, query.minMinor, query.maxMinor, query.kind, query.accountId, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
     }
-    val fts = ftsQuery(text) ?: return q.searchFilteredShort(likeEscape(text), query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+    val fts = ftsQuery(text) ?: return q.searchFilteredShort(likeEscape(text), query.currency, query.minMinor, query.maxMinor, query.kind, query.accountId, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
     // Words under 3 characters cannot use the index, so they are checked as substrings on the rows the index finds (the first two; more are rare).
     val shorts = shortWords(text).map(::likeEscape)
     val short1 = shorts.getOrNull(0)
     val short2 = shorts.getOrNull(1)
     val matches = q.countMatches(fts, SORT_FIRST_MAX_MATCHES + 1).executeAsOne()
     return if (matches <= SORT_FIRST_MAX_MATCHES) {
-        q.searchFilteredText(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+        q.searchFilteredText(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.accountId, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
     } else {
-        q.searchFilteredTextWalk(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
+        q.searchFilteredTextWalk(fts, short1, short2, query.currency, query.minMinor, query.maxMinor, query.kind, query.accountId, query.fromMillis, query.untilMillis, filterCats, ids, limit).executeAsList()
     }
 }
 

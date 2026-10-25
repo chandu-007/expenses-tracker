@@ -1,9 +1,12 @@
 package app.expenses
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -90,6 +93,17 @@ class AndroidPlatform(context: Context) : Platform {
 
     override fun isSmsPermissionGranted(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+
+    /** A `mailto:` address opens the mail app with the message filled in (nothing is sent until the person sends it); anything else is viewed by whichever app handles it. */
+    override fun openExternalUrl(url: String): Boolean {
+        val uri = Uri.parse(url)
+        val intent = Intent(if (uri.scheme == "mailto") Intent.ACTION_SENDTO else Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }
+    }
+
+    override val appVersionText: String get() = BuildConfig.VERSION_NAME
+    override val osVersionText: String get() = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+    override val deviceModelText: String get() = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL else "${Build.MANUFACTURER} ${Build.MODEL}"
 
     override fun notificationsAllowed(): Boolean = Notifier.canShow(context)
     override fun showNotices(notices: List<Notice>): List<Notice> = Notifier.show(context, notices)

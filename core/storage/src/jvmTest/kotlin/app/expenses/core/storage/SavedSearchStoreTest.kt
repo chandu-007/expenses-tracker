@@ -42,6 +42,30 @@ class SavedSearchStoreTest {
     }
 
     @Test
+    fun chosenDatesAndAnAccountAreKeptWithEitherDateLeftOpenAndSurviveABackup() {
+        store.save(SavedSearch("d1", "October", fromDay = 20_362, toDay = 20_376, accountId = "cash"))
+        store.save(SavedSearch("d2", "Since", fromDay = 20_362)); store.save(SavedSearch("d3", "Until", toDay = 20_376)); store.save(SavedSearch("d4", "Cash only", accountId = "bank"))
+        assertEquals(SavedSearch("d1", "October", fromDay = 20_362, toDay = 20_376, accountId = "cash"), store.list().first { it.id == "d1" })
+        assertEquals(listOf(20_362L to null, null to 20_376L), listOf("d2", "d3").map { id -> store.list().first { it.id == id }.let { it.fromDay to it.toDay } }, "either end may be open")
+        val clock = HlcClock("n"); val ledger = LedgerStore(db, clock) { 1L }
+        val backup = BackupStore(db, clock, { 1L }, ledger, TemplateStore(db, clock) { 1L }, RecurringStore(db, clock, { 1L }, ledger))
+        val data = BackupFile.decode(BackupFile.encode(backup.export(), 1L)).second
+        val fresh = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
+        val fl = LedgerStore(fresh, clock) { 1L }
+        BackupStore(fresh, clock, { 1L }, fl, TemplateStore(fresh, clock) { 1L }, RecurringStore(fresh, clock, { 1L }, fl)).restore(data)
+        assertEquals(store.list(), SavedSearchStore(fresh, clock) { 1L }.list())
+    }
+
+    @Test
+    fun aBackupMadeBeforeDatesAndAccountsExistedStillRestores() {
+        val old = """{"savedSearches":[{"id":"o","name":"Old","text":"uber","minRupees":"100","kind":"EXPENSE","range":"LAST_30_DAYS"}]}"""
+        val data = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString(BackupData.serializer(), old)
+        val clock = HlcClock("n"); val ledger = LedgerStore(db, clock) { 1L }
+        BackupStore(db, clock, { 1L }, ledger, TemplateStore(db, clock) { 1L }, RecurringStore(db, clock, { 1L }, ledger)).restore(data)
+        assertEquals(SavedSearch("o", "Old", "uber", "100", "", null, "EXPENSE", "LAST_30_DAYS", null), store.list().single())
+    }
+
+    @Test
     fun aBackupCarriesSavedSearchesAndRestoringTwiceAddsNothing() {
         store.save(s("a", "Cabs")); store.save(SavedSearch("b", "Big", minRupees = "5000"))
         val clock = HlcClock("n"); val ledger = LedgerStore(db, clock) { 1L }

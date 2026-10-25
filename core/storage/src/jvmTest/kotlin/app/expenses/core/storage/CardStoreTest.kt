@@ -205,4 +205,24 @@ class CardStoreTest {
         budgets.setLimit(null, Money(50_000, inr))
         assertTrue(check(LocalDate(2026, 11, 2)).none { it.kind == NoticeKind.BUDGET_WRAPUP }, "October's 600 went over its 500")
     }
+
+    @Test
+    fun theSummaryHasTheChargesSinceTheStatementTheLimitUseAndWhatIsLeftOnTheStatement() {
+        assertNull(cards.summary("card", today(20), zone), "no billing dates, no summary")
+        cards.save(terms)
+        spend(at(2026, 2, 20), 30_000); spend(at(2026, 3, 15, 23), 20_000) // on the statement: 500 owed at the cut
+        spend(at(2026, 3, 16, 0), 12_000); spend(at(2026, 3, 18), 8_000) // 200 charged since
+        ledger.save(Transfer(EntryId("pay"), at(2026, 3, 19), bank, card, Money(15_000, inr))) // 150 paid in
+        cards.setCreditLimit("card", 400_000)
+        val s = cards.summary("card", today(20), zone)!!
+        assertEquals(20_000, s.spentThisCycle, "what the card was charged since the 15th, whatever was paid in")
+        assertEquals(55_000, s.owed); assertEquals(13, s.usedPercent); assertEquals(345_000, s.limitLeft)
+        assertEquals(35_000, s.standing.remaining); assertEquals(2_500, s.standing.minimumDue); assertEquals(16, s.daysToDue)
+        // a charge dated tomorrow is not on the card yet
+        spend(at(2026, 3, 21), 90_000)
+        assertEquals(20_000, cards.summary("card", today(20), zone)!!.spentThisCycle)
+        assertEquals(110_000, cards.summary("card", today(21), zone)!!.spentThisCycle)
+        cards.setCreditLimit("card", null)
+        assertNull(cards.summary("card", today(20), zone)!!.limit)
+    }
 }

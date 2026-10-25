@@ -22,6 +22,7 @@ import kotlin.time.Clock
  *   backup        backupCipher: BackupCipher
  *   auto-export   runAutoExport(container, folderUri, nowMillis, force)
  *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted(), supportsShortcutsCapture, readClipboardText(), openExternalUrl(url)
+ *   about         appVersionText, osVersionText, deviceModelText (for the feedback email; empty by default)
  *   notification  notificationsAllowed(), showNotices(notices), notificationTimingNote
  *   app lock      authenticate(title, subtitle, onResult)
  *   statements    decodeStatementText(bytes), looksLikeXlsx(bytes), readXlsx(bytes)
@@ -99,8 +100,17 @@ interface Platform {
     /** Puts [text] on the clipboard. False where that is not offered. */
     fun copyText(text: String): Boolean = false
 
-    /** Opens [url] in the app that handles it (iPhone: `shortcuts://`). False when nothing could be opened. */
+    /** Opens [url] in the app that handles it (iPhone: `shortcuts://`; both: a `mailto:` address opens the mail app with the message filled in). False when nothing could be opened. */
     fun openExternalUrl(url: String): Boolean = false
+
+    /** The app's own version, for the feedback email ("0.6.0"). Empty where a platform does not say. */
+    val appVersionText: String get() = ""
+
+    /** The system and its version, for the feedback email ("Android 15", "iOS 19.1"). */
+    val osVersionText: String get() = ""
+
+    /** The kind of device, for the feedback email ("Google Pixel 8", "iPhone"). */
+    val deviceModelText: String get() = ""
 
     /** Whether the system will show our notifications at all. */
     fun notificationsAllowed(): Boolean

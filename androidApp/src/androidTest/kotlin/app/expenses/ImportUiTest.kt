@@ -33,7 +33,7 @@ class ImportUiTest {
     private val files = mutableListOf<File>()
 
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } }
     }
 
     @Before fun fresh() = resetApp()

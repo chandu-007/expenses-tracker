@@ -42,7 +42,7 @@ class CategoriesTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } }
     }
 
     /** The less frequent places are in the "More" menu on the list. */

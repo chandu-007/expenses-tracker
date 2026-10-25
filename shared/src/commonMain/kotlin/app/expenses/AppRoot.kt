@@ -139,8 +139,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
             // on a wide screen (a tablet, an unfolded foldable, a phone on its side) the app keeps a comfortable width in the middle instead of stretching every line across it
+            // from app.expenses.ui.WIDE_BREAKPOINT_DP (840 dp) wide: Home and the open entry side by side (see WidePane.kt); below it nothing differs from a phone
+            val wide = app.expenses.ui.rememberIsWide()
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
-            Surface(Modifier.widthIn(max = app.expenses.ui.MAX_CONTENT_WIDTH).fillMaxHeight().imePadding()) {
+            Surface(Modifier.widthIn(max = if (wide) app.expenses.ui.WIDE_PANES_MAX_WIDTH else app.expenses.ui.MAX_CONTENT_WIDTH).fillMaxHeight().imePadding()) {
             val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(Unit) { platform.trace("first composition") }
             var adding by rememberSaveable { mutableStateOf(false) }
@@ -184,6 +186,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var subscribing by rememberSaveable { mutableStateOf(false) }
             var goaling by rememberSaveable { mutableStateOf(false) }
             var searching by rememberSaveable { mutableStateOf(false) }
+            // the account Search opens inside (from Home's account bar); null searches every account
+            var searchAccount by rememberSaveable { mutableStateOf<String?>(null) }
             var securing by rememberSaveable { mutableStateOf(false) }
             val lock = host.lock
             val locked by lock.locked.collectAsStateWithLifecycle(context = MAIN)
@@ -274,40 +278,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val stoppedSimilar by viewModel.stoppedSimilar.collectAsStateWithLifecycle(context = MAIN)
                 androidx.compose.runtime.LaunchedEffect(managingCategories) { if (managingCategories) viewModel.loadStoppedSimilar() }
                 similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
-                val screenKey = listOf(
-                    history != null, editing is Editable.Form, editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling,
-                ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
-                // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
-                val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
-                val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
-                // the bar along the bottom is shown by Home, Search and Reports alike; its glass indicator glides between them as one bar
-                var wantMore by rememberSaveable { mutableStateOf(false) }
-                // the More page is open: kept here, above the screens, so Back from a screen opened from More comes back to More
-                var moreOpen by rememberSaveable { mutableStateOf(false) }
-                val goTab: (String) -> Unit = { t ->
-                    if (searching && t != "Search") { searching = false; viewModel.closeSearch() }
-                    if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
-                    when {
-                        t == "Search" && !searching -> searching = true
-                        t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
-                        t == "More" -> wantMore = true
-                    }
-                }
-                val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
-                    // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
-                    if (!app.expenses.ui.rememberKeyboardOpen()) {
-                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
-                    }
-                }
-                app.expenses.ui.ScreenHost(screenKey) { k -> when {
-                    k == 0 -> {
-                        val h = history ?: heldHistory.value!!
-                        BackHandler { viewModel.closeHistory() }
-                        HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
-                    }
-                    k == 1 -> {
-                        val e = (editing as? Editable.Form) ?: (heldEditing.value as Editable.Form)
+                // the entry editor: a full-screen overlay on a phone (keys 1 and 2), the right-hand pane beside Home on a wide window
+                val editorScreen: @androidx.compose.runtime.Composable (Editable) -> Unit = { e -> when (e) {
+                    is Editable.Form -> {
                         BackHandler { viewModel.closeEditor() }
                         // Keyed, so opening a refund from an expense's editor starts a new form instead of reusing the expense's typed state.
                         androidx.compose.runtime.key(e.draft.id, e.draft.kind, e.draft.refundsEntry) {
@@ -333,11 +306,45 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                         }
                     }
-                    k == 2 -> {
-                        val e = (editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly)
+                    is Editable.ReadOnly -> {
                         BackHandler { viewModel.closeEditor() }
                         ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor, e.origin)
                     }
+                } }
+                val screenKey = listOf(
+                    history != null, !wide && editing is Editable.Form, !wide && editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
+                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling,
+                ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
+                // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
+                val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
+                val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
+                // the bar along the bottom is shown by Home, Search and Reports alike; its glass indicator glides between them as one bar
+                var wantMore by rememberSaveable { mutableStateOf(false) }
+                // the More page is open: kept here, above the screens, so Back from a screen opened from More comes back to More
+                var moreOpen by rememberSaveable { mutableStateOf(false) }
+                val goTab: (String) -> Unit = { t ->
+                    if (searching && t != "Search") { searching = false; searchAccount = null; viewModel.closeSearch() }
+                    if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
+                    when {
+                        t == "Search" && !searching -> { searchAccount = null; searching = true }
+                        t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
+                        t == "More" -> wantMore = true
+                    }
+                }
+                val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
+                    // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
+                    if (!app.expenses.ui.rememberKeyboardOpen()) {
+                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
+                    }
+                }
+                app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen) { when {
+                    k == 0 -> {
+                        val h = history ?: heldHistory.value!!
+                        BackHandler { viewModel.closeHistory() }
+                        HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
+                    }
+                    k == 1 -> editorScreen((editing as? Editable.Form) ?: (heldEditing.value as Editable.Form))
+                    k == 2 -> editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
                         InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null)
@@ -363,7 +370,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onToggleEmail = { on -> viewModel.setEmailCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
                             onOpenAccessSettings = { host.openNotificationAccessSettings() },
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
-                            onTestMessage = { text, done -> viewModel.pasteMessage(text, done) },
+                            onTestMessage = { text, done -> viewModel.pasteMessage(text) { r -> done(r); viewModel.loadCaptureSettings() } },
                         )
                     }
                     k == 8 -> {
@@ -413,12 +420,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 14 -> {
                         val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { searching = false; viewModel.closeSearch() }
+                        BackHandler { searching = false; searchAccount = null; viewModel.closeSearch() }
                         SearchScreen(
                             tabBar = { tabBar("Search") },
                             state = found, categories = s.categories,
                             onChange = viewModel::search,
-                            onBack = { searching = false; viewModel.closeSearch() },
+                            onBack = { searching = false; searchAccount = null; viewModel.closeSearch() },
+                            initialAccountId = searchAccount,
                             onOpen = { viewModel.openEditor(it.id) },
                             accounts = s.accounts,
                             onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete,
@@ -539,6 +547,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BillsScreen(
                             ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
                             onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
+                            onPostRepeat = viewModel::postDue, onSkipRepeat = viewModel::skipDue,
                         )
                     }
                     k == 22 -> {
@@ -585,10 +594,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         moreOpen = moreOpen, onMoreChange = { moreOpen = it },
                         onCustomiseHome = { customisingHome = true },
                         onOpenAppearance = { appearing = true },
-                        onOpenSearch = { searching = true },
+                        onOpenSearch = { searchAccount = null; searching = true },
+                        onSearchAccount = { id -> searchAccount = id; searching = true },
+                        onSetHomePeriod = viewModel::setHomePeriod,
                         onOpenSecurity = { securing = true },
                         onDismissWelcome = viewModel::dismissWelcome,
                         onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
+                        onDismissFirstWeek = viewModel::dismissFirstWeek,
                         onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                         onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                         onBulkCategory = viewModel::bulkSetCategory,
@@ -602,7 +614,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },
                         onOpenPrivacy = { privacyOpen = true },
                     )
-                }
+                } }
                 } }
             }
             }

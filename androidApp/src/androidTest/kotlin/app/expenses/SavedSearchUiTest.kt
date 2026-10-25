@@ -40,7 +40,7 @@ class SavedSearchUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
     private var t = System.currentTimeMillis() - 100_000
 
-    private fun resetApp() { runBlocking { container.startFresh() } }
+    private fun resetApp() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } } }
     @Before fun fresh() = resetApp()
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 

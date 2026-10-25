@@ -10,6 +10,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import platform.Foundation.NSApplicationSupportDirectory
+import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
@@ -21,6 +22,7 @@ import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.writeToURL
 import platform.UIKit.UIApplication
+import platform.UIKit.UIDevice
 import platform.UIKit.UIPasteboard
 import platform.UniformTypeIdentifiers.UTType
 import kotlin.uuid.ExperimentalUuidApi
@@ -142,6 +144,11 @@ class IosPlatform(host: IosHostServices) : Platform {
         UIApplication.sharedApplication.openURL(target, options = emptyMap<Any?, Any?>(), completionHandler = null)
         return true
     }
+
+    override val appVersionText: String get() = NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: ""
+    override val osVersionText: String get() = UIDevice.currentDevice.let { "${it.systemName} ${it.systemVersion}" }
+    override val deviceModelText: String get() = UIDevice.currentDevice.model
+
     override fun notificationsAllowed(): Boolean = IosNotificationCenter.allowed()
     override val notificationTimingNote get() = "iPhone decides when the app may look in the background, which can be rarely. So reminders for bills and cards in the next 7 days are handed to the phone ahead of time and arrive at the hour above even if the app is not opened; budget alerts, the weekly recap and bills found in a message appear when the app next runs, at the latest when you open it."
     override fun showNotices(notices: List<Notice>): List<Notice> = IosNotificationCenter.show(notices)

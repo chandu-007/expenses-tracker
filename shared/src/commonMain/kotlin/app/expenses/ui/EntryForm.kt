@@ -442,7 +442,12 @@ fun EntryFormScreen(
                 label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),
             )
             TagsEditor(draft.tags, allTags) { draft = draft.copy(tags = it) }
-            AttachmentsSection(draft.id != null, attachments, attachmentProblem, onAttach, onOpenAttachment, onRemoveAttachment)
+            AttachmentsSection(draft.id != null, attachments, attachmentProblem, onAttach, onOpenAttachment, onRemoveAttachment, extra = {
+                if (draft.kind == DraftKind.EXPENSE) BillItemsReader(amountEmpty = draft.amountText.isBlank(), note = draft.note, canAttach = attachments.isEmpty()) { amountText, note, photo ->
+                    draft = draft.copy(amountText = amountText ?: draft.amountText, note = note)
+                    photo?.let(onAttach)
+                }
+            })
             if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || draft.kind == DraftKind.LOAN || split)) {
                 Text(built.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("form_problem"))
             }
@@ -578,7 +583,7 @@ private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: 
 
 /** Receipts and other files on an existing entry. They are kept on this phone only (not in a backup yet), and the section says so. */
 @Composable
-private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.AttachmentUi>, problem: String?, onAttach: (String) -> Unit, onOpen: (app.expenses.AttachmentUi) -> Unit, onRemove: (app.expenses.AttachmentUi) -> Unit) {
+private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.AttachmentUi>, problem: String?, onAttach: (String) -> Unit, onOpen: (app.expenses.AttachmentUi) -> Unit, onRemove: (app.expenses.AttachmentUi) -> Unit, extra: @Composable () -> Unit = {}) {
     val picker = rememberFilePickers()
     var removing by remember { mutableStateOf<app.expenses.AttachmentUi?>(null) }
     // a photo whose screen was recreated while the camera was open arrives here
@@ -603,6 +608,7 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
             if (picker.canTakePhoto) OutlinedButton(onClick = { picker.takePhoto { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_camera")) { Text("Take a photo") }
             OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
         }
+        extra()
         Text(if (saved) "Kept on this phone only. A backup does not include them yet." else "Optional. Added to the entry when you save it, kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint"))
     }
 }

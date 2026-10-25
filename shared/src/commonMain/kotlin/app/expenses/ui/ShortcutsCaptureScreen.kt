@@ -1,5 +1,6 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +53,21 @@ internal val SHORTCUTS_EMAIL_STEPS = listOf(
     "Turn on Allow Running When Locked in the shortcut's Privacy and choose Always Allow, as for texts. Only emails from known banks are kept; any other email is dropped unread.",
 )
 
+/** The name the steps ask the person to give the shortcut. */
+internal const val SHORTCUT_NAME = "Capture bank message"
+
+/** The first steps of [SHORTCUTS_STEPS] (make the shortcut and its action) are step 1 on the screen; the rest (the automation that runs it) are step 2. */
+private const val SHORTCUT_STEPS_IN_STAGE_1 = 3
+
+/** One stage of the setup: a heading and what to do. */
+@Composable
+private fun SetupStep(number: Int, title: String, tag: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Step $number  $title", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(tag))
+        content()
+    }
+}
+
 /**
  * "Capture from texts" on a phone where the system gives no access to texts (iPhone): what is possible instead (a Shortcuts automation that hands each bank
  * text to the app), the steps to set it up, how to test it, what happens to the words, and the limits stated plainly. The sender-names, rules and health
@@ -65,21 +82,51 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Bank texts on iPhone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("shortcuts_title"))
             Text("iPhone does not let any app read your text messages. What it does allow is an automation in the Shortcuts app that runs when a message arrives and hands that message to this app. Set it up once and bank texts land in To review by themselves, with nothing added to your ledger until you say so.", style = MaterialTheme.typography.bodyMedium)
-            Text("Set it up", style = MaterialTheme.typography.labelMedium)
-            Column(Modifier.testTag("shortcuts_steps"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SHORTCUTS_STEPS.forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_step_${i + 1}")) }
+            // is it working? the time of the newest text that reached capture (from the capture log, which keeps counts and times only, never the words)
+            val received = settings.lastReceivedText?.let { "Last text received $it" } ?: "Nothing received yet"
+            val statusColor = if (settings.lastReceivedFresh) amountColor(Flow3.IN) else MaterialTheme.colorScheme.onSurfaceVariant
+            Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(statusColor.copy(alpha = 0.12f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(received, style = MaterialTheme.typography.titleSmall, color = statusColor, modifier = Modifier.testTag("shortcuts_status"))
+                Text(if (settings.lastReceivedFresh) "The automation is reaching this app." else "This turns green when a text has arrived in the last 7 days. A test message counts too.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Button(onClick = { platform.openExternalUrl("shortcuts://") }, modifier = Modifier.testTag("shortcuts_open")) { Text("Open Shortcuts") }
-            // the words to type under "Message Contains": one tap copies them, then they are pasted in the automation
+            var copiedName by remember { mutableStateOf(false) }
             var copied by remember { mutableStateOf<String?>(null) }
-            Text("Words for the trigger (copy, then paste under Message Contains)", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("debited", "credited").forEach { w ->
-                    OutlinedButton(onClick = { if (platform.copyText(w)) copied = w }, modifier = Modifier.testTag("shortcuts_copy_$w")) { Text(w) }
+            Column(Modifier.testTag("shortcuts_steps"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SetupStep(1, "Add the shortcut", "shortcuts_stage_1") {
+                    SHORTCUTS_STEPS.take(SHORTCUT_STEPS_IN_STAGE_1).forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_step_${i + 1}")) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { platform.openExternalUrl("shortcuts://") }, modifier = Modifier.testTag("shortcuts_open")) { Text("Open Shortcuts") }
+                        // the name to give the shortcut: copied so it is pasted rather than typed
+                        OutlinedButton(onClick = { if (platform.copyText(SHORTCUT_NAME)) copiedName = true }, modifier = Modifier.testTag("shortcuts_copy_name")) { Text("Copy the name") }
+                    }
+                    if (copiedName) Text("Copied \"$SHORTCUT_NAME\". Paste it as the shortcut's name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("shortcuts_copied_name"))
+                }
+                SetupStep(2, "Create the automation", "shortcuts_stage_2") {
+                    SHORTCUTS_STEPS.drop(SHORTCUT_STEPS_IN_STAGE_1).forEachIndexed { i, step -> Text("${i + SHORTCUT_STEPS_IN_STAGE_1 + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_step_${i + SHORTCUT_STEPS_IN_STAGE_1 + 1}")) }
+                    // the words to type under "Message Contains": one tap copies them, then they are pasted in the automation
+                    Text("Words for the trigger (copy, then paste under Message Contains)", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("debited", "credited").forEach { w ->
+                            OutlinedButton(onClick = { if (platform.copyText(w)) copied = w }, modifier = Modifier.testTag("shortcuts_copy_$w")) { Text(w) }
+                        }
+                    }
+                    copied?.let { Text("Copied \"$it\". Paste it in the automation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("shortcuts_copied")) }
+                    Text("Starting Shortcuts and adding the automation is iOS's own step: an app cannot make it for you.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            copied?.let { Text("Copied \"$it\". Paste it in the automation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("shortcuts_copied")) }
-            Text("Starting Shortcuts and adding the automation is iOS's own step: an app cannot make it for you.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SetupStep(3, "Test", "shortcuts_stage_3") {
+                if (onTestMessage != null) {
+                    var result by remember { mutableStateOf<PasteOutcome?>(null) }
+                    Button(onClick = {
+                        val ref = (1..12).map { (0..9).random() }.joinToString("")
+                        val day = app.expenses.DatePattern("dd-MM-yy").format(app.expenses.nowMillis())
+                        onTestMessage("Rs.250.00 debited from a/c XX1234 on $day at TEST SHOP. Ref $ref. -HDFC Bank") { result = it }
+                    }, modifier = Modifier.testTag("shortcuts_test")) { Text("Send a test now") }
+                    result?.let { Text(it.message + (it.detail?.let { d -> ": $d" } ?: ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_test_result")) }
+                    Text("This hands a made-up bank text to the app the way the automation does. It should appear in To review as a TEST SHOP expense: dismiss it there. It proves the app side; whether the automation fires is up to iOS and the Shortcuts setup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text("Have someone send you (or send yourself from another phone) a text such as: Rs.250.00 debited from a/c XX1234 on 18-10-26 at TEST SHOP. Ref 123456789012. -HDFC Bank. A minute later it should be in To review. If you filled in Sender, a text from a phone number counts as a text from a person and is ignored, which \"How capture is doing\" shows as a count: leave Sender empty to test with a friend's phone. You can also copy any bank message and press Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_test"))
+            }
             Text("Add expense and Capture bank message also appear in Shortcuts and in Siri without any setup, and Add expense can be put on the Action button.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             Text("Bank emails", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("shortcuts_email_title"))
@@ -88,19 +135,6 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
                 SHORTCUTS_EMAIL_STEPS.forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_email_step_${i + 1}")) }
             }
             Text("For a text or an email you already have, no setup is needed: touch and hold the message, tap Share (in Mail, the share button), choose Expenses, then open Expenses and look in To review. Or copy it and use Paste there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HorizontalDivider()
-            Text("Send a test message", style = MaterialTheme.typography.labelMedium)
-            if (onTestMessage != null) {
-                var result by remember { mutableStateOf<PasteOutcome?>(null) }
-                Button(onClick = {
-                    val ref = (1..12).map { (0..9).random() }.joinToString("")
-                    val day = app.expenses.DatePattern("dd-MM-yy").format(app.expenses.nowMillis())
-                    onTestMessage("Rs.250.00 debited from a/c XX1234 on $day at TEST SHOP. Ref $ref. -HDFC Bank") { result = it }
-                }, modifier = Modifier.testTag("shortcuts_test")) { Text("Send a test now") }
-                result?.let { Text(it.message + (it.detail?.let { d -> ": $d" } ?: ""), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_test_result")) }
-                Text("This hands a made-up bank text to the app the way the automation does. It should appear in To review as a TEST SHOP expense: dismiss it there. It proves the app side; whether the automation fires is up to iOS and the Shortcuts setup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text("Have someone send you (or send yourself from another phone) a text such as: Rs.250.00 debited from a/c XX1234 on 18-10-26 at TEST SHOP. Ref 123456789012. -HDFC Bank. A minute later it should be in To review. If you filled in Sender, a text from a phone number counts as a text from a person and is ignored, which \"How capture is doing\" shows as a count: leave Sender empty to test with a friend's phone. You can also copy any bank message and press Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_test"))
             HorizontalDivider()
             Text("What happens to the words", style = MaterialTheme.typography.labelMedium)
             Text("The words of a text that is not a bank transaction (a person's message, a one-time password, an offer) are thrown away as soon as they are looked at: only a count is kept, shown in How capture is doing. The words of a transaction or a bill are kept until you add or skip it; after that only the amount, date and reference stay. Everything is read on this phone and nothing is sent anywhere.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_privacy"))

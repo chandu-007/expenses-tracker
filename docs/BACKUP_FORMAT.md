@@ -63,7 +63,7 @@ All amounts are integers in **minor units** (paise, cents) with the currency cod
 
 ### `origins`: `entryId`, `kind` (`SMS`, `NOTIFICATION`, `EMAIL` or `STATEMENT`), `sender` (the name the text or notification came from; absent for a statement line), `text` (the original words the entry was read from), `receivedAt` (epoch milliseconds, when it arrived; absent when not known). Written only for entries in the file. Absent in a backup made before they existed. Restored only for an entry that exists here and has no origin yet.
 
-### `savedSearches`: `id`, `name`, `text`, `minRupees`, `maxRupees`, `categoryId`, `kind` (`ANY`, `EXPENSE`, `INCOME`), `range` (`ANY`, `LAST_30_DAYS`, `THIS_PERIOD`, `THIS_YEAR`), `tag`
+### `savedSearches`: `id`, `name`, `text`, `minRupees`, `maxRupees`, `categoryId`, `kind` (`ANY`, `EXPENSE`, `INCOME`), `range` (`ANY`, `LAST_30_DAYS`, `THIS_PERIOD`, `THIS_YEAR`), `tag`, `fromDay`, `toDay` (chosen dates as days since 1970-01-01, both included, either may be absent), `accountId` (limits the search to one account). The last three are optional: a backup made before they existed restores as a search without them.
 ### `settings`: a map of text to text (reminder preferences and similar).
 
 ## Restoring
