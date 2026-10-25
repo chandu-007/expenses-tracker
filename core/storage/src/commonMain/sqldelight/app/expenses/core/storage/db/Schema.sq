@@ -625,6 +625,13 @@ entriesLikeStatementRow:
 SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount
   AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
 
+-- An entry an earlier import made from this very line of the file (its origin text), whatever name the line was given then: a later version may tidy the
+-- description differently, which changes the fingerprint, but the line as it was in the file stays the same.
+statementLineAlreadyThere:
+SELECT e.id FROM entry e JOIN entry_origin o ON o.entry_id = e.id
+WHERE e.deleted = 0 AND e.account_id = :account AND e.kind = :kind AND e.amount_minor = :amount AND e.source = 'csv'
+  AND e.occurred_at >= :fromMillis AND e.occurred_at < :untilMillis AND o.kind = 'STATEMENT' AND o.text = :text;
+
 flipInboxDirection:
 UPDATE inbox SET direction = CASE direction WHEN 'DEBIT' THEN 'CREDIT' WHEN 'CREDIT' THEN 'DEBIT' ELSE direction END WHERE id = ? AND status = 'PENDING';
 

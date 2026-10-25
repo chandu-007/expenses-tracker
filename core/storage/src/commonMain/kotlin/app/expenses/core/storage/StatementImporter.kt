@@ -55,6 +55,11 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
             if (q.entryById(id).executeAsOneOrNull() != null) { there++; continue }
             val dayStart = t.date.atStartOfDayIn(zone).toEpochMilliseconds()
             val kind = if (t.flow == Flow.SPENDING) "EXPENSE" else "INCOME"
+            // the same line of the same file, imported by an earlier version under another description: already there (each existing entry answers for one row)
+            val sameLine = t.sourceText?.takeIf { it.isNotBlank() }?.let { text ->
+                q.statementLineAlreadyThere(account.value, kind, t.minor, dayStart, dayStart + DAY_MILLIS, text.take(OriginStore.MAX_CHARS)).executeAsList().firstOrNull { it !in taken }
+            }
+            if (sameLine != null) { taken += sameLine; there++; continue }
             val twin = q.entriesLikeStatementRow(account.value, kind, t.minor, dayStart - DAY_MILLIS, dayStart + 2 * DAY_MILLIS).executeAsList().firstOrNull { it !in taken }
             if (twin != null) { taken += twin; matched++; continue }
             val at = dayStart + NOON_MILLIS
@@ -65,6 +70,7 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
                 Flow.INCOME -> { ledger.save(Income(EntryId(id), at, account, money), details); income += t.minor }
             }
             t.sourceText?.takeIf { it.isNotBlank() }?.let { q.putOrigin(id, OriginKind.STATEMENT.name, null, it.take(OriginStore.MAX_CHARS), null) }
+            taken += id // a later row of this same file must not be taken for it
             imported++
         }
         ImportResult(imported, there, spend, income, matched)

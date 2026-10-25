@@ -198,4 +198,20 @@ class StatementImporterTest {
         assertEquals(setOf("SHOP A AGAIN", "OTHER", "REFUND-ISH", "TWO DAYS ON", "OTHER ACCOUNT ROW"), db.schemaQueries.recentEntries(50).executeAsList().filter { it.source == "csv" }.map { it.merchant }.toSet())
         assertEquals(5, importer.import(rows, bank, inr, zone).let { it.alreadyThere }, "the rows that were added are recognised on a second run, and the matched ones match again")
     }
+
+    @Test
+    fun theSameLineImportedAgainUnderADifferentDescriptionIsNotAddedTwice() {
+        val raw = "01/10/26 UPI-ZERODHA COINS-ZERODHA.NSEINVEST.BRK@VALIDHDFC-HDFC0MERUPI-104184779254 5,000.00"
+        val before = StatementTxn(1, d(1), Flow.SPENDING, 500_000, "UPI-ZERODHA COINS-ZERODHA.NSEINVEST.BRK@VALIDHDFC-HDFC0MERUPI-104184779254", sourceText = raw)
+        assertEquals(1, importer.import(listOf(before), bank, inr, zone).imported)
+        // a later version tidies the description: the file is the same
+        val tidied = before.copy(description = "ZERODHA COINS")
+        val again = importer.import(listOf(tidied), bank, inr, zone)
+        assertEquals(0, again.imported, "nothing is added twice")
+        assertEquals(1, again.alreadyThere)
+        // two real lines alike on one day still both come in the first time, and each answers for one entry the second time
+        val twoLines = listOf(tidied.copy(row = 2, description = "A", sourceText = "x 100.00", minor = 10_000), tidied.copy(row = 3, description = "A", sourceText = "x 100.00", minor = 10_000))
+        assertEquals(2, importer.import(twoLines, bank, inr, zone).imported)
+        assertEquals(0, importer.import(twoLines.map { it.copy(description = "B") }, bank, inr, zone).imported)
+    }
 }
