@@ -612,7 +612,7 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
  * parent first, its subcategories indented); once something is typed they are one flat list of "Parent › Child" names that match.
  */
 @Composable
-private fun CategoryPickerDialog(categories: List<CategoryUi>, selected: String, onPick: (String) -> Unit, onClose: () -> Unit) {
+internal fun CategoryPickerDialog(categories: List<CategoryUi>, selected: String, onPick: (String) -> Unit, onClose: () -> Unit) {
     var typed by rememberSaveable { mutableStateOf("") }
     val named = remember(categories) { categories.map { it.id to displayName(categories, it) } }
     val found = remember(named, typed) { CategoryChoices.search(named, typed) }

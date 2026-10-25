@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import app.expenses.core.domain.formatted
@@ -118,6 +119,7 @@ private fun InboxCard(
     val paired = r.treatment != "PAYMENT" && !asPayment
     var account by rememberSaveable(r.id) { mutableStateOf(r.accountId) }
     var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
+    var pickingCategory by rememberSaveable(r.id) { mutableStateOf(false) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
     var naming by rememberSaveable(r.id) { mutableStateOf(false) }
     var showText by rememberSaveable(r.id) { mutableStateOf(false) }
@@ -168,8 +170,15 @@ private fun InboxCard(
                     }
                     if (changing) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
-                        if (!credit) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            offeredCategories(categories, income = false, keep = category).take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+                        if (!credit) {
+                            val offered = offeredCategories(categories, income = false, keep = category)
+                            // the first few as chips (and the chosen one, wherever it is); every other one is behind "More", in a list with search, as on the Add screen
+                            val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                chips.forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+                                if (offered.size > CATEGORY_CHIPS) AssistChip(onClick = { pickingCategory = true }, label = { Text("More (${offered.size - chips.size})") }, modifier = Modifier.testTag("inbox_more_categories_${r.id}"))
+                            }
+                            if (pickingCategory) CategoryPickerDialog(offered, category, onPick = { id -> category = id; pickingCategory = false }, onClose = { pickingCategory = false })
                         }
                     }
                 }
@@ -313,10 +322,15 @@ fun CaptureRulesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("New rule", style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(pattern, { pattern = it; tested = null; problem = null }, label = { Text("Payee or text contains") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rule_pattern"))
+                    // a rule only applies to captured payments, which are expenses
+                    val offered = offeredCategories(categories, income = false)
+                    val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
+                    var pickingCategory by rememberSaveable { mutableStateOf(false) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // a rule only applies to captured payments, which are expenses
-                        offeredCategories(categories, income = false).take(24).forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id; problem = null }, label = { Text(c.name) }, modifier = Modifier.testTag("rule_category_${c.id}")) }
+                        chips.forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id; problem = null }, label = { Text(c.name) }, modifier = Modifier.testTag("rule_category_${c.id}")) }
+                        if (offered.size > CATEGORY_CHIPS) AssistChip(onClick = { pickingCategory = true }, label = { Text("More (${offered.size - chips.size})") }, modifier = Modifier.testTag("rule_more_categories"))
                     }
+                    if (pickingCategory) CategoryPickerDialog(offered, category, onPick = { id -> category = id; problem = null; pickingCategory = false }, onClose = { pickingCategory = false })
                     tested?.let { Text(if (it == 0L) "No past entry mentions this." else "It would have matched $it of your past entries.", modifier = Modifier.testTag("rule_tested")) }
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("rule_problem")) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -328,3 +342,6 @@ fun CaptureRulesScreen(
         }
     }
 }
+
+/** How many categories show as chips on a captured item and in the rule form; the rest are behind "More". */
+private const val CATEGORY_CHIPS = 10

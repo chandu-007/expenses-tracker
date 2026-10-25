@@ -165,6 +165,25 @@ class InboxUiTest {
     }
 
     @Test
+    fun everyCategoryCanBeChosenForACapturedPaymentThroughMoreAndSearch() {
+        // more categories than the chips show: the last one is only reachable through "More"
+        val lastName = "Zebra upkeep"
+        runBlocking { container.write { ok -> repeat(14) { ok.categories.create(if (it == 13) lastName else "Extra $it") } } }
+        ingest(debit, 5_000); launch(); openInbox()
+        val id = runBlocking { container.write { it.inbox.list().single().id } }!!
+        waitFor("inbox_$id")
+        tap("inbox_change_$id"); tap("inbox_more_categories_$id")
+        waitFor("category_search")
+        compose.onNodeWithTag("category_search", useUnmergedTree = true).performTextInput("Zebra")
+        val target = runBlocking { container.write { ok -> ok.categories.list().first { it.name == lastName }.id } }!!
+        tap("category_option_$target")
+        tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        val e = entries().single()
+        val cat = e.category_id ?: runBlocking { container.write { ok -> ok.db.schemaQueries.splitsOf(e.id).executeAsList().first().category_id } }
+        assertEquals(target, cat, "the category found through More is the one the entry got")
+    }
+
+    @Test
     fun aCreditBecomesIncomeWithoutACategoryAndTheAccountChoiceIsRememberedForTheNextOne() {
         ingest(credit, 6_000); launch(); openInbox()
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
