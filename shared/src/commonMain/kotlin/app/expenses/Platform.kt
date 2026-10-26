@@ -139,7 +139,7 @@ interface Platform {
     fun looksLikePdf(bytes: ByteArray): Boolean = hasPdfMark(bytes)
 
     /** Whether [bytes] are a JPEG, PNG or WebP picture. */
-    fun looksLikeImage(bytes: ByteArray): Boolean = hasImageMark(bytes)
+    fun looksLikeImage(bytes: ByteArray): Boolean = app.expenses.core.domain.ImageSniff.looksLikeImage(bytes)
 
     /**
      * The text of a PDF, read on the device. [password] is what the person typed for a protected file (null the first time). Where this platform cannot read
@@ -171,14 +171,6 @@ private fun hasPdfMark(bytes: ByteArray): Boolean {
     val limit = minOf(bytes.size, 1024) - mark.length
     for (start in 0..limit) if (mark.indices.all { bytes[start + it] == mark[it].code.toByte() }) return true
     return false
-}
-
-private fun hasImageMark(bytes: ByteArray): Boolean {
-    fun at(i: Int, vararg v: Int) = bytes.size >= i + v.size && v.indices.all { bytes[i + it] == v[it].toByte() }
-    val jpeg = at(0, 0xFF, 0xD8, 0xFF)
-    val png = at(0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-    val webp = at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)
-    return jpeg || png || webp
 }
 
 /** What copying an attachment in produced. */

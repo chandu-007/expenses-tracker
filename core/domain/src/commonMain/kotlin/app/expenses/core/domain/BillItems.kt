@@ -63,6 +63,9 @@ object BillItems {
 
     private enum class Kind { ITEM, TOTAL, SKIP }
 
+    /** Where a bill's Qty column stands: no such column, before the name, or after it. */
+    private enum class QtyColumn { NONE, BEFORE, AFTER }
+
     fun parse(text: String, currency: Currency = Currency.INR): ParsedBill {
         val digits = currency.minorUnitDigits
         var one = 1L
@@ -71,13 +74,15 @@ object BillItems {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
         // a header with Qty in it says which side of the name the quantity column is on
-        var qtyColumn: Boolean? = null // null: no quantity column; true: before the name; false: after it
+        // NOT a Boolean?: a nullable Boolean assigned in this loop crashed the iPhone build (Kotlin/Native ThrowInvalidReceiverTypeException) on a real bill
+        var qtyColumn = QtyColumn.NONE
         for (l in lines) {
             val words = words(l)
-            if (words.any { it in QTY_WORDS } && words.count { it in HEADER_WORDS } >= 1) {
+            // a heading has no figures: "Total Qty. 3 Total 576.50" is a totals line, not the column heading
+            if (words.any { it in QTY_WORDS } && words.count { it in HEADER_WORDS } >= 1 && tokens(l).none { amount(it, digits) != null }) {
                 val q = words.indexOfFirst { it in QTY_WORDS }
                 val n = words.indexOfFirst { it in NAME_HEADS }
-                qtyColumn = n >= 0 && q < n
+                qtyColumn = if (n >= 0 && q < n) QtyColumn.BEFORE else QtyColumn.AFTER
                 break
             }
         }
@@ -188,7 +193,7 @@ object BillItems {
     private class Read(val name: String, val total: Long, val qty: Int)
 
     /** The name, the cost of the line and the quantity from the tokens of a line that ends in an amount; null when the tokens do not make a line. */
-    private fun readItem(all: List<String>, digits: Int, qtyColumn: Boolean?): Read? {
+    private fun readItem(all: List<String>, digits: Int, qtyColumn: QtyColumn): Read? {
         val t = all
         val last = amount(t.last(), digits) ?: return null
         val body = t.dropLast(1)
@@ -219,7 +224,7 @@ object BillItems {
                 val x = body[body.size - 2]; val y = body.last()
                 qty = listOf(x, y).filter { isQty(it) }.minOf { it.toInt() }; name = body.dropLast(2)
             }
-            qtyColumn == false && body.size >= 2 && isQty(body.last()) -> { qty = body.last().toInt(); name = body.dropLast(1) }
+            qtyColumn == QtyColumn.AFTER && body.size >= 2 && isQty(body.last()) -> { qty = body.last().toInt(); name = body.dropLast(1) }
             else -> name = body
         }
         var n = name.toMutableList()
@@ -232,7 +237,7 @@ object BillItems {
         if (n.size > 1 && n[0].length >= 4 && n[0].all { it in '0'..'9' } && n.drop(1).any { letters(it) > 0 }) n = n.drop(1).toMutableList()
         // "2x Milk" or "2 x Milk" before the name; "2 Milk" only where the header says the quantity comes first
         if (n.size >= 3 && isQty(n[0]) && n[1] in OPS) { qty = n[0].toInt(); n = n.drop(2).toMutableList() }
-        else if (qtyColumn == true && n.size >= 2 && isQty(n[0]) && letters(n[1]) > 0) { qty = n[0].toInt(); n = n.drop(1).toMutableList() }
+        else if (qtyColumn == QtyColumn.BEFORE && n.size >= 2 && isQty(n[0]) && letters(n[1]) > 0) { qty = n[0].toInt(); n = n.drop(1).toMutableList() }
         return Read(clean(n), total, qty)
     }
 
