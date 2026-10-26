@@ -30,4 +30,28 @@ Thank You VIsIt Agaln.!!"""
         assertEquals(listOf(34_900L, 2_850L, 19_900L), read.items.map { it.amountMinor })
         assertEquals(60_500L, read.printedTotalMinor)
     }
+
+    /** The same bill as Android's recogniser read it: the rupee sign came out as a star, a price lost its first digit to a letter, and "Total" fell on its own line. */
+    private val androidBill = """Date: 01/10/26 20:50 Dine In: G14
+item Qty. Price Aimount
+Zafrani Chicken Biryani 1 349.00 349.00
+(regular)
+Water Bottle 1 28.50 28.50
+Curd Rice i99.00 199.00
+Sub
+Total Qty. 3 576.50
+Total
+2.5% 14.41
+2.5% 14.41
+Round off -0.32
+Grand Total *605.00
+Thank Yo Visit Agaln..!
+All items Include GST"""
+
+    @Test
+    fun theGrandTotalIsFoundWhenTheRupeeSignIsReadAsAStarAndAMisreadPriceIsNotPartOfTheName() {
+        val read = BillItems.parse(androidBill)
+        assertEquals(60_500L, read.printedTotalMinor)
+        assertEquals("Curd Rice", read.items.first { it.amountMinor == 19_900L }.name)
+    }
 }

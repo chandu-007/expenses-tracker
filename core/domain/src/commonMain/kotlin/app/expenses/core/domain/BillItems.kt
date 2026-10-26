@@ -37,6 +37,8 @@ object BillItems {
     private val LEADER = Regex("[._=·•~]{2,}|-{3,}")
     private val NON_LETTERS = Regex("[^\\p{L}]+")
     private val DATE = Regex("\\b\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}\\b")
+    /** A unit price whose first digit the recogniser read as a letter ("i99.00" for "199.00"): never part of a name. */
+    private val MISREAD_PRICE = Regex("^[iIlL|]\\d+[.,]\\d{2}$")
     private val TIME = Regex("\\b\\d{1,2}:\\d{2}\\b")
 
     /** Words that make a line something other than an item, wherever they stand in it. */
@@ -229,7 +231,7 @@ object BillItems {
         }
         var n = name.toMutableList()
         // a unit price left standing in the name ("Milk 500ml 27.00 54.00")
-        while (n.size > 1 && n.last().contains('.') && amount(n.last(), digits) != null) n.removeLast()
+        while (n.size > 1 && n.last().contains('.') && (amount(n.last(), digits) != null || MISREAD_PRICE.matches(n.last()))) n.removeLast()
         while (n.size > 1 && n.last().endsWith("%")) n.removeLast()
         if (n.isNotEmpty() && n.last() in OPS) n.removeLast()
         // a serial number ("1." or "2)") or an item code before the name
@@ -268,6 +270,8 @@ object BillItems {
             var t = raw.trim()
             if (t.isEmpty()) continue
             t = t.trimStart('₹', '¥', '$', '€', '£')
+            // a rupee sign the recogniser read as a star or a hryvnia sign, glued to the amount ("*605.00")
+            if (t.length > 1 && t[0] in "*₴#" && t[1].isDigit()) t = t.drop(1)
             val low = t.lowercase()
             if (low == "rs" || low == "rs." || low == "inr" || low == "/-") continue
             t = when {
