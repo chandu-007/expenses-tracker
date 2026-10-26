@@ -1,6 +1,7 @@
 package app.expenses.ui
 
 import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.BillEntries
 import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.AmountWords
 import androidx.compose.animation.AnimatedVisibility
@@ -160,6 +161,8 @@ fun EntryFormScreen(
     lastIncomeCategory: String = "",
     /** Where the entry was read from (a text, notification, email, statement line); null for one typed by hand. */
     origin: app.expenses.OriginUi? = null,
+    /** Saves several new expenses at once (the items of a bill, each its own entry) and the photo the bill was read from; null where the form cannot (an edit). */
+    onSaveEach: ((drafts: List<EntryDraft>, photoUri: String?) -> Unit)? = null,
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
@@ -443,9 +446,23 @@ fun EntryFormScreen(
             )
             TagsEditor(draft.tags, allTags) { draft = draft.copy(tags = it) }
             AttachmentsSection(draft.id != null, attachments, attachmentProblem, onAttach, onOpenAttachment, onRemoveAttachment, extra = {
-                if (draft.kind == DraftKind.EXPENSE) BillItemsReader(amountEmpty = draft.amountText.isBlank(), note = draft.note, canAttach = attachments.isEmpty()) { amountText, note, photo ->
-                    draft = draft.copy(amountText = amountText ?: draft.amountText, note = note)
-                    photo?.let(onAttach)
+                if (draft.kind == DraftKind.EXPENSE) {
+                    // each item as its own entry: only for a new plain expense (one account and one category, paid in the ledger's currency, not shared)
+                    val eachNotice = when {
+                        onSaveEach == null || draft.id != null -> null
+                        split || draft.foreignCode.isNotEmpty() || EntryDrafts.isSplit(draft) -> "Items cannot be saved one by one for a shared or foreign-currency expense."
+                        draft.category.isBlank() || draft.accountId.isBlank() -> "Choose a category and an account on the form first to save the items one by one."
+                        else -> null
+                    }
+                    val canAddEach = onSaveEach != null && draft.id == null && eachNotice == null
+                    BillItemsReader(
+                        amountEmpty = draft.amountText.isBlank(), note = draft.note, canAttach = attachments.isEmpty(),
+                        canAddEach = canAddEach, eachNotice = eachNotice,
+                        onAddEach = { items, rest, photo -> onSaveEach?.invoke(BillEntries.drafts(draft, items, rest, currency), photo) },
+                    ) { amountText, note, photo ->
+                        draft = draft.copy(amountText = amountText ?: draft.amountText, note = note)
+                        photo?.let(onAttach)
+                    }
                 }
             })
             if (built is DraftResult.Problem && (draft.amountText.isNotEmpty() || draft.kind == DraftKind.TRANSFER || draft.kind == DraftKind.LOAN || split)) {

@@ -27,6 +27,9 @@ import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
 import platform.darwin.dispatch_async
+import platform.darwin.DISPATCH_TIME_NOW
+import platform.darwin.dispatch_time
+import platform.darwin.dispatch_after
 import platform.darwin.dispatch_get_main_queue
 
 /** The window the person is looking at (foreground scene's key window). */
@@ -47,6 +50,11 @@ internal fun topViewController(): UIViewController? {
 }
 
 internal fun onMain(block: () -> Unit) { dispatch_async(dispatch_get_main_queue(), block) }
+
+/** Runs [block] on the main thread after [seconds]. */
+internal fun afterMain(seconds: Double, block: () -> Unit) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (seconds * 1_000_000_000).toLong()), dispatch_get_main_queue(), block)
+}
 
 /**
  * Saving a file on iPhone: iOS shares or exports a file that already exists, so the "pick a place, then write" order of the shared screens becomes

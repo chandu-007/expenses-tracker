@@ -539,6 +539,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
                             lastRates = foreignRates,
                             onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
+                            onSaveEach = { drafts, photo -> viewModel.saveEntries(drafts, photo); adding = false; prefillLoan = null; prefillTransfer = null },
                             onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
                         )
                     }

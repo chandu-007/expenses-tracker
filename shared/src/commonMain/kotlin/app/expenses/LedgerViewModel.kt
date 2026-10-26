@@ -338,6 +338,8 @@ data class UndoUi(
     val entryId: String, val text: String, val restore: Boolean = false, val recurringId: String? = null, val recurringDay: Long = 0,
     /** For a bulk edit: the earlier versions to put back; for a bulk delete: the ids to bring back, in order. */
     val bulkDrafts: List<EntryDraft> = emptyList(), val bulkRestore: List<String> = emptyList(),
+    /** For several entries added in one go (a bill's items): the ids to take back. */
+    val bulkCreated: List<String> = emptyList(),
 )
 
 /** One transaction found in a statement, as shown in the preview. */
@@ -682,6 +684,37 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         offerSimilar(draft, id)
     }
 
+    /**
+     * Saves several new entries at once (the items of a bill, each as its own entry): all or none. Files chosen on the form, and [photoUri] (the photo the bill was
+     * read from), are attached to the first one. One "Undo" takes them all back. On a rule they break, the reason is shown and nothing is saved.
+     */
+    fun saveEntries(drafts: List<EntryDraft>, photoUri: String?) {
+        if (drafts.isEmpty()) return
+        val carried = takeStaged()
+        viewModelScope.launch(BACKGROUND) {
+            val all = carried.toMutableList()
+            if (photoUri != null) {
+                val id = Uuid.random().toString()
+                try {
+                    AttachmentRules.checkAdd(all.size, null)?.let { throw IllegalArgumentException(it) }
+                    val copied = attachmentFiles.copyIn(id, photoUri)
+                    all += Staged(id, AttachmentRules.safeName(platform.displayName(photoUri) ?: photoUri.substringAfterLast('/').ifEmpty { null }), platform.mimeType(photoUri).orEmpty(), copied.sizeBytes, copied.sha256)
+                } catch (e: Exception) { attachmentFiles.delete(id) } // the entries matter more than the picture: they are saved without it
+            }
+            try {
+                container.write { ok ->
+                    val ids = try { ok.store.atomically { drafts.map { EntryActions(ok).save(it) } } } catch (e: Exception) { restoreStaged(all); throw e }
+                    all.forEach { ok.attachments.add(it.id, ids.first(), it.name, it.mime, it.sizeBytes, it.sha256) }
+                    _editor.value = null
+                    val total = Money(drafts.sumOf { parseAmount(it.amountText, inr)?.minorUnits ?: 0L }, inr)
+                    refreshQuickly(ok, undo = UndoUi(ids.first(), "Added ${ids.size} expenses, ${total.formatted()}", bulkCreated = ids))
+                }
+            } catch (e: IllegalArgumentException) {
+                _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
+            }
+        }
+    }
+
     /** Opens the refund form for an expense. */
     fun startRefund(expenseId: String) = withStore { ok ->
         _editor.value = EntryActions(ok).startRefund(expenseId)
@@ -700,7 +733,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** Takes back an entry that was just added. */
     fun undo(u: UndoUi) = withStore { ok ->
-        if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it) } }
+        if (u.bulkCreated.isNotEmpty()) ok.store.atomically { u.bulkCreated.forEach { EntryActions(ok).undo(it) } }
+        else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it) } }
         else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)

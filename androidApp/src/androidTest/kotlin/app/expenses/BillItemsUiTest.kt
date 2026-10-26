@@ -7,6 +7,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.expenses.core.domain.Currency
 import app.expenses.ui.BillItemsChoice
@@ -35,8 +37,13 @@ class BillItemsUiTest {
 
     private var applied: BillItemsChoice? = null
     private var closed = false
-    private fun show(text: String, willSetAmount: Boolean = true) {
-        compose.setContent { MaterialTheme { BillItemsDialog(text, willSetAmount, photoUri = "content://photo/1", onClose = { closed = true }, onApply = { applied = it }, currency = Currency.INR) } }
+    private var copies = 0
+    private fun show(text: String, willSetAmount: Boolean = true, canAddEach: Boolean = false, eachNotice: String? = null) {
+        compose.setContent {
+            MaterialTheme {
+                BillItemsDialog(text, willSetAmount, photoUri = "content://photo/1", onClose = { closed = true }, onApply = { applied = it }, currency = Currency.INR, canAddEach = canAddEach, eachNotice = eachNotice, onCopyText = { copies++; true })
+            }
+        }
     }
 
     @Test
@@ -102,5 +109,85 @@ class BillItemsUiTest {
         assertTrue(textOf("bill_items_total").contains("₹250.00"))
         tap("bill_items_apply")
         assertEquals(25_000, applied!!.amountMinor); assertTrue(applied!!.items.isEmpty())
+    }
+
+    @Test
+    fun eachItemAsItsOwnEntryIsOfferedWithTheTaxAsOneMoreAndChosenWithTheRest() {
+        show(bill, canAddEach = true)
+        compose.waitUntil(10_000) { has("bill_items_mode_each") }
+        assertTrue(has("bill_items_mode_one") && !has("bill_items_rest"), "the tax line is offered only once each item is chosen")
+        tap("bill_items_mode_each")
+        compose.waitUntil(10_000) { has("bill_items_rest") }
+        assertTrue(textOf("bill_items_total").contains("Entries to add: 4") && textOf("bill_items_total").contains("₹127.00"), textOf("bill_items_total"))
+        tap("bill_items_apply")
+        val choice = applied!!
+        assertTrue(choice.eachEntry)
+        assertEquals(listOf("Milk 500ml", "Brown Bread", "Eggs (6)"), choice.items.map { it.name })
+        assertEquals(600L, choice.restMinor, "127.00 on the bill less 121.00 of items")
+    }
+
+    @Test
+    fun leavingTheTaxOutMakesOneEntryLessAndThePlainChoiceStaysOneEntry() {
+        show(bill, canAddEach = true)
+        compose.waitUntil(10_000) { has("bill_items_mode_each") }
+        tap("bill_items_mode_each"); compose.waitUntil(10_000) { has("bill_items_rest") }
+        tap("bill_items_rest")
+        compose.waitUntil(10_000) { textOf("bill_items_total").contains("Entries to add: 3") }
+        assertTrue(textOf("bill_items_total").contains("₹121.00"), textOf("bill_items_total"))
+        tap("bill_items_apply")
+        assertEquals(0L, applied!!.restMinor)
+        applied = null
+    }
+
+    @Test
+    fun theWholeBillIsTheDefaultEvenWhenEachItemIsOffered() {
+        show(bill, canAddEach = true)
+        compose.waitUntil(10_000) { has("bill_items_apply") }
+        tap("bill_items_apply")
+        assertTrue(!applied!!.eachEntry, "one entry for the whole bill unless the person chooses otherwise")
+        applied = null; closed = false
+    }
+
+    @Test
+    fun aReasonIsGivenInsteadOfTheChoiceWhenItemsCannotBeSavedOneByOne() {
+        show(bill, canAddEach = false, eachNotice = "Choose a category and an account on the form first to save the items one by one.")
+        compose.waitUntil(10_000) { has("bill_items_each_notice") }
+        assertTrue(!has("bill_items_mode_each"))
+    }
+
+    @Test
+    fun aMisreadLineCanBeCorrectedBeforeItIsUsed() {
+        show(bill, canAddEach = true)
+        compose.waitUntil(10_000) { has("bill_item_edit_1") }
+        tap("bill_item_edit_1")
+        compose.waitUntil(10_000) { has("bill_item_name_1") }
+        compose.onNodeWithTag("bill_item_name_1", useUnmergedTree = true).performTextClearance()
+        compose.onNodeWithTag("bill_item_name_1", useUnmergedTree = true).performTextInput("Whole Wheat Bread")
+        compose.onNodeWithTag("bill_item_amount_1", useUnmergedTree = true).performTextClearance()
+        compose.onNodeWithTag("bill_item_amount_1", useUnmergedTree = true).performTextInput("45.50")
+        tap("bill_item_done_1")
+        compose.waitUntil(10_000) { !has("bill_item_name_1") }
+        compose.waitUntil(10_000) { textOf("bill_items_total").contains("₹127.00") } // the printed total still stands for the whole bill
+        tap("bill_items_apply")
+        val choice = applied!!
+        assertEquals("Whole Wheat Bread", choice.items[1].name)
+        assertEquals(4_550L, choice.items[1].amountMinor)
+    }
+
+    @Test
+    fun theTextThatWasReadCanBeCopiedForABillThatReadsBadly() {
+        show(bill)
+        compose.waitUntil(10_000) { has("bill_items_copy") }
+        tap("bill_items_copy")
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Copied"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, copies)
+    }
+
+    @Test
+    fun theTextCanBeCopiedWhenNothingWasReadToo() {
+        show("smudge\n????\n   ")
+        compose.waitUntil(10_000) { has("bill_items_copy") }
+        tap("bill_items_copy")
+        assertEquals(1, copies)
     }
 }

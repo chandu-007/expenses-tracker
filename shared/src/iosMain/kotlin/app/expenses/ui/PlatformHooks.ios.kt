@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSURL
 import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIApplication
@@ -65,7 +66,8 @@ private class PickerDelegate(private val onPicked: (String?) -> Unit, private va
         finish(url?.absoluteString)
     }
     override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = finish(null)
-    private fun finish(uri: String?) { PickerHolder.active = null; onPicked(uri) }
+    // the picker closes itself as it answers; what the answer starts (a new screen over the app) waits until it has gone
+    private fun finish(uri: String?) { PickerHolder.active = null; app.expenses.afterMain(0.5) { onPicked(uri) } }
 }
 
 private object PickerHolder { var active: PickerDelegate? = null }
@@ -79,13 +81,12 @@ private class CameraDelegate(private val onPicked: (String?) -> Unit) : NSObject
             val url = NSURL.fileURLWithPath(NSTemporaryDirectory().trimEnd('/') + "/photo-" + NSUUID().UUIDString + ".jpg")
             if (data.writeToURL(url, atomically = true)) uri = url.absoluteString
         }
-        picker.dismissViewControllerAnimated(true, completion = null)
-        finish(uri)
+        // answer only when the camera is gone: reading the picture and showing what was read while it is still leaving put the next screen on a controller that is being dismissed
+        picker.dismissViewControllerAnimated(true, completion = { finish(uri) })
     }
 
     override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
-        picker.dismissViewControllerAnimated(true, completion = null)
-        finish(null)
+        picker.dismissViewControllerAnimated(true, completion = { finish(null) })
     }
 
     private fun finish(uri: String?) { CameraHolder.active = null; onPicked(uri) }
@@ -108,17 +109,25 @@ private fun present(picker: UIDocumentPickerViewController, onPicked: (String?) 
  * (Save to Files, AirDrop, Mail...), see [app.expenses.IosExport].
  */
 private object IosFilePickers : FilePickers {
+    /**
+     * UI tests: `-pick-file <path>` answers every picture or document request with that file at once, as if it had been chosen (the simulator has no camera and the
+     * Files picker cannot be driven reliably), and says a camera is there so the screens show the same choices as on a phone.
+     */
+    private val testFile: String? = NSProcessInfo.processInfo.arguments.filterIsInstance<String>().let { a -> a.indexOf("-pick-file").takeIf { it >= 0 && it + 1 < a.size }?.let { NSURL.fileURLWithPath(a[it + 1]).absoluteString } }
+
     override fun openDocument(mimeTypes: List<String>, onPicked: (String?) -> Unit) {
+        if (testFile != null) { onPicked(testFile); return }
         val types = mimeTypes.mapNotNull { m -> if (m == "*/*") UTTypeItem else UTType.typeWithMIMEType(m) }.ifEmpty { listOf(UTTypeItem) }
         present(UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true), onPicked)
     }
 
     override fun createDocument(suggestedName: String, mime: String, onPicked: (String?) -> Unit) = onPicked(app.expenses.IosExport.stagingFile(suggestedName))
 
-    override val canTakePhoto: Boolean get() = UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera)
+    override val canTakePhoto: Boolean get() = testFile != null || UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera)
 
     /** The system camera (iOS asks for permission the first time, with the reason in Info.plist). The picture is saved as a JPEG in the temporary folder and its address handed back. */
     override fun takePhoto(onPicked: (String?) -> Unit) {
+        if (testFile != null) { onPicked(testFile); return }
         val top = app.expenses.topViewController()
         if (top == null || !canTakePhoto) { onPicked(null); return }
         val picker = UIImagePickerController()
