@@ -63,11 +63,11 @@ private class PickerDelegate(private val onPicked: (String?) -> Unit, private va
         val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
         // a folder chosen for automatic copies is kept as a bookmark while the system still lets the app into it
         if (remember && url != null) app.expenses.IosAutoExport.remember(url)
-        finish(url?.absoluteString)
+        finish(controller, url?.absoluteString)
     }
-    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = finish(null)
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = finish(controller, null)
     // the picker closes itself as it answers; what the answer starts (a new screen over the app) waits until it has gone
-    private fun finish(uri: String?) { PickerHolder.active = null; app.expenses.afterMain(0.5) { onPicked(uri) } }
+    private fun finish(controller: UIDocumentPickerViewController, uri: String?) { PickerHolder.active = null; app.expenses.whenGone(controller) { onPicked(uri) } }
 }
 
 private object PickerHolder { var active: PickerDelegate? = null }

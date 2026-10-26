@@ -43,7 +43,8 @@ internal fun keyWindow(): UIWindow? {
 internal fun topViewController(): UIViewController? {
     var vc = keyWindow()?.rootViewController
     while (true) {
-        val next = vc?.presentedViewController ?: break
+        // a controller that is on its way out is not a place to present from: something presented on it goes down with it, and later presents then fail
+        val next = vc?.presentedViewController?.takeUnless { it.isBeingDismissed() } ?: break
         vc = next
     }
     return vc
@@ -54,6 +55,21 @@ internal fun onMain(block: () -> Unit) { dispatch_async(dispatch_get_main_queue(
 /** Runs [block] on the main thread after [seconds]. */
 internal fun afterMain(seconds: Double, block: () -> Unit) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (seconds * 1_000_000_000).toLong()), dispatch_get_main_queue(), block)
+}
+
+/**
+ * Runs [block] once [controller] is no longer on screen (it has no presenting controller), checking every tenth of a second for at most [maxSeconds], then runs it
+ * anyway. What the block starts (a new screen over the app) must not be presented while the controller that asked for it is still leaving, on a slow phone or
+ * with Reduce Motion alike.
+ */
+internal fun whenGone(controller: platform.UIKit.UIViewController, maxSeconds: Double = 3.0, block: () -> Unit) {
+    var waited = 0.0
+    fun check() {
+        if ((controller.presentingViewController == null && !controller.isBeingDismissed()) || waited >= maxSeconds) { block(); return }
+        waited += 0.1
+        afterMain(0.1) { check() }
+    }
+    afterMain(0.05) { check() }
 }
 
 /**
