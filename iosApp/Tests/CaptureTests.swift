@@ -97,7 +97,7 @@ final class CaptureTests: XCTestCase {
     func testABillReminderTextIsABillNotADebit() async throws {
         let amount = "\(Int.random(in: 1000...99999)).\(Int.random(in: 10...99))" // new each run: the same bill twice is one bill, on a ledger that keeps earlier runs
         let text = "Your bill dated 21-10-2026 for JioHome connection with JioFixedVoice Number +914000000000 is due for payment on 30-10-2026.\n" +
-            "Total amount payable : Rs.\(amount).\nTo pay your bill, click www.jio.com/r/Vbu7k5JBt\n" +
+            "Total amount payable : Rs.\(amount).\nTo pay your bill, click www.jio.com/r/AbCdEfGhI\n" +
             "Overdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
         let before = try await IosCapture.shared.pendingCount(host: host).int64Value
         let first = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: text)

@@ -14,7 +14,7 @@ class BillReminderClassifierTest {
     private val today = LocalDate(2026, 10, 22)
     private val extra = setOf("WATERX", "GASXXX", "DTHXXX")
     private val jio = "Your bill dated 21-10-2026 for JioHome connection with JioFixedVoice Number +914000000000 is due for payment on 30-10-2026.\n" +
-        "Total amount payable : Rs.706.82.\nTo pay your bill, click www.jio.com/r/Vbu7k5JBt\nOverdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
+        "Total amount payable : Rs.706.82.\nTo pay your bill, click www.jio.com/r/AbCdEfGhI\nOverdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
 
     private fun bill(sender: String, body: String): CaptureOutcome.Bill = assertIs<CaptureOutcome.Bill>(CaptureClassifier.classify(sender, body, extra, today), "'$body'")
     private fun txn(sender: String, body: String): CaptureOutcome.Transaction = assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify(sender, body, extra, today), "'$body'")

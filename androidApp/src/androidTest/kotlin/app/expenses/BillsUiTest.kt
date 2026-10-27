@@ -284,7 +284,7 @@ class BillsUiTest {
 
     // The text that reached an iPhone as a debit in To review (0.7.1). The phone number is invented.
     private val jioHome = "Your bill dated 21-10-2026 for JioHome connection with JioFixedVoice Number +914000000000 is due for payment on 30-10-2026.\n" +
-        "Total amount payable : Rs.706.82.\nTo pay your bill, click www.jio.com/r/Vbu7k5JBt\nOverdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
+        "Total amount payable : Rs.706.82.\nTo pay your bill, click www.jio.com/r/AbCdEfGhI\nOverdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
     private fun waiting() = runBlocking { container.write { it.inbox.list() } }!!
 
     @Test
