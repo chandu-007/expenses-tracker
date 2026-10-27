@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -58,7 +59,7 @@ fun FirstWeekCard(items: List<FirstWeekItem>, onOpen: (FirstWeekStep) -> Unit, o
             }
             if (!folded) items.forEach { item ->
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onOpen(item.step) }.padding(vertical = 8.dp, horizontal = 2.dp).testTag("first_week_item_${item.step.name}"),
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(item.step) }.padding(vertical = 8.dp, horizontal = 2.dp).testTag("first_week_item_${item.step.name}"), // 48 dp: a finished step has no second line and was 44
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Tick(item.done, Modifier.testTag(if (item.done) "first_week_done_${item.step.name}" else "first_week_todo_${item.step.name}"))

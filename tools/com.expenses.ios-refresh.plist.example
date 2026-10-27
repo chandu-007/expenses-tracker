@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Copy to ~/Library/LaunchAgents/com.expenses.ios-refresh.plist, replace /Users/YOU with the real home folder, then: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.expenses.ios-refresh.plist
+     Unload: launchctl bootout gui/$(id -u)/com.expenses.ios-refresh. See docs/IOS.md. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.expenses.ios-refresh</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOU/Documents/personal/expenses_tracker/tools/ios_refresh.sh</string>
+        <string>--if-expires-within</string>
+        <string>2</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+    <key>StartCalendarInterval</key>
+    <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
+    <key>StandardOutPath</key><string>/tmp/expenses-ios-refresh.log</string>
+    <key>StandardErrorPath</key><string>/tmp/expenses-ios-refresh.err</string>
+</dict>
+</plist>

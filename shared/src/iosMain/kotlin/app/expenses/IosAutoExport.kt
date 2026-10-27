@@ -2,6 +2,7 @@
 
 package app.expenses
 
+import app.expenses.core.storage.ByteSource
 import kotlinx.cinterop.BooleanVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCObjectVar
@@ -79,15 +80,60 @@ internal object IosAutoExport {
                 ?: throw IllegalStateException("The folder cannot be read. It may have been removed, or the permission was withdrawn.")
         }
 
+        override fun openWrite(name: String, mime: String): FolderWriter? {
+            val started = dir.startAccessingSecurityScopedResource()
+            val sink = openFileForWriting(file(name)) { if (started) dir.stopAccessingSecurityScopedResource() } ?: return null
+            return object : FolderWriter {
+                override val name: String = name
+                override fun write(buf: ByteArray, off: Int, len: Int) = sink.write(buf, off, len)
+                override fun close() = sink.close()
+            }
+        }
+
+        override val canRename get() = true
+
+        override fun rename(name: String, newName: String): String? = scoped { if (files.moveItemAtURL(file(name), toURL = file(newName), error = null)) newName else null }
+
+        override fun openRead(name: String): ByteSource? {
+            val started = dir.startAccessingSecurityScopedResource()
+            return openFileForReading(file(name)) { if (started) dir.stopAccessingSecurityScopedResource() }
+        }
+
         override fun write(name: String, mime: String, bytes: ByteArray): String? = scoped { if (bytes.toNSData().writeToURL(file(name), atomically = true)) name else null }
         override fun read(name: String): ByteArray? = scoped { NSData.dataWithContentsOfURL(file(name))?.toByteArray() }
         override fun delete(name: String): Boolean = scoped { files.removeItemAtURL(file(name), error = null) }
     }
 }
 
+/** Test entry for the Swift unit tests: one photo-or-file attached to an entry, then a copy into [folderPath] (so the backup carries it and is written to the folder in pieces); answers with the sentence the screen would show. The attachment is removed again. */
+object IosAutoExportFilesDebug {
+    suspend fun exportWithAFileInto(host: IosHostServices, folderPath: String, now: Long): String {
+        if (!runningUnderXCTest()) return "refused: this is a test entry and does nothing outside a test run"
+        val core = IosCore.get(host)
+        val uri = NSURL.fileURLWithPath(folderPath).absoluteString.orEmpty()
+        val id = "debug-auto-file"
+        val bytes = ByteArray(70_000) { (it * 31 + 7).toByte() }
+        val vault = core.platform.attachmentFiles
+        core.container.write { ok ->
+            ok.templates.putSetting(AutoExportKeys.FOLDER, uri)
+            ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("debug-auto-entry"), now, app.expenses.core.domain.ledger.AccountId("cash"), app.expenses.core.domain.Money(100, app.expenses.core.domain.Currency.INR)), app.expenses.core.storage.EntryDetails(merchant = "Auto copy with a file"))
+        }
+        try {
+            vault.create(id).also { it.write(bytes, 0, bytes.size) }.close()
+            core.container.write { ok -> ok.attachments.add(id, "debug-auto-entry", "debug.bin", "application/octet-stream", bytes.size.toLong(), app.expenses.core.storage.Sha256.hex(bytes)) }
+            IosAutoExport.run(core.container, uri, now, force = true)
+            return core.container.write { it.templates.setting(AutoExportKeys.STATUS) }.orEmpty()
+        } finally {
+            core.container.write { ok -> ok.attachments.delete(id) }
+            vault.delete(id)
+        }
+    }
+}
+
 /** Test entry for the Swift unit tests: a copy into [folderPath] now, answering with the sentence the screen would show. */
 object IosAutoExportDebug {
     suspend fun exportInto(host: IosHostServices, folderPath: String, now: Long): String {
+        if (!runningUnderXCTest()) return "refused: this is a test entry and does nothing outside a test run"
         val core = IosCore.get(host)
         val uri = NSURL.fileURLWithPath(folderPath).absoluteString.orEmpty()
         core.container.write { it.templates.putSetting(AutoExportKeys.FOLDER, uri) }

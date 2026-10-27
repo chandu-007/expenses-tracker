@@ -201,7 +201,7 @@ class BackupStoreTest {
 
     @Test
     fun aNewerVersionIsRefusedAndUnknownFieldsFromALaterMinorChangeAreIgnored() {
-        assertTrue(assertFailsWith<BackupException> { BackupFile.decode(withHeader(2, "{}")) }.message!!.contains("newer version"))
+        assertTrue(assertFailsWith<BackupException> { BackupFile.decode(withHeader(3, "{}")) }.message!!.contains("newer version"))
         assertTrue(assertFailsWith<BackupException> { BackupFile.decode(withHeader(1, "{}", format = "something-else")) }.message!!.contains("not a backup"))
         assertEquals(1, BackupFile.decode(withHeader(1, """{"accounts":[{"id":"a","name":"A","type":"CASH","currency":"INR","icon":"wallet"}],"futureThing":[1,2,3]}""")).second.accounts.size)
         assertTrue(assertFailsWith<BackupException> { BackupFile.decode(withHeader(1, """{"accounts":"nope"}""")) }.message!!.contains("could not be read"))

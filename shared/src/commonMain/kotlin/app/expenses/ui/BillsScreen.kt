@@ -74,7 +74,10 @@ fun BillsScreen(
     onAdd: (String) -> Unit, onSkip: (String) -> Unit, onSetDue: (String, Long) -> Unit, onUnpay: (String) -> Unit,
     onPay: (id: String, payFromId: String, cardId: String, amount: String, record: Boolean, done: (String?) -> Unit) -> Unit,
     onPostRepeat: (itemId: String, epochDay: Long, amount: Money?) -> Unit, onSkipRepeat: (itemId: String, epochDay: Long) -> Unit,
+    /** "Skipped X · Undo" after a bill is skipped or removed: what to offer, taking it back, and the bar going away. */
+    undo: app.expenses.ScreenUndo? = null, onUndo: (String) -> Unit = {}, onUndoGone: (String) -> Unit = {},
 ) {
+    val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     var askingFor by remember { mutableStateOf<BillRowUi?>(null) }
     askingFor?.let { r -> AmountDialog("Amount for ${r.title}", onConfirm = { onPostRepeat(r.repeatItemId, r.repeatDay, it); askingFor = null }, onDismiss = { askingFor = null }) }
     // a waiting repeating item: Post it posts the occurrence as Home does (asking the amount when it differs each time), Skip drops it for good
@@ -94,7 +97,7 @@ fun BillsScreen(
             dismissButton = { TextButton(onClick = { dating = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
-    Scaffold(topBar = { AreaTopBar("Bills", Area.CAPTURE, Icons.Outlined.Receipt, onBack, "bills_back") }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Bills", Area.CAPTURE, Icons.Outlined.Receipt, onBack, "bills_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         if (ui.loaded && all.isEmpty() && ui.paid.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))

@@ -93,8 +93,13 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier) {
     val feel = rememberFeel()
     val days = spark.days
     val n = days.size
-    val reveal = remember { Animatable(if (reduce) 1f else 0f) }
-    LaunchedEffect(Unit) { if (reduce) reveal.snapTo(1f) else reveal.animateTo(1f, tween(Motion.EMPHASIZED, easing = Motion.EaseOut)) }
+    // saved with the list item: scrolled off and back, the line is already drawn instead of drawing in again
+    var played by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val reveal = remember { Animatable(if (reduce || played) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (reduce) reveal.snapTo(1f) else if (!played) reveal.animateTo(1f, tween(Motion.EMPHASIZED, easing = Motion.EaseOut))
+        played = true
+    }
 
     var active by remember { mutableStateOf(false) }
     var touched by remember { mutableIntStateOf(-1) }

@@ -193,16 +193,16 @@ class MotionUiTest {
     }
 
     @Test
-    fun scrollingTheEntriesUpFoldsTheTopOfHomeAndScrollingBackOpensItAgain() {
+    fun scrollingTheEntriesUpTakesTheTopOfHomeWithThemAndScrollingBackBringsItBack() {
         for (i in 1..14) spend("e$i", 10_000L + i, i.toLong())
-        launch(); compose.waitUntil(15_000) { has("home_spark") }; compose.waitForIdle()
-        fun sparkHeight() = node("list").fetchSemanticsNode().boundsInRoot.top.toInt() // where the entries start: the folded top gives them room
-        val open = sparkHeight()
+        launch(); compose.waitUntil(15_000) { has("home_spark") && has("month_spend") }; compose.waitForIdle()
+        fun monthTop() = node("month_spend").fetchSemanticsNode().boundsInRoot.top.toInt() // the month's figure is part of the page that scrolls
+        val open = monthTop()
         node("list").performTouchInput { swipeUp(startY = bottom - 50f, endY = top + 50f, durationMillis = 200) }
         compose.waitForIdle()
-        assertTrue(sparkHeight() < open - 100, "the top folded away while the entries were scrolled up: they now start higher")
-        repeat(4) { node("list").performTouchInput { swipeDown(startY = top + 50f, endY = bottom - 50f, durationMillis = 200) } }
-        compose.waitForIdle()
-        assertEquals(open, sparkHeight(), "and it is back in full at the top of the list")
+        assertTrue(!has("month_spend") || monthTop() < open - 100, "the top of Home scrolled away with the entries")
+        repeat(6) { node("list").performTouchInput { swipeDown(startY = top + 50f, endY = bottom - 50f, durationMillis = 200) } }
+        compose.waitForIdle(); waitFor("month_spend")
+        assertEquals(open, monthTop(), "and it is back in full at the top of the list")
     }
 }

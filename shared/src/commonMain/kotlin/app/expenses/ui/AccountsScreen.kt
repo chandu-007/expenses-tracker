@@ -35,6 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.FlowRow
@@ -70,7 +72,7 @@ fun AccountsScreen(
     val archived = rows.filter { it.archived }
     Scaffold(
         topBar = { AreaTopBar("Accounts", Area.MONEY, Icons.Outlined.AccountBalance, onBack, "back") },
-        floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account")) { Text("+") } },
+        floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account").semantics { contentDescription = "Add an account" }) { Text("+") } }, // a screen reader says "Add an account", not "plus"
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list")) {
             item {
@@ -140,6 +142,9 @@ private fun AccountDialog(
         onDismissRequest = onClose,
         title = { Text(if (existing == null) "New account" else "Edit account") },
         text = {
+            // With the keyboard up the dialog shrinks above it and its content scrolls, so Save and Cancel stay in view. Not for Edit account: Android raises the keyboard there by itself a second
+            // after the dialog opens, and the buttons moving at that moment made AccountsUiTest miss its taps in 3 runs of 6 (0 of 4 without it). The keyboard still covers that dialog's buttons.
+            if (existing == null) ResizeDialogForKeyboard()
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it; problem = null }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("account_name"))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -216,6 +221,7 @@ private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, St
         onDismissRequest = onClose,
         title = { Text("${a.name}: billing dates") },
         text = {
+            // No ResizeDialogForKeyboard() here, as in Edit account: the dialog moving and shrinking when the keyboard comes or goes made AlertsUiTest's tap on "Remove billing dates" miss in 5 of 12 runs (0 of 12 on a00b138, 0 of 12 without this call).
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 field(statement, "Statement day (1 to 28)", "card_statement_day") { statement = it }
                 field(due, "Payment due day (1 to 28)", "card_due_day") { due = it }

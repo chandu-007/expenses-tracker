@@ -1,6 +1,7 @@
 package app.expenses
 
 import app.expenses.core.storage.BackupException
+import app.expenses.core.storage.SealPrimitives
 import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
 import java.security.SecureRandom
@@ -18,7 +19,7 @@ import javax.crypto.spec.SecretKeySpec
  * salt makes decryption fail instead of quietly weakening it. A wrong passphrase and a damaged file are indistinguishable by design
  * and both report that. There is no way to recover a forgotten passphrase.
  */
-object BackupCrypto {
+object BackupCrypto : SealPrimitives {
     private val MAGIC = "EXPENC1\n".encodeToByteArray()
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
@@ -62,6 +63,26 @@ object BackupCrypto {
             throw BackupException("The passphrase is wrong, or the file is damaged.")
         }
     }
+
+    // The primitives the streaming layout for backups with files (core/storage BackupSeal) is written on: the same javax.crypto calls as above.
+    override fun deriveKey(passphrase: String, salt: ByteArray, iterations: Int): ByteArray = key(passphrase, salt, iterations).encoded
+
+    override fun seal(key: ByteArray, nonce: ByteArray, aad: ByteArray, plain: ByteArray): ByteArray =
+        Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(TAG_BITS, nonce))
+            updateAAD(aad)
+        }.doFinal(plain)
+
+    override fun unseal(key: ByteArray, nonce: ByteArray, aad: ByteArray, sealed: ByteArray): ByteArray? = try {
+        Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(TAG_BITS, nonce))
+            updateAAD(aad)
+        }.doFinal(sealed)
+    } catch (e: GeneralSecurityException) {
+        null
+    }
+
+    override fun randomBytes(count: Int): ByteArray = ByteArray(count).also { SecureRandom().nextBytes(it) }
 
     private fun header(iterations: Int, salt: ByteArray) = MAGIC + ByteBuffer.allocate(4).putInt(iterations).array() + salt
 

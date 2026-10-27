@@ -124,4 +124,18 @@ class WidePaneUiTest {
         assertTrue(!has("wide_placeholder"), "a sub-screen is one pane, with no entry placeholder beside it")
         back(); compose.waitUntil(10_000) { !has("account_Cash") } // More stays open under the screen, so Back lands on More
     }
+
+    @Test
+    fun theMorePageTakesTheWholeWindowInsteadOfSittingBesideAnEmptyPlaceholderAndHomeComesBack() {
+        seed("e1", "Cafe", 10_000)
+        launch(1000); waitFor("row_Cafe"); waitFor("wide_placeholder")
+        compose.openMore()
+        assertTrue(!has("wide_placeholder") && !has("wide_detail_pane"), "More has nothing to put beside it, so there is no empty pane")
+        assertTrue(has("wide_list_pane"), "the page keeps its place in the frame, so Home keeps its scroll position when More closes")
+        compose.closeMore(); waitFor("wide_placeholder"); waitFor("row_Cafe")
+        // an open entry keeps its pane while More is showing
+        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick(); waitFor("amount")
+        compose.openMore()
+        assertTrue(has("amount") && has("wide_detail_pane"), "the entry being edited stays beside More")
+    }
 }

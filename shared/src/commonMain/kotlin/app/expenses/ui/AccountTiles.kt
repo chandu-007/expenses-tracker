@@ -101,7 +101,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
                 Text(a.name, color = ink, style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 val kindLine = if (isCard) listOfNotNull(network?.takeIf { it != CardNetwork.OTHER }?.label, a.tier?.let { t -> CardTier.entries.firstOrNull { it.name == t }?.label?.takeIf { _ -> !compact } }).joinToString(" · ").ifEmpty { "Credit card" } else a.typeLabel
                 // the small tile keeps to the name; the network mark below says the rest
-                if (!compact) Text(kindLine, color = ink.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+                if (!compact) Text(kindLine, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 8.dp)) // 0.9, not 0.8: the small label measured 4.23:1 on the green Cash card (4.5 is the rule)
             }
             Column {
                 if (a.last4 != null) Text("••••  ${a.last4}", color = ink.copy(alpha = 0.85f), style = (if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium).copy(fontFamily = FontFamily.Monospace, letterSpacing = 1.sp))
@@ -159,7 +159,7 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
     val heights = accounts.map { a -> cardH + (if (a.hasCardSummary) a.card?.let(::cardSummaryExtra) ?: 0.dp else 0.dp) }
     // the edge of each card that shows while stacked: less when there are many, so the stack never grows tall
     // each card's edge is a whole line (name, digits, balance), however many cards there are: the stack grows with them instead of squeezing the lines out
-    val peek = if (n <= 1) 0.dp else 46.dp
+    val peek = if (n <= 1) 0.dp else 48.dp // the edge of a card behind the front one is a tap target: 48 dp, what a finger needs (it was 46)
     val stackedH = (heights.lastOrNull() ?: cardH) + peek * (n - 1)
     val spreadH = heights.fold(0.dp) { sum, h -> sum + h + gap } - gap
     val density = androidx.compose.ui.platform.LocalDensity.current

@@ -46,6 +46,13 @@ class InboxStore(private val db: ExpensesDb) {
     /** Puts a resolved item back to pending (its text is gone, so only the parsed fields remain). */
     fun reopen(id: String) { q.reopenInbox(id) }
 
+    /** Takes back a [dismiss]: the item is pending again with [body] (the text it had, which a dismissal forgets). False when it was not dismissed. */
+    fun undismiss(id: String, body: String?): Boolean = db.transactionWithResult {
+        val before = q.inboxById(id).executeAsOneOrNull()
+        q.reopenDismissedInbox(body, id)
+        before != null && before.status == InboxStatus.DISMISSED.name
+    }
+
     private fun resolve(id: String, status: InboxStatus, entryId: String?): Boolean = db.transactionWithResult {
         val before = q.inboxById(id).executeAsOneOrNull()
         q.resolveInbox(status.name, entryId, id)

@@ -47,6 +47,15 @@ class AttachmentFiles(private val context: Context) {
 
     fun delete(id: String) { file(id).delete() }
 
+    /** The size of the stored file, or -1 when there is none. */
+    fun size(id: String): Long = file(id).let { if (it.isFile) it.length() else -1L }
+
+    /** The stored file to read in pieces, or null when there is none. */
+    fun open(id: String): InputStreamSource? = file(id).takeIf { it.isFile }?.let { InputStreamSource(it.inputStream().buffered(64 * 1024), it.length()) }
+
+    /** A new (or replaced) file for [id], written in pieces; the caller removes it again if what was written turns out wrong. */
+    fun create(id: String): OutputStreamSink = OutputStreamSink(file(id).outputStream().buffered(64 * 1024))
+
     /** A content address another app may read for a moment (the viewer the user picks), never the file path itself. */
     fun shareUri(id: String): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file(id))
 

@@ -22,6 +22,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import app.expenses.BackupKeys
+import app.expenses.core.domain.AttachmentRules
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.FlowRow
 import app.expenses.core.domain.AutoExportFrequency
@@ -36,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import app.expenses.DataUi
+import app.expenses.fileCountText
 import app.expenses.todayLocal
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,8 +64,13 @@ fun DataScreen(
     onUnlock: (String) -> Unit,
     onRestore: () -> Unit,
     onCancelRestore: () -> Unit,
+    onShown: () -> Unit = {},
+    onIncludeFiles: (Boolean) -> Unit = {},
+    autoRunning: Boolean = false,
 ) {
     val platform = LocalPlatform.current
+    // how many photos and files a backup would carry is read when the screen opens
+    LaunchedEffect(Unit) { onShown() }
     var pass by rememberSaveable { mutableStateOf("") }
     var pass2 by rememberSaveable { mutableStateOf("") }
     var openPass by rememberSaveable { mutableStateOf("") }
@@ -82,9 +93,15 @@ fun DataScreen(
                     Text("Made ${p.madeAt}. It holds ${p.entriesInFile} entries.")
                     Text("${p.newEntries} entries are new to this phone and will be added" + if (p.otherNewItems > 0) ", along with ${p.otherNewItems} other items (categories, budgets, repeating expenses…)." else ".")
                     Text("${p.alreadyHereEntries} are already here and will be left exactly as they are. Nothing is overwritten or deleted.")
+                    if (p.filesInFile > 0) {
+                        Text(
+                            "It also holds ${fileCountText(p.filesInFile)} (${AttachmentRules.sizeText(p.filesBytes)}): ${if (p.newFiles == 1) "1 is" else "${p.newFiles} are"} not on this phone and will be put back. Each is checked as it is restored; a damaged one is skipped and counted, never stopping the rest.",
+                            modifier = Modifier.testTag("restore_files"),
+                        )
+                    }
                 }
             },
-            confirmButton = { TextButton(onClick = onRestore, modifier = Modifier.testTag("restore_confirm")) { Text("Restore") } },
+            confirmButton = { TextButton(onClick = onRestore, enabled = !state.busy, modifier = Modifier.testTag("restore_confirm")) { Text("Restore") } },
             dismissButton = { TextButton(onClick = onCancelRestore, modifier = Modifier.testTag("restore_cancel")) { Text("Cancel") } },
         )
     }
@@ -106,6 +123,7 @@ fun DataScreen(
 
     Scaffold(topBar = { AreaTopBar("Your data", Area.PRIVACY, Icons.Outlined.Backup, onBack, "data_back") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SigningNotice()
             if (state.busy) CircularProgressIndicator(Modifier.testTag("data_busy"))
             state.status?.let {
                 Text(it, color = if (state.statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("data_status"))
@@ -129,14 +147,14 @@ fun DataScreen(
                 HorizontalDivider()
             } else if (autoExport != null) {
                 Text("Automatic copies to your own folder", style = MaterialTheme.typography.titleMedium)
-                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are not encrypted, so choose a folder only you can reach. This is the safety net for losing or resetting the phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are not encrypted, so choose a folder only you can reach. This is the safety net for losing or resetting the phone. They carry your photos and files too while \"Include photos and files\" under Backup is on and together they are under ${AttachmentRules.sizeText(BackupKeys.AUTO_FILES_LIMIT_BYTES)}; over that the copies are made without them and the line below says so.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { pickers.openFolder { it?.let(onAutoFolder) } }, modifier = Modifier.testTag("auto_folder")) { Text(autoExport.folderName?.let { "Folder: $it" } ?: "Choose a folder") }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AutoExportFrequency.entries.forEach { f -> FilterChip(selected = autoExport.frequency == f, onClick = { onAutoFrequency(f) }, label = { Text(f.label) }, modifier = Modifier.testTag("auto_freq_${f.name}")) }
                 }
                 autoExport.lastText?.let { Text("Last saved $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_last")) }
                 autoExport.status?.let { Text(it, color = if (autoExport.statusOk) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_status")) }
-                OutlinedButton(onClick = onAutoNow, enabled = autoExport.folderName != null, modifier = Modifier.testTag("auto_now")) { Text("Save a copy now") }
+                OutlinedButton(onClick = onAutoNow, enabled = autoExport.folderName != null && !autoRunning, modifier = Modifier.testTag("auto_now")) { Text(if (autoRunning) "Saving a copy…" else "Save a copy now") }
                 HorizontalDivider()
             }
 
@@ -147,9 +165,22 @@ fun DataScreen(
 
             Text("Backup", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Everything in one file: entries, categories, budgets, repeating expenses. Keep it somewhere safe, like your Google Drive or email to yourself. " +
+                "Everything in one file: entries, categories, budgets, repeating expenses, and the photos and files attached to entries unless you switch that off below. Keep it somewhere safe, like your Google Drive or email to yourself. " +
                     "Uninstalling the app deletes the data on this phone, so make a backup first.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Include photos and files", modifier = Modifier.weight(1f))
+                Switch(checked = state.files.include, onCheckedChange = onIncludeFiles, modifier = Modifier.testTag("backup_files_switch"))
+            }
+            val files = state.files
+            Text(
+                when {
+                    files.count == 0 -> "No photos or files are attached to entries yet. When there are, this switch decides whether a backup carries them."
+                    files.include -> "${fileCountText(files.count)}, ${AttachmentRules.sizeText(files.bytes)} together, will be in the backup, so the file is that much larger. A restore brings ${if (files.count == 1) "it" else "them"} back. A backup with photos or files needs this version of the app or a newer one to restore; one without them opens in any version."
+                    else -> "${fileCountText(files.count)}, ${AttachmentRules.sizeText(files.bytes)} together, will stay out of the backup: a restore brings back your entries without their receipts, and if you lose this phone the files are lost too."
+                },
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_files_info"),
             )
             OutlinedTextField(
                 value = pass, onValueChange = { pass = it }, label = { Text("Passphrase (optional)") }, singleLine = true,
@@ -169,7 +200,7 @@ fun DataScreen(
             Text("Choose Google Drive in the list that opens to keep the file in your Drive.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_drive_hint"))
             if (canShareBackup) {
                 OutlinedButton(onClick = { onShareBackup("expenses-backup-$today.expbak", pass.ifEmpty { null }) }, enabled = !state.busy && passProblem == null, modifier = Modifier.testTag("share_backup")) { Text("Send backup to…") }
-                Text("Opens the share sheet: Google Drive, email, WhatsApp. Sending is not confirmed here, so it does not count as a backup made." + if (pass.isEmpty()) " Without a passphrase the file is not encrypted, and it leaves this phone through the app you choose: set one above first if that matters." else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Opens the share sheet: Google Drive, email, WhatsApp. Sending is not confirmed here, so it does not count as a backup made." + (if (state.files.include && state.files.count > 0) " Photos and files go in up to ${AttachmentRules.sizeText(BackupKeys.SHARE_FILES_LIMIT_BYTES)}; a bigger set is left out of what is sent (the message says so), so use Save backup to a file to keep them." else "") + if (pass.isEmpty()) " Without a passphrase the file is not encrypted, and it leaves this phone through the app you choose: set one above first if that matters." else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider()
 

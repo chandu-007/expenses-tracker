@@ -43,6 +43,14 @@ import kotlin.time.TimeSource
  * Opening happens once, off the main thread.
  */
 class AppContainer(private val platform: Platform) {
+    init { app.expenses.core.storage.BackupFile.maxPayloadBytes = platform.maxBackupPayloadBytes }
+
+    /** Where the bytes of attachments are kept: what a backup reads its photos and files from. */
+    val attachmentFiles: AttachmentFileStore get() = platform.attachmentFiles
+
+    /** The primitives that seal backups with passphrases, for the streaming layout. */
+    val backupPrimitives get() = platform.backupCipher.primitives
+
     sealed interface Opened {
         class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore, val currency: BaseCurrencyStore, val cards: CardStore, val inbox: InboxStore, val captureRules: CaptureRuleStore, val people: PeopleStore, val bills: BillStore, val looks: AccountLookStore, val origins: OriginStore) : Opened
 

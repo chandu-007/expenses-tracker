@@ -598,7 +598,7 @@ private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: 
     }
 }
 
-/** Receipts and other files on an existing entry. They are kept on this phone only (not in a backup yet), and the section says so. */
+/** Receipts and other files on an existing entry. They are kept on this phone and go into a backup unless the person switched that off under Your data; the section says so. */
 @Composable
 private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.AttachmentUi>, problem: String?, onAttach: (String) -> Unit, onOpen: (app.expenses.AttachmentUi) -> Unit, onRemove: (app.expenses.AttachmentUi) -> Unit, extra: @Composable () -> Unit = {}) {
     val picker = rememberFilePickers()
@@ -626,7 +626,7 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
             OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
         }
         extra()
-        Text(if (saved) "Kept on this phone only. A backup does not include them yet." else "Optional. Added to the entry when you save it, kept on this phone only. A backup does not include them yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint"))
+        Text(if (saved) "Kept on this phone, and included in a backup unless you switch that off under Your data." else "Optional. Added to the entry when you save it. Kept on this phone, and included in a backup unless you switch that off under Your data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint"))
     }
 }
 

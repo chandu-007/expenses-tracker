@@ -3,7 +3,6 @@ package app.expenses.ui
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,8 +26,8 @@ import app.expenses.core.domain.BackupNudge
  */
 @Composable
 fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> Unit) {
-    // scrolls, so Skip stays reachable on a short screen or with large text, now that the account cards sit above it
-    Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(24.dp).testTag("welcome"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    // an item of Home's scrolling page, so Skip stays reachable on a short screen or with large text
+    Column(Modifier.fillMaxWidth().padding(24.dp).testTag("welcome"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Welcome", style = MaterialTheme.typography.headlineSmall)
         Text("Add your first expense: an amount is all it takes. You can sort it into a category later.", style = MaterialTheme.typography.bodyLarge)
         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().testTag("welcome_add")) { Text("Add my first expense") }

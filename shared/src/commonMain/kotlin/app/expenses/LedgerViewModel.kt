@@ -106,8 +106,8 @@ import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.ledger.CategoryId
-import app.expenses.core.storage.BackupData
 import app.expenses.core.storage.BackupException
+import app.expenses.core.storage.SingleFlight
 import app.expenses.core.storage.BudgetStatus
 import app.expenses.core.storage.CategoryStore
 import app.expenses.core.storage.bulkLoad
@@ -340,6 +340,8 @@ data class UndoUi(
     val bulkDrafts: List<EntryDraft> = emptyList(), val bulkRestore: List<String> = emptyList(),
     /** For several entries added in one go (a bill's items): the ids to take back. */
     val bulkCreated: List<String> = emptyList(),
+    /** True only for entries added through the Add form: Home then scrolls the new row into view (not for quick entries or a posted repeating item). */
+    val reveal: Boolean = false,
 )
 
 /** One transaction found in a statement, as shown in the preview. */
@@ -466,7 +468,14 @@ data class ReportUi(
 )
 
 /** A backup file that was opened and checked, waiting for the user to confirm the restore. */
-data class PendingRestoreUi(val madeAt: String, val entriesInFile: Int, val newEntries: Int, val alreadyHereEntries: Int, val otherNewItems: Int)
+data class PendingRestoreUi(
+    val madeAt: String, val entriesInFile: Int, val newEntries: Int, val alreadyHereEntries: Int, val otherNewItems: Int,
+    /** Photos and files the backup carries, their size together, and how many of them this phone would take. */
+    val filesInFile: Int = 0, val filesBytes: Long = 0, val newFiles: Int = 0,
+)
+
+/** The photos and files a backup would carry: how many, how large together, and whether the switch for including them is on. */
+data class BackupFilesUi(val count: Int = 0, val bytes: Long = 0, val include: Boolean = true)
 
 /** State of the Data screen. [status] is the outcome of the last action; [needsPassphrase] asks for the passphrase of an encrypted backup. */
 data class DataUi(
@@ -475,6 +484,7 @@ data class DataUi(
     val statusIsError: Boolean = false,
     val needsPassphrase: Boolean = false,
     val pending: PendingRestoreUi? = null,
+    val files: BackupFilesUi = BackupFilesUi(),
 )
 
 sealed interface UiState {
@@ -608,8 +618,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private val _data = MutableStateFlow(DataUi())
     val data: StateFlow<DataUi> = _data
-    private var openedBytes: ByteArray? = null
-    private var openedBackup: BackupData? = null
+    private var openedUri: String? = null
+    private var openedReady: DataTransfer.Opened.Ready? = null
     private val actions get() = DataTransfer(platform, container)
 
     private val _import = MutableStateFlow(ImportUi())
@@ -638,6 +648,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var reportRequest: ReportRequest? = null
     private val _report = MutableStateFlow<ReportUi?>(null)
     val report: StateFlow<ReportUi?> = _report
+
+    /** How many report builds are running: a report over a big ledger takes a moment, and the screen says so (after a short wait) while the old figures are still shown. */
+    private val _reportBuilds = MutableStateFlow(0)
+    val reportBuilds: StateFlow<Int> get() = _reportBuilds
 
     private var accountNames = emptyMap<String, String>()
     private var currencyDigits = emptyMap<String, Int>()
@@ -679,7 +693,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
         _editor.value = null
         val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund"; DraftKind.LOAN -> if (draft.gave) "money given" else "money received" }
-        refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}") else null)
+        refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}", reveal = true) else null)
         lastSaveMillis = startedAt.elapsedNow().inWholeNanoseconds / 1e6
         offerSimilar(draft, id)
     }
@@ -707,7 +721,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     all.forEach { ok.attachments.add(it.id, ids.first(), it.name, it.mime, it.sizeBytes, it.sha256) }
                     _editor.value = null
                     val total = Money(drafts.sumOf { parseAmount(it.amountText, inr)?.minorUnits ?: 0L }, inr)
-                    refreshQuickly(ok, undo = UndoUi(ids.first(), "Added ${ids.size} expenses, ${total.formatted()}", bulkCreated = ids))
+                    refreshQuickly(ok, undo = UndoUi(ids.first(), "Added ${ids.size} expenses, ${total.formatted()}", bulkCreated = ids, reveal = true))
                 }
             } catch (e: IllegalArgumentException) {
                 _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
@@ -1188,7 +1202,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 ok.db.schemaQueries.accountSavedItemUsage(a.id).executeAsOne(),
                 if (type != AccountType.CREDIT_CARD) null else ok.cards.terms(a.id)?.let { t ->
                     val summary = ok.cards.summary(a.id, today, zone)
-                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), ok.cards.standing(a.id, today, zone)?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty(),
+                    // the summary carries the statement's standing (the same figures standing() reads), so it is not worked out a second time
+                    CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), summary?.standing?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty(),
                         summary?.let { CardSummaryText.cycle(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.let { CardSummaryText.limit(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.limitFraction ?: 0f,
                         summary?.let { CardSummaryText.due(it) { m -> Money(m, inr).formatted() } }.orEmpty())
                 },
@@ -1641,6 +1656,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
         val cardBills = trackedDue.filter { (b, _) -> b.kind == "CREDIT_CARD" }.map { it.second }
         ok.cards.all().forEach { terms ->
+            // the due date follows from the billing dates alone: a card whose statement is not due within the week costs no balance queries (they read the card's whole history)
+            if (app.expenses.core.domain.CardBilling.cycleOn(today, terms).dueDate >= until) return@forEach
             val st = ok.cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 && it.cycle.dueDate < until } ?: return@forEach
             if (cardBills.any { kotlin.math.abs(it.toEpochDays() - st.cycle.dueDate.toEpochDays()) <= 2 }) return@forEach // its own bill is already counted
             count++; total += st.remaining
@@ -1656,7 +1673,29 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** The person adds a found bill to the ones they track. */
     fun trackBill(id: String) = withStore { ok -> if (ok.bills.track(id)) billsChanged(ok, "Added to your bills") }
 
-    fun dismissBill(id: String) = withStore { ok -> if (ok.bills.dismiss(id)) billsChanged(ok) }
+    /** The skip of a bill that Undo can take back: the bill as it was (its state and its message; a skip forgets the message in the database). */
+    private var skippedBill: app.expenses.core.storage.Bill? = null
+    private val _billUndo = MutableStateFlow<ScreenUndo?>(null)
+    val billUndo: StateFlow<ScreenUndo?> get() = _billUndo
+
+    /** Skips (a found bill) or removes (a tracked one), and offers to bring it back. */
+    fun dismissBill(id: String) = withStore { ok ->
+        val before = ok.bills.get(id)
+        if (ok.bills.dismiss(id)) {
+            billsChanged(ok)
+            if (before != null) { skippedBill = before; _billUndo.value = ScreenUndo(id, "Skipped ${before.title}") }
+        }
+    }
+
+    /** Puts back the bill whose skip was just offered for Undo, in the state it was skipped from. */
+    fun undoDismissBill(id: String) {
+        val held = skippedBill?.takeIf { it.id == id } ?: return // taken now: see [undoDismissCapture]
+        withStore { ok -> if (ok.bills.undismiss(id, held.status, held.body)) billsChanged(ok) }
+    }
+
+    fun billUndoGone(id: String) {
+        if (_billUndo.value?.id == id) { _billUndo.value = null; skippedBill = null }
+    }
 
     fun setBillDue(id: String, epochDay: Long) = withStore { ok -> ok.bills.setDueDate(id, localDateOfEpochDay(epochDay).toString()); billsChanged(ok) }
 
@@ -1929,7 +1968,34 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** The text was read the wrong way round (money out as in, or the reverse): turns it, which also re-works the account, category and pairing suggestions. */
     fun flipCaptureDirection(id: String) = withStore { ok -> ok.inbox.flipDirection(id); _inbox.value = inboxRows(ok) }
 
-    fun dismissCapture(id: String) = withStore { ok -> ok.inbox.dismiss(id); _inbox.value = inboxRows(ok); refresh(ok) }
+    /** The skip of a captured item that Undo can take back: its id and the text it had (a skip forgets the text in the database; this copy lives in memory until the bar is gone). */
+    private var skippedCapture: Pair<String, String?>? = null
+    private val _inboxUndo = MutableStateFlow<ScreenUndo?>(null)
+    val inboxUndo: StateFlow<ScreenUndo?> get() = _inboxUndo
+
+    /** Skips a captured item, and offers to bring it back. */
+    fun dismissCapture(id: String) = withStore { ok ->
+        val item = ok.inbox.get(id)
+        val label = _inbox.value.firstOrNull { it.id == id }?.let { r -> r.payee?.takeIf { it.isNotBlank() } ?: r.issuer.takeIf { it.isNotBlank() } } ?: "the item"
+        val skipped = ok.inbox.dismiss(id)
+        _inbox.value = inboxRows(ok); refresh(ok)
+        if (skipped && item != null) { skippedCapture = id to item.body; _inboxUndo.value = ScreenUndo(id, "Skipped $label") }
+    }
+
+    /** Brings back the item whose skip was just offered for Undo, as it was (its text included). */
+    fun undoDismissCapture(id: String) {
+        val held = skippedCapture?.takeIf { it.first == id } // taken now: the bar clears it as soon as it is gone, before the store work below runs
+        if (held == null) return
+        withStore { ok ->
+            ok.inbox.undismiss(id, held.second)
+            _inbox.value = inboxRows(ok); refresh(ok)
+        }
+    }
+
+    /** The Undo bar for a skip has gone (used, or timed out): what was kept for it is let go. A newer skip's own offer is left alone. */
+    fun inboxUndoGone(id: String) {
+        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null }
+    }
 
     /**
      * Where [Platform.supportsShortcutsCapture] is true (iPhone): puts one pasted bank message through [MessageIngest], with no sender (the words have to
@@ -2045,7 +2111,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 val bytes = platform.readBytes(uri)
                 require(bytes.size <= MAX_STATEMENT_BYTES) { "That file is too large to import (over ${MAX_STATEMENT_BYTES / 1_000_000} MB). Is it a bank statement?" }
                 // a PDF or a picture: the text is read on this device and turned into the same kind of table, so the rest of the screen works unchanged
-                if (platform.looksLikePdf(bytes) || platform.looksLikeImage(bytes)) { readTextStatement(bytes, null); return@launch }
+                if (platform.looksLikePdf(bytes) || platform.looksLikeImage(bytes)) {
+                    // the screen says what is being read ("Reading the PDF on this phone"): the note under the spinner needs to know, and the file was only just seen to be one
+                    _import.update { it.copy(readFrom = if (platform.looksLikePdf(bytes)) "PDF" else "photo") }
+                    readTextStatement(bytes, null); return@launch
+                }
                 clearTextImport()
                 val table = when {
                     platform.looksLikeXlsx(bytes) -> app.expenses.core.domain.CsvTable(platform.readXlsx(bytes), ',', false)
@@ -2475,7 +2545,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun reportAction(next: (ReportRequest) -> ReportRequest) {
         val current = reportRequest ?: ReportRequest(ReportMode.PERIOD, 0)
         reportRequest = next(current)
-        viewModelScope.launch(BACKGROUND) { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } }
+        _reportBuilds.update { it + 1 }
+        viewModelScope.launch(BACKGROUND) {
+            try { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } } finally { _reportBuilds.update { it - 1 } }
+        }
     }
 
     private fun buildReport(ok: AppContainer.Opened.Ok, r: ReportRequest): ReportUi {
@@ -2578,10 +2651,31 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun exportFinancialYear(uri: String, yearsBack: Int) = dataAction { "Saved the ${actions.exportFinancialYear(uri, yearsBack)} summary as an Excel workbook." }
     fun exportCsv(uri: String) = dataAction { "Exported ${actions.exportCsv(uri)} entries as a spreadsheet file." }
 
+    /** How many photos and files a backup would carry and whether the switch is on: read when the Data screen opens and after anything that changes them. */
+    fun loadBackupFiles() {
+        viewModelScope.launch(BACKGROUND) {
+            val files = container.write { ok -> ok.backup.attachmentTotals().let { BackupFilesUi(it.count, it.bytes, ok.templates.setting(BackupKeys.INCLUDE_FILES) != "0") } } ?: return@launch
+            _data.update { it.copy(files = files) }
+        }
+    }
+
+    /** The switch "Include photos and files": kept as a setting, so automatic copies follow it too. */
+    fun setIncludeBackupFiles(on: Boolean) {
+        _data.update { it.copy(files = it.files.copy(include = on)) }
+        viewModelScope.launch(BACKGROUND) {
+            val stored = container.write { ok -> ok.templates.putSetting(BackupKeys.INCLUDE_FILES, if (on) "1" else "0"); ok.templates.setting(BackupKeys.INCLUDE_FILES) != "0" } ?: return@launch
+            _data.update { it.copy(files = it.files.copy(include = stored)) }
+        }
+    }
+
+    private fun savedFilesText(f: DataTransfer.FilesSaved) = (if (f.included > 0) ", ${fileCountText(f.included)} (${AttachmentRules.sizeText(f.includedBytes)})" else "")
+    private fun savedFilesNote(f: DataTransfer.FilesSaved) = f.notes().takeIf { it.isNotEmpty() }?.let { " Note: ${it.joinToString("; ")}." }.orEmpty()
+
     fun createBackup(uri: String, passphrase: String?) = dataAction {
         val saved = actions.backup(uri, passphrase)
         container.write { ok -> refresh(ok) } // the first-week checklist on Home ticks "backup" from this
-        "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories" + if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private."
+        "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories${savedFilesText(saved.files)}" +
+            (if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private.") + savedFilesNote(saved.files)
     }
 
     /**
@@ -2591,53 +2685,92 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun shareBackup(name: String, passphrase: String?, deliver: (name: String, bytes: ByteArray) -> Unit) = dataAction {
         val (bytes, saved) = actions.backupForSharing(passphrase)
         withContext(Dispatchers.Main) { deliver(name, bytes) }
-        "Backup ready: ${saved.counts.entries} entries" + (if (saved.encrypted) ", protected by your passphrase. " else ", not encrypted. ") + "Choose where to send it; this app cannot tell whether it arrived, so check there."
+        "Backup ready: ${saved.counts.entries} entries${savedFilesText(saved.files)}" + (if (saved.encrypted) ", protected by your passphrase. " else ", not encrypted. ") + "Choose where to send it; this app cannot tell whether it arrived, so check there." + savedFilesNote(saved.files)
     }
 
     /** Opens a backup file. Nothing changes until [confirmRestore]. */
     fun openBackup(uri: String) = dataAction { showOpened(actions.open(uri, null)) }
 
     fun unlockBackup(passphrase: String) = dataAction {
-        val bytes = openedBytes ?: throw BackupException("Choose the backup file again.")
-        showOpened(actions.openBytes(bytes, passphrase))
+        val uri = openedUri ?: throw BackupException("Choose the backup file again.")
+        showOpened(actions.open(uri, passphrase))
     }
 
     private fun showOpened(o: DataTransfer.Opened): String {
         when (o) {
             is DataTransfer.Opened.NeedsPassphrase -> {
-                openedBytes = o.bytes
+                openedUri = o.uri
                 _data.update { it.copy(needsPassphrase = true, pending = null) }
                 return "This backup is protected by a passphrase."
             }
             is DataTransfer.Opened.Ready -> {
-                openedBytes = null
-                openedBackup = o.data
+                openedUri = null
+                openedReady = o
                 val made = DatePattern("d MMM yyyy, HH:mm").format(o.header.createdAt)
                 val r = o.report
                 _data.update {
                     it.copy(
                         needsPassphrase = false,
-                        pending = PendingRestoreUi(made, o.data.entries.size, r.added.entries, r.alreadyHere.entries, r.added.accounts + r.added.categories + r.added.templates + r.added.budgets + r.added.recurring),
+                        pending = PendingRestoreUi(
+                            made, o.data.entries.size, r.added.entries, r.alreadyHere.entries, r.added.accounts + r.added.categories + r.added.templates + r.added.budgets + r.added.recurring,
+                            o.data.attachments.size, o.data.attachments.sumOf { a -> a.sizeBytes }, r.added.attachments,
+                        ),
                     )
                 }
-                return "Backup checked: it is complete and not damaged."
+                // a version 2 file has had only its header and entries checked here; the photos and files are read, and checked one by one, when the restore is confirmed
+                return if (o.data.attachments.isEmpty()) "Backup checked: it is complete and not damaged." else "Backup checked: the entries are complete. Photos and files are checked when you restore."
             }
         }
     }
 
+    /** A second tap on Restore while one is running does nothing: two restores would store the same files twice. (The button is off while busy; this is the same rule where it is decided.) */
+    private val restoreFlight = SingleFlight()
+
     fun confirmRestore() {
-        val data = openedBackup ?: return
+        val ready = openedReady ?: return
+        if (_data.value.busy || !restoreFlight.tryEnter()) return
         dataAction {
-            val report = actions.restore(data)
-            openedBackup = null
-            _data.update { it.copy(pending = null) }
-            container.write { ok -> refresh(ok) }
-            "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are."
+            try {
+                val restored = actions.restore(ready)
+                val report = restored.report
+                openedReady = null
+                _data.update { it.copy(pending = null) }
+                container.write { ok -> refresh(ok) }
+                loadBackupFiles()
+                "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are." + (restored.files?.let { restoredFilesText(it, report.added.attachments, restored.skipped) } ?: "")
+            } finally {
+                restoreFlight.leave()
+            }
         }
     }
 
+    /** True while an automatic copy is being written (by this screen's button, the periodic worker or a foreground check): the button waits. */
+    val autoExportRunning: StateFlow<Boolean> get() = AutoExportRunner.running
+
+    /** The sentence about photos and files after a restore: how many were put back, and plainly how many were not and why. */
+    private fun restoredFilesText(f: app.expenses.core.storage.FilesRestored, putBack: Int, skipped: app.expenses.core.storage.AttachmentPlan): String {
+        val sb = StringBuilder(" ").append(if (putBack == 1) "1 photo or file was put back" else "$putBack photos and files were put back")
+        val problems = listOfNotNull(
+            f.damaged.takeIf { it > 0 }?.let { "$it damaged in the backup (skipped)" },
+            f.missing.takeIf { it > 0 }?.let { "$it missing from the backup file (skipped)" },
+            f.notStored.takeIf { it > 0 }?.let { "$it could not be stored on this phone" },
+        )
+        // the ones that were never tried, and why
+        val left = listOfNotNull(
+            skipped.alreadyHere.takeIf { it > 0 }?.let { "$it already here" },
+            skipped.removedHere.takeIf { it > 0 }?.let { "$it removed here earlier" },
+            skipped.noEntry.takeIf { it > 0 }?.let { "$it for entries that are not here or are deleted" },
+            skipped.noRoom.takeIf { it > 0 }?.let { "$it with no room (an entry holds at most ${AttachmentRules.MAX_PER_ENTRY})" },
+            skipped.invalid.takeIf { it > 0 }?.let { "$it not valid (unsafe name, size or checksum)" },
+            skipped.repeated.takeIf { it > 0 }?.let { "$it repeating the name of another" },
+        )
+        if (problems.isNotEmpty()) sb.append("; ").append(problems.joinToString(", "))
+        if (left.isNotEmpty()) sb.append("; not put back: ").append(left.joinToString(", "))
+        return sb.append('.').toString()
+    }
+
     fun cancelRestore() {
-        openedBackup = null; openedBytes = null
+        openedReady = null; openedUri = null
         _data.update { it.copy(pending = null, needsPassphrase = false) }
     }
 

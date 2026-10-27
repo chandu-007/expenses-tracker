@@ -13,6 +13,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
@@ -53,7 +54,9 @@ class SearchBulkCategoryUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
-    private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
+    /** The count and Select all are the first item of the results, so they scroll away with them: bring them back before using them. */
+    private fun seeSelectAll() { runCatching { compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("search_select_all")) }; waitFor("search_select_all") }
+    private fun tap(tag: String) { if (tag == "search_select_all") seeSelectAll(); waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
     private fun hold(tag: String) { waitFor(tag); compose.waitForIdle(); node(tag).performTouchInput { longClick() } } // idle first: a long press while the list is still settling (keyboard going, rows animating) is not always taken
     private fun textOf(tag: String): String {
         waitFor(tag)
@@ -93,10 +96,10 @@ class SearchBulkCategoryUiTest {
         fourNetflixAndTwoSalaries()
         search("Netflix", "n1", "n2", "n3", "n4")
         waitFor("search_select_all")
-        compose.onNodeWithTag("search_select_all").assertTextEquals("Select all 4")
+        run { seeSelectAll(); compose.onNodeWithTag("search_select_all") }.assertTextEquals("Select all 4")
         tap("search_select_all")
         waitTextOf("bulk_count", "4 selected")
-        compose.onNodeWithTag("search_select_all").assertTextEquals("Clear selection")
+        run { seeSelectAll(); compose.onNodeWithTag("search_select_all") }.assertTextEquals("Clear selection")
         tap("bulk_category"); tap("bulk_category_option_Bills")
         waitFor("search_notice"); compose.waitUntil(10_000) { textOf("search_notice").contains("Changed the category of 4 entries") }
         waitGone("bulk_bar")
@@ -117,7 +120,7 @@ class SearchBulkCategoryUiTest {
         search("Netflix", "n1", "n2", "n3", "n4")
         hold("result_n1"); waitTextOf("bulk_count", "1 selected")
         tap("result_n2"); waitTextOf("bulk_count", "2 selected")
-        compose.onNodeWithTag("search_select_all").assertTextEquals("Select all 4") // a partial selection offers Select all
+        run { seeSelectAll(); compose.onNodeWithTag("search_select_all") }.assertTextEquals("Select all 4") // a partial selection offers Select all
         tap("search_select_all"); waitTextOf("bulk_count", "4 selected")
         tap("search_select_all"); waitGone("bulk_bar"); waitFor("search_select_all")
         tap("search_select_all"); waitTextOf("bulk_count", "4 selected")

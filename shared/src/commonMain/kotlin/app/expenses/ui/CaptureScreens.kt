@@ -63,8 +63,11 @@ fun InboxScreen(
     onConfirm: (id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, done: (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit, onBack: () -> Unit,
     /** Where bank messages can be pasted (iPhone): shows the paste button and box. Null on Android, so that screen is as it was. */
     onPaste: ((String?, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
+    /** "Skipped X · Undo" after a skip: what to offer, taking it back, and the bar going away. */
+    undo: app.expenses.ScreenUndo? = null, onUndo: (String) -> Unit = {}, onUndoGone: (String) -> Unit = {},
 ) {
     var confirmingAll by rememberSaveable { mutableStateOf(false) }
+    val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     val paste = if (onPaste != null) rememberPasteState() else null
     // those that need no decision: not a repeat, not a related entry, an account the person has used for this bank card before (or the only account there is),
     // and an ordinary payment (a transfer or refund asks to be looked at)
@@ -82,7 +85,7 @@ fun InboxScreen(
         confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
-    Scaffold(topBar = { AreaTopBar("To review", Area.CAPTURE, Icons.Outlined.Inbox, onBack, "inbox_back") }) { pad ->
+    Scaffold(topBar = { AreaTopBar("To review", Area.CAPTURE, Icons.Outlined.Inbox, onBack, "inbox_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         if (rows.isEmpty() && onPaste != null) {
             LazyColumn(Modifier.padding(pad).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp)) {
                 item(key = "empty") {

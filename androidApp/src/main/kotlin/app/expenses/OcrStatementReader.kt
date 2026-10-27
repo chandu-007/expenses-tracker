@@ -47,6 +47,9 @@ class OcrStatementReader : AutoCloseable {
 
     companion object {
         private const val TIMEOUT_SECONDS = 120L
+        // Measured on the emulator (not a phone) with three 12-24 MP photos of real bills and an invented receipt at 4000x3000 and 1080x1600: this decode is about
+        // 50-250 ms and ML Kit about 250-500 ms per picture; sides of 3000, 2400, 2000 and 1600 were no faster beyond the noise of the runs, and every one of them
+        // changed the recognised text (4-13 numbers of a bill differed), so the larger size stays.
         private const val MAX_SIDE = 4096
         private const val MAX_PIXELS = 16_000_000L
 

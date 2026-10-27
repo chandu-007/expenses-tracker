@@ -410,7 +410,11 @@ accountSavedItemUsage:
 SELECT (SELECT COUNT(*) FROM template WHERE account_id = :id AND deleted = 0) + (SELECT COUNT(*) FROM recurring WHERE (account_id = :id OR to_account_id = :id) AND deleted = 0);
 
 accountUsage:
-SELECT (SELECT COUNT(*) FROM entry WHERE account_id = :id OR counter_account_id = :id)
+-- Every entry that names the account, deleted ones too (a deleted entry could come back). Counted in three parts that each use an index: one OR over the whole
+-- table scanned every entry once per account on every save while Home showed balances. The parts do not overlap, so the sum is the same number.
+SELECT (SELECT COUNT(*) FROM entry WHERE account_id = :id AND deleted = 0)
+     + (SELECT COUNT(*) FROM entry WHERE counter_account_id = :id AND deleted = 0 AND (account_id IS NULL OR account_id <> :id))
+     + (SELECT COUNT(*) FROM entry WHERE deleted = 1 AND (account_id = :id OR counter_account_id = :id))
      + (SELECT COUNT(*) FROM template WHERE account_id = :id AND deleted = 0)
      + (SELECT COUNT(*) FROM recurring WHERE account_id = :id AND deleted = 0);
 
@@ -555,6 +559,17 @@ DELETE FROM attachment WHERE id = :id;
 
 allAttachmentIds:
 SELECT id FROM attachment;
+
+-- What a backup carries: the attachments of entries that are not deleted (a deleted entry is not in a backup, so its files are not either).
+liveAttachments:
+SELECT a.* FROM attachment a JOIN entry e ON e.id = a.entry_id WHERE e.deleted = 0 ORDER BY e.seq, a.created_at, a.id;
+
+liveAttachmentTotals:
+SELECT COUNT(*) AS n, COALESCE(SUM(a.size_bytes), 0) AS bytes FROM attachment a JOIN entry e ON e.id = a.entry_id WHERE e.deleted = 0;
+
+-- Whether the person removed this attachment here: a restore does not bring a removed file back.
+attachmentRemoved:
+SELECT COUNT(*) FROM op_log WHERE entity = 'attachment' AND row_id = :id AND field = 'deleted';
 
 entryBySourceRef:
 SELECT id, deleted, kind FROM entry WHERE source = :source AND source_ref = :sourceRef;
@@ -715,6 +730,10 @@ moveBill:
 -- a tracked bill keeps its message until it is paid or dismissed, so an entry recorded from it can show where it came from
 UPDATE bill SET status = :to, body = CASE WHEN :to = 'TRACKED' THEN body ELSE NULL END WHERE id = :id AND status = :from;
 
+-- Undo of a skip: the bill goes back to the state it was skipped from, with the message it held then
+reviveDismissedBill:
+UPDATE bill SET status = :status, body = :body WHERE id = :id AND status = 'DISMISSED';
+
 payBill:
 UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL WHERE id = :id AND status IN ('FOUND', 'TRACKED');
 
@@ -759,6 +778,10 @@ UPDATE inbox SET status = :status, entry_id = :entryId, body = NULL WHERE id = :
 
 reopenInbox:
 UPDATE inbox SET status = 'PENDING', entry_id = NULL WHERE id = :id AND status != 'PENDING';
+
+-- Undo of a skip: the text is put back too (the screen kept it in memory for the few seconds Undo is offered), so the item reads as it did
+reopenDismissedInbox:
+UPDATE inbox SET status = 'PENDING', entry_id = NULL, body = :body WHERE id = :id AND status = 'DISMISSED';
 
 insertCaptureEvent:
 INSERT INTO capture_event(at, sender_root, outcome) VALUES (?, ?, ?);

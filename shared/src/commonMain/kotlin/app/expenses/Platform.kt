@@ -2,6 +2,13 @@ package app.expenses
 
 import app.cash.sqldelight.db.SqlDriver
 import app.expenses.core.domain.Notice
+import app.expenses.core.storage.BackupFile
+import app.expenses.core.storage.ByteArraySink
+import app.expenses.core.storage.ByteArraySource
+import app.expenses.core.storage.ByteSink
+import app.expenses.core.storage.ByteSource
+import app.expenses.core.storage.FileVault
+import app.expenses.core.storage.SealPrimitives
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
@@ -17,12 +24,13 @@ import kotlin.time.Clock
  *   numbers       autoExportKeep, backupMinPassphrase
  *   diagnostics   trace(name)
  *   database      openDriver(), resetDatabase(), nodeId()
- *   files         readBytes(uri), writeBytes(uri, bytes), displayName(uri), mimeType(uri), folderDisplayName(uri)
+ *   files         readBytes(uri), writeBytes(uri, bytes), openRead(uri), openWrite(uri) (the same as streams), displayName(uri), mimeType(uri), folderDisplayName(uri)
  *   attachments   attachmentFiles: AttachmentFileStore
  *   backup        backupCipher: BackupCipher
  *   auto-export   runAutoExport(container, folderUri, nowMillis, force)
  *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted(), supportsShortcutsCapture, readClipboardText(), openExternalUrl(url)
  *   about         appVersionText, osVersionText, deviceModelText (for the feedback email; empty by default)
+ *   signing       signingExpiresAtMillis (iPhone test builds: when the free-signed install stops opening; null elsewhere)
  *   notification  notificationsAllowed(), showNotices(notices), notificationTimingNote
  *   app lock      authenticate(title, subtitle, onResult)
  *   statements    decodeStatementText(bytes), looksLikeXlsx(bytes), readXlsx(bytes)
@@ -51,6 +59,9 @@ interface Platform {
 
     fun trace(name: String)
 
+    /** The most data (entries and settings, not photos) a backup file may hold on this platform: it is read and built in memory, several times over. */
+    val maxBackupPayloadBytes: Int get() = BackupFile.MAX_PAYLOAD_BYTES
+
     // ---- database ----
 
     /** Opens (or creates) the app database. Throws [app.expenses.core.storage.DatabaseKeyUnavailableException] when it exists but its key is gone. */
@@ -69,6 +80,30 @@ interface Platform {
 
     /** Replaces the content at [uri]. Throws [IllegalArgumentException] with a message for a person when the location cannot be opened for writing; other I/O failures propagate. */
     fun writeBytes(uri: String, bytes: ByteArray)
+
+    /**
+     * The file as a stream, for what can be large (a backup that carries photos). Throws [IllegalArgumentException] with a message for a person when it cannot
+     * be opened. Closing the source releases the file. The default reads it all at once; a platform overrides it to read in pieces.
+     */
+    fun openRead(uri: String): ByteSource = ByteArraySource(readBytes(uri))
+
+    /**
+     * Replaces the content at [uri] with what is written to the sink; closing it completes the file (on iPhone it then offers the file to the share sheet,
+     * as [writeBytes] does). Throws [IllegalArgumentException] with a message for a person when the location cannot be opened for writing. The default holds
+     * it all and writes at the end; a platform overrides it to write in pieces.
+     */
+    fun openWrite(uri: String): ByteSink = object : ByteSink {
+        private val out = ByteArraySink()
+        override fun write(buf: ByteArray, off: Int, len: Int) = out.write(buf, off, len)
+        override fun close() = writeBytes(uri, out.toByteArray())
+    }
+
+    /**
+     * Best-effort removal of a file this app began writing at [uri] and could not finish (a backup that failed half way), so a half file is not left looking like
+     * a backup. Never throws; does nothing where the platform cannot.
+     */
+    fun discard(uri: String) {}
+
     fun displayName(uri: String): String?
     fun mimeType(uri: String): String?
 
@@ -111,6 +146,9 @@ interface Platform {
 
     /** The kind of device, for the feedback email ("Google Pixel 8", "iPhone"). */
     val deviceModelText: String get() = ""
+
+    /** When a build signed with a free Apple ID stops opening, in epoch milliseconds; null when it does not expire or cannot be told (Android, simulator, App Store). */
+    val signingExpiresAtMillis: Long? get() = null
 
     /** Whether the system will show our notifications at all. */
     fun notificationsAllowed(): Boolean
@@ -177,12 +215,13 @@ private fun hasPdfMark(bytes: ByteArray): Boolean {
 class AttachmentCopy(val sizeBytes: Long, val sha256: String)
 
 /**
- * The bytes of attachments, in the app's private storage under a random name; the database says what each is.
+ * The bytes of attachments, in the app's private storage under a random name; the database says what each is. As a [FileVault] it is what a backup reads
+ * the files from and a restore puts them back into ([FileVault.create] replaces a file of that id; the file is whole once its sink is closed).
  */
-interface AttachmentFileStore {
+interface AttachmentFileStore : FileVault {
     /** Copies [source] in as [id]. Throws [IllegalArgumentException] with a reason when it is empty or over the limit; nothing is left behind then. */
     fun copyIn(id: String, source: String): AttachmentCopy
-    fun delete(id: String)
+    override fun delete(id: String)
 
     /** An address another app may read for a moment (the viewer the user picks), never the file path itself. */
     fun shareUri(id: String): String
@@ -194,6 +233,10 @@ interface AttachmentFileStore {
 /** Optional passphrase protection for a backup file. The Android implementation is [BackupCrypto]'s AES-256-GCM with PBKDF2; the file layout is fixed so any platform can read it. */
 interface BackupCipher {
     val minPassphrase: Int
+
+    /** The AES-GCM, PBKDF2 and random primitives the streaming layout for backups with files ([BackupSeal]) is written on. */
+    val primitives: SealPrimitives
+
     fun isEncrypted(bytes: ByteArray): Boolean
 
     /** Throws [IllegalArgumentException] when the passphrase is shorter than [minPassphrase]. */

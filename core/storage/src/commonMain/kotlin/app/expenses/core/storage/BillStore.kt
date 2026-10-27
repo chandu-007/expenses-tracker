@@ -46,6 +46,14 @@ class BillStore(private val db: ExpensesDb) {
     /** Skipped. From FOUND or TRACKED; a PAID bill is left as it is. */
     fun dismiss(id: String): Boolean = move(id, BillStatus.FOUND, BillStatus.DISMISSED) || move(id, BillStatus.TRACKED, BillStatus.DISMISSED)
 
+    /** Takes back a [dismiss]: the bill goes back to [status] (FOUND or TRACKED, what it was) holding [body]. False when it was not skipped. */
+    fun undismiss(id: String, status: BillStatus, body: String?): Boolean = db.transactionWithResult {
+        require(status == BillStatus.FOUND || status == BillStatus.TRACKED) { "A skipped bill goes back to found or tracked" }
+        val before = q.billById(id).executeAsOneOrNull()
+        q.reviveDismissedBill(status.name, body, id)
+        before != null && before.status == BillStatus.DISMISSED.name
+    }
+
     /** Marks a FOUND or TRACKED bill paid, with the entry that recorded the payment when there is one. False when it was already PAID or skipped. */
     fun markPaid(id: String, entryId: String?, at: Long): Boolean = db.transactionWithResult {
         val before = q.billById(id).executeAsOneOrNull()

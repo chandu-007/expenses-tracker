@@ -86,6 +86,7 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
                     modifier = Modifier.fillMaxWidth().testTag("more_search"),
                 )
+                if (q.isEmpty()) SigningNotice(Modifier.padding(top = 14.dp))
                 if (q.isEmpty()) {
                     if (nudges.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         nudges.take(2).forEach { n -> NudgeCard(n, Modifier.weight(1f)) }

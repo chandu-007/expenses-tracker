@@ -4,6 +4,8 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.Notice
+import app.expenses.core.storage.ByteSink
+import app.expenses.core.storage.ByteSource
 import app.expenses.core.storage.Sha256
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -15,6 +17,8 @@ import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
+import platform.Foundation.NSFileSize
+import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSURL
 import platform.Foundation.NSUserDefaults
@@ -102,6 +106,34 @@ class IosPlatform(host: IosHostServices) : Platform {
         IosExport.offer(url)
     }
 
+    override fun openRead(uri: String): ByteSource {
+        val url = urlOf(uri)
+        val started = url.startAccessingSecurityScopedResource()
+        return openFileForReading(url) { if (started) url.stopAccessingSecurityScopedResource() } ?: throw IllegalArgumentException("That file could not be opened.")
+    }
+
+    override fun openWrite(uri: String): ByteSink {
+        val url = urlOf(uri)
+        val started = url.startAccessingSecurityScopedResource()
+        var finished = false
+        return openFileForWriting(url) {
+            if (started) url.stopAccessingSecurityScopedResource()
+            if (finished) IosExport.offer(url) // a file written for the share sheet is offered once it is whole, as writeBytes does
+        }?.let { sink ->
+            object : ByteSink {
+                override fun write(buf: ByteArray, off: Int, len: Int) = sink.write(buf, off, len)
+                override fun close() { finished = true; sink.close() }
+                override fun abort() = sink.close() // a failed backup is not offered to the share sheet
+            }
+        } ?: throw IllegalArgumentException("That location could not be written to.")
+    }
+
+    /** Only the staging copy made for the share sheet ([IosExport]) is removed: a file the person chose in the Files app is not ours to delete. */
+    override fun discard(uri: String) {
+        val url = urlOf(uri)
+        if (url.path?.contains("/export/") == true) files.removeItemAtURL(url, error = null)
+    }
+
     override fun displayName(uri: String): String? = urlOf(uri).lastPathComponent
     override fun mimeType(uri: String): String? = urlOf(uri).pathExtension?.takeIf { it.isNotEmpty() }?.let { UTType.typeWithFilenameExtension(it)?.preferredMIMEType }
     override fun folderDisplayName(uri: String): String? = urlOf(uri).lastPathComponent
@@ -117,6 +149,9 @@ class IosPlatform(host: IosHostServices) : Platform {
         }
 
         override fun delete(id: String) { files.removeItemAtPath("$dir/$id", error = null) }
+        override fun size(id: String): Long = (files.attributesOfItemAtPath("$dir/$id", error = null)?.get(NSFileSize) as? NSNumber)?.longLongValue ?: -1L
+        override fun open(id: String): ByteSource? = openFileForReading(NSURL.fileURLWithPath("$dir/$id"))
+        override fun create(id: String): ByteSink = openFileForWriting(NSURL.fileURLWithPath("$dir/$id")) ?: throw IllegalArgumentException("That file could not be stored.")
         override fun shareUri(id: String): String = NSURL.fileURLWithPath("$dir/$id").absoluteString.orEmpty()
         override fun sweep(recorded: Set<String>): Int =
             files.contentsOfDirectoryAtPath(dir, error = null).orEmpty().filterIsInstance<String>().filter { it !in recorded }.count { files.removeItemAtPath("$dir/$it", error = null) }
@@ -148,6 +183,7 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val appVersionText: String get() = NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: ""
     override val osVersionText: String get() = UIDevice.currentDevice.let { "${it.systemName} ${it.systemVersion}" }
     override val deviceModelText: String get() = UIDevice.currentDevice.model
+    override val signingExpiresAtMillis: Long? by lazy { IosSigning.expiresAtMillis() }
 
     override fun notificationsAllowed(): Boolean = IosNotificationCenter.allowed()
     override val notificationTimingNote get() = "iPhone decides when the app may look in the background, which can be rarely. So reminders for bills and cards in the next 7 days are handed to the phone ahead of time and arrive at the hour above even if the app is not opened; budget alerts, the weekly recap and bills found in a message appear when the app next runs, at the latest when you open it."

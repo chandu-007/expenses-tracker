@@ -1,5 +1,6 @@
 package app.expenses.core.storage
 
+import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.RecurringItem
@@ -29,10 +30,21 @@ import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.LocalDate
 
 /** How many of each kind of thing, for a restore preview or result. */
-data class BackupCounts(val accounts: Int = 0, val categories: Int = 0, val entries: Int = 0, val templates: Int = 0, val budgets: Int = 0, val recurring: Int = 0)
+data class BackupCounts(val accounts: Int = 0, val categories: Int = 0, val entries: Int = 0, val templates: Int = 0, val budgets: Int = 0, val recurring: Int = 0, val attachments: Int = 0)
 
-/** What a restore does: [added] is new to this device, [alreadyHere] is left exactly as it is. */
-data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts)
+/** What a restore does: [added] is new to this device, [alreadyHere] is left exactly as it is. [attached] are the ids of the files that were recorded as attachments by a restore. */
+data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts, val attached: Set<String> = emptySet())
+
+/**
+ * Which files of a backup a restore would take ([wanted], by the ids this phone keeps) and how many it would leave alone, by reason: attached here already,
+ * removed here earlier, for an entry that is not here or is deleted, no room (ten per entry), not valid (unsafe id, size, checksum text), or a repeat of an id already taken.
+ */
+data class AttachmentPlan(
+    val wanted: Set<String> = emptySet(), val alreadyHere: Int = 0, val removedHere: Int = 0, val noEntry: Int = 0, val noRoom: Int = 0, val invalid: Int = 0, val repeated: Int = 0,
+)
+
+/** The photos and files on record for entries that are not deleted: how many, and their size together. */
+data class AttachmentTotals(val count: Int, val bytes: Long)
 
 /**
  * Reads everything the app keeps into a [BackupData] and puts one back.
@@ -53,7 +65,14 @@ class BackupStore(
 ) {
     private val q get() = db.schemaQueries
 
-    fun export(): BackupData {
+    /** What a backup with files would carry. */
+    fun attachmentTotals(): AttachmentTotals = q.liveAttachmentTotals().executeAsOne().let { AttachmentTotals(it.n.toInt(), it.bytes ?: 0L) }
+
+    /**
+     * Everything the app keeps. With [fileSize] (the size of a stored file by id, or a negative number when it is not on this phone) the photos and files
+     * whose bytes are there, with the size on record, are listed in [BackupData.attachments]; the caller then supplies their bytes ([BackupFile.write]).
+     */
+    fun export(fileSize: ((String) -> Long)? = null): BackupData {
         val splits = q.allSplits().executeAsList().groupBy { it.entry_id }
         val shares = q.allShares().executeAsList().groupBy { it.entry_id }
         val tags = q.allEntryTags().executeAsList().groupBy({ it.entry_id }, { it.tag })
@@ -88,6 +107,7 @@ class BackupStore(
             bills = q.allBills().executeAsList().map { BackupBill(it.id, it.issuer, it.kind, it.title, it.amount_minor, it.min_due_minor, it.currency, it.due_date, it.account_last4, it.reference, it.auto_debit == 1L, it.received_at, it.status, it.paid_at, it.dedupe_key) },
             origins = q.allLiveOrigins().executeAsList().map { BackupOrigin(it.entry_id, it.kind, it.sender, it.text, it.received_at) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
+            attachments = if (fileSize == null) emptyList() else q.liveAttachments().executeAsList().filter { fileSize(it.id) == it.size_bytes }.map { BackupAttachment(it.id, it.entry_id, it.name, it.mime, it.size_bytes, it.sha256, it.created_at) },
             settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
@@ -103,14 +123,53 @@ class BackupStore(
             recurring = data.recurring.count { q.recurringById(it.id).executeAsOneOrNull() != null },
         )
         val total = BackupCounts(data.accounts.size, data.categories.size, data.entries.size, data.templates.size, data.budgets.size, data.recurring.size)
+        val files = attachmentsPlan(data)
         return RestoreReport(
-            added = BackupCounts(total.accounts - present.accounts, total.categories - present.categories, total.entries - present.entries, total.templates - present.templates, total.budgets - present.budgets, total.recurring - present.recurring),
-            alreadyHere = present,
+            added = BackupCounts(total.accounts - present.accounts, total.categories - present.categories, total.entries - present.entries, total.templates - present.templates, total.budgets - present.budgets, total.recurring - present.recurring, files.wanted.size),
+            alreadyHere = present.copy(attachments = files.alreadyHere),
         )
     }
 
-    /** Merges [data] into this device in one transaction. Throws, with nothing changed, if the data breaks a ledger rule. */
-    fun restore(data: BackupData): RestoreReport = db.transactionWithResult {
+    /** The ids (as this phone keeps them: [BackupAttachment.localId]) of the files of [data] this device would take. See [attachmentsPlan]. */
+    fun attachmentsWanted(data: BackupData): Set<String> = attachmentsPlan(data).wanted
+
+    /**
+     * Which files of [data] this device would take, and why it would leave the others alone. A file is taken when it is valid ([BackupAttachment.isRestorable]),
+     * is the first with its id (a repeated id is left alone, whatever its bytes), is not attached here already, belongs to an entry that is (or, from this same
+     * backup, will be) here and not deleted, has room under the limit per entry, and was not removed by the person since. A restore never brings back what was deleted.
+     */
+    fun attachmentsPlan(data: BackupData): AttachmentPlan {
+        if (data.attachments.isEmpty()) return AttachmentPlan()
+        val incoming = data.entries.mapTo(HashSet()) { it.id }
+        val perEntry = HashMap<String, Int>()
+        val seen = HashSet<String>()
+        val wanted = LinkedHashSet<String>()
+        var alreadyHere = 0; var removedHere = 0; var noEntry = 0; var noRoom = 0; var invalid = 0; var repeated = 0
+        for (a in data.attachments) {
+            if (!a.isRestorable()) { invalid++; continue }
+            val id = a.localId()
+            if (!seen.add(id)) { repeated++; continue }
+            if (q.attachmentById(id).executeAsOneOrNull() != null) { alreadyHere++; continue }
+            val entry = q.entryById(a.entryId).executeAsOneOrNull()
+            if (if (entry == null) a.entryId !in incoming else entry.deleted != 0L) { noEntry++; continue }
+            if (q.attachmentRemoved(id).executeAsOne() > 0L) { removedHere++; continue }
+            val have = perEntry.getOrPut(a.entryId) { q.attachmentsOf(a.entryId).executeAsList().size }
+            if (have >= AttachmentRules.MAX_PER_ENTRY) { noRoom++; continue }
+            perEntry[a.entryId] = have + 1
+            wanted += id
+        }
+        return AttachmentPlan(wanted, alreadyHere, removedHere, noEntry, noRoom, invalid, repeated)
+    }
+
+    /** Which of [ids] have an attachment record now, whoever wrote it: what a restore checks before removing a stored file that its own transaction did not record. */
+    fun recordedAttachments(ids: Collection<String>): Set<String> = ids.filterTo(HashSet()) { q.attachmentById(it).executeAsOneOrNull() != null }
+
+    /**
+     * Merges [data] into this device in one transaction. Throws, with nothing changed, if the data breaks a ledger rule. [storedFiles] are the ids of listed
+     * files whose bytes were already put in the app's file store (checked against their checksum); each is recorded as an attachment of its entry, and
+     * [RestoreReport.attached] says which were, so the caller can remove any stored file that was not.
+     */
+    fun restore(data: BackupData, storedFiles: Set<String> = emptySet()): RestoreReport = db.transactionWithResult {
         val report = preview(data)
         val digits = (data.currencies.associate { it.code to it.digits } + q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() })
         fun currency(code: String) = Currency(code, digits[code] ?: error("The backup does not say how many decimal places $code has"))
@@ -158,7 +217,19 @@ class BackupStore(
             if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
         }
         for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX) || k.startsWith(RATE_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
-        report
+        // Files last, once their entries are here. Each is checked again inside this transaction: it may have been taken, or its entry may be deleted here.
+        val attached = LinkedHashSet<String>()
+        for (a in data.attachments) {
+            // the record that passed the check is the one the file was stored for: the first valid one with this id, as in BackupTransfer.storeFiles
+            val id = a.localId()
+            if (!a.isRestorable() || id !in storedFiles || id in attached || q.attachmentById(id).executeAsOneOrNull() != null) continue
+            if (q.entryById(a.entryId).executeAsOneOrNull()?.deleted != 0L) continue
+            if (q.attachmentsOf(a.entryId).executeAsList().size >= AttachmentRules.MAX_PER_ENTRY) continue
+            q.insertAttachment(id, a.entryId, AttachmentRules.safeName(a.name), a.safeMime(), a.sizeBytes, a.sha256, if (a.createdAt > 0) a.createdAt else nowMillis())
+            q.insertOp(clock.now(nowMillis()).encode(), "attachment", id, "entry_id", a.entryId)
+            attached += id
+        }
+        report.copy(added = report.added.copy(attachments = attached.size), attached = attached)
     }
 
     private fun isUntouchedDefault(row: app.expenses.core.storage.db.Category): Boolean {

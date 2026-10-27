@@ -12,7 +12,11 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.cash.sqldelight.db.SqlDriver
 import app.expenses.core.domain.Notice
+import app.expenses.core.storage.BackupFile
+import app.expenses.core.storage.ByteSink
+import app.expenses.core.storage.ByteSource
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.SealPrimitives
 import java.io.File
 import java.lang.ref.WeakReference
 import kotlin.uuid.ExperimentalUuidApi
@@ -48,6 +52,9 @@ class AndroidPlatform(context: Context) : Platform {
 
     override fun trace(name: String) = StartupTrace.mark(name)
 
+    /** A backup's data is held in memory about 6 times over when opened and 8 when written, so a phone that gives the app little heap gets a lower limit: an eighth of the heap, between 16 and 128 MB. */
+    override val maxBackupPayloadBytes: Int get() = (Runtime.getRuntime().maxMemory() / 8).coerceIn(16L * 1024 * 1024, BackupFile.MAX_PAYLOAD_BYTES.toLong()).toInt()
+
     override fun openDriver(): SqlDriver = EncryptedDriver.create(context)
     override fun resetDatabase() = EncryptedDriver.reset(context)
 
@@ -63,6 +70,26 @@ class AndroidPlatform(context: Context) : Platform {
         context.contentResolver.openOutputStream(Uri.parse(uri), "wt")?.use { it.write(bytes); it.flush() } ?: throw IllegalArgumentException("That location could not be written to.")
     }
 
+    override fun openRead(uri: String): ByteSource {
+        val parsed = Uri.parse(uri)
+        val input = context.contentResolver.openInputStream(parsed) ?: throw IllegalArgumentException("That file could not be opened.")
+        val size = if (parsed.scheme == "file") File(parsed.path.orEmpty()).length() else try {
+            context.contentResolver.query(parsed, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L } ?: -1L
+        } catch (e: Exception) { -1L } // a provider that will not say: the size is only used to describe a file that is not a backup
+        return InputStreamSource(input.buffered(64 * 1024), size)
+    }
+
+    override fun openWrite(uri: String): ByteSink =
+        OutputStreamSink((context.contentResolver.openOutputStream(Uri.parse(uri), "wt") ?: throw IllegalArgumentException("That location could not be written to.")).buffered(64 * 1024))
+
+    override fun discard(uri: String) {
+        try {
+            val parsed = Uri.parse(uri)
+            if (parsed.scheme == "file") File(parsed.path.orEmpty()).delete()
+            else if (android.provider.DocumentsContract.isDocumentUri(context, parsed)) android.provider.DocumentsContract.deleteDocument(context.contentResolver, parsed)
+        } catch (_: Exception) { }
+    }
+
     override fun displayName(uri: String): String? =
         context.contentResolver.query(Uri.parse(uri), arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
 
@@ -76,6 +103,9 @@ class AndroidPlatform(context: Context) : Platform {
         override fun delete(id: String) = files.delete(id)
         override fun shareUri(id: String): String = files.shareUri(id).toString()
         override fun sweep(recorded: Set<String>): Int = files.sweep(recorded)
+        override fun size(id: String): Long = files.size(id)
+        override fun open(id: String): ByteSource? = files.open(id)
+        override fun create(id: String): ByteSink = files.create(id)
     }
 
     override val backupCipher: BackupCipher = object : BackupCipher {
@@ -83,6 +113,7 @@ class AndroidPlatform(context: Context) : Platform {
         override fun isEncrypted(bytes: ByteArray) = BackupCrypto.isEncrypted(bytes)
         override fun encrypt(plain: ByteArray, passphrase: String) = BackupCrypto.encrypt(plain, passphrase)
         override fun decrypt(bytes: ByteArray, passphrase: String) = BackupCrypto.decrypt(bytes, passphrase)
+        override val primitives: SealPrimitives get() = BackupCrypto
     }
 
     override suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean) {

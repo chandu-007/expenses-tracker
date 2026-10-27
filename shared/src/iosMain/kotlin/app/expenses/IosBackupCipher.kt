@@ -1,6 +1,7 @@
 package app.expenses
 
 import app.expenses.core.storage.BackupException
+import app.expenses.core.storage.SealPrimitives
 
 /**
  * The same file layout as the Android BackupCrypto, so a backup made on either phone opens on the other:
@@ -10,6 +11,14 @@ import app.expenses.core.storage.BackupException
  */
 class IosBackupCipher(private val host: IosHostServices) : BackupCipher {
     override val minPassphrase get() = MIN_PASSPHRASE
+
+    /** The primitives of the streaming layout for backups with files ([app.expenses.core.storage.BackupSeal]), from the same Swift host as above. */
+    override val primitives: SealPrimitives = object : SealPrimitives {
+        override fun deriveKey(passphrase: String, salt: ByteArray, iterations: Int): ByteArray = host.deriveKey(passphrase, salt.toNSData(), iterations).toByteArray()
+        override fun seal(key: ByteArray, nonce: ByteArray, aad: ByteArray, plain: ByteArray): ByteArray = host.seal(key.toNSData(), nonce.toNSData(), aad.toNSData(), plain.toNSData()).toByteArray()
+        override fun unseal(key: ByteArray, nonce: ByteArray, aad: ByteArray, sealed: ByteArray): ByteArray? = host.unseal(key.toNSData(), nonce.toNSData(), aad.toNSData(), sealed.toNSData())?.toByteArray()
+        override fun randomBytes(count: Int): ByteArray = secureRandom(count)
+    }
 
     override fun isEncrypted(bytes: ByteArray) = bytes.size > MAGIC.size && bytes.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
 

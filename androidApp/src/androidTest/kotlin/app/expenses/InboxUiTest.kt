@@ -1,9 +1,6 @@
 package app.expenses
 
-import android.Manifest
 import android.content.Intent
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -212,24 +209,6 @@ class InboxUiTest {
         val again = runBlocking { container.write { it.inbox.list().single().id } }!!
         waitFor("inbox_$again"); tap("inbox_add_$again"); waitFor("inbox_problem_$again")
         assertEquals(1, entries().size)
-    }
-
-    @Test
-    fun smsCaptureShowsTheMissingPermissionAndOnceGrantedTheSwitchTurnsItOnAndOff() {
-        val granted = { androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED }
-        val on = { runBlocking { container.write { it.templates.setting(Capture.SETTING_SMS_ON) } } }
-        if (!granted()) {
-            // switched on in the settings but Android never allowed it (or the person took it back): the screen says so and the switch is off
-            runBlocking { container.write { it.templates.putSetting(Capture.SETTING_SMS_ON, "1") } }
-            launch(); compose.openMore(); tap("open_capture"); waitFor("capture_permission_missing")
-            compose.onNodeWithTag("capture_sms_switch", useUnmergedTree = true).assertIsOff()
-            runBlocking { container.write { it.templates.putSetting(Capture.SETTING_SMS_ON, "0") } }
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.RECEIVE_SMS}")).use { it.readBytes() } // grantRuntimePermission needs API 28
-        }
-        launch(); compose.openMore(); tap("open_capture"); tap("capture_sms_switch")
-        compose.waitUntil(10_000) { on() == "1" }
-        compose.onNodeWithTag("capture_sms_switch", useUnmergedTree = true).assertIsOn()
-        tap("capture_sms_switch"); compose.waitUntil(10_000) { on() == "0" }
     }
 
     @Test

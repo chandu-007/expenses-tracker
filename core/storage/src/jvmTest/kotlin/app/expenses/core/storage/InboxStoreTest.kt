@@ -84,6 +84,20 @@ class InboxStoreTest {
     }
 
     @Test
+    fun undoingASkipBringsTheItemBackWithTheTextItHadAndOnlyASkippedItemCanBeBroughtBack() {
+        store.add(item("a"), "1"); store.add(item("b"), "2")
+        assertTrue(store.dismiss("a")); assertNull(store.get("a")!!.body)
+        assertTrue(store.undismiss("a", "Rs.100 debited"))
+        val back = store.get("a")!!
+        assertEquals(InboxStatus.PENDING, back.status); assertEquals("Rs.100 debited", back.body); assertNull(back.entryId); assertEquals(10_000, back.amountMinor)
+        assertEquals(2, store.pendingCount())
+        assertFalse(store.undismiss("a", "x"), "already pending: nothing to undo"); assertEquals("Rs.100 debited", store.get("a")!!.body, "and the text is not overwritten")
+        store.confirm("b", "entry1")
+        assertFalse(store.undismiss("b", "x"), "an item that became an entry is not a skipped one"); assertEquals(InboxStatus.CONFIRMED, store.get("b")!!.status)
+        assertFalse(store.undismiss("nope", null))
+    }
+
+    @Test
     fun reopeningBringsAResolvedItemBackAsPendingWithoutItsEntry() {
         store.add(item("a"), "1"); store.confirm("a", "entry1"); store.reopen("a")
         val back = store.get("a")!!; assertEquals(InboxStatus.PENDING, back.status); assertNull(back.entryId); assertEquals(1, store.pendingCount())

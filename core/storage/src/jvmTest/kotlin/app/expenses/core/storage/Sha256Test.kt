@@ -27,4 +27,18 @@ class Sha256Test {
             assertEquals(md.digest(data).joinToString("") { "%02x".format(it) }, Sha256.hex(data), "length $n")
         }
     }
+
+    @Test
+    fun thePortableImplementationAgreesWithTheJdkWhateverThePlatformUsesForTheRest() {
+        val md = MessageDigest.getInstance("SHA-256")
+        val rnd = Random(9)
+        for (n in (0..130) + listOf(1_000, 4_096, 65_537, 300_000)) {
+            val data = rnd.nextBytes(n)
+            val pure = PureSha256()
+            var i = 0
+            while (i < n) { val k = minOf(rnd.nextInt(1, 100), n - i); pure.update(data, i, k); i += k }
+            assertEquals(md.digest(data).joinToString("") { "%02x".format(it) }, pure.finish().joinToString("") { "%02x".format(it) }, "length $n")
+        }
+        assertEquals("cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", PureSha256().also { it.update(ByteArray(1_000_000) { 'a'.code.toByte() }, 0, 1_000_000) }.finish().joinToString("") { "%02x".format(it) })
+    }
 }

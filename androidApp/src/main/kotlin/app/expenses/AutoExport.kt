@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.core.domain.AutoExportRules
 import app.expenses.core.storage.BackupFile
+import app.expenses.core.storage.ByteSource
 import app.expenses.core.storage.Sha256
 import kotlinx.datetime.TimeZone
 import java.time.Instant
@@ -37,6 +38,65 @@ class SafFolder(private val context: Context, private val tree: Uri) : ExportFol
         cr.openOutputStream(uri, "wt")?.use { it.write(bytes); it.flush() } ?: return null
         return entries().firstOrNull { child(it.first) == uri }?.second ?: name
     }
+    override fun openWrite(name: String, mime: String): FolderWriter? {
+        val uri = DocumentsContract.createDocument(cr, child(treeId), mime, name) ?: return null
+        val out = cr.openOutputStream(uri, "wt") ?: return null
+        val requested = name
+        return object : FolderWriter {
+            override var name: String = requested
+                private set
+            private val sink = OutputStreamSink(out.buffered(64 * 1024))
+            override fun write(buf: ByteArray, off: Int, len: Int) = sink.write(buf, off, len)
+            override fun close() {
+                sink.close()
+                this.name = entries().firstOrNull { child(it.first) == uri }?.second ?: this.name
+            }
+        }
+    }
+
+    private fun flagsOf(documentId: String): Int =
+        cr.query(child(documentId), arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use { c -> if (c.moveToFirst()) c.getInt(0) else 0 } ?: 0
+
+    /**
+     * Whether this provider renames documents (`FLAG_SUPPORTS_RENAME`), asked of a document in the folder, or of a small one created and removed again when the
+     * folder is empty. Where it does not, a copy is written under its real name from the start (no temporary copy, so nothing is uploaded twice).
+     */
+    override val canRename: Boolean by lazy {
+        try {
+            val existing = entries().firstOrNull { !it.second.endsWith(".part") && !it.second.endsWith(".old") }
+            if (existing != null) flagsOf(existing.first) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0
+            else {
+                val probe = DocumentsContract.createDocument(cr, child(treeId), "application/octet-stream", "expenses-probe.tmp")
+                if (probe == null) false else try {
+                    cr.query(probe, arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use { c -> c.moveToFirst() && c.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0 } ?: false
+                } finally {
+                    runCatching { DocumentsContract.deleteDocument(cr, probe) }
+                }
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Renames through the document provider and returns the name the document ended up with, which a provider may change (" (1)"); null when it cannot rename. */
+    override fun rename(name: String, newName: String): String? = try {
+        val doc = entries().firstOrNull { it.second == name }
+        if (doc == null || flagsOf(doc.first) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME == 0) null
+        else {
+            val moved = DocumentsContract.renameDocument(cr, child(doc.first), newName)
+            // the provider may have given the document another name than asked for (" (1)"): the caller compares
+            if (moved == null) null else {
+                val id = DocumentsContract.getDocumentId(moved)
+                entries().firstOrNull { it.first == id }?.second ?: newName
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    override fun openRead(name: String): ByteSource? =
+        entries().firstOrNull { it.second == name }?.let { e -> cr.openInputStream(child(e.first))?.let { InputStreamSource(it.buffered(64 * 1024)) } }
+
     override fun read(name: String): ByteArray? = entries().firstOrNull { it.second == name }?.let { cr.openInputStream(child(it.first))?.use { s -> s.readBytes() } }
     override fun delete(name: String): Boolean = entries().firstOrNull { it.second == name }?.let { runCatching { DocumentsContract.deleteDocument(cr, child(it.first)) }.getOrDefault(false) } ?: false
 }

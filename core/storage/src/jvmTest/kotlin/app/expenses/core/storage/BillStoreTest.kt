@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.storage.db.ExpensesDb
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -33,6 +34,20 @@ class BillStoreTest {
         val t = store.get("a")!!
         assertEquals(BillStatus.TRACKED, t.status); assertEquals("text a", t.body, "kept so that an entry recorded from the bill can show it"); assertTrue(store.dismiss("a")); assertNull(store.get("a")!!.body, "dismissed: the message is gone"); store.add(bill("z")); store.track("z"); store.markPaid("z", null, 5); assertNull(store.get("z")!!.body, "paid: the message is gone"); store.add(bill("a2", key = "ka2")); store.track("a2"); val t2 = store.get("a2")!!; assertEquals(1_234_500L, t.amountMinor); assertEquals(61_700L, t.minDueMinor); assertEquals("2026-10-25", t.dueDate)
         assertFalse(store.track("a"), "already tracked"); assertFalse(store.track("missing"))
+    }
+
+    @Test
+    fun undoingASkipPutsTheBillBackAsItWasWithItsTextAndOnlyASkippedBillGoesBack() {
+        store.add(bill("a")); store.add(bill("t", key = "kt")); store.track("t")
+        assertTrue(store.dismiss("a")); assertTrue(store.dismiss("t"))
+        assertNull(store.get("a")!!.body); assertNull(store.get("t")!!.body)
+        assertTrue(store.undismiss("a", BillStatus.FOUND, "text a")); assertTrue(store.undismiss("t", BillStatus.TRACKED, "text t"))
+        val a = store.get("a")!!; val t = store.get("t")!!
+        assertEquals(BillStatus.FOUND, a.status); assertEquals("text a", a.body); assertEquals(1_234_500L, a.amountMinor)
+        assertEquals(BillStatus.TRACKED, t.status); assertEquals("text t", t.body); assertEquals("2026-10-25", t.dueDate)
+        assertFalse(store.undismiss("a", BillStatus.FOUND, "other"), "not skipped: nothing to undo"); assertEquals("text a", store.get("a")!!.body)
+        store.markPaid("t", null, 5); assertFalse(store.undismiss("t", BillStatus.TRACKED, "x"), "a paid bill is not a skipped one"); assertEquals(BillStatus.PAID, store.get("t")!!.status)
+        assertFailsWith<IllegalArgumentException> { store.undismiss("a", BillStatus.PAID, null) }
     }
 
     @Test

@@ -82,11 +82,12 @@ private class HeldEditable(var value: Editable?)
  * The frame every screen of the app host is drawn in. [key] is the screen being drawn ([ScreenKeys]); [editing] is the entry being opened, if any, and
  * [editor] draws it.
  * - not [wide]: [content] as it is, nothing around it;
- * - [wide], on Home: [content] (Home) in a list-sized pane, and the entry editor, or a placeholder, in the pane beside it;
+ * - [wide], on Home: [content] (Home) in a list-sized pane, and the entry editor, or a placeholder, in the pane beside it; while the More page is
+ *   showing ([moreOpen]) and no entry is open, there is nothing to put beside it, so it takes the window as one centred page, at most [WIDE_SCREEN_MAX_WIDTH] wide;
  * - [wide], any other screen: [content] centred, at most [WIDE_SCREEN_MAX_WIDTH] wide.
  */
 @Composable
-fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (Editable) -> Unit, content: @Composable () -> Unit) {
+fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (Editable) -> Unit, moreOpen: Boolean = false, content: @Composable () -> Unit) {
     if (!wide) { content(); return }
     if (key != ScreenKeys.HOME) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -96,10 +97,16 @@ fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val listWidth = (maxWidth * 0.42f).coerceIn(minOf(LIST_PANE_MIN, maxWidth / 2), LIST_PANE_MAX)
-        Row(Modifier.fillMaxSize()) {
-            Box(Modifier.width(listWidth).fillMaxHeight().testTag("wide_list_pane")) { content() }
-            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Box(Modifier.weight(1f).fillMaxHeight().testTag("wide_detail_pane")) { DetailPane(editing, editor) }
+        // the More page with no entry open: one centred page, not a list-sized strip beside an empty "Select an entry". [content] stays the first child of the
+        // Row in both cases, so Home keeps its scroll position and selection when More is opened and closed.
+        val alone = moreOpen && editing == null
+        val aloneWidth = minOf(maxWidth, WIDE_SCREEN_MAX_WIDTH)
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
+            Box(Modifier.width(if (alone) aloneWidth else listWidth).fillMaxHeight().testTag("wide_list_pane")) { content() }
+            if (!alone) {
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Box(Modifier.weight(1f).fillMaxHeight().testTag("wide_detail_pane")) { DetailPane(editing, editor) }
+            }
         }
     }
 }

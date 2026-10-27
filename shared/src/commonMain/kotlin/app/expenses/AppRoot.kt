@@ -171,6 +171,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var loansOpen by rememberSaveable { mutableStateOf(false) }
             var billsOpen by rememberSaveable { mutableStateOf(false) }
             val billsUi by viewModel.bills.collectAsStateWithLifecycle(context = MAIN)
+            val billUndo by viewModel.billUndo.collectAsStateWithLifecycle(context = MAIN)
+            val inboxUndo by viewModel.inboxUndo.collectAsStateWithLifecycle(context = MAIN)
             val billAsks by host.billsRequests.collectAsState()
             var handledBillAsks by rememberSaveable { mutableIntStateOf(0) }
             LaunchedEffect(billAsks) { if (billAsks > handledBillAsks) { handledBillAsks = billAsks; billsOpen = true; viewModel.watchBills(true) } }
@@ -337,7 +339,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
                     }
                 }
-                app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen) { when {
+                app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen) { when {
                     k == 0 -> {
                         val h = history ?: heldHistory.value!!
                         BackHandler { viewModel.closeHistory() }
@@ -347,7 +349,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 2 -> editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
-                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null)
+                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone)
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
@@ -456,11 +458,12 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 16 -> {
                         val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
+                        val reportBuilds by viewModel.reportBuilds.collectAsStateWithLifecycle(context = MAIN)
                         // Back leaves the entry list first, then the report.
                         BackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
                         ReportsScreen(
                             tabBar = { tabBar("Reports") },
-                            report = report,
+                            report = report, working = reportBuilds > 0,
                             onBack = { reporting = false; viewModel.closeReports() },
                             onMode = viewModel::setReportMode, onStep = viewModel::stepReport,
                             onDrill = { target, start, end, label -> viewModel.drill(target, start, end, label) },
@@ -471,6 +474,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 17 -> {
                         val dataState by viewModel.data.collectAsStateWithLifecycle(context = MAIN)
+                        val autoRunning by viewModel.autoExportRunning.collectAsStateWithLifecycle(context = MAIN)
                         val statement by viewModel.statement.collectAsStateWithLifecycle(context = MAIN)
                         if (statement.active) {
                             BackHandler { viewModel.closeImport() }
@@ -487,6 +491,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx, onExportFinancialYear = viewModel::exportFinancialYear,
                                 autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
+                                onShown = viewModel::loadBackupFiles, onIncludeFiles = viewModel::setIncludeBackupFiles, autoRunning = autoRunning,
                                 canShareBackup = host.canShareFiles, onShareBackup = { name, pass -> viewModel.shareBackup(name, pass) { n, b -> host.shareFile(n, "application/octet-stream", b) } },
                             )
                         }
@@ -549,6 +554,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
                             onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
                             onPostRepeat = viewModel::postDue, onSkipRepeat = viewModel::skipDue,
+                            undo = billUndo, onUndo = viewModel::undoDismissBill, onUndoGone = viewModel::billUndoGone,
                         )
                     }
                     k == 22 -> {

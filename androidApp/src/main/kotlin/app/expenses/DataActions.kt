@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import app.expenses.core.storage.BackupData
 import app.expenses.core.storage.BackupHeader
+import app.expenses.core.storage.BackupReader
 import app.expenses.core.storage.RestoreReport
 
 /**
@@ -14,8 +15,8 @@ class DataActions(context: Context, container: AppContainer, now: () -> Long = S
 
     /** A backup file that was opened: either it needs a passphrase first, or it has been checked and previewed. */
     sealed interface Opened {
-        class NeedsPassphrase(val bytes: ByteArray) : Opened
-        class Ready(val header: BackupHeader, val data: BackupData, val report: RestoreReport) : Opened
+        class NeedsPassphrase(val uri: String) : Opened
+        class Ready(val header: BackupHeader, val data: BackupData, val report: RestoreReport, val reopen: (() -> BackupReader)? = null) : Opened
     }
 
     companion object {
@@ -28,11 +29,13 @@ class DataActions(context: Context, container: AppContainer, now: () -> Long = S
     suspend fun exportFinancialYear(uri: Uri, yearsBack: Int): String = transfer.exportFinancialYear(uri.toString(), yearsBack)
     suspend fun backup(uri: Uri, passphrase: String?): DataTransfer.Saved = transfer.backup(uri.toString(), passphrase)
     suspend fun open(uri: Uri, passphrase: String?): Opened = transfer.open(uri.toString(), passphrase).let(::wrap)
-    suspend fun openBytes(bytes: ByteArray, passphrase: String?): Opened = wrap(transfer.openBytes(bytes, passphrase))
     suspend fun restore(data: BackupData): RestoreReport = transfer.restore(data)
 
+    /** Restores an opened backup with its photos and files. */
+    suspend fun restore(opened: Opened.Ready): DataTransfer.Restored = transfer.restore(DataTransfer.Opened.Ready(opened.header, opened.data, opened.report, opened.reopen))
+
     private fun wrap(o: DataTransfer.Opened): Opened = when (o) {
-        is DataTransfer.Opened.NeedsPassphrase -> Opened.NeedsPassphrase(o.bytes)
-        is DataTransfer.Opened.Ready -> Opened.Ready(o.header, o.data, o.report)
+        is DataTransfer.Opened.NeedsPassphrase -> Opened.NeedsPassphrase(o.uri)
+        is DataTransfer.Opened.Ready -> Opened.Ready(o.header, o.data, o.report, o.reopen)
     }
 }

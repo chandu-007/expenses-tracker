@@ -2,6 +2,8 @@ package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -95,8 +97,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
@@ -187,10 +187,43 @@ fun EntryListScreen(
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
     // the rows grouped under a heading for each day; the heading is an item of its own so scrolling stays lazy
     val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
-    LaunchedEffect(listState, listItems) {
-        // the position counts the day headings too, so count the entries up to it: more is loaded when one of the last ten entries is on screen
+    // the account Home is narrowed to, if any
+    val filtered = state.accountRows.firstOrNull { it.id == state.homeAccountId }
+    // the page's own items before the entries: the top block, and while an account is chosen its bar
+    val lead = if (filtered != null) 2 else 1
+    LaunchedEffect(listState, listItems, lead) {
+        // the position counts those leading items and the day headings too: take the leading items off, then count the entries up to it.
+        // More is loaded when one of the last ten entries is on screen
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { last -> if (listItems.take(last + 1).count { it is RowUi } >= state.rows.size - 10) onLoadMore() }
+            .collect { last -> if (state.rows.isNotEmpty() && listItems.take((last - lead + 1).coerceAtLeast(0)).count { it is RowUi } >= state.rows.size - 10) onLoadMore() }
+    }
+    // choosing an account brings its bar (and the entries below it) to the top of the page; leaving the account view goes back to the cards
+    // Only a real change of the account does it: the account last scrolled for is kept (and saved with the screen, so a rotation or coming back from Search or an
+    // entry keeps the scroll position), seeded with the account shown now.
+    var scrolledFor by rememberSaveable { mutableStateOf(state.homeAccountId) }
+    val reduceMotion = LocalReduceMotion.current
+    LaunchedEffect(state.homeAccountId) {
+        val now = state.homeAccountId
+        val was = scrolledFor
+        if (now == was) return@LaunchedEffect
+        scrolledFor = now
+        if (now != null) { androidx.compose.runtime.withFrameNanos { }; if (reduceMotion) listState.scrollToItem(1) else listState.animateScrollToItem(1) }
+        else if (was != null) { if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0) }
+    }
+    // an entry just added glows (see SwipeableRow): bring it into view if the page's top block, now part of the scrolling page, leaves it below the fold
+    val freshId = state.undo?.takeIf { it.reveal && !it.restore }?.entryId
+    val latestItems by androidx.compose.runtime.rememberUpdatedState(listItems)
+    val latestLead by androidx.compose.runtime.rememberUpdatedState(lead)
+    LaunchedEffect(freshId) {
+        if (freshId == null) return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { } // the new row is laid out
+        val at = latestItems.indexOfFirst { it is RowUi && it.id == freshId }
+        if (at < 0) return@LaunchedEffect
+        val index = at + latestLead
+        val shown = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+        val bottom = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.afterContentPadding
+        if (shown == null) { if (reduceMotion) listState.scrollToItem(index, scrollOffset = -(bottom / 2)) else listState.animateScrollToItem(index, scrollOffset = -(bottom / 2)) }
+        else if (shown.offset + shown.size > bottom) { if (reduceMotion) listState.scrollBy((shown.offset + shown.size - bottom).toFloat()) else listState.animateScrollBy((shown.offset + shown.size - bottom).toFloat()) }
     }
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(it) else it); onMessageShown() }
@@ -235,8 +268,8 @@ fun EntryListScreen(
         },
         floatingActionButton = {
             if (!moreOpen) {
-            // shrinks to a round button while the list is scrolled, and opens up again at the top
-            val expanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+            // shrinks to a round button as soon as the page is scrolled (the whole page is the list, so its first item is the top of Home, not an entry), and opens up again at the top
+            val expanded by remember { derivedStateOf { !listState.canScrollBackward } }
             androidx.compose.material3.ExtendedFloatingActionButton(onClick = onAdd, expanded = expanded, icon = { Text("+", style = MaterialTheme.typography.headlineMedium) }, text = { Text("Add") }, modifier = Modifier.testTag("add"))
             }
         },
@@ -295,91 +328,98 @@ fun EntryListScreen(
             return@Scaffold
         }
         LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)
-        val fold = remember { HeaderFold() }
-        val foldPx = with(androidx.compose.ui.platform.LocalDensity.current) { 190.dp.toPx() }
-        Column(Modifier.fillMaxSize().padding(padding).nestedScroll(remember(foldPx) { fold.connection(foldPx) })) {
-            val onHero = MaterialTheme.colorScheme.onPrimary
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
-                if (supportsBlur) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures
-                Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
-                    Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
-                    RollingAmount(
-                        state.periodSpend, state.periodSpendMinor,
-                        modifier = Modifier.padding(top = 4.dp).graphicsLayer { val k = 1f - 0.30f * fold.fraction; scaleX = k; scaleY = k; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }.testTag("month_spend"),
-                        color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    )
-                    if (state.spark.compare.isNotEmpty()) Text(state.spark.compare, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 4.dp).foldAway(fold).testTag("month_compare"))
-                    if (state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).foldAway(fold).testTag("home_insight"))
-                    if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp).foldAway(fold))
-                }
-            }
-            Column(Modifier.foldAway(fold)) {
-            if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
-            if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
-            FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
-            state.homeLayout.visible().forEach { section ->
-                when (section) {
-                    HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
-                    HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
-                    // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
-                    HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) })
-                    HomeSection.QUICK_ENTRIES -> {
-                if (state.templates.isNotEmpty()) {
-                    LazyRow(
-                        modifier = Modifier.testTag("templates"),
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(state.templates, key = { it.id }) { t ->
-                            LongPressChip(
-                                label = if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …",
-                                onClick = { onTemplate(t) }, onLongClick = { removing = t },
-                                modifier = Modifier.testTag("template_${t.name}"),
+        val onHero = MaterialTheme.colorScheme.onPrimary
+        // The whole page is one list: the month card, the banners, the cards and the account bar are its first item and scroll away with the entries, so a small
+        // screen is not left with a few rows under a fixed top. The empty states are items of the same list.
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding).testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
+            item(key = "home_top", contentType = "top") {
+                Column(Modifier.fillMaxWidth()) {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
+                        if (supportsBlur) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures
+                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
+                            Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
+                            RollingAmount(
+                                state.periodSpend, state.periodSpendMinor,
+                                modifier = Modifier.padding(top = 4.dp).testTag("month_spend"),
+                                color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                             )
+                            if (state.spark.compare.isNotEmpty()) Text(state.spark.compare, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 4.dp).testTag("month_compare"))
+                            if (state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
+                            if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp))
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
+                    if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
+                    FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
+                    state.homeLayout.visible().forEach { section ->
+                        when (section) {
+                            HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
+                            HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
+                            // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
+                            HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) })
+                            HomeSection.QUICK_ENTRIES -> {
+                                if (state.templates.isNotEmpty()) {
+                                    LazyRow(
+                                        modifier = Modifier.testTag("templates"),
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        items(state.templates, key = { it.id }) { t ->
+                                            LongPressChip(
+                                                label = if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …",
+                                                onClick = { onTemplate(t) }, onLongClick = { removing = t },
+                                                modifier = Modifier.testTag("template_${t.name}"),
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
+            }
+            // the account bar: its own item, so choosing an account can bring it to the top of the page with the entries right below
+            // sticky: "Showing only X", Show all and the period chips stay in view while the account's entries scroll under them
+            if (filtered != null) stickyHeader(key = "home_filter", contentType = "filter") {
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Showing only ${filtered.name}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f).testTag("account_filter_note"))
+                        TextButton(onClick = onManageAccounts, modifier = Modifier.testTag("account_filter_manage")) { Text("Edit account") }
+                        TextButton(onClick = { onFilterAccount(null) }, modifier = Modifier.testTag("account_filter_clear")) { Text("Show all") }
+                    }
+                    // narrow the account's list by date; searching inside it is one tap away
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf(Triple(app.expenses.HomePeriod.THIS_MONTH, "This month", "account_period_this"), Triple(app.expenses.HomePeriod.LAST_MONTH, "Last month", "account_period_last"), Triple(app.expenses.HomePeriod.ALL, "All", "account_period_all")).forEach { (p, label, tag) ->
+                            FilterChip(selected = state.homePeriod == p, onClick = { onSetHomePeriod(p) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
+                        }
+                        TextButton(onClick = { onSearchAccount(filtered.id) }, modifier = Modifier.testTag("account_search")) { Text("Search") }
                     }
                 }
             }
-            }
-            Spacer(Modifier.height(4.dp))
-            val filtered = state.accountRows.firstOrNull { it.id == state.homeAccountId }
-            if (filtered != null) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Showing only ${filtered.name}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f).testTag("account_filter_note"))
-                TextButton(onClick = onManageAccounts, modifier = Modifier.testTag("account_filter_manage")) { Text("Edit account") }
-                TextButton(onClick = { onFilterAccount(null) }, modifier = Modifier.testTag("account_filter_clear")) { Text("Show all") }
-            }
-            // narrow the account's list by date; searching inside it is one tap away
-            if (filtered != null) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                listOf(Triple(app.expenses.HomePeriod.THIS_MONTH, "This month", "account_period_this"), Triple(app.expenses.HomePeriod.LAST_MONTH, "Last month", "account_period_last"), Triple(app.expenses.HomePeriod.ALL, "All", "account_period_all")).forEach { (p, label, tag) ->
-                    FilterChip(selected = state.homePeriod == p, onClick = { onSetHomePeriod(p) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
-                }
-                TextButton(onClick = { onSearchAccount(filtered.id) }, modifier = Modifier.testTag("account_search")) { Text("Search") }
-            }
-            if (state.rows.isEmpty() && filtered != null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(if (state.homePeriod == app.expenses.HomePeriod.ALL) "Nothing in ${filtered.name} yet." else "Nothing in ${filtered.name} in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_filter_empty")) }
-            } else if (state.rows.isEmpty()) {
-                if (state.showWelcome) {
-                    WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
-                } else {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            EmptyArt(EmptyKind.HOME, Modifier.size(140.dp))
-                            Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.rows.isEmpty()) {
+                item(key = "home_empty", contentType = "empty") {
+                    if (filtered != null) {
+                        Box(Modifier.fillParentMaxWidth().heightIn(min = 200.dp), contentAlignment = Alignment.Center) { Text(if (state.homePeriod == app.expenses.HomePeriod.ALL) "Nothing in ${filtered.name} yet." else "Nothing in ${filtered.name} in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_filter_empty")) }
+                    } else if (state.showWelcome) {
+                        WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
+                    } else {
+                        Box(Modifier.fillParentMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                EmptyArt(EmptyKind.HOME, Modifier.size(140.dp))
+                                Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
             } else {
-                LazyColumn(state = listState, modifier = Modifier.testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
-                    itemsIndexed(listItems, key = { _, it -> if (it is RowUi) it.seq else "day$it" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
-                        if (item is RowUi) SwipeableRow(
-                            item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
-                            onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
-                            modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
-                        ) else DayHeader(item as Long)
-                    }
+                itemsIndexed(listItems, key = { _, it -> if (it is RowUi) it.seq else "day$it" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
+                    if (item is RowUi) SwipeableRow(
+                        item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
+                        onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
+                        modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
+                    ) else DayHeader(item as Long)
                 }
             }
         }

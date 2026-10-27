@@ -292,27 +292,29 @@ fun SearchScreen(
                             state.undo?.let { u -> TextButton(onClick = { onUndo(u) }, modifier = Modifier.testTag("search_undo")) { Text("Undo") } }
                         }
                     }
-                    // the count, what the expenses add up to, and the way to select every result share one line: with the keyboard up the list has little room
+                    // the count, what the expenses add up to, and the way to select every result share one line (the first item of the results, below)
                     val listedIds = remember(state.results) { state.results.map { it.id } }
                     val allSelected = listedIds.isNotEmpty() && selected.size >= listedIds.size && selected.toHashSet().containsAll(listedIds)
                     val spentMinor = remember(state.results) { state.results.filter { it.kind == "EXPENSE" }.sumOf { it.minor } }
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${state.results.size} ${if (state.results.size == 1) "result" else "results"}" +
-                                if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) " · ${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
-                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f).testTag("search_count"),
-                        )
-                        // every listed result, not only the ones composed on screen
-                        if (listedIds.isNotEmpty()) TextButton(
-                            onClick = { selected = if (allSelected) emptyList() else listedIds },
-                            modifier = Modifier.height(32.dp).testTag("search_select_all"),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
-                    }
                     // rows under a heading for their day, like the home list
                     val listItems = remember(state.results) { buildList<Any> { var last = Long.MIN_VALUE; state.results.forEach { r -> if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
                     LazyColumn(Modifier.fillMaxSize().nestedScroll(hideOnScroll).testTag("search_results"), contentPadding = PaddingValues(bottom = 24.dp)) {
+                        item(key = "search_summary", contentType = "summary") {
+                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${state.results.size} ${if (state.results.size == 1) "result" else "results"}" +
+                                        if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) " · ${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
+                                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f).testTag("search_count"),
+                                )
+                                // every listed result, not only the ones composed on screen
+                                if (listedIds.isNotEmpty()) TextButton(
+                                    onClick = { selected = if (allSelected) emptyList() else listedIds },
+                                    modifier = Modifier.testTag("search_select_all"),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
+                            }
+                        }
                         itemsIndexed(listItems, key = { i, it -> if (it is RowUi) it.seq else "day$i" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
                             if (item !is RowUi) { DayHeader(item as Long); return@itemsIndexed }
                             val row = item

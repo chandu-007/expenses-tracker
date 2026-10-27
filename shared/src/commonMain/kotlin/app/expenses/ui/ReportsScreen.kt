@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import app.expenses.core.storage.ReportGroup
 import app.expenses.GroupRowUi
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,8 +66,12 @@ fun ReportsScreen(
     onOpenEntry: (String) -> Unit,
     onGroup: (ReportGroup) -> Unit = {},
     onRange: (startDay: Long, endDay: Long) -> Unit = { _, _ -> },
+    /** A new report is being worked out (over a big ledger it takes a moment): a thin bar shows after a short wait, while the old figures stay. */
+    working: Boolean = false,
 ) {
     var pickingRange by rememberSaveable { mutableStateOf<String?>(null) }
+    var slow by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(working) { slow = false; if (working) { kotlinx.coroutines.delay(WORKING_SHOWS_AFTER_MS); slow = true } }
     val drill = report?.drill
     if (drill != null) {
         DrillScreen(drill, onCloseDrill, onOpenEntry)
@@ -92,7 +97,7 @@ fun ReportsScreen(
     }
     Scaffold(bottomBar = { tabBar() }, topBar = { TopAppBar(title = { Text("Reports") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("reports_back")) { Text("Back") } }) }) { padding ->
         if (report == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("Loading…") }
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("Loading…", modifier = Modifier.testTag("reports_working")) }
             return@Scaffold
         }
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -158,8 +163,11 @@ fun ReportsScreen(
                 HorizontalDivider()
             }
         }
+        if (slow) LinearProgressIndicator(Modifier.padding(padding).fillMaxWidth().testTag("reports_working"))
     }
 }
+
+private const val WORKING_SHOWS_AFTER_MS = 250L
 
 @Composable
 private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, onDrill: (DrillTarget, Long?, Long?, String?) -> Unit) {

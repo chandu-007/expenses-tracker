@@ -30,6 +30,9 @@ internal object IosOcr {
 
     fun recognize(image: CGImageRef): String = run(VNImageRequestHandler(cGImage = image, options = emptyMap<Any?, Any?>()))
 
+    // Not timed on a phone, so the level stays as it is: Accurate is the setting that reads small printed digits, and a bill's amounts are the whole point.
+    // BillItemsReader calls this off the main thread (ioDispatcher), so a slow read never blocks the screen; the read picture is whatever Vision is given (the
+    // full image, as the Android reader's own downscale was measured to bring no gain without changing the text).
     private fun run(handler: VNImageRequestHandler): String = memScoped {
         val request = VNRecognizeTextRequest()
         request.recognitionLevel = VNRequestTextRecognitionLevelAccurate

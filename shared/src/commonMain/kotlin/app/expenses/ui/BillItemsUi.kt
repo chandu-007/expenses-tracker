@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BillItem
@@ -75,25 +80,35 @@ internal fun BillItemsReader(
 
     fun readPhoto(uri: String?) {
         choosing = false
-        if (uri == null) return
+        if (uri == null || busy) return // a cancelled picker hands back null: nothing started, nothing to reset
         busy = true; problem = null
         scope.launch {
-            // recognition and reading the file are slow: off the main thread
-            val result = withContext(ioDispatcher) {
-                try {
-                    val bytes = platform.readBytes(uri)
-                    if (!platform.looksLikeImage(bytes)) Result.failure(IllegalArgumentException("That is not a picture. Choose a photo of the bill."))
-                    else Result.success(platform.recognizeText(bytes))
-                } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+            // `busy` always comes back, whatever the reading does (an exception, or an Error such as running out of memory on a very large picture); leaving the form
+            // cancels this scope with the form, so a result never opens the list of items on a form that is gone
+            try {
+                // recognition and reading the file are slow: off the main thread
+                val result = withContext(ioDispatcher) {
+                    try {
+                        val bytes = platform.readBytes(uri)
+                        if (!platform.looksLikeImage(bytes)) Result.failure(IllegalArgumentException("That is not a picture. Choose a photo of the bill."))
+                        else Result.success(platform.recognizeText(bytes))
+                    } catch (e: CancellationException) { throw e } catch (e: Throwable) { Result.failure(e) }
+                }
+                result.onSuccess { read = it to uri }.onFailure { problem = (it as? IllegalArgumentException)?.message ?: "Could not read that photo." }
+            } finally {
+                busy = false
             }
-            busy = false
-            result.onSuccess { read = it to uri }.onFailure { problem = (it as? IllegalArgumentException)?.message ?: "Could not read that photo." }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton(onClick = { if (picker.canTakePhoto) choosing = !choosing else picker.openDocument(listOf("image/*")) { readPhoto(it) } }, enabled = !busy, modifier = Modifier.testTag("bill_items_read")) {
             Text(if (busy) "Reading the photo…" else "Read items from a photo")
+        }
+        // reading takes a second or more on a large photo: a thin moving bar says the phone is working
+        if (busy) {
+            LinearProgressIndicator(Modifier.fillMaxWidth().testTag("bill_items_working"))
+            Text("Reading the bill on this phone. Nothing is sent anywhere.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // The two ways to get the picture are shown in place, not in a dialog: on an iPhone a dialog is a screen of its own, and the camera or the Files picker
         // opened over it left that screen and the list of items to be shown after it fighting over what was on top (the list appeared and was gone).
@@ -174,17 +189,17 @@ fun BillItemsDialog(
                             Checkbox(checked = on, onCheckedChange = null, modifier = Modifier.padding(end = 8.dp).testTag("bill_item_check_$i"))
                             Text(item.name + if (item.quantity > 1) " × ${item.quantity}" else "", maxLines = 2, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
                             Text(Money(item.amountMinor, currency).formatted(), modifier = Modifier.padding(start = 8.dp))
-                            TextButton(onClick = { editing = i }, modifier = Modifier.testTag("bill_item_edit_$i")) { Text("Edit") }
+                            TextButton(onClick = { editing = i }, modifier = Modifier.testTag("bill_item_edit_$i").semantics { contentDescription = "Edit ${item.name}" }) { Text("Edit") } // a screen reader must tell the buttons apart
                         }
                     }
                 }
                 bill.printedTotalMinor?.let { printed -> Text("Total on the bill: ${Money(printed, currency).formatted()}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("bill_items_printed_total")) }
                 if (canAddEach && bill.items.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth().clickable { each = false }.testTag("bill_items_mode_one"), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = !each, onClick = { each = false }, role = Role.RadioButton).testTag("bill_items_mode_one"), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = !each, onClick = null, modifier = Modifier.padding(end = 8.dp))
                         Text("One entry for the whole bill", modifier = Modifier.padding(vertical = 6.dp))
                     }
-                    Row(Modifier.fillMaxWidth().clickable { each = true }.testTag("bill_items_mode_each"), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = each, onClick = { each = true }, role = Role.RadioButton).testTag("bill_items_mode_each"), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = each, onClick = null, modifier = Modifier.padding(end = 8.dp))
                         Text("Each item as its own entry", modifier = Modifier.padding(vertical = 6.dp))
                     }

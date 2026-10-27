@@ -1,10 +1,13 @@
 package app.expenses.core.storage
 
+import app.expenses.core.domain.AttachmentRules
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * The backup file (documented format, version 1). It is two parts: one line of JSON describing the file, a newline, then the payload.
+ * The backup file (documented format, versions 1 and 2). It is a line of JSON describing the file, a newline, then the payload:
  *
  *     {"format":"expenses-backup","version":1,"createdAt":<epoch millis>,"payloadBytes":<n>,"sha256":"<hex>"}
  *     {"accounts":[...],"categories":[...],"entries":[...],...}
@@ -12,6 +15,9 @@ import kotlinx.serialization.json.Json
  * `sha256` is the hash of the payload bytes exactly as stored, so a damaged or cut-off file is detected before anything is read from it.
  * All amounts are integers in minor units (paise, cents) with the currency code beside them; dates are epoch milliseconds (UTC) for
  * entries and days since 1970-01-01 for repeating-expense schedules. Unknown fields are ignored on read, so a later version can add fields.
+ *
+ * A backup that also carries photos and files is version 2: the payload lists them (`attachments`) and their bytes follow the payload, one after
+ * the other in the order of that list, `sizeBytes` each. A backup without files is written exactly as version 1 was, so any older version of the app reads it.
  */
 @Serializable
 data class BackupHeader(val format: String, val version: Int, val createdAt: Long, val payloadBytes: Int, val sha256: String)
@@ -73,6 +79,23 @@ data class BackupRecurring(
     val accountLast4: String? = null, val reference: String? = null, val autoDebit: Boolean = false, val receivedAt: Long, val status: String, val paidAt: Long? = null, val dedupeKey: String,
 )
 
+/** A photo or file attached to an entry. Its [sizeBytes] bytes follow the payload (version 2 files); [sha256] is checked before the file is put back. */
+@Serializable data class BackupAttachment(val id: String, val entryId: String, val name: String, val mime: String, val sizeBytes: Long, val sha256: String, val createdAt: Long = 0L) {
+    /** The id as this phone keeps it: lower case, because it becomes a file name and some file systems do not tell upper from lower case apart. */
+    fun localId(): String = id.lowercase()
+
+    /** What a listed file must look like to be put back: a plain id (it becomes a file name), a size within the limit, a SHA-256 to check it against. */
+    fun isRestorable(): Boolean =
+        ID_PATTERN.matches(id) && sizeBytes in 1..AttachmentRules.MAX_BYTES && sha256.length == 64 && sha256.all { it in '0'..'9' || it in 'a'..'f' }
+
+    /** The type as it is kept: `type/subtype` of plain characters (it is handed to the viewer chooser), else a generic one. */
+    fun safeMime(): String = mime.trim().takeIf { MIME_PATTERN.matches(it) }?.lowercase() ?: "application/octet-stream"
+}
+
+/** The app makes lower-case UUIDs; a restore also takes upper case and lower-cases it ([BackupAttachment.localId]). */
+private val ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
+private val MIME_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9!#&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#&^_.+-]{0,126}")
+
 @Serializable data class BackupOrigin(val entryId: String, val kind: String, val sender: String? = null, val text: String, val receivedAt: Long? = null)
 
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
@@ -101,62 +124,11 @@ data class BackupData(
     val origins: List<BackupOrigin> = emptyList(),
     /** Card networks, tiers and last four digits of accounts. Absent in a backup made before they existed. */
     val accountLooks: List<BackupAccountLook> = emptyList(),
+    /** The photos and files attached to the entries in this file, when the backup carries them (version 2; their bytes follow the payload). Left out of the JSON when empty, so a backup without files is exactly a version 1 file. */
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val attachments: List<BackupAttachment> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 
 /** A backup file that cannot be used. The message is written for the user. */
 class BackupException(message: String) : Exception(message)
 
-object BackupFile {
-    const val FORMAT = "expenses-backup"
-    const val VERSION = 1
-
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-
-    fun encode(data: BackupData, createdAtMillis: Long): ByteArray {
-        val payload = json.encodeToString(BackupData.serializer(), data).encodeToByteArray()
-        val header = json.encodeToString(BackupHeader.serializer(), BackupHeader(FORMAT, VERSION, createdAtMillis, payload.size, Sha256.hex(payload)))
-        return header.encodeToByteArray() + byteArrayOf('\n'.code.toByte()) + payload
-    }
-
-    /** Checks the file and returns its contents, or throws [BackupException] saying what is wrong. Nothing is written anywhere. */
-    fun decode(raw: ByteArray): Pair<BackupHeader, BackupData> {
-        // a copy that went through an email, a chat or a cloud drive can arrive with a byte-order mark or blank space in front, or a newline behind
-        val bytes = withoutLeadingNoise(raw)
-        if (bytes.isEmpty()) throw BackupException("That file is empty, so it is not a backup. A download that did not finish can leave an empty file: save the backup again and choose it once more.")
-        if (bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) throw BackupException("That is a zip or Excel file, not a backup. A backup file ends in .expbak. ${describe(raw)}")
-        if (bytes[0] == '<'.code.toByte()) throw BackupException("That is a web page, not a backup: the download may have been blocked or asked you to sign in. ${describe(raw)}")
-        val newline = bytes.indexOf('\n'.code.toByte())
-        if (newline <= 0) throw BackupException("This is not a backup file from this app. ${describe(raw)}")
-        val header = try {
-            json.decodeFromString(BackupHeader.serializer(), bytes.copyOfRange(0, newline).decodeToString().trim())
-        } catch (e: Exception) {
-            throw BackupException("This is not a backup file from this app. ${describe(raw)}")
-        }
-        if (header.format != FORMAT) throw BackupException("This is not a backup file from this app (it says it is \"${header.format.take(40)}\"). ${describe(raw)}")
-        if (header.version > VERSION) throw BackupException("This backup was made by a newer version of the app. Update the app to restore it.")
-        if (header.version < 1) throw BackupException("This backup file is not valid.")
-        var payload = bytes.copyOfRange(newline + 1, bytes.size)
-        // blank space after the data (a trailing newline added on the way) is not part of it
-        if (payload.size > header.payloadBytes && payload.copyOfRange(header.payloadBytes, payload.size).all { it == '\n'.code.toByte() || it == '\r'.code.toByte() || it == ' '.code.toByte() }) payload = payload.copyOfRange(0, header.payloadBytes)
-        if (payload.size != header.payloadBytes) throw BackupException("This backup file is incomplete or damaged (it should hold ${header.payloadBytes} bytes of data but holds ${payload.size}).")
-        if (Sha256.hex(payload) != header.sha256) throw BackupException("This backup file is damaged: its contents do not match its checksum. Nothing was changed.")
-        val data = try {
-            json.decodeFromString(BackupData.serializer(), payload.decodeToString())
-        } catch (e: Exception) {
-            throw BackupException("This backup file could not be read (${e.message?.lineSequence()?.firstOrNull() ?: "unknown error"}).")
-        }
-        return header to data
-    }
-
-    private fun withoutLeadingNoise(bytes: ByteArray): ByteArray {
-        var i = 0
-        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) i = 3
-        while (i < bytes.size && (bytes[i] == ' '.code.toByte() || bytes[i] == '\n'.code.toByte() || bytes[i] == '\r'.code.toByte() || bytes[i] == '\t'.code.toByte())) i++
-        return if (i == 0) bytes else bytes.copyOfRange(i, bytes.size)
-    }
-
-    /** What to tell about a file that is not a backup, without showing any of its words: its size and the first bytes in hex. */
-    private fun describe(bytes: ByteArray): String =
-        "(The file has ${bytes.size} bytes and begins ${bytes.take(8).joinToString(" ") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }}.)"
-}
