@@ -98,23 +98,13 @@ object MessageIngest {
                 storedSender = named
                 verdict = CaptureClassifier.classifyEmail(emailNames, text, extra, arrived)
                 if (verdict is CaptureOutcome.Ignored && verdict.reason == IgnoreReason.NOT_ALLOWLISTED && verdict.headerRoot == null) return@write MessageResult(CaptureEventOutcome.NOT_ALLOWLISTED, wording(CaptureEventOutcome.NOT_ALLOWLISTED))
-            } else if (named.isNotEmpty()) {
-                storedSender = named
-                verdict = CaptureClassifier.classify(named, text, extra, arrived)
             } else {
-                storedSender = ""
-                when (val evidence = PasteRules.evidence(text)) {
-                    is PasteRules.Evidence.Bank -> verdict = CaptureClassifier.classify(evidence.root, text, extra, arrived)
-                    PasteRules.Evidence.AlertWords -> verdict = when (val r = CaptureClassifier.classify(NO_SENDER_ROOT, text, extra + NO_SENDER_ROOT, arrived)) {
-                        is CaptureOutcome.Transaction -> r.copy(issuer = UNKNOWN_ISSUER)
-                        is CaptureOutcome.Bill -> r.copy(issuer = UNKNOWN_ISSUER)
-                        is CaptureOutcome.Ignored -> r
-                    }
-                    PasteRules.Evidence.None -> {
-                        // not read any further: it is counted, and nothing of it is kept
-                        ok.inbox.recordEvent(now, NO_SENDER_ROOT, CaptureEventOutcome.NOT_A_TRANSACTION)
-                        return@write MessageResult(CaptureEventOutcome.NOT_A_TRANSACTION, wording(CaptureEventOutcome.NOT_A_TRANSACTION))
-                    }
+                storedSender = named
+                verdict = classifyText(named, text, extra, arrived)
+                if (verdict === NO_EVIDENCE) {
+                    // not read any further: it is counted, and nothing of it is kept
+                    ok.inbox.recordEvent(now, NO_SENDER_ROOT, CaptureEventOutcome.NOT_A_TRANSACTION)
+                    return@write MessageResult(CaptureEventOutcome.NOT_A_TRANSACTION, wording(CaptureEventOutcome.NOT_A_TRANSACTION))
                 }
             }
             var detail: String? = null
@@ -149,6 +139,48 @@ object MessageIngest {
             if (outcome == CaptureEventOutcome.CAPTURED || outcome == CaptureEventOutcome.BILL) changes.value += 1
             MessageResult(outcome, wording(outcome), detail)
         } ?: MessageResult(null, "Expenses could not open its data, so nothing was captured.")
+    }
+
+    /** What [classifyText] returns for a text that came with no sender and carries no evidence of being a bank's: counted, never read. */
+    private val NO_EVIDENCE = CaptureOutcome.Ignored(IgnoreReason.NOT_A_TRANSACTION, null)
+
+    /**
+     * The verdict for a text with [sender] (blank when the message came without one): judged by its header when there is one, otherwise by the evidence in its words
+     * ([PasteRules]). [NO_EVIDENCE] when a text with no sender has none.
+     */
+    private fun classifyText(sender: String, text: String, extra: Set<String>, arrived: kotlinx.datetime.LocalDate): CaptureOutcome {
+        if (sender.isNotEmpty()) return CaptureClassifier.classify(sender, text, extra, arrived)
+        return when (val evidence = PasteRules.evidence(text)) {
+            is PasteRules.Evidence.Bank -> CaptureClassifier.classify(evidence.root, text, extra, arrived)
+            PasteRules.Evidence.AlertWords -> when (val r = CaptureClassifier.classify(NO_SENDER_ROOT, text, extra + NO_SENDER_ROOT, arrived)) {
+                is CaptureOutcome.Transaction -> r.copy(issuer = UNKNOWN_ISSUER)
+                is CaptureOutcome.Bill -> r.copy(issuer = UNKNOWN_ISSUER)
+                is CaptureOutcome.Ignored -> r
+            }
+            PasteRules.Evidence.None -> NO_EVIDENCE
+        }
+    }
+
+    /**
+     * Texts that an earlier version filed as a debit or credit in To review but that the rules now read as a bill (0.7.1: "Your bill ... is due ... Total amount payable
+     * ... Kindly ignore, if already paid" was filed as a debit). Each still-PENDING text item (SMS or Shortcuts source, never an email or a payment-app notification,
+     * and never one the person already confirmed or skipped) is judged again from its stored sender and words by the same rules as a new message; one that is now a
+     * bill becomes a [Bill] (the same dedupe key as a new one, so a bill already on the Bills page is not doubled) and the item is skipped, which keeps its
+     * fingerprint so the same text is not captured twice. Idempotent: a skipped item is no longer pending, and an item that is still a transaction is not touched.
+     * Returns how many items became bills. Call inside the write lock.
+     */
+    fun reclassifyWaiting(ok: AppContainer.Opened.Ok): Int {
+        val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        var converted = 0
+        for (item in ok.inbox.list(InboxStatus.PENDING, 5000)) {
+            val text = item.body?.takeIf { item.source == CaptureKeys.SMS } ?: continue
+            val verdict = classifyText(item.sender.trim(), text, extra, dateOfMillis(item.receivedAt))
+            if (verdict !is CaptureOutcome.Bill) continue
+            ok.bills.add(billOf(verdict, item.source, item.sender, item.receivedAt, text))
+            if (ok.inbox.dismiss(item.id)) converted++
+        }
+        if (converted > 0) changes.value += 1
+        return converted
     }
 
     /** The sentence for each outcome: what a Shortcuts dialog says and what the paste box shows. */

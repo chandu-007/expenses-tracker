@@ -93,6 +93,28 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(named.pending, before + 2)
     }
 
+    // 0.7.1: this Jio text (invented phone number) reached the iPhone as a debit in To review. It is a bill reminder: money still owed, never money that moved.
+    func testABillReminderTextIsABillNotADebit() async throws {
+        let amount = "\(Int.random(in: 1000...99999)).\(Int.random(in: 10...99))" // new each run: the same bill twice is one bill, on a ledger that keeps earlier runs
+        let text = "Your bill dated 21-10-2026 for JioHome connection with JioFixedVoice Number +914000000000 is due for payment on 30-10-2026.\n" +
+            "Total amount payable : Rs.\(amount).\nTo pay your bill, click www.jio.com/r/Vbu7k5JBt\n" +
+            "Overdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
+        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+        let first = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: text)
+        XCTAssertEqual(first.code, "BILL")
+        XCTAssertEqual(first.message, "Captured a bill, see Bills in Expenses")
+        XCTAssertTrue(first.kept)
+        XCTAssertEqual(first.pending, before, "nothing waits in To review")
+        let again = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: text)
+        XCTAssertEqual(again.code, "DUPLICATE")
+        let withSender = try await IosCapture.shared.captureMessage(host: host, sender: "JD-JIOPAY-S", message: text)
+        XCTAssertEqual(withSender.code, "DUPLICATE", "the same bill from its header is the same bill")
+        // paying that bill is a real payment: still a pending debit
+        let paid = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: "Rs.\(amount) paid to Jio via UPI. Ref \(ref())")
+        XCTAssertEqual(paid.code, "CAPTURED")
+        XCTAssertEqual(paid.pending, before + 1)
+    }
+
     func testTheCaptureIntentRunsWithNoScreenAndAnswersInWords() async throws {
         var intent = CaptureBankMessageIntent()
         intent.message = bank()

@@ -41,7 +41,7 @@ sealed interface ParseResult {
  */
 object GenericAlertParser {
     private val otp = Regex("""(?i)\botp\b|one[\s-]?time\s+pass|\bcvv\b|\bpin\b\s+is""")
-    private val dueNotice = Regex("""(?i)\bis\s+due\b|min(?:imum)?\s+(?:amount\s+)?due|total\s+(?:amount\s+)?due|statement\s+(?:is\s+)?(?:generated|ready)|login""")
+    private val dueNotice = Regex("""(?i)\bis\s+due\b|\bamount\s+payable\b|\bdue\s+(?:date|on|by)\b|min(?:imum)?\s+(?:amount\s+)?due|total\s+(?:amount\s+)?due|statement\s+(?:is\s+)?(?:generated|ready)|login""")
     private val amountToken = Regex("""(?i)(rs\.?|inr|₹)[\s:]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)|\b([A-Z]{3})\s*([0-9][0-9,]*\.[0-9]{2})\b|\b(?:debited|credited|spent|paid|received|sent|withdrawn|deducted)\s+(?:by|for|of|with)\s+([0-9][0-9,]*\.[0-9]{2})\b""")
     private val balanceContext = Regex("""(?i)(?:bal|avl|avail|limit|due|outstanding|minimum)[a-z .:]*$""")
     private val declined = Regex("""(?i)\b(?:declined|unsuccessful|insufficient\s+funds?)\b|\b(?:txn|transaction|payment)\b[^.]{0,40}\bfailed\b|\bfailed\b[^.]{0,20}\b(?:txn|transaction)\b""")
@@ -53,6 +53,8 @@ object GenericAlertParser {
     private val debitWords = Regex("""(?i)\b(?:debited|spent|sent|paid|withdrawn|purchase|transferred|deducted|used|redeemed)\b|\bDr\b\.?""")
     /** HDFC Bank only (any of its header roots, HDFCBK or HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
     private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
+    /** "Payment of Rs.706.82 successful for your Jio bill": the person paid, with no debit word in the text. */
+    private val paymentSuccessful = Regex("""(?i)\bpayment\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""")
     /** "credited to the beneficiary account" describes an outgoing payment seen from the sender's bank. */
     private val outgoingCreditPhrase = Regex("""(?i)\bbeneficiary\b""")
     private val accountMask = Regex("""(?i)(?:a/?c|acct|account)\s*(?:no\.?)?\s*[:*]?\s*[x*]*(\d{3,6})(?:\b|-)""")
@@ -73,7 +75,8 @@ object GenericAlertParser {
      * learned from one bank's text never decides what another bank's text means.
      */
     fun parse(body: String, senderRoot: String? = null): ParseResult {
-        val text = body.replace(Regex("\\s+"), " ").trim()
+        // "Kindly ignore, if already paid" is not a payment: the words are read without it
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
         if (otp.containsMatchIn(text)) return ParseResult.NotATransaction("otp")
         val amounts = amounts(text)
         val charged = amounts.firstOrNull { it.first == "INR" } ?: amounts.firstOrNull() ?: return ParseResult.NotATransaction("no amount")
@@ -91,7 +94,7 @@ object GenericAlertParser {
                 // the passive wording only settles a text that also has a credit word: "paid by your card at X" alone is still a debit
                 val d = (if (c != null) debitWords.find(directional) else debitWords.find(readAs))?.range?.first
                 when {
-                    c == null && d == null -> if (senderRoot?.let { SenderRules.BUILT_IN[it] } == "HDFC Bank" && cardTxn.containsMatchIn(text)) Direction.DEBIT else return ParseResult.NotATransaction("no direction")
+                    c == null && d == null -> if ((senderRoot?.let { SenderRules.BUILT_IN[it] } == "HDFC Bank" && cardTxn.containsMatchIn(text)) || paymentSuccessful.containsMatchIn(text)) Direction.DEBIT else return ParseResult.NotATransaction("no direction")
                     c != null && outgoingCreditPhrase.containsMatchIn(readAs) -> Direction.DEBIT
                     c == null -> Direction.DEBIT
                     d == null -> Direction.CREDIT

@@ -27,10 +27,16 @@ object CaptureClassifier {
         val root = SenderRules.headerRoot(sender) ?: return CaptureOutcome.Ignored(IgnoreReason.PERSONAL_SENDER, null)
         val issuer = SenderRules.BUILT_IN[root] ?: if (root in extraRoots.map { it.uppercase() }) root else return CaptureOutcome.Ignored(IgnoreReason.NOT_ALLOWLISTED, root)
         val parsed = GenericAlertParser.parse(body, root)
-        // money that moved is a transaction even when the same text also quotes what is due: losing a real payment is worse than showing a bill as a transaction.
-        // Only a debit that is merely promised ("will be debited") is read as a bill instead.
-        val moved = parsed is ParseResult.Parsed && !BillParser.promisesDebit(body)
-        if (!moved) BillParser.parse(body, root, today)?.let { return CaptureOutcome.Bill(issuer, root, it) }
+        // THE RULE. A text that asks for money (BillParser: due / payable / pay by / bill generated / statement ready / EMI or premium falling due, with an amount,
+        // and not worded as a receipt) is a bill, UNLESS it also states that money actually moved ([MoneyMoved]): a past-tense movement word (debited, credited,
+        // spent, withdrawn, deducted, refunded, transferred, paid) outside a promise ("will be debited") or an "ignore if already paid" line, or a UPI reference
+        // number, or HDFC's "Txn ... Card ... At" layout. Then the debit or credit wins, because losing a real payment is worse than showing a bill as a transaction
+        // ("Rs.500 debited ... Your bill of Rs.1200 is due on 25-10" stays a transaction). Receipts ("payment of Rs X received", "thank you for your payment") are never
+        // bills (BillParser), so they keep going to the transaction rules. A text with no ask is judged by the transaction rules alone.
+        // What went wrong before 0.7.1: any "paid" made GenericAlertParser read the text as a debit (Jio's "Kindly ignore, if already paid"), and a parsed alert skipped the
+        // bill rules altogether, so a bill reminder became a debit in To review.
+        val bill = BillParser.parse(body, root, today)
+        if (bill != null && !(parsed is ParseResult.Parsed && MoneyMoved.stated(body))) return CaptureOutcome.Bill(issuer, root, bill)
         return when (val r = parsed) {
             is ParseResult.NotATransaction -> CaptureOutcome.Ignored(if (r.reason == "otp") IgnoreReason.OTP else IgnoreReason.NOT_A_TRANSACTION, root)
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)
@@ -52,4 +58,19 @@ object CaptureClassifier {
 
     /** An email's words with those safety sentences taken out; the words kept on the pending item are the original ones. */
     internal fun withoutSafetyNotice(body: String): String = safetyNotice.replace(body, " ")
+}
+
+/** Whether a text says that money moved, as opposed to asking for it. Used by [CaptureClassifier] to let a real debit or credit win over a bill's wording. */
+internal object MoneyMoved {
+    /** A promise or a plan, not an event: "will be debited", "to be auto-debited", "scheduled debit". */
+    private val promise = Regex("""(?i)\b(?:will|shall|would|to)\s+be\s+(?:auto[- ]?)?(?:debited|deducted|charged|paid|credited|transferred)\b|\bscheduled\s+(?:to\s+be\s+)?debit\w*""")
+    /** "sent" is not here: "your bill has been sent to your email" is a bill; a sent payment carries a UPI reference or a bank's wording. */
+    private val words = Regex("""(?i)\b(?:debited|credited|spent|withdrawn|deducted|refunded|reversed|transferred|paid|purchase)\b""")
+    private val upiRef = Regex("""(?i)\bupi\s*(?:ref(?:erence)?\.?\s*(?:no\.?|number)?)?\s*[:\-]?\s*\d{9,18}\b|upi/[a-z0-9]+/\d{9,18}""")
+    private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
+
+    fun stated(body: String): Boolean {
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
+        return words.containsMatchIn(promise.replace(text, " ")) || upiRef.containsMatchIn(text) || cardTxn.containsMatchIn(text)
+    }
 }

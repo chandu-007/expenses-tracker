@@ -28,6 +28,8 @@ import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.storage.BillStatus
 import app.expenses.core.storage.CaptureEventOutcome
+import app.expenses.core.storage.InboxItem
+import app.expenses.core.storage.InboxStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -278,5 +280,46 @@ class BillsUiTest {
         openBills()
         compose.onNodeWithTag("bill_due_${b.id}", useUnmergedTree = true).assertTextContains("No due date in the message", substring = true)
         waitFor("bill_setdate_${b.id}")
+    }
+
+    // The text that reached an iPhone as a debit in To review (0.7.1). The phone number is invented.
+    private val jioHome = "Your bill dated 21-10-2026 for JioHome connection with JioFixedVoice Number +914000000000 is due for payment on 30-10-2026.\n" +
+        "Total amount payable : Rs.706.82.\nTo pay your bill, click www.jio.com/r/Vbu7k5JBt\nOverdue charges will be applicable, in case of delay in payment. Kindly ignore, if already paid."
+    private fun waiting() = runBlocking { container.write { it.inbox.list() } }!!
+
+    @Test
+    fun aJioHomeBillReminderIsABillOnTheBillsPageAndNeverADebitInToReview() {
+        assertEquals(CaptureEventOutcome.BILL, ingest(jioHome, sender = "JD-JIOPAY-S"))
+        assertEquals(CaptureEventOutcome.DUPLICATE, ingest(jioHome, sender = "JD-JIOPAY-S"), "the same bill text again is one bill")
+        assertEquals(emptyList(), waiting(), "no debit item in To review")
+        val b = bills(BillStatus.FOUND).single()
+        assertEquals("Jio broadband bill", b.title); assertEquals(70_682L, b.amountMinor); assertEquals("2026-10-30", b.dueDate)
+        openBills(); waitFor("bill_${b.id}")
+        compose.onNodeWithTag("bill_amount_${b.id}", useUnmergedTree = true).assertTextContains("₹706.82", substring = true)
+        compose.onNodeWithTag("bill_title_${b.id}", useUnmergedTree = true).assertTextContains("Jio", substring = true)
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_empty")
+        assertEquals(emptyList(), entries())
+    }
+
+    @Test
+    fun aJioTextThatWasAlreadyFiledAsADebitMovesToBillsOnceAndAnAcceptedOrRealItemIsLeftAlone() {
+        fun item(id: String, body: String, ref: String?) = InboxItem(id, Capture.SMS, "JD-JIOPAY-S", "Jio", 1_000, "DEBIT", 70_682, "INR", "2026-10-21", ref, null, false, "GENERIC", body, InboxStatus.PENDING, null)
+        runBlocking { container.write { ok ->
+            ok.inbox.add(item("wrong", jioHome.replace(Regex("\\s+"), " "), null), "fp-wrong")
+            ok.inbox.add(item("kept", jioHome.replace(Regex("\\s+"), " "), null), "fp-accepted")
+            ok.inbox.confirm("kept", "e1") // the person already accepted this one
+            ok.inbox.add(item("real", "Rs.200.00 debited from A/c XX1234 on 21-10-26 to VPA shop@okhdfc (UPI Ref 628374659283). Not you? Call 18002586161", "628374659283").copy(sender = "AX-HDFCBK-S", issuer = "HDFC Bank", amountMinor = 20_000), "fp-real")
+        } }
+        launch(); compose.waitUntil(10_000) { bills(BillStatus.FOUND).size == 1 }
+        assertEquals(listOf("real"), waiting().map { it.id }, "the misfiled item left To review; the real debit stays")
+        assertEquals(InboxStatus.DISMISSED, runBlocking { container.write { it.inbox.get("wrong") } }!!.status)
+        assertEquals(InboxStatus.CONFIRMED, runBlocking { container.write { it.inbox.get("kept") } }!!.status, "an accepted item is never touched")
+        val b = bills(BillStatus.FOUND).single()
+        assertEquals(70_682L, b.amountMinor); assertEquals("2026-10-30", b.dueDate)
+        // opening To review runs the check again: still one bill, nothing else changes
+        compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
+        assertEquals(1, bills(BillStatus.FOUND).size); assertEquals(listOf("real"), waiting().map { it.id })
+        // the same text arriving afterwards is the same bill
+        assertEquals(CaptureEventOutcome.DUPLICATE, ingest(jioHome, sender = "JD-JIOPAY-S"))
     }
 }

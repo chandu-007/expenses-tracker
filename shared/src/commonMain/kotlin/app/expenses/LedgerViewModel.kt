@@ -1425,7 +1425,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private val _captureSettings = MutableStateFlow(CaptureSettingsUi(false, ""))
     val captureSettings: StateFlow<CaptureSettingsUi> get() = _captureSettings
 
-    fun loadInbox() = withStore { ok -> _inbox.value = inboxRows(ok) }
+    fun loadInbox() = withStore { ok ->
+        // waiting texts that the rules now read as bills (0.7.1) move to Bills before the list is shown
+        if (MessageIngest.reclassifyWaiting(ok) > 0) refresh(ok)
+        _inbox.value = inboxRows(ok)
+    }
 
     fun loadCaptureSettings() = withStore { ok ->
         // the capture log keeps 90 days: the newest event of any outcome is the last time something arrived
@@ -3144,7 +3148,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
                 is AppContainer.Opened.Ok -> {
-                    container.write { ok -> refresh(ok); offerGuide(ok); loadRates(ok) }; platform.trace("open: first page loaded")
+                    container.write { ok -> MessageIngest.reclassifyWaiting(ok); refresh(ok); offerGuide(ok); loadRates(ok) }; platform.trace("open: first page loaded")
                     viewModelScope.launch(BACKGROUND) { platform.captureChanges.collect { container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) } } }
                     // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
                     container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }

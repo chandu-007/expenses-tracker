@@ -83,7 +83,7 @@ object BillParser {
     private val kindWater = Regex("""(?i)water\s*(?:bill|board|supply|charges)|jal\s*board|bwssb""")
     private val kindGas = Regex("""(?i)\bpng\b|piped\s*gas|gas\s*bill|\bgas\b[^.]{0,20}\bbill|mahanagar|indraprastha""")
     private val kindMobile = Regex("""(?i)postpaid|mobile\s*bill|(?:jio|airtel|vodafone|\bvi\b|bsnl)[^.]{0,30}\bbill""")
-    private val kindBroadband = Regex("""(?i)broadband|fib(?:re|er)|wi-?fi|internet\s*bill|act\s*fibernet""")
+    private val kindBroadband = Regex("""(?i)broadband|fib(?:re|er)|wi-?fi|internet\s*bill|act\s*fibernet|jio\s*(?:home|fixed)""")
     private val kindDth = Regex("""(?i)\bdth\b|tata\s*(?:play|sky)|dish\s*tv|\bd2h\b|sun\s*direct""")
     private val kindInsurance = Regex("""(?i)\bpremium\b|\bpolicy\b|insurance|\blic\b""")
     private val kindLoan = Regex("""(?i)\bemi\b|instal+ment|\bloan\b""")
@@ -102,9 +102,6 @@ object BillParser {
     }
 
     /** True when [body] is a message about something to pay. Cheap; the same checks as [parse] without reading the details. */
-    /** True for a debit that is only promised ("will be debited", "scheduled debit"), which is a bill, not money that moved. */
-    fun promisesDebit(body: String): Boolean = futureDebit.containsMatchIn(body)
-
     fun looksLikeBill(body: String): Boolean = parse(body, null, LocalDate(2000, 1, 1)) != null
 
     /**
@@ -112,7 +109,7 @@ object BillParser {
      * more than about six weeks past.
      */
     fun parse(body: String, senderRoot: String?, today: LocalDate): BillNotice? {
-        val text = body.replace(Regex("\\s+"), " ").trim()
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
         if (otp.containsMatchIn(text) || completed.containsMatchIn(text) || junk.containsMatchIn(text) || !cue.containsMatchIn(text)) return null
         if (happened.containsMatchIn(futureDebit.replace(text, "")) && !deadline.containsMatchIn(text)) return null
 
