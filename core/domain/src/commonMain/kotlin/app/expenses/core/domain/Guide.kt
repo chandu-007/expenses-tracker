@@ -107,6 +107,7 @@ object Guide {
                 "Add as many accounts as you like. Move money between them with a Transfer.",
                 "For a credit card, set the statement and due days to see what is left on the latest statement, the minimum due, and a reminder before the due date.",
                 "Paying the card from your bank is a transfer, so it is not counted twice.",
+                "Safe to spend, under Net worth, is what is left of your cash, bank and wallet money after what your cards owe and the bills, EMIs and repeating items due soon. It is an estimate.",
             ),
             "More, then Accounts", GuideTarget.ACCOUNTS,
         ),
@@ -154,7 +155,7 @@ object Guide {
         ),
         GuideStep(
             "loans", "Lent and borrowed", "Keep track of who owes you and whom you owe.",
-            listOf("Add a person, then record money you gave or got.", "Repayments reduce what is owed; each person shows a running balance.", "None of it is counted as your own spending."),
+            listOf("Add a person, then record money you gave or got.", "Repayments reduce what is owed; each person shows a running balance.", "None of it is counted as your own spending.", "An expense you expect back (switch on I expect this back in the Add form) waits here until the money comes. It still counts as spending until then."),
             "More, then Lent and borrowed", GuideTarget.LOANS,
         ),
         GuideStep(
