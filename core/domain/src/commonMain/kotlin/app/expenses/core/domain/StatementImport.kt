@@ -107,6 +107,12 @@ data class StatementMapping(
     val amountColumn: Int? = null,
     val typeColumn: Int? = null,
     val sign: SignConvention = SignConvention.NEGATIVE_IS_SPENDING,
+    /** Optional columns a file from another app has (see [ImportPresets]); a bank statement has none of them. */
+    val categoryColumn: Int? = null,
+    val subcategoryColumn: Int? = null,
+    val accountColumn: Int? = null,
+    val noteColumn: Int? = null,
+    val tagsColumn: Int? = null,
 ) {
     /** What still has to be chosen before the file can be read, or null when the mapping is complete. */
     fun missing(): String? = when {
@@ -118,8 +124,18 @@ data class StatementMapping(
     }
 }
 
-/** [sourceText] is the statement line this was read from, exactly as the file had it, kept with the entry so the person can see where it came from. */
-data class StatementTxn(val row: Int, val date: LocalDate, val flow: Flow, val minor: Long, val description: String, val sourceText: String? = null)
+/**
+ * [sourceText] is the statement line this was read from, exactly as the file had it, kept with the entry so the person can see where it came from.
+ * [counterAccount] is set when the person said this line is money moving between their own accounts (a payment of a card's bill): the importer then records a
+ * transfer between the account being imported and this one instead of spending or income, from the account for a [Flow.SPENDING] line and into it for [Flow.INCOME].
+ */
+data class StatementTxn(
+    val row: Int, val date: LocalDate, val flow: Flow, val minor: Long, val description: String, val sourceText: String? = null, val counterAccount: String? = null,
+    /** From a file of another app: what its category, sub-category, account, note and labels columns said, as written. */
+    val category: String? = null, val subcategory: String? = null, val accountName: String? = null, val note: String? = null, val tags: List<String> = emptyList(),
+    /** What the person's own accounts and categories made of [accountName], [category] and [subcategory] (the import's account and no category when null). */
+    val accountId: String? = null, val categoryId: String? = null,
+)
 
 /** A row that looked like a transaction but could not be read. [row] is its line number in the file's table, counting from 1. */
 data class StatementProblem(val row: Int, val reason: String)
@@ -167,6 +183,7 @@ object StatementParser {
         val problems = ArrayList<StatementProblem>()
         var ignored = 0
         fun cell(r: List<String>, c: Int?) = c?.let { r.getOrNull(it) }.orEmpty().trim()
+        fun optional(r: List<String>, c: Int?) = cell(r, c).takeIf { it.isNotEmpty() }
 
         for ((index, r) in rows.withIndex()) {
             if (index < m.headerRows) continue
@@ -227,11 +244,16 @@ object StatementParser {
                 reason != null -> if ((dateText.isEmpty() && description.isEmpty()) || date == null) ignored++ else problems += StatementProblem(line, reason)
                 dateText.isEmpty() -> problems += StatementProblem(line, "The date is missing.")
                 date == null -> problems += StatementProblem(line, "The date '$dateText' is not a date in the chosen format.")
-                else -> txns += StatementTxn(line, date, flow!!, minor, description, sourceOf(index) ?: r.dropLastWhile { it.isBlank() }.joinToString(", "))
+                else -> txns += StatementTxn(
+                    line, date, flow!!, minor, description, sourceOf(index) ?: r.dropLastWhile { it.isBlank() }.joinToString(", "),
+                    category = optional(r, m.categoryColumn), subcategory = optional(r, m.subcategoryColumn), accountName = optional(r, m.accountColumn),
+                    note = optional(r, m.noteColumn)?.take(MAX_NOTE), tags = optional(r, m.tagsColumn)?.split(',', ';')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
+                )
             }
         }
         return ParsedStatement(txns, problems, ignored, repairedRows)
     }
 
     private const val MAX_DESCRIPTION = 200
+    private const val MAX_NOTE = 500
 }

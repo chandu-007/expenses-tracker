@@ -1,19 +1,26 @@
 package app.expenses.core.storage
 
+import app.expenses.core.domain.CardPayments
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Flow
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.StatementTxn
 import app.expenses.core.domain.ledger.AccountId
+import app.expenses.core.domain.ledger.CategoryId
+import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import app.expenses.core.domain.ledger.Income
+import app.expenses.core.domain.ledger.Transfer
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 
-/** What an import did. "Already there" rows were left exactly as they are. */
-data class ImportResult(val imported: Int, val alreadyThere: Int, val spendingMinor: Long, val incomeMinor: Long, val matchedExisting: Int = 0)
+/**
+ * What an import did. "Already there" rows were left exactly as they are. [transfers] of the [imported] entries are transfers between the person's own accounts
+ * (a card's bill paid from the bank), together [transferMinor]: they are in neither [spendingMinor] nor [incomeMinor].
+ */
+data class ImportResult(val imported: Int, val alreadyThere: Int, val spendingMinor: Long, val incomeMinor: Long, val matchedExisting: Int = 0, val transfers: Int = 0, val transferMinor: Long = 0)
 
 /**
  * Saves the transactions read from a bank statement. Each becomes an expense (money out) or income (money in) on [account], dated at noon
@@ -27,6 +34,13 @@ data class ImportResult(val imported: Int, val alreadyThere: Int, val spendingMi
  * A row that matches an entry from **another source** (a captured text or notification, or one typed by hand) on the same account, direction and
  * amount within a day of the row's date is **not added again** and is counted in [ImportResult.matchedExisting] so the person is told. Each existing entry
  * answers for at most one row, so two real same-amount purchases on one day are not both swallowed by one entry.
+ * A row from another app's file may name its own account ([StatementTxn.accountId]), which then stands in for [account] for that row (in its fingerprint and its
+ * twin check too), and its category ([StatementTxn.categoryId]), note and labels, which the entry keeps. None of them is part of the fingerprint.
+ * A row with a [StatementTxn.counterAccount] (the person said it is a card's bill being paid) is saved as a **transfer** between the two accounts instead, with
+ * a fingerprint of its own that leaves the other account out (so choosing another card on a second import adds nothing). It counts as already there when the
+ * same line was imported by an earlier version as an expense or income. It is **not added again** when a transfer between those two accounts for the same
+ * amount is already in the app within three days, whatever its source: a "Mark paid", a captured text, or the other side's statement (the card's credit for
+ * a bank's debit), and, as for any row, when a text or hand-typed expense or income of the same amount is there within a day.
  * A row that carries its [StatementTxn.sourceText] (the line as it was in the file) keeps it as the entry's origin (kind STATEMENT).
  * Everything is saved in one transaction, oldest first (which also keeps the search index fast), so a failure saves nothing.
  *
@@ -40,41 +54,88 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
         require(acct != null && acct.deleted == 0L) { "That account does not exist" }
         require(acct.currency == currency.code) { "That account is in ${acct.currency}, not ${currency.code}" }
 
+        for (other in txns.mapNotNull { it.counterAccount }.toSet()) {
+            val o = q.accountById(other).executeAsOneOrNull()
+            require(o != null && o.deleted == 0L) { "The account a payment was to be moved to or from does not exist" }
+            require(txns.none { it.counterAccount == other && (it.accountId ?: account.value) == other }) { "A transfer needs two different accounts" }
+            require(o.currency == currency.code) { "${o.name} is in ${o.currency}, not ${currency.code}, so a payment cannot be moved to or from it here" }
+        }
+        // the accounts the rows name for themselves: each must be there, in the currency of the import
+        val accountTypes = HashMap<String, String>().also { it[account.value] = acct.type }
+        for (id in txns.mapNotNull { it.accountId }.toSet()) {
+            val a = q.accountById(id).executeAsOneOrNull()
+            require(a != null && a.deleted == 0L) { "An account named in the file does not exist" }
+            require(a.currency == currency.code) { "${a.name} is in ${a.currency}, not ${currency.code}" }
+            accountTypes[id] = a.type
+        }
+        for (id in txns.mapNotNull { it.categoryId }.toSet()) {
+            val c = q.categoryById(id).executeAsOneOrNull()
+            require(c != null && c.deleted == 0L) { "A category chosen for the file does not exist" }
+        }
+
         val seen = HashMap<String, Int>()
         val ordered = txns.withIndex().map { (i, t) ->
-            val key = "${account.value}|${t.date.toEpochDays()}|${t.flow}|${t.minor}|${normalise(t.description)}"
+            val text = normalise(t.description)
+            val key = "${(t.accountId ?: account.value)}|${t.date.toEpochDays()}|${t.flow}|${t.minor}|$text"
             val n = (seen[key] ?: 0).also { seen[key] = it + 1 }
-            Triple(t, "$key|$n", i)
-        }.sortedWith(compareBy({ it.first.date }, { it.third }))
+            Row(t, "$key|$n", text, n, i)
+        }.sortedWith(compareBy({ it.txn.date }, { it.index }))
 
-        var imported = 0; var there = 0; var spend = 0L; var income = 0L; var matched = 0
+        var imported = 0; var there = 0; var spend = 0L; var income = 0L; var matched = 0; var transfers = 0; var transferMinor = 0L
         val taken = HashSet<String>()
-        for ((t, fingerprint, _) in ordered) {
-            val hash = Sha256.hex(fingerprint.encodeToByteArray())
+        for ((t, fingerprint, text, n, _) in ordered) {
+            val counter = t.counterAccount
+            val rowAccount = t.accountId?.let(::AccountId) ?: account
+            val cardSide = accountTypes[rowAccount.value] == "CREDIT_CARD"
+            // a line as a transfer has a fingerprint of its own: named a transfer, and without the other account (so a second import choosing another card adds nothing)
+            fun transferHash() = Sha256.hex("${rowAccount.value}|${t.date.toEpochDays()}|TRANSFER_${t.flow}|${t.minor}|$text|$n".encodeToByteArray())
+            val plainHash = Sha256.hex(fingerprint.encodeToByteArray())
+            val hash = if (counter != null) transferHash() else plainHash
             val id = "csv:" + hash.take(ID_HEX)
             if (q.entryById(id).executeAsOneOrNull() != null) { there++; continue }
+            // the line as an earlier version (or a choice to leave it as it stands) made it still counts; and the other way round, a line that looks like a card
+            // payment, once imported as a transfer, must not come back as spending on a later import that leaves it as it stands
+            val otherId = if (counter != null) "csv:" + plainHash.take(ID_HEX) else if (looksLikeCardPayment(t, cardSide)) "csv:" + transferHash().take(ID_HEX) else null
+            if (otherId != null && q.entryById(otherId).executeAsOneOrNull() != null) { there++; continue }
             val dayStart = t.date.atStartOfDayIn(zone).toEpochMilliseconds()
             val kind = if (t.flow == Flow.SPENDING) "EXPENSE" else "INCOME"
             // the same line of the same file, imported by an earlier version under another description: already there (each existing entry answers for one row)
             val sameLine = t.sourceText?.takeIf { it.isNotBlank() }?.let { text ->
-                q.statementLineAlreadyThere(account.value, kind, t.minor, dayStart, dayStart + DAY_MILLIS, text.take(OriginStore.MAX_CHARS)).executeAsList().firstOrNull { it !in taken }
+                q.statementLineAlreadyThere(rowAccount.value, kind, t.minor, dayStart, dayStart + DAY_MILLIS, text.take(OriginStore.MAX_CHARS)).executeAsList().firstOrNull { it !in taken }
             }
             if (sameLine != null) { taken += sameLine; there++; continue }
-            val twin = q.entriesLikeStatementRow(account.value, kind, t.minor, dayStart - DAY_MILLIS, dayStart + 2 * DAY_MILLIS).executeAsList().firstOrNull { it !in taken }
+            val transferTwin = if (counter == null) null else {
+                val (from, to) = if (t.flow == Flow.SPENDING) rowAccount.value to counter else counter to rowAccount.value
+                q.transfersLikeStatementRow(from, to, t.minor, dayStart - TRANSFER_WINDOW_DAYS * DAY_MILLIS, dayStart + (TRANSFER_WINDOW_DAYS + 1) * DAY_MILLIS).executeAsList().firstOrNull { it !in taken }
+            }
+            if (transferTwin != null) { taken += transferTwin; matched++; continue }
+            val twin = q.entriesLikeStatementRow(rowAccount.value, kind, t.minor, dayStart - DAY_MILLIS, dayStart + 2 * DAY_MILLIS).executeAsList().firstOrNull { it !in taken }
             if (twin != null) { taken += twin; matched++; continue }
             val at = dayStart + NOON_MILLIS
             val money = Money(t.minor, currency)
-            val details = EntryDetails(merchant = t.description.ifBlank { null }, source = SOURCE, sourceRef = hash)
-            when (t.flow) {
-                Flow.SPENDING -> { ledger.save(Expense(EntryId(id), at, account, money), details); spend += t.minor }
-                Flow.INCOME -> { ledger.save(Income(EntryId(id), at, account, money), details); income += t.minor }
+            // labels only when the file had some: null leaves an entry's labels alone, which for a new entry is none
+            val details = EntryDetails(merchant = t.description.ifBlank { null }, note = t.note, source = SOURCE, sourceRef = hash, tags = t.tags.takeIf { it.isNotEmpty() })
+            val category = t.categoryId?.let(::CategoryId)
+            when {
+                counter != null -> {
+                    val (from, to) = if (t.flow == Flow.SPENDING) rowAccount to AccountId(counter) else AccountId(counter) to rowAccount
+                    ledger.save(Transfer(EntryId(id), at, from, to, money), details); transfers++; transferMinor += t.minor
+                }
+                t.flow == Flow.SPENDING -> { ledger.save(Expense(EntryId(id), at, rowAccount, money, splits = listOfNotNull(category?.let { CategorySplit(it, money) })), details); spend += t.minor }
+                else -> { ledger.save(Income(EntryId(id), at, rowAccount, money, category), details); income += t.minor }
             }
             t.sourceText?.takeIf { it.isNotBlank() }?.let { q.putOrigin(id, OriginKind.STATEMENT.name, null, it.take(OriginStore.MAX_CHARS), null) }
             taken += id // a later row of this same file must not be taken for it
             imported++
         }
-        ImportResult(imported, there, spend, income, matched)
+        ImportResult(imported, there, spend, income, matched, transfers, transferMinor)
     }
+
+    private fun looksLikeCardPayment(t: StatementTxn, cardSide: Boolean) =
+        if (cardSide) t.flow == Flow.INCOME && CardPayments.looksLikePaymentReceived(t.description) else t.flow == Flow.SPENDING && CardPayments.looksLikePaymentToCard(t.description)
+
+    /** A transaction with its fingerprint as spending or income, its description tidied, and how many identical lines came before it. */
+    private data class Row(val txn: StatementTxn, val fingerprint: String, val text: String, val n: Int, val index: Int)
 
     private fun normalise(description: String) = description.lowercase().replace(Regex("\\s+"), " ").trim()
 
@@ -83,5 +144,7 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
         private const val ID_HEX = 32
         private const val NOON_MILLIS = 12 * 3_600_000L
         private const val DAY_MILLIS = 24 * 3_600_000L
+        /** A bank's debit and the card's credit for one payment, or a Mark paid made a day or two later, are days apart. */
+        private const val TRANSFER_WINDOW_DAYS = 3
     }
 }

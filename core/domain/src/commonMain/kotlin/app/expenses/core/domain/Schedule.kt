@@ -74,6 +74,19 @@ data class Schedule(val unit: RepeatUnit, val every: Int, val start: LocalDate, 
         }
     }
 
+    /** The date of the last occurrence, or null when the schedule never ends. */
+    fun lastDate(): LocalDate? = when (end) {
+        ScheduleEnd.Never -> null
+        is ScheduleEnd.AfterCount -> dateAt(end.count - 1)
+        is ScheduleEnd.OnOrBefore -> {
+            // from near the end, step back to an occurrence that is inside it, then forward to the last one
+            var i = firstIndexNear(end.date)
+            while (i > 0 && dateAt(i) == null) i--
+            while (dateAt(i + 1) != null) i++
+            dateAt(i)
+        }
+    }
+
     private fun monthsLater(months: Long): LocalDate {
         val total = start.year.toLong() * 12 + (start.month.ordinal) + months
         val year = (total / 12).toInt()

@@ -172,6 +172,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var billsOpen by rememberSaveable { mutableStateOf(false) }
             val billsUi by viewModel.bills.collectAsStateWithLifecycle(context = MAIN)
             val billUndo by viewModel.billUndo.collectAsStateWithLifecycle(context = MAIN)
+            val waitingUndo by viewModel.waitingUndo.collectAsStateWithLifecycle(context = MAIN)
             val inboxUndo by viewModel.inboxUndo.collectAsStateWithLifecycle(context = MAIN)
             val billAsks by host.billsRequests.collectAsState()
             var handledBillAsks by rememberSaveable { mutableIntStateOf(0) }
@@ -394,6 +395,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
                             onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms, onSetCreditLimit = viewModel::setCreditLimit,
                             onShowEntries = { id -> viewModel.showAccountOnHome(id); managingAccounts = false; moreOpen = false },
+                            safeToSpend = s.safeToSpend, onSafeToSpendOnHome = viewModel::setSafeToSpendOnHome,
                         )
                     }
                     k == 12 -> {
@@ -482,6 +484,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 state = statement, accounts = s.accounts,
                                 onAccount = viewModel::changeImportAccount, onMapping = viewModel::changeImportMapping,
                                 onImport = viewModel::confirmImport, onClose = viewModel::closeImport, onPassword = viewModel::submitImportPassword,
+                                onCardPayments = viewModel::chooseCardPayments, onCreateCategories = viewModel::setCreateImportCategories, onPlainFile = viewModel::readImportAsPlainFile,
                             )
                         } else {
                             BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
@@ -489,7 +492,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 state = dataState,
                                 onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
                                 onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx, onExportFinancialYear = viewModel::exportFinancialYear,
-                                autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
+                                autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onAutoProtect = viewModel::setAutoProtect, onDeleteOldExcel = viewModel::deleteOldAutoExcel, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                 onShown = viewModel::loadBackupFiles, onIncludeFiles = viewModel::setIncludeBackupFiles, autoRunning = autoRunning,
                                 canShareBackup = host.canShareFiles, onShareBackup = { name, pass -> viewModel.shareBackup(name, pass) { n, b -> host.shareFile(n, "application/octet-stream", b) } },
@@ -511,6 +514,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onSkip = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
                             onSave = viewModel::saveRecurring,
                             onDelete = viewModel::deleteRecurring,
+                            sinkingFunds = s.sinkingFunds, onSinkingFunds = viewModel::setSinkingFunds,
                         )
                     }
                     k == 20 -> {
@@ -566,6 +570,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onNew = { person, gave, amount -> prefillLoan = listOf(person.orEmpty(), if (gave) "1" else "0", if (amount > 0) app.expenses.core.domain.Money(amount, BaseCurrency.current).toPlainString() else "").joinToString("|"); adding = true },
                             onOpenEntry = { viewModel.openEditor(it) },
                             onRemove = viewModel::removePerson,
+                            accounts = s.accounts,
+                            onGotItBack = viewModel::gotItBack, onNotExpecting = viewModel::notExpectingBack,
+                            undo = waitingUndo, onUndo = viewModel::undoWaiting, onUndoGone = viewModel::waitingUndoGone,
                         )
                     }
                     else -> EntryListScreen(
@@ -616,6 +623,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onBulkAddTag = viewModel::bulkAddTag,
                         onBulkRemoveTag = viewModel::bulkRemoveTag,
                         onToggleHideAmounts = { viewModel.setHideAmounts(!s.hideAmounts) },
+                        onSafeToSpendOnHome = viewModel::setSafeToSpendOnHome,
                         onOpenCurrency = { currencyOpen = true; viewModel.loadCurrencyBlocker() },
                         onOpenInbox = { inboxOpen = true; viewModel.loadInbox() },
                         onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },

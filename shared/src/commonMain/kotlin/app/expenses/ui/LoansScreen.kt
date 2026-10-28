@@ -25,6 +25,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,9 +54,21 @@ fun LoansScreen(
     onNew: (personId: String?, gave: Boolean, amountMinor: Long) -> Unit,
     onOpenEntry: (String) -> Unit,
     onRemove: (String) -> Unit,
+    /** For "Got it back": the accounts the money can come into. */
+    accounts: List<app.expenses.AccountUi> = emptyList(),
+    onGotItBack: (entryId: String, accountId: String, amount: String, done: (String?) -> Unit) -> Unit = { _, _, _, _ -> },
+    onNotExpecting: (String) -> Unit = {},
+    /** "Got X back · Undo" and "Not expecting it · Undo", and the bar going away. */
+    undo: app.expenses.ScreenUndo? = null,
+    onUndo: (String) -> Unit = {},
+    onUndoGone: (String) -> Unit = {},
 ) {
     val selected = ui.selected
+    val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
+    var gettingBack by rememberSaveable { mutableStateOf<String?>(null) }
+    ui.waiting.firstOrNull { it.id == gettingBack }?.let { w -> GotItBackDialog(w, accounts, onGotItBack, onClose = { gettingBack = null }) }
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) },
         topBar = {
             AreaTopBar(selected?.name ?: "Lent and borrowed", Area.MONEY, Icons.Outlined.SwapHoriz, { if (selected != null) onSelect(null) else onBack() }, "loans_back")
         },
@@ -69,6 +86,34 @@ fun LoansScreen(
                             OutlinedButton(onClick = { onNew(null, false, 0) }, modifier = Modifier.testTag("loan_got_btn")) { Text("I got") }
                         }
                     }
+                }
+                if (ui.waiting.isNotEmpty()) {
+                    item(key = "waiting_head") {
+                        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp).testTag("waiting_section")) {
+                            Text("Waiting to get back", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("waiting_title"))
+                            Text("Expenses you said you expect money back for. The expense counts as spending until the money comes in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    itemsIndexed(ui.waiting, key = { _, it -> "w" + it.id }) { index, w ->
+                        val pos = CardPos.of(index == 0, index == ui.waiting.lastIndex)
+                        Column(Modifier.animateItem().entryCardClip(pos)) {
+                            Column(Modifier.fillMaxWidth().entryCardFill(pos).padding(horizontal = 16.dp, vertical = 12.dp).testTag("waiting_row_${w.title}")) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(w.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                        Text(listOf(w.whoText, w.dateText).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_who_${w.title}"))
+                                        Text(w.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_detail_${w.title}"))
+                                    }
+                                    Text(w.remainingText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(Flow3.IN), modifier = Modifier.testTag("waiting_amount_${w.title}"))
+                                }
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick = { gettingBack = w.id }, modifier = Modifier.testTag("waiting_got_${w.title}")) { Text("Got it back") }
+                                    TextButton(onClick = { onNotExpecting(w.id) }, modifier = Modifier.testTag("waiting_close_${w.title}")) { Text("Not expecting it any more") }
+                                }
+                            }
+                        }
+                    }
+                    item(key = "waiting_gap") { androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 16.dp)) }
                 }
                 if (ui.rows.isEmpty()) item {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -141,4 +186,44 @@ private fun HistoryRow(e: LoanEntryUi, pos: CardPos, onOpen: (String) -> Unit, m
             Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
         }
     }
+}
+
+/**
+ * Money came back for an expense: where it came into (the expense's own account to start with) and how much (what is still expected to start with, part of it is fine).
+ * It is recorded as a refund of the expense, so the spending goes down by that much.
+ */
+@Composable
+private fun GotItBackDialog(w: app.expenses.WaitingRowUi, accounts: List<app.expenses.AccountUi>, onGot: (String, String, String, (String?) -> Unit) -> Unit, onClose: () -> Unit) {
+    var account by rememberSaveable(w.id) { mutableStateOf(w.accountId.ifEmpty { accounts.firstOrNull()?.id.orEmpty() }) }
+    var amount by rememberSaveable(w.id) { mutableStateOf(w.remainingPlain) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        modifier = Modifier.testTag("got_dialog"),
+        title = { Text("Got it back: ${w.title}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = amount, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) { amount = v; problem = null } },
+                    label = { Text("Amount that came back") }, singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().testTag("got_amount"),
+                )
+                Text("Came into", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    accounts.forEach { a -> androidx.compose.material3.FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("got_account_${a.name}")) }
+                }
+                Text("Part of it is fine: the rest stays waiting. It is recorded as a refund of the expense.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("got_problem")) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { busy = true; onGot(w.id, account, amount) { p -> busy = false; if (p == null) onClose() else problem = p } },
+                enabled = account.isNotEmpty() && !busy, modifier = Modifier.testTag("got_ok"),
+            ) { Text("Record") }
+        },
+        dismissButton = { TextButton(onClick = onClose, modifier = Modifier.testTag("got_cancel")) { Text("Cancel") } },
+    )
 }

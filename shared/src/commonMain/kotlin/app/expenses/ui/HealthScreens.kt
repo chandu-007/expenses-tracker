@@ -19,6 +19,10 @@ import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +36,9 @@ private fun whenText(ms: Long?): String = ms?.let { dateTimeLabel(it) } ?: "neve
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> Unit, onBack: () -> Unit) {
+    /** Null: the report window is closed; otherwise the sender it opens with (empty when the person names it). */
+    var reportFor by remember { mutableStateOf<String?>(null) }
+    reportFor?.let { sender -> ReportMessageDialog(sender, "", report?.senders.orEmpty().map { it.root }.toSet(), onClose = { reportFor = null }) }
     Scaffold(topBar = { AreaTopBar("How capture is doing", Area.CAPTURE, Icons.Outlined.Sms, onBack, "health_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (report == null) { Text("Loading…"); return@Column }
@@ -66,12 +73,19 @@ fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> U
                 Text("Senders not on the list", style = MaterialTheme.typography.labelMedium)
                 Text("Texts from these names were not read. If one is your bank, add it and its transactions will be found from the next text on. Only the sender name is shown here, never the message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 report.unknownSenders.take(12).forEach { s ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${s.root} (${s.ignored})")
-                        OutlinedButton(onClick = { onAddSender(s.root) }, modifier = Modifier.testTag("health_add_${s.root}")) { Text("This is my bank") }
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${s.root} (${s.ignored})")
+                            OutlinedButton(onClick = { onAddSender(s.root) }, modifier = Modifier.testTag("health_add_${s.root}")) { Text("This is my bank") }
+                        }
+                        TextButton(onClick = { reportFor = s.root }, modifier = Modifier.testTag("health_report_${s.root}")) { Text("Share a message from ${s.root} for a fix") }
                     }
                 }
             }
+            HorizontalDivider()
+            Text("A message the app missed", style = MaterialTheme.typography.labelMedium)
+            Text("If a bank text did not turn up as a transaction, paste it here. You see it with account and phone numbers, UPI names and amounts taken out, then copy it or mail it yourself. The app keeps no message words, so it cannot show you the one it missed: it has to be pasted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { reportFor = "" }, modifier = Modifier.testTag("health_report_open")) { Text("Share a message for a fix") }
         }
     }
 }

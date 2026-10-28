@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
@@ -23,7 +24,8 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * Backups with photos and files (docs/BACKUP_FORMAT.md, version 2, and the EXPENC2 chunked layout), written and read here from the document alone, with no code shared with the app:
  *   java tools/backup_interop/Interop.java make2   <passphrase or -> <out.expbak>   a version 2 file with four sample files (the pattern below), sealed as EXPENC2 with a fixed salt unless "-"
- *   java tools/backup_interop/Interop.java verify2 <passphrase or -> <in.expbak> [pattern]   opens a version 1 or 2 file (plain, EXPENC1 or EXPENC2): payload length and sha256, every file's sha256, no bytes left over;
+ *   java tools/backup_interop/Interop.java make3   <passphrase> <out.expbak>   the same sample, sealed as EXPENC3 (an automatic copy, docs/BACKUP_FORMAT.md "Automatic copies") with fixed salts
+ *   java tools/backup_interop/Interop.java verify2 <passphrase or -> <in.expbak> [pattern]   opens a version 1 or 2 file (plain, EXPENC1, EXPENC2 or EXPENC3): payload length and sha256, every file's sha256, no bytes left over;
  *                                                                                           with "pattern" also that file k (1, 2, ...) holds byte i = (i*31 + k*7) mod 256, which is what the apps' sample writer produces; exit 1 on any mismatch
  */
 public class Interop {
@@ -38,6 +40,8 @@ public class Interop {
     // ---- version 2 files ----
 
     static final byte[] MAGIC2 = "EXPENC2\n".getBytes(StandardCharsets.UTF_8);
+    static final byte[] MAGIC3 = "EXPENC3\n".getBytes(StandardCharsets.UTF_8);
+    static final byte[] FILE_KEY_LABEL = "expenses-auto-copy-file-key\n".getBytes(StandardCharsets.UTF_8);
     static final int[] SAMPLE_SIZES = {70_000, 65_536, 1, 3_000};
 
     static byte[] pattern(int k, int size) {
@@ -120,6 +124,53 @@ public class Interop {
         return out.toByteArray();
     }
 
+    /** EXPENC3: the key of one file is HMAC-SHA256 under the key the passphrase gives (with the first salt) of the label and the file's own salt (the second). */
+    static SecretKeySpec fileKey(SecretKeySpec master, byte[] fileSalt) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(master.getEncoded(), "HmacSHA256"));
+        mac.update(FILE_KEY_LABEL);
+        return new SecretKeySpec(mac.doFinal(fileSalt), "AES");
+    }
+
+    /** EXPENC3, written from the document: header of 48 bytes, then the same chunks as EXPENC2 (nonce and associated data as there, the header being all 48 bytes). Fixed salts. */
+    static byte[] seal3(byte[] plain, String pass, int chunk) throws Exception {
+        byte[] salt = new byte[16], fileSalt = new byte[16];
+        for (int i = 0; i < 16; i++) { salt[i] = (byte) (i * 3 + 9); fileSalt[i] = (byte) (i * 11 + 4); }
+        byte[] header = ByteBuffer.allocate(48).put(MAGIC3).putInt(ITERATIONS).put(salt).put(fileSalt).putInt(chunk).array();
+        SecretKeySpec key = fileKey(key(pass, salt, ITERATIONS), fileSalt);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(header);
+        int chunks = Math.max(1, (plain.length + chunk - 1) / chunk);
+        for (int i = 0; i < chunks; i++) {
+            int from = i * chunk, to = Math.min(plain.length, from + chunk);
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, nonce(i)));
+            c.updateAAD(aad(header, i == chunks - 1));
+            out.write(c.doFinal(plain, from, to - from));
+        }
+        return out.toByteArray();
+    }
+
+    static byte[] open3(byte[] bytes, String pass) throws Exception {
+        byte[] header = Arrays.copyOfRange(bytes, 0, 48);
+        int iterations = ByteBuffer.wrap(header, 8, 4).getInt();
+        int chunk = ByteBuffer.wrap(header, 44, 4).getInt();
+        if (iterations < 100_000 || iterations > 5_000_000 || chunk < 4096 || chunk > 1_048_576) throw new IllegalStateException("header out of range");
+        SecretKeySpec key = fileKey(key(pass, Arrays.copyOfRange(header, 12, 28), iterations), Arrays.copyOfRange(header, 28, 44));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int sealed = chunk + 16, pos = 48;
+        for (long i = 0; pos < bytes.length; i++) {
+            int len = Math.min(sealed, bytes.length - pos);
+            boolean last = pos + len >= bytes.length;
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, nonce(i)));
+            c.updateAAD(aad(header, last));
+            out.write(c.doFinal(bytes, pos, len));
+            pos += len;
+        }
+        return out.toByteArray();
+    }
+
     /** A just-enough JSON reader: objects, arrays, strings, integers, booleans, null. */
     static final class Json {
         final String s; int i = 0;
@@ -158,6 +209,7 @@ public class Interop {
     static void verify2(String pass, byte[] bytes, boolean checkPattern) throws Exception {
         byte[] plain;
         if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC2)) plain = open2(bytes, pass);
+        else if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC3)) plain = open3(bytes, pass);
         else if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC)) {
             int headerSize = MAGIC.length + 4 + 16;
             Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
@@ -197,6 +249,11 @@ public class Interop {
         if (mode.equals("make2")) {
             byte[] plain = sample2();
             Files.write(Path.of(a[2]), pass.equals("-") ? plain : seal2(plain, pass, 64 * 1024));
+            System.out.println("wrote " + a[2]);
+            return;
+        }
+        if (mode.equals("make3")) {
+            Files.write(Path.of(a[2]), seal3(sample2(), pass, 64 * 1024));
             System.out.println("wrote " + a[2]);
             return;
         }

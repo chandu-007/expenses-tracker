@@ -103,7 +103,8 @@ class SafFolder(private val context: Context, private val tree: Uri) : ExportFol
 
 /**
  * Writes a backup file and an Excel workbook into a folder the user chose, on a schedule, and keeps only the newest few of each. The files
- * are not encrypted (a passphrase cannot be stored, and one asked for every time would not be automatic); the screen says so. Each file is
+ * are plain unless the person turned on "Protect automatic copies with a passphrase": the key made from it lives in the Android Keystore
+ * ([KeystoreSecretStore]) and a run seals the backup with it (see [AutoExportRunner]). Each file is
  * read back and compared before the run counts, so a half-written file is reported, not recorded as a success.
  */
 object AutoExport {

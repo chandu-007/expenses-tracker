@@ -21,7 +21,10 @@ import platform.Foundation.NSURL
  * True only while the process is running under XCTest (the test runner sets `XCTestConfigurationFilePath`). The debug entries in this file and in
  * [IosAutoExportFilesDebug] write and remove real files and data, and they ship in the framework, so outside a test run they do nothing.
  */
-internal fun runningUnderXCTest(): Boolean = NSProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != null
+internal fun runningUnderXCTest(): Boolean = isSimulatorBuild && NSProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != null
+
+/** True only in the framework compiled for the simulator (an actual in `iosSimulatorArm64Main`; the device framework has false), so the entries below do nothing on a phone whatever its environment holds. */
+internal expect val isSimulatorBuild: Boolean
 
 private const val ONLY_IN_TESTS = "refused: this is a test entry and does nothing outside a test run"
 

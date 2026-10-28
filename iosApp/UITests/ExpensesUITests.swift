@@ -155,6 +155,9 @@ final class ExpensesUITests: XCTestCase {
         // automatic copies to a folder from the Files app are on iPhone now: the folder button is there, not the "not available" note
         XCTAssertTrue(appears(app, "auto_folder"), "Automatic export offers a folder\n" + app.debugDescription)
         XCTAssertFalse(el(app, "auto_unavailable").exists)
+        // protecting the copies with a passphrase (Keychain key): the switch, its status line and the honest note are there
+        XCTAssertTrue(appears(app, "auto_protect_switch"), "Automatic copies can be protected\n" + app.debugDescription)
+        XCTAssertTrue(appears(app, "auto_protect_status") && appears(app, "auto_protect_info"))
         shot("data")
         tap(app, "data_back")
         XCTAssertTrue(appears(app, "more_page"), "Back returns to More, as on Android")

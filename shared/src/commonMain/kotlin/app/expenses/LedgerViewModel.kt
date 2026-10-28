@@ -28,6 +28,7 @@ import app.expenses.core.domain.ReportMath
 import app.expenses.core.domain.StatementDetector
 import app.expenses.core.domain.StatementMapping
 import app.expenses.core.domain.StatementParser
+import app.expenses.core.domain.StatementTxn
 import app.expenses.core.domain.StatementTextParser
 import app.expenses.core.domain.parseAmount
 import app.expenses.core.storage.SearchQuery
@@ -40,6 +41,9 @@ import app.expenses.core.domain.RecurringItem
 import app.expenses.core.domain.RecurringKind
 import app.expenses.core.domain.RepeatUnit
 import app.expenses.core.domain.Schedule
+import app.expenses.core.domain.PaymentsLeftMath
+import app.expenses.core.domain.SinkingFunds
+import app.expenses.core.storage.RecurringStore
 import app.expenses.core.domain.ScheduleEnd
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
@@ -180,7 +184,7 @@ data class LoanRowUi(val id: String, val name: String, val minor: Long, val amou
 data class LoanEntryUi(val id: String, val dateText: String, val amountText: String, val gave: Boolean, val account: String, val note: String)
 
 /** The lent-and-borrowed screen: everyone's standing, the two totals, and the history of the person picked. */
-data class LoansUi(val rows: List<LoanRowUi> = emptyList(), val owedToYou: String = "", val youOwe: String = "", val selected: LoanRowUi? = null, val history: List<LoanEntryUi> = emptyList())
+data class LoansUi(val rows: List<LoanRowUi> = emptyList(), val owedToYou: String = "", val youOwe: String = "", val selected: LoanRowUi? = null, val history: List<LoanEntryUi> = emptyList(), /** Expenses still waiting for money to come back. */ val waiting: List<WaitingRowUi> = emptyList())
 
 /** One of the first few items waiting in To review, for the home banner. */
 data class InboxPeekRow(val title: String, val amountText: String, val credit: Boolean)
@@ -267,8 +271,8 @@ data class CategoryUi(val id: String, val name: String, val parentId: String?, v
 /** An attachment as the editor lists it. */
 data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
 
-/** Automatic export to the user's own folder, as the Data screen shows it. [status] is the last outcome. */
-data class AutoExportUi(val frequency: AutoExportFrequency, val folderName: String?, val lastText: String?, val status: String?, val statusOk: Boolean)
+/** Automatic export to the user's own folder, as the Data screen shows it. [status] is the last outcome; [protectedCopies] is "Protect automatic copies with a passphrase" being on. */
+data class AutoExportUi(val frequency: AutoExportFrequency, val folderName: String?, val lastText: String?, val status: String?, val statusOk: Boolean, val protectedCopies: Boolean = false, val olderExcel: Int = 0)
 
 /** A saved quick entry as the UI needs it. [amountText] is null when the template asks for the amount. */
 data class TemplateUi(val id: String, val name: String, val amountText: String?, val category: String, val accountId: String, val note: String)
@@ -330,6 +334,10 @@ data class RecurringUi(
     val toAccountId: String,
     /** "₹15,000.00 · every month · next 1 Nov". */
     val summary: String,
+    /** For one that ends (after a number of payments or on a date): "12 payments left · last on 5 Mar 2028 · ₹60,000.00 still to pay". Payments times the amount; no interest. Empty otherwise. */
+    val paymentsLeft: String = "",
+    /** For a yearly, half-yearly or quarterly expense with a fixed amount: "set aside ₹1,000.00 a month". Empty otherwise. */
+    val setAside: String = "",
 )
 
 /** Shown as "Added ₹20 · Undo" after an entry is recorded in one step. */
@@ -344,11 +352,26 @@ data class UndoUi(
     val reveal: Boolean = false,
 )
 
-/** One transaction found in a statement, as shown in the preview. */
-data class ImportRowUi(val text: String, val amount: String, val spending: Boolean)
+/** One transaction found in a statement, as shown in the preview. A [transfer] is money moving between the person's own accounts. */
+data class ImportRowUi(val text: String, val amount: String, val spending: Boolean, val transfer: Boolean = false)
 
-/** What an import did, for the screen. */
-data class ImportResultUi(val imported: Int, val alreadyThere: Int, val spending: String, val income: String, val matchedExisting: Int = 0)
+/** What an import did, for the screen. [transfers] of the [imported] entries are transfers between the person's own accounts, together [transferAmount]. */
+data class ImportResultUi(val imported: Int, val alreadyThere: Int, val spending: String, val income: String, val matchedExisting: Int = 0, val transfers: Int = 0, val transferAmount: String = "")
+
+/**
+ * The lines of a statement that look like paying a credit card's bill, and what to do with them. [side] is "BANK" (money out of a bank account) or "CARD" (money into
+ * a card). [choice] is "TRANSFER", "AS_IS" or "SKIP", or empty while the person has not chosen. For a transfer, [account] is the account every line goes to (bank
+ * side) or comes from (card side), empty when each line goes to the one its own text names ([eachNamed]). [accounts] are the ones it can go to or come from.
+ */
+data class CardGroupUi(
+    val side: String, val count: Int, val total: String, val rows: List<ImportRowUi>, val choice: String, val account: String,
+    val accounts: List<AccountUi>, val eachNamed: Boolean, val skipped: Int, val transfers: Int,
+    /** False while the person has not chosen (or chose a transfer and a line has no account to go to): the import stays off. */
+    val resolved: Boolean,
+)
+
+/** For a file from another app: how many rows found a category and an account of the person's own, and the categories they have none of, which they may choose to create. */
+data class ImportCategoriesUi(val newNames: List<String>, val create: Boolean, val withCategory: Int, val onOwnAccount: Int)
 
 /** State of the statement import. [mapping] is null until a file is chosen. Nothing is saved until the user confirms. */
 data class ImportUi(
@@ -382,6 +405,14 @@ data class ImportUi(
     val cardPayments: Int = 0,
     /** For a PDF or photo: a sentence saying the statement's own printed totals differ from what was found, else null. */
     val totalsNote: String? = null,
+    /** The group of card payments to decide about, when the file has any. */
+    val cardGroup: CardGroupUi? = null,
+    /** How many of [txnCount] will be saved as transfers between the person's own accounts. */
+    val transfers: Int = 0,
+    /** The other app a file was recognised as an export of ("Money Manager"), with what is to be known about reading it, what was left out of it, and whether its date order is a fact. */
+    val preset: String? = null, val presetNote: String? = null, val presetLeftOut: String? = null,
+    /** For a recognised file: its categories and accounts matched to the person's own. */
+    val categories: ImportCategoriesUi? = null,
     /** A PDF that is protected with a password: asks for it. [passwordError] says the one typed did not open it. The password itself is never kept in this state. */
     val needsPassword: Boolean = false,
     val passwordError: String? = null,
@@ -547,6 +578,12 @@ sealed interface UiState {
         val homeAccountId: String? = null,
         /** The dates Home's list is limited to while it is narrowed to one account. */
         val homePeriod: HomePeriod = HomePeriod.ALL,
+        /** The balance-based safe to spend; worked out with the balances (when the accounts page is open, or Home may show it), null until then. */
+        val safeToSpend: SafeToSpendUi? = null,
+        /** Expenses still waiting for money to come back, for the chip on Home. */
+        val waiting: WaitingUi = WaitingUi(),
+        /** The person turned on putting yearly bills aside month by month (it is taken off safe to spend). */
+        val sinkingFunds: Boolean = false,
         val message: String? = null,
         val undo: UndoUi? = null,
     ) : UiState
@@ -596,6 +633,7 @@ private const val SETTING_FIRST_WEEK_DISMISSED = "first_week_dismissed"
 private const val MAX_STATEMENT_BYTES = 20_000_000
 private const val MAX_STATEMENT_ROWS = 200_000
 private const val PREVIEW_ROWS = 6
+private const val CARD_ROWS_LISTED = 200
 private const val PROBLEMS_SHOWN = 20
 private const val SEARCH_DEBOUNCE_MS = 200L
 private const val LAST_CATEGORY = "last_category"
@@ -632,6 +670,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var importReadFrom: String? = null
     private var importReadNote: String? = null
     private var importCardPayments = 0
+    /** The rows to save as the preview shows them (null while card payments await a choice), the categories the person may tick to create, and the file as another app's export. */
+    private var importReady: List<StatementTxn>? = null
+    private var importNewCategories: List<app.expenses.core.domain.ImportCategories.NewCategory> = emptyList()
+    private var importPreset: app.expenses.core.domain.ImportPresets.Read? = null
+    private var importPresetOff = false
+    private var importSourceTable: app.expenses.core.domain.CsvTable? = null
+    private var importCardPick: Pair<app.expenses.core.domain.CardPayments.Side, app.expenses.core.domain.CardPayments.Pick>? = null
+    private var importCreateCategories = false
     private var importRead: StatementTextParser.Result? = null
     private var importConvention: StatementTextParser.Convention? = null
     private var importProtectedPdf: ByteArray? = null
@@ -1107,6 +1153,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var categoryUsageCache: Map<String, Long> = emptyMap()
     private var categoriesOpen = false
     private var nudgeCache = false
+    private var safeCache: SafeToSpendUi? = null
     private var figuresReady = false
     private var accountsOpen = false
     private var balancesVisible = false
@@ -1132,20 +1179,27 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     ok.templates.setting(DataTransfer.SETTING_BACKUP_AT)?.toLongOrNull()?.let { at -> LastBackup(at, ok.templates.setting(DataTransfer.SETTING_BACKUP_COUNT)?.toLongOrNull() ?: 0L) },
                     ok.templates.setting(SETTING_NUDGE_SNOOZED_AT)?.toLongOrNull(), nowMillis(),
                 )
-                val rows = if (accountsOpen || balancesVisible) accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList()) else accountRowsCache
+                // the balances are read once for whatever shows them: the accounts, Home's strip, and the safe-to-spend line (unless the person turned that off)
+                // (by default the line is decided from the balances the Home strip reads anyway; with the strip hidden and no choice made, nothing extra is read for it)
+                val safeChoice = ok.templates.setting(SETTING_SAFE_HOME)
+                val wantSafe = accountsOpen || safeChoice == "1" || (safeChoice == null && balancesVisible)
+                val accountList = ok.db.schemaQueries.selectAccounts().executeAsList()
+                val balances = if (accountsOpen || balancesVisible || wantSafe) ok.store.balances() else null
+                val rows = if (balances != null && (accountsOpen || balancesVisible)) accountRows(ok, accountList, balances) else accountRowsCache
+                val safe = if (balances != null && wantSafe) safeToSpendUi(ok, accountList, balances, todayLocal(), inr) else null
                 val usage = if (categoriesOpen) ok.categories.list().associate { it.id to ok.categories.usage(it.id) } else categoryUsageCache
-                Figures(nudge, rows, usage, sparkOf(ok))
+                Figures(nudge, rows, usage, sparkOf(ok), safe)
             } ?: return@launch
-            nudgeCache = figures.nudge; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; sparkCache = figures.spark; figuresReady = true
+            nudgeCache = figures.nudge; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; sparkCache = figures.spark; figuresReady = true
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
-                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, spark = figures.spark, showBackupNudge = figures.nudge, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage) }) ?: st
+                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage) }) ?: st
                 }
             }
         }
     }
 
-    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi)
+    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi, val safe: SafeToSpendUi?)
 
     /** Spending on each of the last 14 days, for the line on the home screen. One range query; worked out with the other slow figures, never on the save path. */
     private fun sparkOf(ok: AppContainer.Opened.Ok): SparkUi {
@@ -1186,8 +1240,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }, compare, insight)
     }
 
-    private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>): List<AccountRowUi> {
-        val balances = ok.store.balances()
+    private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>, balances: Map<AccountId, Money>): List<AccountRowUi> {
         val looks = ok.looks.all().associateBy { it.accountId }
         val today = todayLocal()
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
@@ -1348,7 +1401,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val folder = t.setting(AutoExportKeys.FOLDER)?.let { platform.folderDisplayName(it) ?: "the chosen folder" }
         val last = t.setting(AutoExportKeys.LAST_AT)?.toLongOrNull()?.let { DatePattern("d MMM yyyy, HH:mm").format(it) }
         val status = t.setting(AutoExportKeys.STATUS)
-        return AutoExportUi(freq, folder, last, status?.substringAfter('|')?.ifEmpty { null }, status?.startsWith("ok|") ?: true)
+        return AutoExportUi(freq, folder, last, status?.substringAfter('|')?.ifEmpty { null }, status?.startsWith("ok|") ?: true, t.setting(AutoExportKeys.PROTECT) == "1", t.setting(AutoExportKeys.OLD_EXCEL)?.toIntOrNull() ?: 0)
+    }
+
+    /** "Delete them": removes the Excel files from before protection that the last protected run found in the folder (only the app's own file names), after the person asked. */
+    fun deleteOldAutoExcel() {
+        viewModelScope.launch(BACKGROUND) {
+            val uri = container.write { it.templates.setting(AutoExportKeys.FOLDER) }
+            platform.deleteOldAutoExcel(container, uri)
+            container.write { refresh(it) }
+        }
+    }
+
+    /** Turns "Protect automatic copies with a passphrase" on, or changes its passphrase, with [passphrase]; off with null. The key goes to the phone's secure storage, the passphrase nowhere ([AutoCopyControls]). */
+    fun setAutoProtect(passphrase: String?) = dataAction {
+        val message = if (passphrase != null) AutoCopyControls.turnOn(platform, container, passphrase) else AutoCopyControls.turnOff(platform, container)
+        container.write { ok -> refresh(ok) }
+        message
     }
 
     fun setAutoExportFolder(uri: String) = withStore { ok ->
@@ -1414,7 +1483,70 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             }
             (lent + shares + paidForYou).sortedByDescending { it.first }.map { it.second }
         }.orEmpty()
-        _loans.value = LoansUi(rows, Money(rows.filter { it.minor > 0 }.sumOf { it.minor }, inr).formatted(), Money(rows.filter { it.minor < 0 }.sumOf { -it.minor }, inr).formatted(), selected, history)
+        _loans.value = LoansUi(rows, Money(rows.filter { it.minor > 0 }.sumOf { it.minor }, inr).formatted(), Money(rows.filter { it.minor < 0 }.sumOf { -it.minor }, inr).formatted(), selected, history,
+            waitingRows(ok, currencyDigits, ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L }.mapTo(HashSet()) { it.id }))
+    }
+
+    // ---- waiting to get back ("I expect this back") ----
+
+    private val _waitingUndo = MutableStateFlow<ScreenUndo?>(null)
+
+    /** "Got X back · Undo" or "Not expecting it · Undo", shown on the Lent and borrowed page. The id says what Undo does: `refund:<id>` deletes that refund, `close:<expense id>` reopens it. */
+    val waitingUndo: StateFlow<ScreenUndo?> get() = _waitingUndo
+
+    /**
+     * Money came back for the expense [entryId]: it is recorded as a refund of it into [accountId] ([amountText] blank is what is still expected). [onDone] gets null
+     * on success, otherwise the reason (shown in the dialog, which stays open).
+     */
+    fun gotItBack(entryId: String, accountId: String, amountText: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val refundId = ok.store.atomically { EntryActions(ok).gotItBack(entryId, accountId, amountText) }
+                    val minor = ok.db.schemaQueries.entryById(refundId).executeAsOne().amount_minor
+                    refresh(ok)
+                    _waitingUndo.value = ScreenUndo("refund:$refundId", "Got ${Money(minor, inr).formatted()} back")
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** "Not expecting it any more": it leaves the list without any money; Undo brings it back. */
+    fun notExpectingBack(entryId: String) = withStore { ok ->
+        val title = ok.expects.waiting().firstOrNull { it.entryId == entryId }?.title
+        if (ok.expects.close(entryId)) {
+            refresh(ok)
+            _waitingUndo.value = ScreenUndo("close:$entryId", "Not expecting ${title ?: "it"} back any more")
+        }
+    }
+
+    fun undoWaiting(id: String) = withStore { ok ->
+        when {
+            id.startsWith("refund:") -> ok.store.delete(EntryId(id.removePrefix("refund:")))
+            id.startsWith("close:") -> ok.expects.reopen(id.removePrefix("close:"))
+        }
+        refresh(ok)
+    }
+
+    fun waitingUndoGone(id: String) { if (_waitingUndo.value?.id == id) _waitingUndo.value = null }
+
+    // ---- safe to spend and yearly bills ----
+
+    /** The switch in the safe-to-spend dialog: show the line under the budget on Home, or not. */
+    fun setSafeToSpendOnHome(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(SETTING_SAFE_HOME, if (on) "1" else "0")
+        safeCache = safeCache?.copy(homeSetting = on)
+        _state.update { (it as? UiState.Ready)?.copy(safeToSpend = safeCache) ?: it }
+        scheduleSlowFigures() // switched back on, it is worked out again
+    }
+
+    /** The switch on the Repeating page: take the monthly amount for yearly bills off safe to spend. */
+    fun setSinkingFunds(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(SETTING_SINKING_FUNDS, if (on) "1" else "0")
+        refresh(ok)
+        scheduleSlowFigures() // the figure is worked out again with or without it
     }
 
     private val _inbox = MutableStateFlow<List<InboxRowUi>>(emptyList())
@@ -1473,7 +1605,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val count = ok.inbox.pendingCount().toInt()
         fun title(i: app.expenses.core.storage.InboxItem): String {
             val raw = PayeeGuess.of(i.body.orEmpty())
-            return raw?.let { ok.templates.setting(payeeNameKey(it))?.takeIf { n -> n.isNotBlank() } } ?: raw ?: i.issuer
+            return raw?.let { ok.templates.setting(payeeNameKey(it))?.takeIf { n -> n.isNotBlank() } } ?: raw?.let(::cleanPayee) ?: i.issuer
         }
         fun money(minor: Long) = Money(minor, inr).formatted()
         return InboxPeekUi(
@@ -1827,10 +1959,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
             val rawPayee = PayeeGuess.of(i.body.orEmpty())
             val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
-            val payee = named ?: rawPayee
+            val payee = named ?: rawPayee?.let(::cleanPayee)
             // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
             val byName = ok.categories.list().filter { !it.hidden && it.kind.forExpense && it.parentId == null }.associate { it.name.lowercase() to it.id }
-            val history = if (i.direction == "DEBIT" && rawPayee != null) SimilarEntries.topCategory(rawPayee, similarCandidates(ok, rawPayee, "EXPENSE")) else null
+            // entries filed from a captured text carry the clean merchant name (cleanPayee), older ones the raw address: look under both
+            val history = if (i.direction == "DEBIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
+                SimilarEntries.topCategory(clean, (similarCandidates(ok, clean, "EXPENSE") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "EXPENSE") else emptyList()).distinctBy { it.id })
+            } else null
             val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history) else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(i.receivedAt),
@@ -1847,6 +1982,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)
     private fun payeeNameKey(raw: String) = "payee_name:" + app.expenses.core.domain.CategorySuggest.merchantKey(raw)
+
+    /** The name an entry from a captured text is filed under when the person gave none: the starter list's clean merchant name ("Swiggy" for "swiggyupi@axb"), else the payee as read. The text itself is kept as it was. */
+    private fun cleanPayee(raw: String): String = app.expenses.core.domain.DefaultRules.displayNameFor(raw) ?: raw
 
     /**
      * Turns a pending captured transaction into an entry in [accountId] (and [categoryId] for a debit). [onDone] gets null on success, otherwise
@@ -1865,7 +2003,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val kind = if (i.direction == "CREDIT") DraftKind.INCOME else DraftKind.EXPENSE
                     val at = app.expenses.core.domain.CaptureTime.entryTime(i.txnDate?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }, i.receivedAt, kotlinx.datetime.TimeZone.currentSystemDefault())
                     val rawPayee = PayeeGuess.of(i.body.orEmpty())
-                    val payee = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() } ?: rawPayee ?: i.issuer
+                    val payee = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() } ?: rawPayee?.let(::cleanPayee) ?: i.issuer
                     val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
                     val draft = when (treatment) {
                         "TRANSFER" -> EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), fromId, toId, payee, at)
@@ -2132,13 +2270,17 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 require(table.rows.size >= 2) { "That file has no rows to import. A statement CSV has a header row and at least one transaction." }
                 require(table.rows.size <= MAX_STATEMENT_ROWS) { "That file has too many rows to import (over $MAX_STATEMENT_ROWS)." }
                 importTable = table
+                importSourceTable = table; importPreset = null; importPresetOff = false; importCardPick = null; importCreateCategories = false
                 val accounts = container.write { it.db.schemaQueries.selectAccounts().executeAsList().filter { a -> a.archived == 0L } }.orEmpty()
                 val account = (_state.value as? UiState.Ready)?.lastAccountId?.takeIf { id -> accounts.any { it.id == id } } ?: accounts.firstOrNull()?.id.orEmpty()
-                val guessed = StatementDetector.detect(table.rows)
-                // The header may not be where the detector thinks (it cannot place unusual titles), so every one of the first rows is tried.
-                val width = table.rows.maxOf { r -> r.size }
-                val saved = container.write { ok -> table.rows.take(PROFILE_SEARCH_ROWS).firstNotNullOfOrNull { row -> ImportProfiles.signature(row)?.let { sig -> ImportProfiles.decode(ok.templates.setting(sig), width) } } }
-                recomputeImport(saved ?: guessed, account, profileNote = if (saved != null) "Read the way you set it up for the last file with these column titles. Change anything below if it is wrong." else null)
+                // a file that is another app's export is read by what its columns mean; anything else is guessed as a bank statement
+                val preset = app.expenses.core.domain.ImportPresets.read(table.rows, table.lines, inr.code, inr.minorUnitDigits)
+                if (preset != null) {
+                    importPreset = preset; importTable = preset.table; importRawLines = preset.rawLines
+                    recomputeImport(preset.mapping, account)
+                    return@launch
+                }
+                readAsBankFile(table, account)
             } catch (e: IllegalArgumentException) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: app.expenses.core.domain.XlsReader.Unreadable) {
@@ -2147,6 +2289,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.simpleName}")
             }
         }
+    }
+
+    /** Reads [table] as a bank statement: the way the person set up the last file with the same column titles, else as guessed. */
+    private suspend fun readAsBankFile(table: app.expenses.core.domain.CsvTable, account: String) {
+        val guessed = StatementDetector.detect(table.rows)
+        // The header may not be where the detector thinks (it cannot place unusual titles), so every one of the first rows is tried.
+        val width = table.rows.maxOf { r -> r.size }
+        val saved = container.write { ok -> table.rows.take(PROFILE_SEARCH_ROWS).firstNotNullOfOrNull { row -> ImportProfiles.signature(row)?.let { sig -> ImportProfiles.decode(ok.templates.setting(sig), width) } } }
+        recomputeImport(saved ?: guessed, account, profileNote = if (saved != null) "Read the way you set it up for the last file with these column titles. Change anything below if it is wrong." else null)
+    }
+
+    /** The file was recognised as another app's export but the person wants it read as a plain statement, with the columns chosen by hand. */
+    fun readImportAsPlainFile() {
+        val table = importSourceTable ?: return
+        importPresetOff = true; importPreset = null; importTable = table; importRawLines = null
+        viewModelScope.launch(BACKGROUND) { readAsBankFile(table, _import.value.accountId) }
     }
 
     /** The password for the PDF that asked for one. It is used once to open the file and is neither stored nor logged. */
@@ -2216,9 +2374,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) {
             val convention = importConventionFor(accountId)
             val read = StatementTextParser.parse(text, convention)
-            if (read.convention == importConvention && read.cardPayments == importCardPayments) return@launch
-            applyTextRead(read)
-            recomputeImport(_import.value.mapping ?: StatementDetector.detect(read.table.rows), accountId)
+            if (read.convention != importConvention || read.cardPayments != importCardPayments) applyTextRead(read)
+            recomputeImport(_import.value.mapping ?: StatementDetector.detect(read.table.rows), accountId, _import.value.profileNote)
         }
     }
 
@@ -2229,48 +2386,122 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun changeImportAccount(id: String) {
         _import.update { it.copy(accountId = id) }
-        rereadTextImport(id)
+        if (importText != null) rereadTextImport(id)
+        // the account decides which side of a card payment the statement is, so the preview is made again
+        else viewModelScope.launch(BACKGROUND) { _import.value.mapping?.let { recomputeImport(it, id, _import.value.profileNote) } }
     }
 
-    private fun recomputeImport(mapping: StatementMapping, accountId: String, profileNote: String? = null) {
+    /**
+     * What to do with the lines that look like paying a card's bill: [choice] is TRANSFER, AS_IS (spending on a bank statement, income on a card's) or SKIP. For a
+     * transfer, [account] is the account all of them go to (or come from, on a card's statement); empty lets each line's own text decide.
+     */
+    fun chooseCardPayments(choice: String, account: String) {
+        val chosen = app.expenses.core.domain.CardPaymentChoice.entries.firstOrNull { it.name == choice } ?: return
+        val side = _import.value.cardGroup?.side?.let { n -> app.expenses.core.domain.CardPayments.Side.entries.firstOrNull { it.name == n } } ?: return
+        importCardPick = side to app.expenses.core.domain.CardPayments.Pick(chosen, account.ifEmpty { null })
+        viewModelScope.launch(BACKGROUND) { _import.value.mapping?.let { recomputeImport(it, _import.value.accountId, _import.value.profileNote) } }
+    }
+
+    /** The person's tick to create the categories of a recognised file that they have none of. */
+    fun setCreateImportCategories(create: Boolean) {
+        importCreateCategories = create
+        viewModelScope.launch(BACKGROUND) { _import.value.mapping?.let { recomputeImport(it, _import.value.accountId, _import.value.profileNote) } }
+    }
+
+    /** The person's live accounts in the base currency (the ones a statement can go to or be matched with) and their visible categories. */
+    private suspend fun importContext(): Pair<List<app.expenses.core.domain.ImportAccount>, List<app.expenses.core.domain.CategoryRef>> =
+        container.write { ok ->
+            val last4 = ok.looks.all().associate { it.accountId to it.last4 }
+            val accounts = ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L && it.currency == inr.code }
+                .map { app.expenses.core.domain.ImportAccount(it.id, it.name, it.type == AccountType.CREDIT_CARD.name, last4[it.id]) }
+            val categories = ok.categories.list().filter { !it.hidden }.map { app.expenses.core.domain.CategoryRef(it.id, it.name, it.parentId, it.kind.forExpense, it.kind.forIncome) }
+            accounts to categories
+        } ?: (emptyList<app.expenses.core.domain.ImportAccount>() to emptyList<app.expenses.core.domain.CategoryRef>())
+
+    private suspend fun recomputeImport(mapping: StatementMapping, accountId: String, profileNote: String? = null) {
         val table = importTable ?: return
         val names = StatementDetector.columnNames(table.rows, mapping.headerRows)
         val missing = mapping.missing()
         val raw = importRawLines
         val parsed = if (missing == null) StatementParser.parse(table.rows, mapping, inr.minorUnitDigits, { table.lines[it] }, { raw?.getOrNull(it) }) else null
         importParsed = parsed
+        val preset = importPreset
+        val plan = parsed?.let { p ->
+            val (accounts, categories) = importContext()
+            val into = accounts.firstOrNull { it.id == accountId } ?: app.expenses.core.domain.ImportAccount(accountId, "", false)
+            app.expenses.core.domain.ImportPlanner.plan(p.txns, into, accounts, categories, preset != null, importCardPick, importCreateCategories)
+        }
+        importReady = plan?.txns
+        importNewCategories = plan?.newCategories.orEmpty()
+        val shown = plan?.shown.orEmpty()
         val dateFmt = DatePattern("d MMM yyyy")
-        fun sum(flow: Flow) = Money(parsed?.txns?.filter { it.flow == flow }?.sumOf { it.minor } ?: 0L, inr)
+        fun row(it: StatementTxn) = ImportRowUi(
+            dateFmt.format(localDateOfEpochDay(it.date.toEpochDays())) + (if (it.description.isNotEmpty()) " · " + it.description else ""), Money(it.minor, inr).formatted(),
+            it.flow == Flow.SPENDING, transfer = it.counterAccount != null,
+        )
+        fun sum(flow: Flow) = Money(shown.filter { it.flow == flow && it.counterAccount == null }.sumOf { it.minor }, inr)
+        val found = plan?.found
+        val group = if (plan == null || found == null || parsed == null) null else {
+            val rows = found.indexes.map { parsed.txns[it] }
+            val targets = found.indexes.map { app.expenses.core.domain.CardPayments.target(found, it, plan.pick, plan.others) }
+            val common = targets.distinct().singleOrNull()
+            val transfer = plan.pick.choice == app.expenses.core.domain.CardPaymentChoice.TRANSFER
+            CardGroupUi(
+                side = found.side.name, count = rows.size, total = Money(rows.sumOf { it.minor }, inr).formatted(), rows = rows.take(CARD_ROWS_LISTED).map(::row),
+                choice = plan.pick.choice?.name.orEmpty(), account = if (transfer) common.orEmpty() else "", accounts = plan.others.map { AccountUi(it.id, it.name) },
+                eachNamed = transfer && plan.pick.account == null && targets.distinct().size > 1, skipped = plan.skippedCardPayments, transfers = plan.transfers,
+                resolved = plan.txns != null,
+            )
+        }
+        val leftOut = preset?.leftOut
         _import.value = ImportUi(
             active = true, columnNames = names, mapping = mapping, accountId = accountId,
-            dateAmbiguous = StatementDetector.dateIsAmbiguous(table.rows, mapping), damaged = table.damaged, rowCount = table.rows.size - mapping.headerRows,
-            preview = parsed?.txns?.take(PREVIEW_ROWS)?.map {
-                ImportRowUi(dateFmt.format(localDateOfEpochDay(it.date.toEpochDays())) + (if (it.description.isNotEmpty()) " · " + it.description else ""), Money(it.minor, inr).formatted(), it.flow == Flow.SPENDING)
-            }.orEmpty(),
-            txnCount = parsed?.txns?.size ?: 0, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
+            dateAmbiguous = StatementDetector.dateIsAmbiguous(table.rows, mapping) && preset?.dateOrderKnown != true, damaged = table.damaged, rowCount = table.rows.size - mapping.headerRows,
+            preview = shown.take(PREVIEW_ROWS).map(::row),
+            txnCount = shown.size, spending = sum(Flow.SPENDING).formatted(), income = sum(Flow.INCOME).formatted(),
             problems = parsed?.problems?.take(PROBLEMS_SHOWN)?.map { "Line ${it.row}: ${it.reason}" }.orEmpty(), problemCount = parsed?.problems?.size ?: 0,
             ignoredRows = parsed?.ignoredRows ?: 0, repairedRows = parsed?.repairedRows ?: 0, mappingProblem = missing, profileNote = profileNote,
             readFrom = importReadFrom, readNote = importReadNote, cardPayments = importCardPayments,
             totalsNote = if (importReadFrom != null && parsed != null) importRead?.check(parsed.txns) else null,
+            cardGroup = group, transfers = plan?.transfers ?: 0,
+            preset = preset?.app?.label, presetNote = preset?.note, presetLeftOut = leftOut,
+            categories = if (preset == null || plan == null) null else ImportCategoriesUi(plan.newCategories.map { it.name }, importCreateCategories, plan.withCategory, plan.onOwnAccount),
         )
     }
 
     /** Saves what the preview showed. Already-imported rows are skipped, so doing it twice is harmless. */
     fun confirmImport() {
-        val parsed = importParsed ?: return
+        val txns = importReady ?: return
         val account = _import.value.accountId
-        if (account.isEmpty() || parsed.txns.isEmpty()) return
+        if (account.isEmpty() || txns.isEmpty()) return
+        val create = if (importCreateCategories) importNewCategories else emptyList()
         _import.update { it.copy(busy = true, error = null) }
         viewModelScope.launch(BACKGROUND) {
             try {
                 container.write { ok ->
-                    val r = ok.statements.import(parsed.txns, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    // the categories the person ticked are made in the same all-or-nothing step as the entries that use them
+                    val r = ok.store.atomically {
+                        var rows = txns
+                        if (create.isNotEmpty()) {
+                            val all = ok.categories.list()
+                            val made = HashMap<Pair<String, Boolean>, String>()
+                            for (n in create) {
+                                if (app.expenses.core.domain.CategoryRules.checkName(all, n.name, null) != null) continue // one with that name is there already (hidden, or for the other kind)
+                                made[n.name.trim().lowercase() to n.income] = ok.categories.create(n.name, null, null, if (n.income) app.expenses.core.domain.CategoryKind.INCOME else app.expenses.core.domain.CategoryKind.EXPENSE).id
+                            }
+                            rows = rows.map { t ->
+                                if (t.categoryId != null) t
+                                else app.expenses.core.domain.ImportCategories.nameOf(t.category, t.subcategory)?.let { made[it.trim().lowercase() to (t.flow == Flow.INCOME)] }?.let { id -> t.copy(categoryId = id) } ?: t
+                            }
+                        }
+                        ok.statements.import(rows, AccountId(account), inr, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    }
                     // Remember how this bank's file was read, now that it is known to have worked, for the next one with the same column titles.
                     val mapping = _import.value.mapping
-                    val signature = mapping?.takeIf { it.headerRows > 0 && importText == null }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
+                    val signature = mapping?.takeIf { it.headerRows > 0 && importText == null && importPreset == null }?.let { m -> importTable?.rows?.getOrNull(m.headerRows - 1)?.let(ImportProfiles::signature) }
                     if (mapping != null && signature != null) ok.templates.putSettingIfChanged(signature, ImportProfiles.encode(mapping))
                     refresh(ok)
-                    _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting)) }
+                    _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting, r.transfers, Money(r.transferMinor, inr).formatted())) }
                 }
             } catch (e: Exception) {
                 _import.update { it.copy(busy = false, error = "Nothing was imported: ${e.message ?: e::class.simpleName}") }
@@ -2281,6 +2512,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun closeImport() {
         importTable = null
         importParsed = null
+        importReady = null; importNewCategories = emptyList(); importPreset = null; importPresetOff = false; importSourceTable = null; importCardPick = null; importCreateCategories = false
         clearTextImport()
         _import.value = ImportUi()
     }
@@ -2994,6 +3226,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             endReached = endReached,
             homeAccountId = homeAccount,
             homePeriod = homePeriod,
+            safeToSpend = safeCache,
+            waiting = waitingSummary(ok, inr),
+            sinkingFunds = ok.templates.setting(SETTING_SINKING_FUNDS) == "1",
             undo = undo,
         )
     }
@@ -3106,6 +3341,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             RecurringUi(
                 i.id, i.name, i.amount?.toPlainString().orEmpty(), i.category?.value.orEmpty(), i.account.value, i.merchant.orEmpty(), s, i.auto, i.kind, i.toAccount?.value.orEmpty(),
                 listOfNotNull(i.amount?.formatted() ?: "amount each time", cadence, next, if (i.auto) "posts by itself" else null).joinToString(" · "),
+                paymentsLeft = if (i.kind == RecurringKind.INCOME) "" else PaymentsLeftMath.of(s, now.minusDays(RecurringStore.DUE_WINDOW_DAYS.toLong()), if (s.end == ScheduleEnd.Never) emptySet() else ok.recurring.handledDays(i.id, now.minusDays(RecurringStore.DUE_WINDOW_DAYS.toLong())))
+                    ?.let { left -> PaymentsLeftMath.text(left, i.amount?.minorUnits, { m -> Money(m, inr).formatted() }, { d -> fmt.format(localDateOfEpochDay(d.toEpochDays())) }) }.orEmpty(),
+                setAside = if (i.kind != RecurringKind.EXPENSE) "" else SinkingFunds.forItem(i.amount?.minorUnits, s, now)?.let { SinkingFunds.text(it.perMonthMinor) { m -> Money(m, inr).formatted() } }.orEmpty(),
             )
         }
     }

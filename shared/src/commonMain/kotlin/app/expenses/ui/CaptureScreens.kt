@@ -141,6 +141,11 @@ private fun InboxCard(
     payeeGroup: List<InboxRowUi> = emptyList(), onAddPayee: (List<InboxRowUi>) -> Unit = {},
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
+    var reporting by remember(r.id) { mutableStateOf(false) }
+    if (reporting) ReportMessageDialog(
+        "", r.body, emptySet(),
+        ReadAs(r.issuer.ifBlank { "unknown" } + " (an item in To review)", "added to To review as money ${if (r.direction == "CREDIT") "in" else "out"}, read by " + (if (r.confidence == "BANK_RULE") "the bank's own rule" else "the generic rules (low confidence)")),
+    ) { reporting = false }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
     var toAcct by rememberSaveable(r.id) { mutableStateOf(r.toAccountId) }
     val paired = r.treatment != "PAYMENT" && !asPayment
@@ -272,6 +277,7 @@ private fun InboxCard(
                 Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(r.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_text_${r.id}"))
                     Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { reporting = true }, modifier = Modifier.testTag("inbox_report_${r.id}")) { Text("Share this message for a fix") }
                 }
             }
         }

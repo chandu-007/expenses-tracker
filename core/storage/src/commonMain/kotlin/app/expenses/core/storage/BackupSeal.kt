@@ -28,6 +28,9 @@ interface SealPrimitives {
  * 0 to `chunkBytes` (0 only for an empty file). Chunk number i (from 0) uses the nonce 4 zero bytes then i as 8 bytes big-endian, and authenticates the
  * header followed by one byte, 1 for the last chunk and 0 for any other. So chunks cannot be reordered, dropped from the end or taken from another
  * file without the tag failing, and a changed iteration count, salt or chunk size fails at once. The plain file inside is an ordinary backup file.
+ *
+ * An automatic copy is `EXPENC3`, the same chunks behind a 48-byte header that has a second salt (see [keyedSink]): the key kept on the phone, which the person's
+ * passphrase makes with the first salt, is turned into the key of that one file with the second.
  */
 object BackupSeal {
     private val MAGIC = "EXPENC2\n".encodeToByteArray()
@@ -44,11 +47,26 @@ object BackupSeal {
 
     private val LEGACY_MAGIC = "EXPENC1\n".encodeToByteArray()
 
-    /** Whether a file that starts with [start] is sealed the older way (one block: every backup without files), which each platform's own cipher opens. */
-    fun isLegacySealed(start: ByteArray): Boolean = start.size >= LEGACY_MAGIC.size && LEGACY_MAGIC.indices.all { start[it] == LEGACY_MAGIC[it] }
+    /** The layout of an automatic copy (`EXPENC3`, see [keyedSink]): the same chunks as `EXPENC2`, under a key made for that one file from a key kept on the phone. */
+    private val MAGIC3 = "EXPENC3\n".encodeToByteArray()
+    private const val HEADER3_BYTES = 8 + 4 + SALT_BYTES + SALT_BYTES + 4
+    private val FILE_KEY_LABEL = "expenses-auto-copy-file-key\n".encodeToByteArray()
 
-    /** Whether a file that starts with [start] is sealed this way. */
-    fun isSealed(start: ByteArray): Boolean = start.size >= MAGIC.size && MAGIC.indices.all { start[it] == MAGIC[it] }
+    private fun starts(start: ByteArray, magic: ByteArray) = start.size >= magic.size && magic.indices.all { start[it] == magic[it] }
+
+    /** Whether a file that starts with [start] is sealed the older way (one block: every backup without files), which each platform's own cipher opens. */
+    fun isLegacySealed(start: ByteArray): Boolean = starts(start, LEGACY_MAGIC)
+
+    /** Whether a file that starts with [start] is sealed in the chunked layout: `EXPENC2` (a backup made with a passphrase) or `EXPENC3` (an automatic copy). [source] opens both. */
+    fun isSealed(start: ByteArray): Boolean = starts(start, MAGIC) || starts(start, MAGIC3)
+
+    /** Whether a file that starts with [start] is an automatic copy (`EXPENC3`). */
+    fun isKeyedSealed(start: ByteArray): Boolean = starts(start, MAGIC3)
+
+    internal fun acceptsIterations(iterations: Int) = iterations in MIN_ACCEPTED_ITERATIONS..MAX_ACCEPTED_ITERATIONS
+
+    /** The key one `EXPENC3` file is sealed under: HMAC-SHA256 of the file's own random salt under the key the passphrase gives. */
+    internal fun fileKey(master: ByteArray, fileSalt: ByteArray): ByteArray = HmacSha256.mac(master, FILE_KEY_LABEL + fileSalt)
 
     /** Writes the header to [inner] and returns a sink that seals what is written to it. Closing it writes the last chunk and closes [inner]. */
     fun sink(inner: ByteSink, passphrase: String, primitives: SealPrimitives, iterations: Int = ITERATIONS, chunkBytes: Int = CHUNK_BYTES, salt: ByteArray = primitives.randomBytes(SALT_BYTES)): SealedSink {
@@ -61,18 +79,38 @@ object BackupSeal {
     }
 
     /**
-     * Reads the header of a sealed file from [inner] and returns the plain bytes. [keyFor] gets the salt and iteration count and returns the key (derived
-     * from the passphrase, or one kept from opening the file before). Throws [BackupException] for a header that is not ours; a wrong passphrase shows
-     * up on the first read, as "the passphrase is wrong, or the file is damaged".
+     * The header of an automatic copy, then a sink that seals what is written to it: `EXPENC3` (see the document). The copy is made without the passphrase, which
+     * the phone does not keep: [kept] is the key the passphrase gave (with its salt and rounds, which the header carries so the passphrase alone opens the copy).
+     * Every copy gets a salt of its own and is sealed under HMAC-SHA256 of that salt with [kept]: the chunk nonces are counters, so one key for two files would
+     * use the same nonce twice, which breaks AES-GCM.
+     */
+    fun keyedSink(inner: ByteSink, kept: KeptKey, primitives: SealPrimitives, chunkBytes: Int = CHUNK_BYTES, fileSalt: ByteArray = primitives.randomBytes(SALT_BYTES)): SealedSink {
+        require(chunkBytes in MIN_ACCEPTED_CHUNK..MAX_ACCEPTED_CHUNK && fileSalt.size == SALT_BYTES)
+        val header = MAGIC3 + intBytes(kept.iterations) + kept.salt + fileSalt + intBytes(chunkBytes)
+        val key = fileKey(kept.key, fileSalt)
+        inner.write(header, 0, header.size)
+        return SealedSink(inner, primitives, key, header, chunkBytes)
+    }
+
+    /**
+     * Reads the header of a sealed file (`EXPENC2` or `EXPENC3`) from [inner] and returns the plain bytes. [keyFor] gets the salt and iteration count and returns the
+     * key the passphrase gives (derived from it, or one kept from opening the file before); for an `EXPENC3` file the key of the file itself is made from that here.
+     * Throws [BackupException] for a header that is not ours; a wrong passphrase shows up on the first read, as "the passphrase is wrong, or the file is damaged".
      */
     fun source(inner: ByteSource, primitives: SealPrimitives, keyFor: (salt: ByteArray, iterations: Int) -> ByteArray): DamageTolerantSource {
-        val header = ByteArray(HEADER_BYTES)
-        if (inner.readFully(header) < HEADER_BYTES || !isSealed(header)) throw BackupException("This is not a backup file from this app.")
+        val magic = ByteArray(8)
+        if (inner.readFully(magic) < magic.size || !isSealed(magic)) throw BackupException("This is not a backup file from this app.")
+        val keyed = isKeyedSealed(magic)
+        val rest = ByteArray((if (keyed) HEADER3_BYTES else HEADER_BYTES) - magic.size)
+        if (inner.readFully(rest) < rest.size) throw BackupException("This is not a backup file from this app.")
+        val header = magic + rest
         val iterations = int(header, 8)
-        val chunkBytes = int(header, 8 + 4 + SALT_BYTES)
-        if (iterations !in MIN_ACCEPTED_ITERATIONS..MAX_ACCEPTED_ITERATIONS || chunkBytes !in MIN_ACCEPTED_CHUNK..MAX_ACCEPTED_CHUNK) throw BackupException("This backup file is damaged.")
+        val chunkBytes = int(header, if (keyed) 8 + 4 + SALT_BYTES + SALT_BYTES else 8 + 4 + SALT_BYTES)
+        if (!acceptsIterations(iterations) || chunkBytes !in MIN_ACCEPTED_CHUNK..MAX_ACCEPTED_CHUNK) throw BackupException("This backup file is damaged.")
         val salt = header.copyOfRange(12, 12 + SALT_BYTES)
-        return SealedSource(inner, primitives, keyFor(salt, iterations), header, chunkBytes)
+        val given = keyFor(salt, iterations)
+        val key = if (keyed) fileKey(given, header.copyOfRange(12 + SALT_BYTES, 12 + 2 * SALT_BYTES)) else given
+        return SealedSource(inner, primitives, key, header, chunkBytes)
     }
 
     private fun intBytes(v: Int) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())

@@ -21,8 +21,18 @@ object AutoExportRules {
      * same folder are not ours to delete.
      */
     fun filesToDelete(names: List<String>, prefix: String, extension: String, keep: Int): List<String> {
-        val pattern = Regex("^" + Regex.escape(prefix) + "-(\\d{4}-\\d{2}-\\d{2})( \\(\\d+\\))?\\." + Regex.escape(extension) + "$")
-        val ours = names.mapNotNull { n -> pattern.find(n)?.let { n to it.groupValues[1] } }
+        val ours = ourFiles(names, prefix, extension)
         return ours.sortedWith(compareByDescending<Pair<String, String>> { it.second }.thenByDescending { it.first }).drop(keep.coerceAtLeast(1)).map { it.first }
+    }
+
+    /** How many of [names] are automatic files `prefix-YYYY-MM-DD.ext` (the same names [filesToDelete] looks at): what is already in the folder from earlier runs. */
+    fun countOurs(names: List<String>, prefix: String, extension: String): Int = ourFiles(names, prefix, extension).size
+
+    /** The names in [names] that are automatic files `prefix-YYYY-MM-DD.ext` (and only those: the person's own files are never in the answer). */
+    fun ourNames(names: List<String>, prefix: String, extension: String): List<String> = ourFiles(names, prefix, extension).map { it.first }
+
+    private fun ourFiles(names: List<String>, prefix: String, extension: String): List<Pair<String, String>> {
+        val pattern = Regex("^" + Regex.escape(prefix) + "-(\\d{4}-\\d{2}-\\d{2})( \\(\\d+\\))?\\." + Regex.escape(extension) + "$")
+        return names.mapNotNull { n -> pattern.find(n)?.let { n to it.groupValues[1] } }
     }
 }

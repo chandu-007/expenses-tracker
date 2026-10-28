@@ -136,6 +136,9 @@ class RecurringStore(
         }.sortedBy { it.date }.mapNotNull { d -> post(d.item.id, d.date, zone)?.let { d to it } }
     }
 
+    /** The days (epoch days) of [id]'s occurrences on or after [from] that were posted or skipped. */
+    fun handledDays(id: String, from: LocalDate): Set<Long> = q.doneDays(id, from.toEpochDays()).executeAsList().toSet()
+
     /** How many occurrences older than the due window were never dealt with, so the screen can say they are hidden. */
     fun hiddenOlder(today: LocalDate): Int {
         val cutoff = today.minus(DUE_WINDOW_DAYS, DateTimeUnit.DAY)

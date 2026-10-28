@@ -40,6 +40,15 @@ Settings, Display, Font size and Display size at their largest.
 ### Send feedback
 - [ ] More, Send feedback opens your mail app with the version, system and phone model filled in and nothing from your ledger.
 
+### Money and captures added in 0.8.0 (Android and iPhone)
+- [ ] Safe to spend (Accounts, under Net worth; Home, under the budget card): with your real balances, cards and bills the figure and the "not counted" note make sense; the Home line can be switched on or off in the figure's own dialog.
+- [ ] "I expect this back" on a real expense (a friend or your employer): it shows on Home and under Lent and borrowed; "Got it back" with a real refund and with part of the amount; Undo works.
+- [ ] Repeating: switch on set-aside for yearly bills (sinking funds) and look at an EMI row's "payments left" against your real loan.
+- [ ] Import a REAL credit card statement and a REAL bank statement that pays that card: the card-payment lines come up as transfers to the right card or as a choice, never silently to another card.
+- [ ] Import a real export from Money Manager, YNAB, Splitwise, Cashew or Spendee (the presets were written from the apps' documented columns, no real export was seen).
+- [ ] A bank text the app misses: To review, Report, the redacted message shows no name, number or balance, with "Keep the amounts" off and on; send it by mail.
+- [ ] Protected copies: Your data, "Protect copies with a passphrase", on a real phone and a real folder (see the iPhone list for the lock/restart cases); restore the copy with the passphrase on a second phone.
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 
@@ -64,6 +73,7 @@ Settings, Accessibility, VoiceOver. Swipe right through each screen.
 - [ ] Today and Quick add widgets add an entry that shows up in the app.
 - [ ] Share to Expenses from Photos or Files opens the import.
 - [ ] Automatic copies to a Files folder write a new file when due.
+- [ ] With "Protect copies with a passphrase" on (Your data): a copy is made while the phone is locked (after the first unlock since a restart) and is a sealed `.expbak` (opens only through Restore with the passphrase, on this phone and on a second one); after a restart and before the first unlock no copy is written, and never a plain one; turning it off makes plain copies again.
 - [ ] Notification buttons (Mark paid, Later today, Tomorrow) work from the lock screen.
 
 ### Larger text and iPad (if you have one)

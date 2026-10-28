@@ -200,5 +200,29 @@ class EntryDraftTest {
         assertEquals(m(5_000_00), ledger.balances().getValue(AccountId("bank")), "no account moved")
         assertEquals(m(-300_00), ledger.personBalance(PersonId("asha"), inr), "you owe them")
     }
-}
+    // ---- "I expect this back" ----
 
+    private fun expecting(amount: String = "500", expected: String = "", split: List<String> = emptyList(), paidBy: String = "", kind: DraftKind = DraftKind.EXPENSE) =
+        EntryDraft(null, kind, amount, "Food", emptyList(), "bank", "", "", 5L, splitWith = split, paidBy = paidBy, expectBack = true, expectFrom = "the office", expectAmount = expected)
+
+    @Test
+    fun anExpectationIsValidForAPlainExpenseBlankMeansAllAndNeverMoreThanTheExpense() {
+        assertEquals(50_000L, EntryDrafts.expectedMinor(expecting(), inr))
+        assertEquals(20_000L, EntryDrafts.expectedMinor(expecting(expected = "200"), inr))
+        assertTrue(EntryDrafts.build(expecting(expected = "500"), id, inr) is DraftResult.Ok)
+        assertTrue(problem(expecting(expected = "500.01")).contains("no more than the expense"))
+        assertTrue(problem(expecting(expected = "0")).contains("more than zero"))
+        assertTrue(problem(expecting(expected = "abc")).contains("more than zero"))
+        // the expense itself is unchanged by expecting money back: same entry as without it
+        assertEquals(ok(expecting().copy(expectBack = false, expectFrom = "")), ok(expecting()))
+    }
+
+    @Test
+    fun anExpectationIsRefusedOnASharedExpenseAndNeverCountedForOtherKinds() {
+        assertTrue(problem(expecting(split = listOf("asha"))).contains("already tracked"))
+        assertTrue(problem(expecting(paidBy = "asha")).contains("already tracked"))
+        assertEquals(null, EntryDrafts.expectedMinor(expecting(kind = DraftKind.INCOME), inr))
+        assertTrue(EntryDrafts.build(expecting(kind = DraftKind.INCOME, expected = "9999"), id, inr) is DraftResult.Ok, "the box is ignored for income")
+        assertEquals(null, EntryDrafts.expectedMinor(expecting().copy(expectBack = false), inr))
+    }
+}

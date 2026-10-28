@@ -2,6 +2,8 @@
 
 package app.expenses
 
+import app.expenses.core.storage.AutoCopyProtection
+import app.expenses.core.storage.BackupException
 import app.expenses.core.storage.ByteSource
 import kotlinx.cinterop.BooleanVar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -22,7 +24,9 @@ import platform.Foundation.writeToURL
 /**
  * Automatic copies into a folder from the Files app (iCloud Drive, On My iPhone, another provider), as on Android: a backup and an Excel file on a schedule, the newest few kept.
  * The folder is remembered as a security-scoped bookmark made when it was chosen, since iOS lets an app into a folder it was given only through one. The run itself is
- * [AutoExportRunner]. iOS decides when a background refresh runs, so a due export is also done whenever the app comes forward.
+ * [AutoExportRunner]. iOS decides when a background refresh runs, so a due export is also done whenever the app comes forward. With "Protect automatic copies with a passphrase" on,
+ * the runner reads the key from the Keychain ([IosSecretStore]: readable after the first unlock, so a background run can seal a copy while the phone is locked) and
+ * writes nothing at all when it cannot.
  */
 internal object IosAutoExport {
     private val defaults get() = NSUserDefaults.standardUserDefaults
@@ -57,6 +61,10 @@ internal object IosAutoExport {
     suspend fun run(container: AppContainer, folderUri: String?, now: Long, force: Boolean) {
         val url = folderUri?.let(::resolve)
         AutoExportRunner.run(container, url?.let(::Folder), now, force)
+    }
+
+    suspend fun deleteOldExcel(container: AppContainer, folderUri: String?) {
+        AutoExportRunner.deleteOldExcel(container, folderUri?.let(::resolve)?.let(::Folder))
     }
 
     /** The scheduled run: does nothing unless a folder was chosen and the schedule says it is due. */
@@ -139,5 +147,47 @@ object IosAutoExportDebug {
         core.container.write { it.templates.putSetting(AutoExportKeys.FOLDER, uri) }
         IosAutoExport.run(core.container, uri, now, force = true)
         return core.container.write { it.templates.setting(AutoExportKeys.STATUS) }.orEmpty()
+    }
+}
+
+/**
+ * Test entries for protected automatic copies (Swift unit tests). Answers are plain sentences, because a Kotlin exception cannot be caught from Swift.
+ */
+object IosAutoProtectDebug {
+    private const val ONLY_IN_TESTS = "refused: this is a test entry and does nothing outside a test run"
+
+    /** What the switch does: protection on (or a new passphrase) with [passphrase], off with null; answers with the sentence the screen shows. */
+    suspend fun set(host: IosHostServices, passphrase: String?): String {
+        if (!runningUnderXCTest()) return ONLY_IN_TESTS
+        val core = IosCore.get(host)
+        return try {
+            if (passphrase != null) AutoCopyControls.turnOn(core.platform, core.container, passphrase) else AutoCopyControls.turnOff(core.platform, core.container)
+        } catch (e: BackupException) {
+            "refused: ${e.message}"
+        } catch (e: Throwable) {
+            "failed: ${e::class.simpleName}: ${e.message}"
+        }
+    }
+
+    /** What a phone that lost its Keychain item looks like (a new phone): the key is gone while the setting still says protection is on. */
+    fun forgetKey(host: IosHostServices) {
+        if (!runningUnderXCTest()) return
+        AutoCopyProtection.disable(IosCore.get(host).platform.secretStore)
+    }
+
+    /** The "Choose a backup file" path of the app, on the file at [path] with [passphrase] (null: none typed yet). Nothing on the phone changes. */
+    suspend fun openThroughTheApp(host: IosHostServices, path: String, passphrase: String?): String {
+        if (!runningUnderXCTest()) return ONLY_IN_TESTS
+        val core = IosCore.get(host)
+        return try {
+            when (val opened = DataTransfer(core.platform, core.container).open(NSURL.fileURLWithPath(path).absoluteString.orEmpty(), passphrase)) {
+                is DataTransfer.Opened.NeedsPassphrase -> "needs a passphrase"
+                is DataTransfer.Opened.Ready -> "ready: entries=${opened.data.entries.size} version=${opened.header.version} files=${opened.data.attachments.size}"
+            }
+        } catch (e: BackupException) {
+            "refused: ${e.message}"
+        } catch (e: Throwable) {
+            "failed: ${e::class.simpleName}: ${e.message}"
+        }
     }
 }

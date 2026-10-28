@@ -135,6 +135,9 @@ fun RecurringScreen(
     onSkip: (DueUi) -> Unit,
     onSave: (id: String?, name: String, amount: Money?, category: String, account: String, merchant: String, schedule: Schedule, auto: Boolean, kind: RecurringKind, toAccount: String) -> Unit,
     onDelete: (String) -> Unit,
+    /** Putting yearly bills aside month by month (taken off safe to spend), and the switch for it. */
+    sinkingFunds: Boolean = false,
+    onSinkingFunds: (Boolean) -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) } // an item id, or NEW
     var asking by remember { mutableStateOf<DueUi?>(null) }
@@ -173,6 +176,19 @@ fun RecurringScreen(
                     )
                 }
             }
+            if (items.any { it.setAside.isNotEmpty() }) item(key = "sinking") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = sinkingFunds, onCheckedChange = onSinkingFunds, modifier = Modifier.testTag("sinking_funds_switch"))
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text("Put yearly bills aside")
+                        Text(
+                            "Take the monthly amount for yearly, half-yearly and quarterly bills off safe to spend, so the money is there when they fall due.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("sinking_funds_note"),
+                        )
+                    }
+                }
+                HorizontalDivider()
+            }
             item { Text("All repeating expenses", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)) }
             if (items.isEmpty()) {
                 item {
@@ -188,6 +204,8 @@ fun RecurringScreen(
                 Column(Modifier.fillMaxWidth().entryCardFill(pos).clickable { editing = i.id }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("rec_row_${i.name}")) {
                     Text(i.name, style = MaterialTheme.typography.bodyLarge)
                     Text(i.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (i.paymentsLeft.isNotEmpty()) Text(i.paymentsLeft, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("rec_left_${i.name}"))
+                    if (i.setAside.isNotEmpty()) Text(i.setAside, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("rec_set_aside_${i.name}"))
                 }
                 }
             }

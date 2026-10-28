@@ -41,4 +41,13 @@ class AutoExportRulesTest {
         assertEquals(4, AutoExportRules.filesToDelete(names, "expenses-backup", "expbak", keep = 0).size, "a keep of zero is treated as one")
         assertEquals(emptyList(), AutoExportRules.filesToDelete(listOf("expenses.expbak", "expenses-backup-2026-10-01.expbak.txt"), "expenses-backup", "expbak", 1))
     }
+
+    @Test
+    fun countOursCountsOnlyFilesNamedLikeOurCopies() {
+        val names = listOf("expenses-2026-10-01.xlsx", "expenses-2026-10-02 (1).xlsx", "expenses-backup-2026-10-01.expbak", "expenses-2026-10-03.xlsx.part", "my-notes.xlsx", "expenses-final.xlsx")
+        assertEquals(2, AutoExportRules.countOurs(names, "expenses", "xlsx"))
+        assertEquals(1, AutoExportRules.countOurs(names, "expenses-backup", "expbak"))
+        assertEquals(0, AutoExportRules.countOurs(emptyList(), "expenses", "xlsx"))
+        assertEquals(setOf("expenses-2026-10-01.xlsx", "expenses-2026-10-02 (1).xlsx"), AutoExportRules.ourNames(names, "expenses", "xlsx").toSet(), "only ours, never my-notes.xlsx or a .part")
+    }
 }

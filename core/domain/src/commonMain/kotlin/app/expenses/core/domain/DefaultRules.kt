@@ -1,29 +1,113 @@
 package app.expenses.core.domain
 
 /**
- * A starter list of well-known Indian merchants and their usual category, used **only** when the person has no rule of their own and nothing learned for
- * the payee. The category is named, not identified: it is used only if a category with that name exists and is not hidden, so renaming or deleting one
- * switches its starters off. A name matches whole words only ("ola" is not in "cola"), so a UPI address like "swiggy@icici" matches "swiggy".
+ * A starter list of well-known Indian merchants ([MerchantTable]) and their usual category, used **only** when the person has no rule of their own and nothing learned for
+ * the payee (see [CategorySuggest.suggest]). The category is named, not identified: it is used only if a category with that name exists and is not hidden, so renaming or
+ * deleting one switches its starters off.
+ *
+ * Matching is on whole words, so a UPI address like "swiggy@icici" matches "swiggy" but "ola" is not in "cola" and "uber" is not in "suburban". What follows an `@` (the
+ * bank's handle: "ola@paytm", "x@airtel") is never read. When two names match, the one with more words wins, then the longer, then the earlier in the text
+ * ("Swiggy Instamart" is Instamart's groceries, not Swiggy's food). The names are looked up in an index built once, so a text costs one pass over its words, however long
+ * the list grows.
  */
 object DefaultRules {
-    private val table: Map<String, List<String>> = mapOf(
-        "Food" to listOf("swiggy", "zomato", "dominos", "kfc", "mcdonalds", "starbucks", "pizza hut", "burger king", "box8", "faasos", "chaayos", "chai point", "behrouz", "haldirams", "barbeque nation", "eatsure"),
-        "Groceries" to listOf("bigbasket", "big basket", "blinkit", "zepto", "dmart", "jiomart", "instamart", "grofers", "milkbasket", "licious", "reliance fresh", "natures basket"),
-        "Transport" to listOf("uber", "ola", "rapido", "redbus", "irctc", "fastag", "namma yatri", "indigo", "air india", "vistara", "indian oil", "iocl", "bpcl", "hpcl", "bharat petroleum", "hindustan petroleum"),
-        "Bills" to listOf("jio", "airtel", "vodafone", "bsnl", "bescom", "tneb", "msedcl", "tata power", "adani electricity", "bharat gas", "indane", "mahanagar gas", "act fibernet", "hathway", "tata play", "dish tv", "d2h", "lic", "electricity", "broadband", "recharge"),
-        "Shopping" to listOf("amazon", "flipkart", "myntra", "ajio", "meesho", "nykaa", "tata cliq", "decathlon", "ikea", "croma", "lenskart", "reliance digital"),
-        "Health" to listOf("apollo", "pharmeasy", "1mg", "netmeds", "practo", "medplus", "cult fit", "cultfit", "lal pathlabs"),
-        "Fun" to listOf("netflix", "prime video", "hotstar", "spotify", "bookmyshow", "pvr", "inox", "youtube premium", "sonyliv", "zee5", "disney"),
+    private class Alias(val words: List<String>, val chars: Int, val merchant: Merchant)
+
+    /** The first word of every alias to the aliases that start with it. */
+    private val index: Map<String, List<Alias>> = HashMap<String, MutableList<Alias>>().also { map ->
+        for (m in MerchantTable.all) for (a in m.aliases) {
+            val words = tokens(a)
+            if (words.isNotEmpty()) map.getOrPut(words[0]) { ArrayList(2) } += Alias(words, words.sumOf { it.length }, m)
+        }
+    }
+
+    /** Words that may stand around a merchant's name in a payee string without making it someone else: company suffixes, places, payment-gateway words. */
+    private val noise: Set<String> = setOf(
+        "pvt", "ltd", "limited", "private", "india", "indian", "llp", "inc", "co", "corp", "corporation", "company", "services", "service", "solutions", "technologies", "tech", "systems",
+        "retail", "online", "ecommerce", "commerce", "payments", "payment", "pay", "upi", "qr", "order", "orders", "app", "store", "stores", "shop", "merchant", "mobile", "digital",
+        "internet", "wallet", "bill", "bills", "electricity", "recharge", "broadband", "the", "and", "in", "ind", "rzp", "razorpay", "payu", "billdesk", "cashfree", "ccavenue", "paytm",
+        "ka", "mh", "dl", "tn", "ap", "ts", "kl", "gj", "up", "wb", "rj", "hr", "pb", "mp",
+        "bangalore", "bengaluru", "mumbai", "delhi", "new", "chennai", "hyderabad", "kolkata", "pune", "gurgaon", "gurugram", "noida", "ahmedabad", "jaipur", "kochi",
     )
 
-    private fun tokens(text: String): List<String> = text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+    /**
+     * The lower-case ASCII words of [text]: letters and digits, everything else a separator, and the bank handle after an `@` skipped. Every consumer of the index reads text
+     * through this one function so aliases and payees are split the same way.
+     */
+    internal fun tokens(text: String): List<String> {
+        val out = ArrayList<String>(8)
+        var i = 0
+        val n = text.length
+        while (i < n) {
+            val c = text[i]
+            if (c == '@') { i++; while (i < n && isWordChar(text[i])) i++; continue }
+            if (!isWordChar(c)) { i++; continue }
+            val start = i
+            while (i < n && isWordChar(text[i])) i++
+            out += text.substring(start, i).lowercase()
+        }
+        return out
+    }
 
-    private fun containsPhrase(text: List<String>, phrase: List<String>): Boolean =
-        phrase.isNotEmpty() && (0..text.size - phrase.size).any { i -> phrase.indices.all { text[i + it] == phrase[it] } }
+    private fun isWordChar(c: Char) = c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9'
 
-    /** The category name the starter list gives [text] (a payee and the words of the alert), or null. The first list entry that matches wins. */
-    fun categoryNameFor(text: String): String? {
-        val t = tokens(text)
-        return table.entries.firstOrNull { (_, names) -> names.any { containsPhrase(t, tokens(it)) } }?.key
+    private class Found(val alias: Alias, val at: Int)
+
+    /** The best alias in [words]: most words, then most letters, then first in the text. Only merchants with a display name when [named]. */
+    private fun best(words: List<String>, named: Boolean): Found? {
+        var best: Found? = null
+        for (i in words.indices) {
+            val candidates = index[words[i]] ?: continue
+            for (a in candidates) {
+                if (named && a.merchant.display == null) continue
+                if (i + a.words.size > words.size) continue
+                var k = 1
+                while (k < a.words.size && words[i + k] == a.words[k]) k++
+                if (k < a.words.size) continue
+                val b = best
+                if (b == null || a.words.size > b.alias.words.size || (a.words.size == b.alias.words.size && a.chars > b.alias.chars)) best = Found(a, i)
+            }
+        }
+        return best
+    }
+
+    /**
+     * Words that may follow a merchant's name in a payee that is still the merchant: what it sells or is ("Jio Mart", "Swiggy Stores", "Haldiram Foods", "Apollo Pharmacy Ltd"). Anything
+     * else after the first word ("Ola Sharma", "Uber Singh", "Apollo Tyres") makes it a person or another business, and the starter list stays out of it.
+     */
+    private val shopWords: Set<String> = setOf(
+        "store", "stores", "mart", "foods", "food", "restaurant", "restaurants", "cafe", "cafes", "hotel", "hotels", "pharmacy", "pharmacies", "medical", "medicals", "traders", "trading", "enterprises",
+        "supermarket", "hypermarket", "bazaar", "bazar", "mall", "kitchen", "bakery", "sweets", "bhavan", "hospital", "hospitals", "clinic", "clinics", "labs", "lab", "diagnostics", "healthcare",
+        "insurance", "ins", "allied", "life", "general", "seller", "marketplace", "cabs", "taxi", "fuel", "petrol", "pump", "station", "recharge", "prepaid", "postpaid", "bill", "payments", "dairy",
+        "pulse", "express", "fresh", "daily", "bank", "cinemas", "cinema", "studios", "entertainment", "network", "networks", "energy", "power", "gas", "oil", "sports", "fashion", "electronics", "digital",
+    )
+
+    /**
+     * The merchant [text] names, by the rules above, or null. A name that opens with a merchant and goes on with a word that is not company noise and not a shop word is a person ("Ola Sharma") or another business ("Apollo Tyres"): null, so the person's own choices and "a payment to a person" decide.
+     */
+    internal fun find(text: String): Merchant? {
+        val words = tokens(text)
+        val found = best(words, named = false) ?: return null
+        if (found.at == 0 && wordsBeyond(words, found).any { it !in shopWords }) return null
+        return found.alias.merchant
+    }
+
+    /** The words of a payee outside the matched name that are neither company noise nor digits. */
+    private fun wordsBeyond(words: List<String>, found: Found): List<String> {
+        val inside = found.at until found.at + found.alias.words.size
+        return words.filterIndexed { i, w -> i !in inside && w !in noise && !w.all { it in '0'..'9' } }
+    }
+
+    /** The category name the starter list gives [text] (a payee and the words of the alert), or null. The longest merchant name in the text wins. */
+    fun categoryNameFor(text: String): String? = find(text)?.category
+
+    /**
+     * The clean name of the merchant a payee string stands for ("Swiggy" for "swiggyupi@axb" or "SWIGGY BANGALORE KA IN"), or null when it names none or names it among words that
+     * are not company noise ("Uber Singh" is a person, not Uber). The caller shows it as the entry's merchant; the text the payee came from is kept as it was.
+     */
+    fun displayNameFor(payee: String): String? {
+        val words = tokens(payee)
+        val found = best(words, named = true) ?: return null
+        return if (wordsBeyond(words, found).isEmpty()) found.alias.merchant.display else null
     }
 }

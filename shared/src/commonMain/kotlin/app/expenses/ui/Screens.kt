@@ -157,6 +157,8 @@ fun EntryListScreen(
     onMoreChange: (Boolean) -> Unit = {},
     onCustomiseHome: () -> Unit,
     onToggleHideAmounts: () -> Unit,
+    /** The switch in the safe-to-spend dialog: show that line under the budget on Home. */
+    onSafeToSpendOnHome: (Boolean) -> Unit = {},
     onOpenAppearance: () -> Unit,
     onOpenCurrency: () -> Unit,
     onOpenInbox: () -> Unit,
@@ -179,6 +181,8 @@ fun EntryListScreen(
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     var askingFor by remember { mutableStateOf<DueUi?>(null) }
     askingFor?.let { d -> AmountDialog("Amount for ${d.name}", onConfirm = { onPostDue(d, it); askingFor = null }, onDismiss = { askingFor = null }) }
+    var safeOpen by rememberSaveable { mutableStateOf(false) }
+    if (safeOpen && state.safeToSpend != null) SafeToSpendDialog(state.safeToSpend, onClose = { safeOpen = false }, onShowOnHome = onSafeToSpendOnHome)
     val listState = rememberLazyListState()
     val feel = rememberFeel()
     val snackbar = remember { SnackbarHostState() }
@@ -350,10 +354,15 @@ fun EntryListScreen(
                     }
                     if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
                     if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
+                    if (!state.waiting.isEmpty) WaitingBanner(state.waiting, onOpenLoans)
                     FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
                     state.homeLayout.visible().forEach { section ->
                         when (section) {
-                            HomeSection.BUDGET -> BudgetSummary(state.budget, onOpenBudget)
+                            HomeSection.BUDGET -> {
+                                BudgetSummary(state.budget, onOpenBudget)
+                                // the balance-based version, under the budget card: only when it is on (by the person's choice, or by itself for someone with money in an account and something due)
+                                state.safeToSpend?.takeIf { it.homeVisible }?.let { SafeToSpendLine(it, "home_safe_to_spend_line", onClick = { safeOpen = true }) }
+                            }
                             HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                             // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
                             HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) })
@@ -535,6 +544,24 @@ private fun InboxBanner(state: UiState.Ready, onOpen: () -> Unit) {
                 }
             }
             if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Money expected back for expenses, at a glance: how many are waiting and what they add up to. The whole card opens the list (on the Lent and borrowed page). */
+@Composable
+private fun WaitingBanner(waiting: app.expenses.WaitingUi, onOpen: () -> Unit) {
+    androidx.compose.material3.Card(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("waiting_banner"),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(if (waiting.count == 1) "1 expense waiting to come back" else "${waiting.count} expenses waiting to come back", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("waiting_banner_title"))
+                Text(if (waiting.totalText.isNotEmpty()) "${waiting.totalText} to get back" else "Money you expect back", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_banner_total"))
+            }
+            Text("Open", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 8.dp))
         }
     }
 }

@@ -9,6 +9,7 @@ import app.expenses.core.storage.ByteSink
 import app.expenses.core.storage.ByteSource
 import app.expenses.core.storage.FileVault
 import app.expenses.core.storage.SealPrimitives
+import app.expenses.core.storage.SecretStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
@@ -27,7 +28,7 @@ import kotlin.time.Clock
  *   files         readBytes(uri), writeBytes(uri, bytes), openRead(uri), openWrite(uri) (the same as streams), displayName(uri), mimeType(uri), folderDisplayName(uri)
  *   attachments   attachmentFiles: AttachmentFileStore
  *   backup        backupCipher: BackupCipher
- *   auto-export   runAutoExport(container, folderUri, nowMillis, force)
+ *   auto-export   runAutoExport(container, folderUri, nowMillis, force), secretStore (the key of passphrase-protected automatic copies)
  *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted(), supportsShortcutsCapture, readClipboardText(), openExternalUrl(url)
  *   about         appVersionText, osVersionText, deviceModelText (for the feedback email; empty by default)
  *   signing       signingExpiresAtMillis (iPhone test builds: when the free-signed install stops opening; null elsewhere)
@@ -115,6 +116,15 @@ interface Platform {
 
     /** Runs an automatic export now if due (or [force]d). Never throws; the outcome is recorded in the settings for the screen. No-op where [supportsAutoExport] is false. */
     suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean)
+
+    /**
+     * Where the key of passphrase-protected automatic copies is kept: the Android Keystore, the iPhone Keychain (readable after the first unlock, this device only).
+     * Null where a platform has none; protection cannot then be turned on, and one that is on writes nothing.
+     */
+    val secretStore: SecretStore? get() = null
+
+    /** Deletes the Excel files an unprotected run left in the automatic-copy folder, after the person pressed "Delete them" ([AutoExportRunner.deleteOldExcel]). Never throws; the outcome is recorded for the screen. */
+    suspend fun deleteOldAutoExcel(container: AppContainer, folderUri: String?) {}
 
     // ---- capture and notifications ----
 

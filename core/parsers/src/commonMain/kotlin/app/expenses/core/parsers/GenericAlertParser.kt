@@ -51,7 +51,7 @@ object GenericAlertParser {
     /** "Chandu. sent ₹10 to you", "Anita paid you ₹120", "Ravi sent you Rs.50": the other person paid, so the money came in. Read as "received" before the direction is decided. */
     private val doneToYou = Regex("""(?i)\b(?:sent|paid|transferred)\s+(?:to\s+you\b|you\b|(?:₹|rs\.?|inr)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+to\s+you\b)""")
     private val debitWords = Regex("""(?i)\b(?:debited|spent|sent|paid|withdrawn|purchase|transferred|deducted|used|redeemed)\b|\bDr\b\.?""")
-    /** HDFC Bank only (any of its header roots, HDFCBK or HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
+    /** Roots with [BankRule.cardTxnLayout] only (HDFC Bank: HDFCBK and HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
     private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
     /** "Payment of Rs.706.82 successful for your Jio bill": the person paid, with no debit word in the text. */
     private val paymentSuccessful = Regex("""(?i)\bpayment\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""")
@@ -94,7 +94,7 @@ object GenericAlertParser {
                 // the passive wording only settles a text that also has a credit word: "paid by your card at X" alone is still a debit
                 val d = (if (c != null) debitWords.find(directional) else debitWords.find(readAs))?.range?.first
                 when {
-                    c == null && d == null -> if ((senderRoot?.let { SenderRules.BUILT_IN[it] } == "HDFC Bank" && cardTxn.containsMatchIn(text)) || paymentSuccessful.containsMatchIn(text)) Direction.DEBIT else return ParseResult.NotATransaction("no direction")
+                    c == null && d == null -> if ((senderRoot?.let { BankRules.byRoot[it]?.cardTxnLayout } == true && cardTxn.containsMatchIn(text)) || paymentSuccessful.containsMatchIn(text)) Direction.DEBIT else return ParseResult.NotATransaction("no direction")
                     c != null && outgoingCreditPhrase.containsMatchIn(readAs) -> Direction.DEBIT
                     c == null -> Direction.DEBIT
                     d == null -> Direction.CREDIT

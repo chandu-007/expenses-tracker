@@ -65,8 +65,13 @@ fun AccountsScreen(
     onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
     /** "See its transactions": Home's list narrowed to this account. */
     onShowEntries: ((String) -> Unit)? = null,
+    /** The balance-based safe to spend, once it is worked out (a moment after the page opens), and the switch for showing it on Home. */
+    safeToSpend: app.expenses.SafeToSpendUi? = null,
+    onSafeToSpendOnHome: (Boolean) -> Unit = {},
 ) {
     var editing by remember { mutableStateOf<AccountRowUi?>(null) }
+    var safeOpen by rememberSaveable { mutableStateOf(false) }
+    if (safeOpen && safeToSpend != null) SafeToSpendDialog(safeToSpend, onClose = { safeOpen = false }, onShowOnHome = onSafeToSpendOnHome)
     var creating by rememberSaveable { mutableStateOf(false) }
     val active = rows.filter { !it.archived }
     val archived = rows.filter { it.archived }
@@ -77,11 +82,14 @@ fun AccountsScreen(
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list")) {
             item {
                 val net = active.sumOf { it.balanceMinor }
-                Column(Modifier.padding(16.dp)) {
+                // With the safe-to-spend line below it the header is kept short (no help sentence, less room under it): the cards must still start high enough on a phone
+                // for the third and fourth of them to be in view when they are spread (AccountTilesUiTest reads where each one is).
+                Column(Modifier.padding(16.dp, if (safeToSpend != null) 8.dp else 16.dp, 16.dp, if (safeToSpend != null) 0.dp else 16.dp)) {
                     Text("Net worth", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
-                    Text("Balances start from the opening balance you set, then follow your entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (safeToSpend == null) Text("Balances start from the opening balance you set, then follow your entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (safeToSpend != null) SafeToSpendLine(safeToSpend, "safe_to_spend_line", onClick = { safeOpen = true }, compact = true)
                 HorizontalDivider()
             }
             // each account is a card; one that is archived stays a plain line below
@@ -139,12 +147,12 @@ private fun AccountDialog(
     val onlyActive = existing != null && !existing.archived && all.count { !it.archived } == 1
     if (cardOpen && existing != null) CardTermsDialog(existing, onSaveCard, onClearCard, onSetCreditLimit) { cardOpen = false }
     AlertDialog(
+        modifier = Modifier.padding(bottom = dialogKeyboardRoom()),
         onDismissRequest = onClose,
         title = { Text(if (existing == null) "New account" else "Edit account") },
         text = {
-            // With the keyboard up the dialog shrinks above it and its content scrolls, so Save and Cancel stay in view. Not for Edit account: Android raises the keyboard there by itself a second
-            // after the dialog opens, and the buttons moving at that moment made AccountsUiTest miss its taps in 3 runs of 6 (0 of 4 without it). The keyboard still covers that dialog's buttons.
-            if (existing == null) ResizeDialogForKeyboard()
+            // The dialog always leaves room for the keyboard below it (it comes up by itself when the dialog opens), so its content scrolls above the keyboard and Save and Cancel stay in view.
+            // The room is fixed, so nothing moves when the keyboard comes: resizing the window for it made taps miss.
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it; problem = null }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("account_name"))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,10 +226,11 @@ private fun CardTermsDialog(a: AccountRowUi, onSave: (String, String, String, St
     @Composable fun field(value: String, label: String, tag: String, set: (String) -> Unit) =
         OutlinedTextField(value, { v -> if (v.all { it.isDigit() } && v.length <= 3) { set(v); problem = null } }, label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth().testTag(tag))
     AlertDialog(
+        modifier = Modifier.padding(bottom = dialogKeyboardRoom()),
         onDismissRequest = onClose,
         title = { Text("${a.name}: billing dates") },
         text = {
-            // No ResizeDialogForKeyboard() here, as in Edit account: the dialog moving and shrinking when the keyboard comes or goes made AlertsUiTest's tap on "Remove billing dates" miss in 5 of 12 runs (0 of 12 on a00b138, 0 of 12 without this call).
+            // As in Edit account: room is left for the keyboard, so Save and Cancel stay above it.
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 field(statement, "Statement day (1 to 28)", "card_statement_day") { statement = it }
                 field(due, "Payment due day (1 to 28)", "card_due_day") { due = it }

@@ -118,10 +118,10 @@ internal fun categoryFor(all: List<CategoryUi>, income: Boolean, current: String
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith, d.foreignCode, d.foreignAmount, d.foreignRate, d.splitAmounts, d.paidBy) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith, d.foreignCode, d.foreignAmount, d.foreignRate, d.splitAmounts, d.paidBy, d.expectBack, d.expectFrom, d.expectPersonId, d.expectAmount) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>), l[15] as String, l[16] as String, l[17] as String, @Suppress("UNCHECKED_CAST") (l[18] as List<String>), l[19] as String)
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>), l[15] as String, l[16] as String, l[17] as String, @Suppress("UNCHECKED_CAST") (l[18] as List<String>), l[19] as String, l[20] as Boolean, l[21] as String, l[22] as String, l[23] as String)
     },
 )
 
@@ -436,6 +436,36 @@ fun EntryFormScreen(
                             else -> "You pay ${Money(shares.second, currency).formatted()} of it; each of the ${draft.splitWith.size} owes ${Money(shares.first, currency).formatted()}. The whole bill leaves your account."
                         },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("split_summary"),
+                    )
+                }
+            }
+
+            // "I expect this back": a friend or an employer will pay it back. Not for a shared expense (what friends owe is already tracked there).
+            val shared = draft.splitWith.isNotEmpty() || draft.paidBy.isNotEmpty()
+            LaunchedEffect(shared) { if (shared && draft.expectBack) draft = draft.copy(expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "") }
+            if (draft.kind == DraftKind.EXPENSE && !shared) {
+                FilterChip(selected = draft.expectBack, onClick = { draft = if (draft.expectBack) draft.copy(expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "") else draft.copy(expectBack = true) }, label = { Text("I expect this back") }, modifier = Modifier.testTag("expect_toggle"))
+                if (draft.expectBack) {
+                    if (people.isNotEmpty()) {
+                        Text("From (optional)", style = MaterialTheme.typography.labelMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            people.forEach { p -> FilterChip(selected = p.id == draft.expectPersonId, onClick = { draft = if (p.id == draft.expectPersonId) draft.copy(expectPersonId = "") else draft.copy(expectPersonId = p.id, expectFrom = "") }, label = { Text(p.name) }, modifier = Modifier.testTag("expect_person_${p.name}")) }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = draft.expectFrom, onValueChange = { v -> draft = draft.copy(expectFrom = v.take(80), expectPersonId = if (v.isNotBlank()) "" else draft.expectPersonId) },
+                        label = { Text(if (people.isEmpty()) "From (optional)" else "Or type who (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("expect_from"),
+                    )
+                    val expectInvalid = draft.expectAmount.isNotEmpty() && amount != null && app.expenses.core.domain.ExpectMath.expected(draft.expectAmount, amount.minorUnits) { parseAmount(it, currency)?.minorUnits } == null
+                    OutlinedTextField(
+                        value = draft.expectAmount, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) draft = draft.copy(expectAmount = v) },
+                        label = { Text("Amount expected back (${currency.symbolOrCode()}), empty for all of it") }, singleLine = true, isError = expectInvalid,
+                        supportingText = { if (expectInvalid) Text("More than zero and no more than the expense") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag("expect_amount"),
+                    )
+                    Text(
+                        "It stays in Waiting to get back until you record the money coming in. The expense still counts as spending in your reports until then; when you record it, it is a refund and the spending goes down.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("expect_note"),
                     )
                 }
             }

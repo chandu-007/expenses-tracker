@@ -15,8 +15,11 @@ import app.expenses.core.domain.Notice
 import app.expenses.core.storage.BackupFile
 import app.expenses.core.storage.ByteSink
 import app.expenses.core.storage.ByteSource
+import app.expenses.core.storage.AutoCopyProtection
 import app.expenses.core.storage.EncryptedDriver
+import app.expenses.core.storage.KeystoreSecretStore
 import app.expenses.core.storage.SealPrimitives
+import app.expenses.core.storage.SecretStore
 import java.io.File
 import java.lang.ref.WeakReference
 import kotlin.uuid.ExperimentalUuidApi
@@ -56,7 +59,15 @@ class AndroidPlatform(context: Context) : Platform {
     override val maxBackupPayloadBytes: Int get() = (Runtime.getRuntime().maxMemory() / 8).coerceIn(16L * 1024 * 1024, BackupFile.MAX_PAYLOAD_BYTES.toLong()).toInt()
 
     override fun openDriver(): SqlDriver = EncryptedDriver.create(context)
-    override fun resetDatabase() = EncryptedDriver.reset(context)
+
+    /** The key of passphrase-protected automatic copies, wrapped by the Keystore like the database key (but under a Keystore key of its own). */
+    override val secretStore: SecretStore = KeystoreSecretStore(context)
+
+    override fun resetDatabase() {
+        EncryptedDriver.reset(context)
+        // the setting that says copies are protected is gone with the database, so the key that went with it goes too
+        AutoCopyProtection.disable(secretStore)
+    }
 
     override fun nodeId(): String {
         val f = File(context.noBackupFilesDir, "node_id")
@@ -120,6 +131,10 @@ class AndroidPlatform(context: Context) : Platform {
         AutoExport.run(container, AutoExport.folderOf(context, folderUri), nowMillis, force)
     }
 
+    override suspend fun deleteOldAutoExcel(container: AppContainer, folderUri: String?) {
+        AutoExportRunner.deleteOldExcel(container, AutoExport.folderOf(context, folderUri))
+    }
+
     override val captureChanges: Flow<Unit> = Capture.changes.map { }
 
     override fun isSmsPermissionGranted(): Boolean =
@@ -131,6 +146,11 @@ class AndroidPlatform(context: Context) : Platform {
         val intent = Intent(if (uri.scheme == "mailto") Intent.ACTION_SENDTO else Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }
     }
+
+    /** Puts [text] on the clipboard (no permission needed to write to it). */
+    override fun copyText(text: String): Boolean = try {
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Expenses", text)); true
+    } catch (_: RuntimeException) { false }
 
     override val appVersionText: String get() = BuildConfig.VERSION_NAME
     override val osVersionText: String get() = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"

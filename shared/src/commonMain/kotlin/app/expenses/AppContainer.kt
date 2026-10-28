@@ -51,8 +51,14 @@ class AppContainer(private val platform: Platform) {
     /** The primitives that seal backups with passphrases, for the streaming layout. */
     val backupPrimitives get() = platform.backupCipher.primitives
 
+    /** Where the key of passphrase-protected automatic copies is kept; null where the platform has no secure storage. */
+    val secretStore get() = platform.secretStore
+
     sealed interface Opened {
-        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore, val currency: BaseCurrencyStore, val cards: CardStore, val inbox: InboxStore, val captureRules: CaptureRuleStore, val people: PeopleStore, val bills: BillStore, val looks: AccountLookStore, val origins: OriginStore) : Opened
+        class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore, val currency: BaseCurrencyStore, val cards: CardStore, val inbox: InboxStore, val captureRules: CaptureRuleStore, val people: PeopleStore, val bills: BillStore, val looks: AccountLookStore, val origins: OriginStore) : Opened {
+            /** What the person expects back for expenses ("I expect this back"): a side table, so it needs only the database. */
+            val expects: app.expenses.core.storage.ExpectStore = app.expenses.core.storage.ExpectStore(db)
+        }
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
         class KeyLost(val message: String) : Opened

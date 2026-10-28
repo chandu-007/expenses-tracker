@@ -56,6 +56,11 @@ data class EntryDraft(
     val splitAmounts: List<String> = emptyList(),
     /** A friend who paid the whole bill (their id). The amount is then your share of it; no account moves, and you owe them that. */
     val paidBy: String = "",
+    /** For an expense: "I expect this back" (a friend or an employer will pay it back). [expectFrom] is free text, [expectPersonId] a person on the list, [expectAmount] how much (blank is the whole amount). */
+    val expectBack: Boolean = false,
+    val expectFrom: String = "",
+    val expectPersonId: String = "",
+    val expectAmount: String = "",
 )
 
 /** Sharing one bill equally between you and some friends. */
@@ -101,6 +106,7 @@ object EntryDrafts {
         val amount = foreign?.first ?: parseAmount(d.amountText, currency)
         if (amount == null || amount.minorUnits <= 0) return problem(if (d.amountText.isBlank()) "Enter an amount." else "Enter an amount like 250 or 99.50.")
         if (d.accountId.isEmpty()) return problem("Choose an account.")
+        if (d.kind == DraftKind.EXPENSE && d.expectBack) expectProblem(d, amount, currency)?.let { return problem(it) }
         return when (d.kind) {
             DraftKind.EXPENSE -> expense(d, id, amount, currency, foreign?.second)
             DraftKind.INCOME -> DraftResult.Ok(Income(id, d.occurredAt, AccountId(d.accountId), amount, d.category.ifEmpty { null }?.let(::CategoryId)))
@@ -119,6 +125,21 @@ object EntryDrafts {
                 else -> DraftResult.Ok(Refund(id, d.occurredAt, AccountId(d.accountId), amount, EntryId(d.refundsEntry)))
             }
         }
+    }
+
+    /** Why "I expect this back" cannot be kept on this expense, or null. A shared expense is already tracked as what the friends owe; the amount expected is at most the expense. */
+    private fun expectProblem(d: EntryDraft, amount: Money, currency: Currency): String? = when {
+        d.paidBy.isNotEmpty() || d.splitWith.isNotEmpty() -> "An expense shared with friends is already tracked as what they owe you, so it cannot also be expected back."
+        ExpectMath.expected(d.expectAmount, amount.minorUnits) { parseAmount(it, currency)?.minorUnits } == null ->
+            "The amount you expect back must be more than zero and no more than the expense (${amount.formatted()})."
+        else -> null
+    }
+
+    /** How much is expected back for [d] (an expense with the box ticked), in minor units; null when nothing is expected or it is not valid. */
+    fun expectedMinor(d: EntryDraft, currency: Currency): Long? {
+        if (d.kind != DraftKind.EXPENSE || !d.expectBack) return null
+        val amount = parseAmount(d.amountText, currency)?.minorUnits ?: return null
+        return ExpectMath.expected(d.expectAmount, amount) { parseAmount(it, currency)?.minorUnits }
     }
 
     private fun expense(d: EntryDraft, id: EntryId, amount: Money, currency: Currency, original: Money? = null): DraftResult {

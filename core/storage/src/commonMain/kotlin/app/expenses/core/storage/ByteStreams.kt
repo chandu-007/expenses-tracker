@@ -142,6 +142,7 @@ class PushbackSource(private val prefix: ByteArray, private val inner: ByteSourc
 /** Counts and hashes what is read from [inner]. */
 class HashingSource(private val inner: ByteSource) : ByteSource {
     private val digest = Sha256.Digest()
+    private var closed = false
     var count = 0L
         private set
 
@@ -153,10 +154,14 @@ class HashingSource(private val inner: ByteSource) : ByteSource {
         return n
     }
 
-    override fun close() = inner.close()
+    override fun close() { closed = true; inner.close() }
 
-    /** Reads what is left (to count and hash all of it) and returns the SHA-256 of everything that was read. Call once. */
-    fun finishHex(): String { drain(); return digest.finishHex() }
+    /**
+     * Reads what is left (to count and hash all of it) and returns the SHA-256 of everything that was read. Call once. A source that was closed already (the reader
+     * of a backup without files reads to the end and closes it) is not read again: a closed file or stream refuses to be read, and what it gave is all there is to hash;
+     * one that was closed before its end shows as a count that differs from the file's size.
+     */
+    fun finishHex(): String { if (!closed) drain(); return digest.finishHex() }
 }
 
 /**

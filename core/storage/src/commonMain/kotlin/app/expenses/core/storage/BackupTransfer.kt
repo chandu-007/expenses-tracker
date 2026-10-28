@@ -14,8 +14,32 @@ interface FileVault {
     fun delete(id: String)
 }
 
-/** A passphrase and the primitives to seal with it. */
-class SealWith(val passphrase: String, val primitives: SealPrimitives)
+/**
+ * What to seal a backup with: a passphrase (the key is derived from it with a fresh salt: `EXPENC2`), or a key made from a passphrase earlier and kept ([withKey], for
+ * automatic copies that cannot ask: `EXPENC3`), and the primitives to do it with.
+ */
+class SealWith private constructor(private val passphrase: String?, val primitives: SealPrimitives, private val kept: KeptKey?) {
+    constructor(passphrase: String, primitives: SealPrimitives) : this(passphrase, primitives, null)
+
+    internal fun sink(inner: ByteSink): BackupSeal.SealedSink = if (kept != null) BackupSeal.keyedSink(inner, kept, primitives) else BackupSeal.sink(inner, passphrase!!, primitives)
+
+    /**
+     * The key a reader is given for the header of the file just written. A kept key is only used when the header names its salt and rounds (they are what lets the
+     * passphrase alone open the file); [written] is the key the sink made for an `EXPENC2` file, so that one is not derived a second time.
+     */
+    internal fun readerKey(salt: ByteArray, iterations: Int, written: ByteArray?): ByteArray {
+        if (kept != null) {
+            if (iterations != kept.iterations || !salt.contentEquals(kept.salt)) throw BackupException("The copy was not sealed with the key that opens it. Nothing was kept.")
+            return kept.key
+        }
+        return written ?: primitives.deriveKey(passphrase!!, salt, iterations)
+    }
+
+    companion object {
+        /** Seals with [kept], the key a passphrase gave earlier ([AutoCopyProtection.enable]); the file is `EXPENC3` and opens with that passphrase. */
+        fun withKey(kept: KeptKey, primitives: SealPrimitives) = SealWith(null, primitives, kept)
+    }
+}
 
 /** A backup that was written: its size and SHA-256 as stored (after any sealing), and what [BackupFile.write] reported. [key] is the sealing key it was written with, if it was sealed. */
 class SavedBackup(val bytes: Long, val sha256: String, val written: BackupWritten, internal val key: ByteArray? = null)
@@ -34,7 +58,7 @@ object BackupTransfer {
      */
     fun write(data: BackupData, files: List<BackupFileSource>, createdAtMillis: Long, seal: SealWith?, out: ByteSink): SavedBackup {
         val stored = HashingSink(out)
-        val sealed = if (seal != null) BackupSeal.sink(stored, seal.passphrase, seal.primitives) else null
+        val sealed = seal?.sink(stored)
         val written = BackupFile.write(data, files, createdAtMillis, sealed ?: stored)
         return SavedBackup(stored.count, stored.hex(), written, sealed?.key)
     }
@@ -47,7 +71,7 @@ object BackupTransfer {
         val raw = HashingSource(source)
         var bad = 0
         try {
-            val plain = if (seal != null) BackupSeal.source(raw, seal.primitives) { salt, iterations -> saved.key ?: seal.primitives.deriveKey(seal.passphrase, salt, iterations) } else raw
+            val plain = if (seal != null) BackupSeal.source(raw, seal.primitives) { salt, iterations -> seal.readerKey(salt, iterations, saved.key) } else raw
             val reader = BackupFile.open(plain)
             // a file that was already wrong on this phone when it was copied is written as it is, and is expected not to match
             reader.readFiles({ DiscardSink }) { a, r -> if (r != FileResult.OK && a.id !in saved.written.mismatched) bad++ }

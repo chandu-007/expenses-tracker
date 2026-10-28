@@ -130,10 +130,13 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
                     row.original_amount_minor != null -> readOnly("This expense was paid in ${row.original_currency} (${Money(row.original_amount_minor!!, app.expenses.core.domain.CurrencyChoices.byCode(row.original_currency)).formatted()}) and entered at the rate you chose. Changing it is not possible yet: delete it and add it again to correct it.")
                     q.hasLiveRefunds(entryId).executeAsOne() -> readOnly("This expense has refunds. Delete the refunds first to edit it.")
                     else -> Editable.Form(
+                        ok.expects.get(entryId)?.takeIf { !it.closed }.let { x ->
                         base.copy(
                             category = if (splits.size == 1) splits[0].category_id else "",
                             splits = if (splits.size > 1) splits.map { SplitDraft(it.category_id, Money(it.amount_minor, BaseCurrency.current).toPlainString()) } else emptyList(),
-                        ),
+                            expectBack = x != null, expectFrom = x?.from.orEmpty(), expectPersonId = x?.personId.orEmpty(),
+                            expectAmount = x?.expectedMinor?.takeIf { it != row.amount_minor }?.let { Money(it, BaseCurrency.current).toPlainString() }.orEmpty(),
+                        ) },
                         title = "Edit expense", canRefund = true,
                     )
                 }
@@ -201,7 +204,29 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
             }
         }
         if (draft.kind == DraftKind.INCOME && draft.category.isNotEmpty()) ok.templates.putSettingIfChanged(LAST_INCOME_CATEGORY, draft.category)
+        if (draft.kind == DraftKind.EXPENSE) {
+            // "I expect this back": kept beside the expense; switched off on an edit, it is forgotten (a new expense has nothing to forget)
+            val expected = EntryDrafts.expectedMinor(draft, BaseCurrency.current)
+            if (expected != null) ok.expects.set(id, draft.expectFrom, draft.expectPersonId, expected) else if (existing != null) ok.expects.clear(id)
+        }
         return id
+    }
+
+    /**
+     * Money came back for an expense that was expected back: it is recorded as a refund of that expense into [accountId] (the refund rules apply: never more than
+     * what is still refundable). A blank [amountText] is what is still expected. Returns the refund's id, so Undo can take it back. Throws [IllegalArgumentException]
+     * with a reason the user can read.
+     */
+    fun gotItBack(entryId: String, accountId: String, amountText: String, occurredAt: Long = now()): String {
+        val q = ok.db.schemaQueries
+        val row = q.entryById(entryId).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.kind == "EXPENSE" } ?: throw IllegalArgumentException("That expense no longer exists.")
+        val x = ok.expects.get(entryId)?.takeIf { !it.closed } ?: throw IllegalArgumentException("Nothing is expected back for that expense any more.")
+        if (row.currency != BaseCurrency.current.code) throw IllegalArgumentException("This expense is in ${row.currency}, but your ledger is in ${BaseCurrency.current.code}.")
+        val refunded = q.refundedExcept(entryId, "").executeAsOne()
+        val left = app.expenses.core.domain.ExpectMath.remaining(x.expectedMinor, row.amount_minor, refunded)
+        val text = amountText.trim().ifEmpty { Money(left, BaseCurrency.current).toPlainString() }
+        val note = ("Got back" + (ok.people.get(x.personId.orEmpty())?.name ?: x.from)?.let { " from $it" }.orEmpty())
+        return save(EntryDraft(null, DraftKind.REFUND, text, "", emptyList(), accountId, "", note, occurredAt, entryId, row.amount_minor - refunded))
     }
 
     /** What happened to an entry, newest first, worded for a person. Null if it never existed. */

@@ -1,6 +1,7 @@
 import CommonCrypto
 import CryptoKit
 import Foundation
+import Security
 import Shared
 import WidgetKit
 
@@ -30,6 +31,43 @@ final class CryptoServices: NSObject, IosHostServices {
     }
 
     func reloadWidgets() { WidgetCenter.shared.reloadAllTimelines() }
+
+    // ---- the Keychain: the key of passphrase-protected automatic copies (IosSecretStore) ----
+
+    private static let keychainService = "app.expenses.tracker.ios.secrets"
+
+    private func keychainQuery(_ name: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: Self.keychainService, kSecAttrAccount as String: name]
+    }
+
+    /// Readable after the first unlock, so a background refresh can write a copy while the phone is locked; this device only (never in a backup or iCloud Keychain).
+    /// Updates an item that is there and adds one that is not: nothing is deleted first, so a failed write leaves the old value.
+    func secretPut(name: String, data: Data) -> Int32 {
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        var status = SecItemUpdate(keychainQuery(name) as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(keychainQuery(name).merging(attributes) { _, new in new } as CFDictionary, nil)
+        }
+        return status
+    }
+
+    func secretGet(name: String) -> Data? {
+        var query = keychainQuery(name)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+        return result as? Data
+    }
+
+    func secretStatus(name: String) -> Int32 {
+        SecItemCopyMatching(keychainQuery(name) as CFDictionary, nil)
+    }
+
+    func secretDelete(name: String) -> Bool {
+        let status = SecItemDelete(keychainQuery(name) as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
 
     func unseal(key: Data, nonce: Data, aad: Data, sealed: Data) -> Data? {
         guard sealed.count >= 16, let nonce = try? AES.GCM.Nonce(data: nonce) else { return nil }

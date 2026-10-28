@@ -184,6 +184,44 @@ DELETE FROM entry_origin WHERE entry_id = :entryId;
 allLiveOrigins:
 SELECT o.* FROM entry_origin o JOIN entry e ON e.id = o.entry_id WHERE e.deleted = 0 ORDER BY o.entry_id;
 
+-- Money the person expects back for an expense (a friend will pay it back, an employer will reimburse it). [from_text] is a free-text name, [person_id] a person from
+-- the list (either, both or neither may be set), [expected_minor] how much is expected (at most the expense). The money coming back is recorded the way a refund is: an
+-- entry that refunds the expense, so what is still waiting is [expected_minor] less the live refunds. [closed] is 1 when the person said they are not expecting it any more.
+CREATE TABLE entry_expect (
+    entry_id TEXT NOT NULL PRIMARY KEY,
+    from_text TEXT,
+    person_id TEXT,
+    expected_minor INTEGER NOT NULL,
+    closed INTEGER NOT NULL DEFAULT 0
+);
+
+putExpect:
+INSERT OR REPLACE INTO entry_expect(entry_id, from_text, person_id, expected_minor, closed) VALUES (?, ?, ?, ?, 0);
+
+expectOf:
+SELECT * FROM entry_expect WHERE entry_id = :entryId;
+
+deleteExpect:
+DELETE FROM entry_expect WHERE entry_id = :entryId;
+
+setExpectClosed:
+UPDATE entry_expect SET closed = :closed WHERE entry_id = :entryId;
+
+-- Only for live expenses, with what is already refunded. This runs on every refresh, so the (tiny) entry_expect table is always the outer loop (CROSS JOIN pins the
+-- order; with an ORDER BY on entry the planner walked the whole entry index instead: 90 ms on 20,000 entries) and the newest-first order is applied by the caller.
+waitingExpects:
+SELECT x.entry_id, x.from_text, x.person_id, x.expected_minor, e.occurred_at, e.seq, e.account_id, e.currency, e.amount_minor, e.merchant, e.note,
+    COALESCE((SELECT SUM(r.amount_minor) FROM entry r WHERE r.kind = 'REFUND' AND r.refunds_entry = x.entry_id AND r.deleted = 0), 0) AS refunded
+FROM entry_expect x CROSS JOIN entry e ON e.id = x.entry_id
+WHERE x.closed = 0 AND e.deleted = 0 AND e.kind = 'EXPENSE';
+
+-- Every expectation of a live expense, closed ones too, for a backup.
+allLiveExpects:
+SELECT x.* FROM entry_expect x JOIN entry e ON e.id = x.entry_id WHERE e.deleted = 0 ORDER BY x.entry_id;
+
+insertExpectRaw:
+INSERT OR IGNORE INTO entry_expect(entry_id, from_text, person_id, expected_minor, closed) VALUES (?, ?, ?, ?, ?);
+
 -- Someone the person lends to, borrows from or settles with. An entry refers to one by [id] (entry.person_id); the name lives only here.
 CREATE TABLE person (
     id TEXT NOT NULL PRIMARY KEY,
@@ -639,6 +677,11 @@ ORDER BY e.occurred_at DESC LIMIT 300;
 entriesLikeStatementRow:
 SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount
   AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
+
+-- A transfer already recorded between these two accounts for a statement row: same direction, amount, in a window, from any source (a Mark paid, a text, another statement).
+transfersLikeStatementRow:
+SELECT id FROM entry WHERE deleted = 0 AND kind = 'TRANSFER' AND account_id = :fromAccount AND counter_account_id = :toAccount AND amount_minor = :amount
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
 
 -- An entry an earlier import made from this very line of the file (its origin text), whatever name the line was given then: a later version may tidy the
 -- description differently, which changes the fingerprint, but the line as it was in the file stays the same.

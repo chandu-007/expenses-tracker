@@ -21,6 +21,13 @@ class FeedbackMailTest {
         assertTrue(url.endsWith("Device%3A%20Google%20Pixel%208%0A"), url)
     }
 
+    @Test fun aMessageReportIsMailtoWithTheRedactedTextEncodedAndNothingElse() {
+        val url = FeedbackMail.buildReport("0.7.2", "iOS 19.1", "Sender: AX-NEWBNK-S\nRs.NNN.NN & more")
+        assertTrue(url.startsWith("mailto:nelluri.c@gmail.com?subject=Expenses%3A%20a%20bank%20message%20to%20fix%20%28version%200.7.2%2C%20iPhone%29&body=Sender%3A%20AX-NEWBNK-S%0ARs.NNN.NN%20%26%20more"), url)
+        assertEquals(1, url.count { it == '?' }); assertEquals(2, url.count { it == '=' }); assertEquals(1, url.count { it == '&' })
+        assertFalse(url.contains(' ') || url.contains('\n'), url)
+    }
+
     @Test fun nothingButVersionSystemAndModelIsInTheBody() {
         val body = FeedbackMail.body("0.6.0", "iOS 19.1", "iPhone")
         assertEquals("Describe what happened:\n\n\n\n---\nApp version: 0.6.0\nSystem: iOS 19.1\nDevice: iPhone\n", body)

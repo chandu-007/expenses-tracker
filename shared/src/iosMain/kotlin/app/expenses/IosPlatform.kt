@@ -4,8 +4,10 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.Notice
+import app.expenses.core.storage.AutoCopyProtection
 import app.expenses.core.storage.ByteSink
 import app.expenses.core.storage.ByteSource
+import app.expenses.core.storage.SecretStore
 import app.expenses.core.storage.Sha256
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -45,6 +47,9 @@ import kotlin.uuid.Uuid
  */
 @OptIn(ExperimentalForeignApi::class, ExperimentalUuidApi::class)
 class IosPlatform(host: IosHostServices) : Platform {
+    /** The Keychain item with the key of passphrase-protected automatic copies ([AutoExportKeys.PROTECT]); readable after the first unlock, this device only. */
+    override val secretStore: SecretStore = IosSecretStore(host)
+
     override val supportsAppLock get() = true
     override val supportsBiometricLock get() = true
     override val supportsNotifications get() = true
@@ -76,6 +81,8 @@ class IosPlatform(host: IosHostServices) : Platform {
 
     override fun resetDatabase() {
         for (suffix in listOf("", "-wal", "-shm", "-journal")) files.removeItemAtPath("$supportDir/$databaseName$suffix", error = null)
+        // the setting that says copies are protected is gone with the database, so the key that went with it goes too
+        AutoCopyProtection.disable(secretStore)
     }
 
     override fun nodeId(): String {
@@ -160,6 +167,8 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val backupCipher: BackupCipher = IosBackupCipher(host)
 
     override suspend fun runAutoExport(container: AppContainer, folderUri: String?, nowMillis: Long, force: Boolean) = IosAutoExport.run(container, folderUri, nowMillis, force)
+
+    override suspend fun deleteOldAutoExcel(container: AppContainer, folderUri: String?) = IosAutoExport.deleteOldExcel(container, folderUri)
 
     // Bank messages reach the iPhone app by a Shortcuts automation or by pasting ([IosCapture]); either one bumps this so an open To review refreshes.
     override val captureChanges: Flow<Unit> = MessageIngest.changes.map { }

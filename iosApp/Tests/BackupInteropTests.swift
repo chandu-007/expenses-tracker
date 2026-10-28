@@ -50,7 +50,8 @@ final class BackupInteropTests: XCTestCase {
     }
 
     func testBackupsWithFilesMadeByTheReferenceRestoreOnIPhoneWithEveryFileIntact() async throws {
-        for (name, pass) in [("reference-v2.expbak", nil), ("android-made-v2.expbak", passphrase)] as [(String, String?)] {
+        // the third is an automatic copy (EXPENC3: a key kept on the phone, a salt of its own for the file), written by the Java reference from docs/BACKUP_FORMAT.md
+        for (name, pass) in [("reference-v2.expbak", nil), ("android-made-v2.expbak", passphrase), ("reference-v3.expbak", passphrase)] as [(String, String?)] {
             let answer = try await IosBackupDebug.shared.restoreThroughTheApp(host: CryptoServices(), path: fixturePath(name), passphrase: pass)
             XCTAssertEqual(answer, "restored: entries=2 files=4 matched=4 damaged=0 missing=0", name)
         }

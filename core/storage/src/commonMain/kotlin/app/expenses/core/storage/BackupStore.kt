@@ -101,6 +101,7 @@ class BackupStore(
             savedSearches = q.liveSavedSearches().executeAsList().map { BackupSavedSearch(it.id, it.name, it.text, it.min_rupees, it.max_rupees, it.category_id, it.kind, it.range_kind, it.tag, it.from_day, it.to_day, it.account_id) },
             cardTerms = q.allCardTerms().executeAsList().map { BackupCardTerms(it.account_id, it.statement_day.toInt(), it.due_day.toInt(), it.min_due_percent.toInt(), it.remind_days.toInt()) },
             accountLooks = q.allAccountLooks().executeAsList().map { BackupAccountLook(it.account_id, it.network, it.tier, it.last4) },
+            expects = q.allLiveExpects().executeAsList().map { BackupExpect(it.entry_id, it.from_text, it.person_id, it.expected_minor, it.closed == 1L) },
             captureRules = q.allCaptureRules().executeAsList().map { BackupCaptureRule(it.id, it.position.toInt(), it.pattern, it.category_id) },
             merchantMap = q.allMerchantMap().executeAsList().map { BackupMerchant(it.key, it.category_id, it.uses.toInt()) },
             people = q.allPeople().executeAsList().map { BackupPerson(it.id, it.name, it.deleted == 1L) },
@@ -190,7 +191,12 @@ class BackupStore(
         for (p in data.people) q.insertPersonRaw(p.id, p.name, if (p.deleted) 1 else 0)
         // a bill still waiting (FOUND) is not restored: it was never added, and its message is not in the file; a restore keeps what the person acted on
         for (b in data.bills.filter { it.status != BillStatus.FOUND.name }) q.insertBill(b.id, "backup", "", b.issuer, b.kind, b.title, b.amountMinor, b.minDueMinor, b.currency, b.dueDate, b.accountLast4, b.reference, if (b.autoDebit) 1L else 0L, b.receivedAt, null, b.status, null, b.paidAt, b.dedupeKey)
-        for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags))
+        val addedEntries = HashSet<String>()
+        for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) { ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags)); addedEntries += e.id }
+        // "expecting this back" comes with an expense this restore added (one already here keeps whatever the person decided about it); a person who is not here is dropped, the free text stays
+        for (x in data.expects) if (x.entryId in addedEntries && x.expectedMinor > 0 && q.entryById(x.entryId).executeAsOneOrNull()?.kind == "EXPENSE") {
+            q.insertExpectRaw(x.entryId, x.from?.trim()?.takeIf { it.isNotEmpty() }?.take(ExpectStore.MAX_FROM), x.personId?.takeIf { q.personById(it).executeAsOneOrNull() != null }, x.expectedMinor, if (x.closed) 1L else 0L)
+        }
         // an entry's origin is restored with the entry that was just added; one already here keeps its own
         for (o in data.origins) if (q.entryById(o.entryId).executeAsOneOrNull() != null && q.originOf(o.entryId).executeAsOneOrNull() == null && o.text.isNotBlank()) q.putOrigin(o.entryId, o.kind, o.sender, o.text, o.receivedAt)
         for (t in data.templates) if (q.templateById(t.id).executeAsOneOrNull() == null) {
@@ -273,7 +279,8 @@ class BackupStore(
     companion object {
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
         val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots",
-            "goals", "budget_rollover", "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit")
+            "goals", "budget_rollover", "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit",
+            "safe_to_spend_on_home", "sinking_funds_on")
 
         /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
         const val CARD_LIMIT_PREFIX = "card_limit:"

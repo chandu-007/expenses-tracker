@@ -19,6 +19,18 @@ object AutoExportKeys {
     const val FREQ = "auto_export_freq"
     const val LAST_AT = "auto_export_last_at"
     const val STATUS = "auto_export_status"
+
+    /** "1" while automatic copies are sealed with the passphrase the person set; the key itself is in the phone's secure storage ([app.expenses.core.storage.AutoCopyProtection]), never in the settings, and this key is not in backups. */
+    const val PROTECT = "auto_export_protect"
+
+    /** What the status says when protection is on and a run cannot use the key. In each case nothing was written or removed and older copies are untouched. */
+    const val KEY_NOT_FOUND = "No protection key on this phone: set the passphrase again."
+    const val KEY_UNAVAILABLE = "Could not read the protection key right now (on iPhone: unlock the phone once after a restart). Nothing was changed."
+    const val KEY_CORRUPT = "The protection key on this phone is damaged: set the passphrase again. Nothing was changed."
+    val KEY_PROBLEMS = setOf(KEY_NOT_FOUND, KEY_UNAVAILABLE, KEY_CORRUPT)
+
+    /** How many Excel files from before protection were left in the folder by the last protected run ("0" or absent: none). */
+    const val OLD_EXCEL = "auto_export_old_excel"
 }
 
 /** Settings keys and limits for what a backup carries. */

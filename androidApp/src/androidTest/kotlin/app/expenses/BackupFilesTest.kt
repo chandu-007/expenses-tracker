@@ -462,6 +462,41 @@ class BackupFilesTest {
         } finally { dir.deleteRecursively() }
     }
 
+    @Test
+    fun aProtectedAutomaticCopyWithFilesIsCheckedUnderATemporaryNameAndRestoresWithJustThePassphrase() {
+        val files = seed()
+        autoSetup()
+        val dir = autoDir("auto-protected")
+        val pass = "correct horse battery"
+        try {
+            runBlocking { AutoCopyControls.turnOn(platform, container, pass) }
+            val folder = DirFolder(dir)
+            val t0 = 1_900_000_000_000L
+            val r = runBlocking { AutoExport.run(container, folder, t0, force = true) }
+            assertTrue(r.ran && r.ok, r.text); assertTrue(r.text.contains("protected backup") && r.text.contains("with 3 photos and files"), r.text)
+            assertEquals(1, dir.list()!!.size, "one sealed backup, no workbook, nothing left over: ${dir.list()!!.toList()}")
+            val name = dir.list()!!.single()
+            val backup = File(dir, name).readBytes()
+            assertEquals("EXPENC3\n", String(backup.copyOf(8), Charsets.ISO_8859_1))
+            for ((_, bytes) in files) assertTrue(String(backup, Charsets.ISO_8859_1).indexOf(String(bytes.copyOf(64), Charsets.ISO_8859_1)) < 0, "no photo bytes in the clear")
+            // restorable from that very file with the passphrase alone, files byte for byte
+            resetApp()
+            val uri = target("from-protected.expbak"); fileOf(uri).writeBytes(backup)
+            assertTrue(assertFailsWith<BackupException> { runBlocking { actions.open(uri, "wrong passphrase!") } }.message!!.contains("passphrase is wrong"))
+            val ready = runBlocking { actions.open(uri, pass) } as DataActions.Opened.Ready
+            assertEquals(3, runBlocking { actions.restore(ready) }.report.attached.size)
+            for ((id, bytes) in files) assertEquals(bytes.toList(), storedBytes(id).toList())
+            // a protected run that is cut off keeps the good copy and leaves no half file
+            runBlocking { AutoCopyControls.turnOn(platform, container, pass) }
+            autoSetup()
+            folder.failAfterBytes = 200_000
+            val failed = runBlocking { AutoExport.run(container, folder, t0 + 60_000L, force = true) }
+            assertTrue(failed.ran && !failed.ok, failed.text)
+            assertEquals(listOf(name), dir.list()!!.toList(), "the earlier copy of the day is untouched and no .part is left")
+            assertEquals(backup.toList(), File(dir, name).readBytes().toList())
+        } finally { dir.deleteRecursively() }
+    }
+
     private fun autoSetup() = db { it.templates.putSetting(AutoExport.S_FREQ, AutoExportFrequency.WEEKLY.name); it.templates.putSetting(AutoExport.S_FOLDER, "content://tree/x") }
     private fun autoDir(name: String) = File(context.cacheDir, name).also { it.deleteRecursively(); it.mkdirs() }
 

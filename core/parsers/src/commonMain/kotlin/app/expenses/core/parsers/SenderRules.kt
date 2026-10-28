@@ -18,36 +18,13 @@ object SenderRules {
         return root?.uppercase()
     }
 
-    /**
-     * Header roots of banks, card issuers and payment apps that send transaction alerts, with the name shown to the user. **Provisional:**
-     * written from public knowledge of common headers, not checked against live traffic; the labelled corpus from consenting testers is what
-     * confirms or corrects it (FR-CAP-13 ships corrections over the air). A person can add a header the list misses.
-     */
-    val BUILT_IN: Map<String, String> = mapOf(
-        "HDFCBK" to "HDFC Bank", "HDFCBN" to "HDFC Bank", "ICICIB" to "ICICI Bank", "SBIINB" to "SBI", "SBIPSG" to "SBI", "SBICRD" to "SBI Card", "SBIUPI" to "SBI",
-        "AXISBK" to "Axis Bank", "KOTAKB" to "Kotak Mahindra Bank", "IDFCFB" to "IDFC FIRST Bank", "INDUSB" to "IndusInd Bank", "YESBNK" to "Yes Bank",
-        "PNBSMS" to "Punjab National Bank", "BOBSMS" to "Bank of Baroda", "BOIIND" to "Bank of India", "CANBNK" to "Canara Bank", "UNIONB" to "Union Bank of India",
-        "IDBIBK" to "IDBI Bank", "FEDBNK" to "Federal Bank", "RBLBNK" to "RBL Bank", "AUBANK" to "AU Small Finance Bank", "BANDHN" to "Bandhan Bank",
-        "SCBANK" to "Standard Chartered", "HSBCIN" to "HSBC", "AMEXIN" to "American Express", "CITIBK" to "Citibank", "INDBNK" to "Indian Bank",
-        // Payment apps, for notification capture (FR-CAP-06): not text headers, but the same list decides which sources are read.
-        "GPAY" to "Google Pay", "PHONEPE" to "PhonePe", "PAYTM" to "Paytm", "BHIM" to "BHIM",
-        // Utilities, telecom and insurers that send bills. **Even more provisional than the banks above:** a handful written from memory of common headers, not checked against live
-        // traffic. Electricity, water and gas boards each use their own header; capture health lists the headers it saw and ignored, and a person can add them.
-        "BESCOM" to "BESCOM", "MSEDCL" to "MSEDCL", "TATAPW" to "Tata Power", "JIOPAY" to "Jio", "AIRTEL" to "Airtel", "LICIND" to "LIC",
-        "ONECRD" to "OneCard", "SLCEIT" to "slice", "JUPITR" to "Jupiter", "PAYTMB" to "Paytm Payments Bank", "AIRBNK" to "Airtel Payments Bank",
-    )
-
-    /** Roots whose names are not matched in an email's sender: payment apps send no bank email, and "slice" and "Jupiter" are ordinary words that would match too much. */
-    private val NOT_NAMED_IN_EMAIL = setOf("GPAY", "PHONEPE", "PAYTM", "BHIM", "SLCEIT", "JUPITR")
-
-    /** Short or long ways a bank writes its own name that [BUILT_IN]'s display names do not cover, each with the header root it stands for. */
-    private val EMAIL_ALIASES = listOf(
-        "state bank of india" to "SBIINB", "kotak" to "KOTAKB", "idfc first" to "IDFCFB", "indusind" to "INDUSB", "pnb" to "PNBSMS", "amex" to "AMEXIN", "citi" to "CITIBK",
-    )
+    /** Header root to the name shown to the user, for every entry of [BankRules.ALL]. The data lives there; this is the view the classifier looks roots up in. */
+    val BUILT_IN: Map<String, String> = BankRules.ALL.associate { it.root to it.issuer }
 
     /** Every phrase an email's sender name may contain, lower case, longest first so "State Bank of India" and "Union Bank of India" win over "Bank of India". */
     private val emailPhrases: List<Pair<String, String>> = (
-        BUILT_IN.entries.filter { it.key !in NOT_NAMED_IN_EMAIL }.groupBy { it.value }.map { (name, roots) -> name.lowercase() to roots.first().key } + EMAIL_ALIASES
+        BankRules.ALL.filter { it.emailNamed }.groupBy { it.issuer }.map { (name, rules) -> name.lowercase() to rules.first().root } +
+            BankRules.ALL.flatMap { r -> r.emailAliases.map { it to r.root } }
         ).distinctBy { it.first }.sortedByDescending { it.first.length }
 
     private fun isWordChar(c: Char) = c.isLetterOrDigit()

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import app.expenses.BackupKeys
@@ -37,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,8 @@ fun DataScreen(
     onAutoFolder: (String) -> Unit = {},
     onAutoFrequency: (AutoExportFrequency) -> Unit = {},
     onAutoNow: () -> Unit = {},
+    onAutoProtect: (passphrase: String?) -> Unit = {},
+    onDeleteOldExcel: () -> Unit = {},
     onBackup: (String, String?) -> Unit,
     canShareBackup: Boolean = false,
     onShareBackup: (name: String, passphrase: String?) -> Unit = { _, _ -> },
@@ -83,6 +87,50 @@ fun DataScreen(
     }
     val today = todayLocal()
     val pickers = rememberFilePickers()
+    // The passphrase for protected automatic copies is typed into a dialog and kept in memory only while it is open (not in saved state).
+    var protectDialog by rememberSaveable { mutableStateOf(false) }
+    var protectPass by remember { mutableStateOf("") }
+    var protectPass2 by remember { mutableStateOf("") }
+    val protectProblem = when {
+        protectPass.length < platform.backupMinPassphrase -> "At least ${platform.backupMinPassphrase} characters"
+        protectPass != protectPass2 -> "The two passphrases are different"
+        else -> null
+    }
+    fun closeProtectDialog() { protectDialog = false; protectPass = ""; protectPass2 = "" }
+
+    if (protectDialog && autoExport != null) {
+        AlertDialog(
+            onDismissRequest = ::closeProtectDialog,
+            title = { Text(if (autoExport.protectedCopies) "Change the passphrase" else "Protect automatic copies") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("auto_protect_dialog")) {
+                    Text(
+                        "Each automatic backup is sealed with a key made from this passphrase, so the files in your folder or drive cannot be read without it. " +
+                            "To save copies by itself, this phone keeps that key (not the passphrase) in its secure storage: the Keystore on Android, the Keychain on iPhone. " +
+                            "So this protects the files in the folder, not your data from someone who holds your unlocked phone. " +
+                            "If you forget the passphrase, copies made with it cannot be opened. No Excel file is saved while copies are protected." +
+                            if (autoExport.protectedCopies) " Copies already in the folder keep the passphrase they were made with." else "",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = protectPass, onValueChange = { protectPass = it }, label = { Text("Passphrase") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth().testTag("auto_protect_pass"),
+                    )
+                    OutlinedTextField(
+                        value = protectPass2, onValueChange = { protectPass2 = it }, label = { Text("Type it again") }, singleLine = true, isError = protectPass.isNotEmpty() && protectProblem != null,
+                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        supportingText = { if (protectPass.isNotEmpty()) protectProblem?.let { Text(it) } },
+                        modifier = Modifier.fillMaxWidth().testTag("auto_protect_pass2"),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onAutoProtect(protectPass); closeProtectDialog() }, enabled = protectProblem == null, modifier = Modifier.testTag("auto_protect_confirm")) { Text(if (autoExport.protectedCopies) "Change" else "Protect") }
+            },
+            dismissButton = { TextButton(onClick = ::closeProtectDialog, modifier = Modifier.testTag("auto_protect_cancel")) { Text("Cancel") } },
+        )
+    }
 
     state.pending?.let { p ->
         AlertDialog(
@@ -147,10 +195,38 @@ fun DataScreen(
                 HorizontalDivider()
             } else if (autoExport != null) {
                 Text("Automatic copies to your own folder", style = MaterialTheme.typography.titleMedium)
-                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are not encrypted, so choose a folder only you can reach. This is the safety net for losing or resetting the phone. They carry your photos and files too while \"Include photos and files\" under Backup is on and together they are under ${AttachmentRules.sizeText(BackupKeys.AUTO_FILES_LIMIT_BYTES)}; over that the copies are made without them and the line below says so.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are plain files unless you protect them with a passphrase below, so choose a folder only you can reach. This is the safety net for losing or resetting the phone. They carry your photos and files too while \"Include photos and files\" under Backup is on and together they are under ${AttachmentRules.sizeText(BackupKeys.AUTO_FILES_LIMIT_BYTES)}; over that the copies are made without them and the line below says so.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { pickers.openFolder { it?.let(onAutoFolder) } }, modifier = Modifier.testTag("auto_folder")) { Text(autoExport.folderName?.let { "Folder: $it" } ?: "Choose a folder") }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AutoExportFrequency.entries.forEach { f -> FilterChip(selected = autoExport.frequency == f, onClick = { onAutoFrequency(f) }, label = { Text(f.label) }, modifier = Modifier.testTag("auto_freq_${f.name}")) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Protect copies with a passphrase", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = autoExport.protectedCopies, enabled = !state.busy,
+                        onCheckedChange = { on -> if (on) protectDialog = true else onAutoProtect(null) },
+                        modifier = Modifier.testTag("auto_protect_switch"),
+                    )
+                }
+                Text(
+                    "While this is on, each backup copy is sealed with AES-256 and opens only with your passphrase, on any phone: choose the file under Restore and type it. " +
+                        "The key made from the passphrase stays in this phone's secure storage so copies can be made by themselves, so this protects the files in your folder or drive, not your data from someone who has your unlocked phone. " +
+                        "No Excel file is saved while it is on (it cannot be locked), and copies made before stay as they were.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("auto_protect_info"),
+                )
+                if (autoExport.protectedCopies) {
+                    OutlinedButton(onClick = { protectDialog = true }, enabled = !state.busy, modifier = Modifier.testTag("auto_protect_change")) { Text("Change the passphrase") }
+                }
+                Text(
+                    if (autoExport.protectedCopies) "Protected: new copies are sealed with your passphrase." else "Not protected: copies are plain files.",
+                    style = MaterialTheme.typography.bodySmall, fontWeight = if (autoExport.protectedCopies) FontWeight.SemiBold else null, modifier = Modifier.testTag("auto_protect_status"),
+                )
+                if (autoExport.protectedCopies && autoExport.olderExcel > 0) {
+                    Text(
+                        (if (autoExport.olderExcel == 1) "1 older Excel file from before protection is still in the folder, unprotected." else "${autoExport.olderExcel} older Excel files from before protection are still in the folder, unprotected."),
+                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_protect_old_excel"),
+                    )
+                    OutlinedButton(onClick = onDeleteOldExcel, enabled = !autoRunning, modifier = Modifier.testTag("auto_protect_delete_old_excel")) { Text("Delete them") }
                 }
                 autoExport.lastText?.let { Text("Last saved $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_last")) }
                 autoExport.status?.let { Text(it, color = if (autoExport.statusOk) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("auto_status")) }

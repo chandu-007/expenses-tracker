@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,6 +27,7 @@ import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.storage.AutoCopyProtection
 import app.expenses.core.storage.BackupException
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
@@ -296,5 +299,87 @@ class DataTest {
         assertTrue(runCatching { app.expenses.core.storage.BackupFile.decode(sealed!!) }.isFailure, "not readable as it is")
         assertEquals(entryCount().toInt(), app.expenses.core.storage.BackupFile.decode(BackupCrypto.decrypt(sealed!!, "correct horse battery")).second.entries.size)
     }
-}
 
+    // ---- automatic copies: protecting them with a passphrase ----
+
+    private fun waitTextLong(tag: String, text: String) = compose.waitUntil(120_000) { compose.onAllNodes(hasTestTag(tag) and hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun autoSetting(key: String) = runBlocking { container.write { it.templates.setting(key) } }
+    private val secrets get() = (context.applicationContext as ExpensesApp).platform.secretStore!!
+
+    @Test
+    fun theProtectSwitchAsksForAPassphraseTwiceAndTurnsProtectionOnAndOffWithItsStatusLine() {
+        runBlocking { container.write { it.templates.putSetting(AutoExportKeys.FOLDER, "content://tree/x"); it.templates.putSetting(AutoExportKeys.FREQ, "WEEKLY") } }
+        launch()
+        waitFor("auto_protect_switch")
+        compose.onNodeWithTag("auto_protect_switch").performScrollTo()
+        waitText("auto_protect_status", "Not protected")
+        waitText("auto_protect_info", "not your data from someone who has your unlocked phone")
+        // cancelling changes nothing
+        compose.onNodeWithTag("auto_protect_switch").performClick()
+        waitFor("auto_protect_dialog")
+        compose.onNodeWithTag("auto_protect_confirm").assertIsNotEnabled()
+        compose.onNodeWithTag("auto_protect_cancel").performClick()
+        waitGone("auto_protect_dialog")
+        assertEquals(null, autoSetting(AutoExportKeys.PROTECT)); assertEquals(null, secrets.get(AutoCopyProtection.SECRET))
+        // it stays off until the passphrase is long enough and typed twice the same
+        compose.onNodeWithTag("auto_protect_switch").performClick()
+        waitFor("auto_protect_dialog")
+        compose.onNodeWithTag("auto_protect_pass").performTextInput("abc")
+        compose.onNodeWithTag("auto_protect_pass2").performTextInput("abc")
+        compose.onNodeWithTag("auto_protect_confirm").assertIsNotEnabled()
+        compose.onNodeWithTag("auto_protect_pass").performTextReplacement("correct horse battery")
+        compose.onNodeWithTag("auto_protect_pass2").performTextReplacement("correct horse batterX")
+        compose.onNodeWithTag("auto_protect_confirm").assertIsNotEnabled()
+        waitAnyText("The two passphrases are different")
+        compose.onNodeWithTag("auto_protect_pass2").performTextReplacement("correct horse battery")
+        compose.onNodeWithTag("auto_protect_confirm").assertIsEnabled().performClick()
+        waitGone("auto_protect_dialog")
+        waitTextLong("auto_protect_status", "Protected: new copies are sealed")
+        waitText("data_status", "Automatic copies are protected from now on")
+        assertEquals("1", autoSetting(AutoExportKeys.PROTECT))
+        val kept = AutoCopyProtection.load(secrets)!!
+        assertEquals(600_000, kept.iterations)
+        assertEquals(57, secrets.get(AutoCopyProtection.SECRET)!!.size)
+        // the passphrase is nowhere in the settings
+        assertTrue(runBlocking { container.write { ok -> ok.templates.settingsWithPrefix("").none { (_, v) -> v.contains("correct horse battery") } } }!!, "the passphrase is not stored in the settings")
+        // changing it asks again, under a title that says what it does
+        compose.onNodeWithTag("auto_protect_change").performScrollTo().performClick()
+        waitFor("auto_protect_dialog"); waitAnyText("Copies already in the folder keep the passphrase they were made with")
+        compose.onNodeWithTag("auto_protect_cancel").performClick()
+        waitGone("auto_protect_dialog")
+        assertEquals(kept.salt.toList(), AutoCopyProtection.load(secrets)!!.salt.toList(), "cancelling kept the key as it was")
+        // off again: the line says so, the key is forgotten
+        compose.onNodeWithTag("auto_protect_switch").performScrollTo().performClick()
+        waitText("auto_protect_status", "Not protected")
+        waitText("data_status", "Protection is off")
+        assertEquals("0", autoSetting(AutoExportKeys.PROTECT)); assertEquals(null, secrets.get(AutoCopyProtection.SECRET))
+    }
+
+    @Test
+    fun aCouldNotProtectNoticeIsShownOnTheStatusLineAndGoesWhenThePassphraseIsSetAgain() {
+        runBlocking { container.write { it.templates.putSetting(AutoExportKeys.FOLDER, "content://tree/x"); it.templates.putSetting(AutoExportKeys.PROTECT, "1"); it.templates.putSetting(AutoExportKeys.STATUS, "fail|" + AutoExportKeys.KEY_NOT_FOUND) } }
+        launch()
+        waitFor("auto_status")
+        compose.onNodeWithTag("auto_status").performScrollTo()
+        waitText("auto_status", "No protection key on this phone: set the passphrase again.")
+        waitText("auto_protect_status", "Protected")
+        viewModel().setAutoProtect("correct horse battery")
+        waitTextLong("data_status", "Automatic copies are protected")
+        waitGone("auto_status")
+    }
+
+    @Test
+    fun theOlderExcelNoteAndDeleteButtonShowOnlyWhileProtectedAndWhenSomeAreLeft() {
+        runBlocking { container.write { it.templates.putSetting(AutoExportKeys.FOLDER, "content://tree/x"); it.templates.putSetting(AutoExportKeys.PROTECT, "1"); it.templates.putSetting(AutoExportKeys.OLD_EXCEL, "3") } }
+        launch()
+        waitFor("auto_protect_old_excel")
+        compose.onNodeWithTag("auto_protect_old_excel").performScrollTo()
+        waitText("auto_protect_old_excel", "3 older Excel files from before protection are still in the folder, unprotected.")
+        compose.onNodeWithTag("auto_protect_delete_old_excel").assertIsEnabled()
+        // a copy that was never asked to delete anything leaves the count alone
+        assertEquals("3", autoSetting(AutoExportKeys.OLD_EXCEL))
+        runBlocking { container.write { it.templates.putSetting(AutoExportKeys.OLD_EXCEL, "0") } }
+        viewModel().setAutoExportFrequency(app.expenses.core.domain.AutoExportFrequency.WEEKLY) // any change refreshes the screen state
+        waitGone("auto_protect_old_excel"); waitGone("auto_protect_delete_old_excel")
+    }
+}
