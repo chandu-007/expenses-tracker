@@ -36,7 +36,11 @@ case "$mode" in
     xcodebuild build -project iosApp/Expenses.xcodeproj -scheme Expenses -sdk iphoneos -configuration Release -derivedDataPath /tmp/iosdev -allowProvisioningUpdates ;;
   ipa)
     framework; project
-    xcodebuild -project iosApp/Expenses.xcodeproj -scheme Expenses -sdk iphoneos -configuration Release -derivedDataPath /tmp/iosdev -allowProvisioningUpdates build
+    # With no cached profile Apple only issues a new one for a registered device, so the build is aimed at the paired phone (IOS_UDID, or the first physical iPhone devicectl lists);
+    # without one it falls back to the generic device, which works only while a profile is cached.
+    UDID="${IOS_UDID:-$(xcrun devicectl list devices 2>/dev/null | awk '/physical/ && /iPhone/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}$/) { print $i; exit } }')}"
+    if [ -n "$UDID" ]; then target=(-destination "id=$UDID"); else target=(-sdk iphoneos); fi
+    xcodebuild -project iosApp/Expenses.xcodeproj -scheme Expenses "${target[@]}" -configuration Release -derivedDataPath /tmp/iosdev -allowProvisioningUpdates build
     rm -rf /tmp/ipa_work && mkdir -p /tmp/ipa_work/Payload && cp -R /tmp/iosdev/Build/Products/Release-iphoneos/Expenses.app /tmp/ipa_work/Payload/
     (cd /tmp/ipa_work && zip -qry "$HOME/Desktop/Expenses-iOS-$VERSION-test.ipa" Payload) ;;
   native)
