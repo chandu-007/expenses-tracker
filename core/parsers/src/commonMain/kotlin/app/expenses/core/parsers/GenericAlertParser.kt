@@ -25,6 +25,11 @@ data class ParsedAlert(
     val originalCurrency: String? = null,
     val originalAmountMinor: Long? = null,
     val confidence: Confidence = Confidence.GENERIC,
+    /**
+     * The last four digits of a second account the text names, when it names one: the other end of a transfer ("XXXXXXXXXX1234-TPT-..." in a credit's narration, "To A/c xxxxxxxxxx5678" in an IMPS debit).
+     * Never the same digits as [accountLast4]. See [TransferClues].
+     */
+    val counterLast4: String? = null,
 )
 
 sealed interface ParseResult {
@@ -54,7 +59,10 @@ object GenericAlertParser {
     /** Roots with [BankRule.cardTxnLayout] only (HDFC Bank: HDFCBK and HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
     private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
     /** "Payment of Rs.706.82 successful for your Jio bill": the person paid, with no debit word in the text. */
-    private val paymentSuccessful = Regex("""(?i)\bpayment\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""")
+    private val paymentSuccessful = Regex(
+        """(?i)\bpayment\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""" +
+            """|\bauto[- ]?pay\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+for\s+[A-Za-z][^.]{0,40}?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""",
+    )
     /** "credited to the beneficiary account" describes an outgoing payment seen from the sender's bank. */
     private val outgoingCreditPhrase = Regex("""(?i)\bbeneficiary\b""")
     private val accountMask = Regex("""(?i)(?:a/?c|acct|account)\s*(?:no\.?)?\s*[:*]?\s*[x*]*(\d{3,6})(?:\b|-)""")
@@ -103,6 +111,8 @@ object GenericAlertParser {
                 }
             }
         }
+        // the account the text is about: the first "A/c" named, unless the text names the destination first ("sent to A/c 9876 via IMPS from A/c XX1234")
+        val ownLast4 = (if (direction == Direction.DECLINED) null else TransferClues.ownLast4(text, direction == Direction.DEBIT)) ?: (accountMask.find(text) ?: cardMask.find(text))?.groupValues?.get(1)?.takeLast(4)
         return ParseResult.Parsed(
             ParsedAlert(
                 direction = direction,
@@ -110,10 +120,11 @@ object GenericAlertParser {
                 currency = currencyCode,
                 date = findDate(text),
                 reference = refAfterWord.find(text)?.groupValues?.get(1) ?: refInUpiPath.find(text)?.groupValues?.get(1) ?: refAfterUpi.find(text)?.groupValues?.get(1),
-                accountLast4 = (accountMask.find(text) ?: cardMask.find(text))?.groupValues?.get(1)?.takeLast(4),
+                accountLast4 = ownLast4,
                 viaUpi = upiWord.containsMatchIn(text),
                 originalCurrency = original?.first,
                 originalAmountMinor = original?.second,
+                counterLast4 = TransferClues.counterLast4(text, ownLast4),
             ),
         )
     }

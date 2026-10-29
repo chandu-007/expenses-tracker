@@ -190,11 +190,15 @@ class AlertsUiTest {
     @Test
     fun theWeekLineAlsoCountsRepeatingItemsAndCardDueDatesAndCountsATrackedCardBillOnlyOnce() {
         val today = java.time.LocalDate.now()
+        val dueDay = today.plusDays(3).dayOfMonth.coerceAtMost(28)
+        // the day the card's statement (cut on the 1st) falls due, by the card rule and not the app's code: the first date after the 1st of this month that is the due day.
+        // That is in the next month when the due day has rolled over (the 29th, 30th and 31st), and may already be past, which counts as due too. CardDueRolloverTest proves this rule for every day of 2026-2028.
+        val cardDue = cardDueDate(today, dueDay)
         db { ok ->
             ok.store.saveAccount(Account(AccountId("amex"), "Amex", AccountType.CREDIT_CARD, inr))
             ok.store.save(Expense(EntryId("big"), System.currentTimeMillis() - 60L * 86_400_000, AccountId("amex"), Money(40_000, inr)), EntryDetails(merchant = "Phone"))
             // due within the week whatever today's date is (or overdue, when that wraps past the 28th, which also counts)
-            ok.cards.save(CardTerms("amex", statementDay = 1, dueDay = today.plusDays(3).dayOfMonth.coerceAtMost(28)))
+            ok.cards.save(CardTerms("amex", statementDay = 1, dueDay = dueDay))
             ok.recurring.save(app.expenses.core.domain.RecurringItem("rent", "Rent", Money(500_000, inr), app.expenses.core.domain.ledger.CategoryId("Bills"), AccountId("cash"), null,
                 app.expenses.core.domain.Schedule(app.expenses.core.domain.RepeatUnit.MONTH, 1, kotlinx.datetime.LocalDate(today.plusDays(1).year, today.plusDays(1).monthValue, today.plusDays(1).dayOfMonth)), false))
         }
@@ -203,10 +207,14 @@ class AlertsUiTest {
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("5,400.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } // 5,000 rent + 400 left on the card
         scenario!!.close()
         // the card's own bill, tracked, is the same thing: it is counted once, not twice
-        db { ok -> ok.bills.add(bill("cardbill").copy(kind = "CREDIT_CARD", dueDate = java.time.LocalDate.of(today.year, today.month, today.plusDays(3).dayOfMonth.coerceAtMost(28)).toString(), dedupeKey = "cb", amountMinor = 40_000)) }
+        db { ok -> ok.bills.add(bill("cardbill").copy(kind = "CREDIT_CARD", dueDate = cardDue.toString(), dedupeKey = "cb", amountMinor = 40_000)) }
         launch(); waitFor("bills_banner")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("2 bills due this week"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
+
+    /** The date a card whose statement is cut on the 1st falls due on [dueDay]: the first date after the 1st of [today]'s month with that day of the month. */
+    private fun cardDueDate(today: java.time.LocalDate, dueDay: Int): java.time.LocalDate =
+        generateSequence(today.withDayOfMonth(1).plusDays(1)) { it.plusDays(1) }.first { it.dayOfMonth == dueDay }
 
     private fun food(id: String, millis: Long, minor: Long) = db { ok -> ok.store.save(Expense(EntryId(id), millis, AccountId("cash"), Money(minor, inr), listOf(app.expenses.core.domain.ledger.CategorySplit(app.expenses.core.domain.ledger.CategoryId("Food"), Money(minor, inr)))), EntryDetails(merchant = id)) }
 

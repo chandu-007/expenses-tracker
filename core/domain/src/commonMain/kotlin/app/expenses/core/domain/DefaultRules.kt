@@ -25,7 +25,7 @@ object DefaultRules {
     private val noise: Set<String> = setOf(
         "pvt", "ltd", "limited", "private", "india", "indian", "llp", "inc", "co", "corp", "corporation", "company", "services", "service", "solutions", "technologies", "tech", "systems",
         "retail", "online", "ecommerce", "commerce", "payments", "payment", "pay", "upi", "qr", "order", "orders", "app", "store", "stores", "shop", "merchant", "mobile", "digital",
-        "internet", "wallet", "bill", "bills", "electricity", "recharge", "broadband", "the", "and", "in", "ind", "rzp", "razorpay", "payu", "billdesk", "cashfree", "ccavenue", "paytm",
+        "internet", "wallet", "bill", "bills", "com", "electricity", "recharge", "broadband", "the", "and", "in", "ind", "rzp", "razorpay", "payu", "billdesk", "cashfree", "ccavenue", "paytm",
         "ka", "mh", "dl", "tn", "ap", "ts", "kl", "gj", "up", "wb", "rj", "hr", "pb", "mp",
         "bangalore", "bengaluru", "mumbai", "delhi", "new", "chennai", "hyderabad", "kolkata", "pune", "gurgaon", "gurugram", "noida", "ahmedabad", "jaipur", "kochi",
     )
@@ -100,6 +100,21 @@ object DefaultRules {
 
     /** The category name the starter list gives [text] (a payee and the words of the alert), or null. The longest merchant name in the text wins. */
     fun categoryNameFor(text: String): String? = find(text)?.category
+
+    /**
+     * The category names the starter list would put [text] in, best first: the merchant's better home among the newer starter categories ("Subscriptions" for Netflix, "Fuel" for Indian Oil), then the
+     * coarse starter it has always had ("Fun", "Transport"). The caller takes the first one the person has a visible category of, so a person without the newer categories gets exactly what
+     * [categoryNameFor] says. Empty when the text names no merchant.
+     */
+    private val recurringHomes = setOf("Subscriptions", "Internet and mobile", "Insurance", "Loan EMI", "Investments", "Rent")
+
+    /**
+     * Whether [text] names a service that is billed again and again (a streaming, cloud or software subscription, a mobile or broadband plan, an insurer, a lender, an investment platform, a housing
+     * society) as opposed to a shop or a delivery app: the subscription finder trusts such a name with less evidence than an unknown merchant.
+     */
+    fun isRecurringService(text: String): Boolean = displayNameFor(text) != null && find(text)?.home in recurringHomes
+
+    fun categoryNamesFor(text: String): List<String> = find(text)?.let { listOfNotNull(it.home, it.category).distinct() }.orEmpty()
 
     /**
      * The clean name of the merchant a payee string stands for ("Swiggy" for "swiggyupi@axb" or "SWIGGY BANGALORE KA IN"), or null when it names none or names it among words that

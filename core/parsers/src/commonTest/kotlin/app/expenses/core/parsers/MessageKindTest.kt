@@ -22,6 +22,7 @@ class MessageKindTest {
         assertEquals(MessageKind.ATM_WITHDRAWAL, kind("Rs.5,000.00 withdrawn at ATM 12345 on 05-10-26 from A/c XX1234", Direction.DEBIT))
         assertEquals(MessageKind.ATM_WITHDRAWAL, kind("INR 2,000 ATM WDL at SBI ATM on 05-10-26", Direction.DEBIT))
         assertEquals(MessageKind.ATM_WITHDRAWAL, kind("Cash withdrawal of Rs 10,000 from your account", Direction.DEBIT))
+        assertEquals(MessageKind.ATM_WITHDRAWAL, kind("Rs.2,000.00 debited from A/c XX1234 on 05-10-26. Info: ATM-CASH. Avl Bal Rs.100", Direction.DEBIT), "the narration form of an ATM withdrawal")
         assertEquals(MessageKind.PAYMENT, kind("Rs.800 spent on your HDFC Debit/ATM Card xx1234 at SWIGGY", Direction.DEBIT), "an ATM-type card used in a shop is a payment")
         assertEquals(MessageKind.PAYMENT, kind("Rs.5,000.00 withdrawn at ATM", Direction.CREDIT), "a credit is never a withdrawal")
     }

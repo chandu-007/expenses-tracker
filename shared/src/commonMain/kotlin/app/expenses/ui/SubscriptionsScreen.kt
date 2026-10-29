@@ -45,7 +45,9 @@ fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (
                     CategoryAvatar(r.name, r.name, Modifier.padding(end = 14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                        Text("${r.amountText} ${r.cadenceText} · ${r.nextText}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${r.amountText} ${r.cadenceText} · ${r.nextText}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("subscription_when_${r.name}"))
+                        if (r.lastText.isNotEmpty()) Text(r.lastText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("subscription_last_${r.name}"))
+                        if (r.priceNote.isNotEmpty()) Text(r.priceNote, style = MaterialTheme.typography.labelMedium, color = if (r.priceUp) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("subscription_price_${r.name}"))
                         Text(r.yearlyText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
                     Column(horizontalAlignment = Alignment.End) {

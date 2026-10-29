@@ -39,10 +39,11 @@ object StatementDescriptions {
     /** The words of [text] (upper case, four letters or more) for [join]'s `known`. */
     fun words(text: String): Set<String> = Regex("[A-Za-z]{4,}").findAll(text).map { it.value.uppercase() }.toSet()
 
-    private val MODE = Regex("^(UPI|NEFT|IMPS|RTGS|ACH|NACH|ECS|POS)(?:\\s+(?:CR|DR|D|C))?$", RegexOption.IGNORE_CASE)
+    private val MODE = Regex("^(UPI|NEFT|IMPS|RTGS|ACH|NACH|ECS|POS|TPT|FT|SI)(?:\\s+(?:CR|DR|D|C))?$", RegexOption.IGNORE_CASE)
     private val DIRECTION = Regex("^(CR|DR|D|C)$", RegexOption.IGNORE_CASE)
     private val IFSC = Regex("^[A-Za-z]{4}0[A-Za-z0-9]{6}$")
     private val ALNUM = Regex("^[A-Za-z0-9]+$")
+    internal val MASKED_ACCOUNT = Regex("^[Xx*]{4,}\\d{3,4}$")
     private val MASKED_CARD = Regex("^(?:\\d{4}[Xx*]{4,}\\d{2,4}|[Xx*]{4,}\\d{2,4})$")
     private val POS_FORM = Regex("^(POS|ATW)\\s+(\\S+)\\s+(.+)$", RegexOption.IGNORE_CASE)
 
@@ -69,7 +70,8 @@ object StatementDescriptions {
         POS_FORM.matchEntire(cleaned)?.let { m ->
             if (MASKED_CARD.matches(m.groupValues[2])) return m.groupValues[3].trim().ifEmpty { cleaned }
         }
-        val segments = cleaned.split('-', '/').map { it.trim() }
+        // HDFC words a credit's narration "XXXXXXXXXX1234-TPT-note-name": the sender's masked account number leads, then the mode
+        val segments = cleaned.split('-', '/').map { it.trim() }.let { all -> if (all.size > 2 && MASKED_ACCOUNT.matches(all[0])) all.drop(1) else all }
         if (segments.size < 2 || !MODE.matches(segments[0])) return cleaned
         val name = segments.drop(1).firstOrNull { !isNoise(it) && looksLikeName(it) } ?: return cleaned
         return name

@@ -1,6 +1,8 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.AttachmentRules
+import app.expenses.core.domain.CategoryKind
+import app.expenses.core.domain.StarterCategories
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.RecurringItem
@@ -181,10 +183,23 @@ class BackupStore(
         for (c in data.categories.sortedBy { it.parentId != null }) {
             val here = q.categoryById(c.id).executeAsOneOrNull()
             when {
-                here == null -> q.insertCategoryRaw(c.id, c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind)
+                here == null -> {
+                    q.insertCategoryRaw(c.id, c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind)
+                    // a new install already has a pristine starter of this very name and kind ("Rent", "Fuel"): the backup's own category takes its place, so the person does not get two
+                    if (c.parentId == null && !c.deleted) pristineStarterNamed(c.name, c.kind)?.let { q.markMerged(c.id, it) }
+                }
                 // A fresh install already has the default categories. One nothing has touched takes the backup's version (renamed,
                 // recoloured, hidden, or merged away); one that has been used or changed on this device is left alone.
-                isUntouchedDefault(here) -> q.replaceCategory(c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind, c.id)
+                isUntouchedDefault(here) || isUntouchedNewDefault(here) -> q.replaceCategory(c.name, c.parentId, c.color, c.position.toLong(), if (c.hidden) 1 else 0, if (c.deleted) 1 else 0, c.mergedInto, c.kind, c.id)
+            }
+        }
+        // a new install's newer starters that the backup does not carry and nothing has touched go again, so the restored ledger is the backup's (only while this device has no entries)
+        if (q.recentEntries(1).executeAsList().isEmpty()) {
+            val carried = data.categories.mapTo(HashSet()) { it.id }
+            for ((id, _, _) in StarterCategories.newExpense + StarterCategories.newIncome) {
+                if (id in carried) continue
+                val row = q.categoryById(id).executeAsOneOrNull() ?: continue
+                if (isUntouchedNewDefault(row)) q.softDeleteCategory(id)
             }
         }
         // people before the entries that refer to them; one already here keeps its own name
@@ -242,6 +257,33 @@ class BackupStore(
         val index = CategoryStore.DEFAULTS.indexOf(row.id)
         return index >= 0 && row.name == row.id && row.parent_id == null && row.color == null && row.position == index.toLong() && row.hidden == 0L &&
             row.deleted == 0L && row.merged_into == null && q.categoryUsage(row.id).executeAsOne() == 0L && q.budgetByScope(row.id).executeAsOneOrNull() == null
+    }
+
+    /**
+     * The id of a newer starter category on this device ([StarterCategories.EXPENSE_MORE], [StarterCategories.INCOME_MORE]) that is exactly as it was created (see [isUntouchedNewDefault]), has the
+     * same name as [name] (any capitalisation) and the same kind, and that no capture rule points at; null when there is none. Anything the person made, renamed, used or set a limit on is never
+     * returned, whatever its name.
+     */
+    private fun pristineStarterNamed(name: String, kind: String): String? {
+        val ruled = q.allCaptureRules().executeAsList().mapTo(HashSet()) { it.category_id }
+        for ((id, _, _) in StarterCategories.newExpense + StarterCategories.newIncome) {
+            val row = q.categoryById(id).executeAsOneOrNull() ?: continue
+            if (row.name.equals(name, ignoreCase = true) && row.kind == kind && id !in ruled && isUntouchedNewDefault(row)) return id
+        }
+        return null
+    }
+
+    /**
+     * A new install also has the newer starter categories ([StarterCategories.EXPENSE_MORE], [StarterCategories.INCOME_MORE]). Restoring a backup onto it must give back that backup's ledger,
+     * not the ledger plus categories it never had: one of them that nothing has touched (same name, position and kind, not used, no limit) and that the backup does not carry is taken away
+     * again, and one the backup does carry takes the backup's version like an original starter. Only on a device with no entries yet: a device in use keeps its categories.
+     */
+    private fun isUntouchedNewDefault(row: app.expenses.core.storage.db.Category): Boolean {
+        val expense = StarterCategories.newExpense.firstOrNull { it.first == row.id }
+        val income = StarterCategories.newIncome.firstOrNull { it.first == row.id }
+        val (_, name, position) = expense ?: income ?: return false
+        return row.name == name && row.parent_id == null && row.color == null && row.position == position.toLong() && row.hidden == 0L && row.deleted == 0L && row.merged_into == null &&
+            row.kind == (if (expense != null) CategoryKind.EXPENSE else CategoryKind.INCOME).name && q.categoryUsage(row.id).executeAsOne() == 0L && q.budgetByScope(row.id).executeAsOneOrNull() == null
     }
 
     private fun toDomain(e: BackupEntry, currency: (String) -> Currency): DomainEntry {

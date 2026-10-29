@@ -22,7 +22,7 @@ object KindRules {
     private val cardPayment = Regex(
         """(?i)\b(?:re)?payment\s+of\b[^\n]{0,70}\b(?:received|towards)\b[^\n]{0,70}\bcard\b|\brepayment\b[^\n]{0,70}\bcredit\s+card\b|\bcredit\s+card\s+bill\b|\bcard\s+bill\b[^\n]{0,40}\bpaid\b|\btowards\s+(?:your\s+)?[\w\s]{0,30}credit\s+card\b|\bcc\s+(?:bill|payment)\b""",
     )
-    private val atmWithdrawal = Regex("""(?i)\bcash\s+withdraw\w*|\bwithdrawn\b|\batm\s*(?:wdl|withdrawal|cash)\b|\bwdl\s+at\s+atm\b|\bcash\s+wdl\b""")
+    private val atmWithdrawal = Regex("""(?i)\bcash\s+withdraw\w*|\bwithdrawn\b|\batm\s*[-/]?\s*(?:wdl|withdrawal|cash)\b|\bwdl\s+at\s+atm\b|\bcash\s+wdl\b""")
     private val refundWords = Regex("""(?i)\brefund(?:ed)?\b|\breversal\b|\breversed\b|\brevoked\b""")
 
     fun of(body: String, direction: Direction): MessageKind {

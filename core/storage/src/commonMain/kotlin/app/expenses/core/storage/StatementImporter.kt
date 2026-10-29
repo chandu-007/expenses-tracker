@@ -1,6 +1,7 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.CardPayments
+import app.expenses.core.domain.TransferWording
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Flow
 import app.expenses.core.domain.Money
@@ -41,6 +42,9 @@ data class ImportResult(val imported: Int, val alreadyThere: Int, val spendingMi
  * same line was imported by an earlier version as an expense or income. It is **not added again** when a transfer between those two accounts for the same
  * amount is already in the app within three days, whatever its source: a "Mark paid", a captured text, or the other side's statement (the card's credit for
  * a bank's debit), and, as for any row, when a text or hand-typed expense or income of the same amount is there within a day.
+ * An ordinary row (not said to be a transfer) is also **not added again** when it is one side of a transfer between the person's own accounts that is already in the app from
+ * another source: a debit row of the source account, or a credit row of the destination account, of the same amount within a day. That is how the two statements of a transfer
+ * captured from the bank's two texts add nothing on top of it; the transfer answers once for each side.
  * A row that carries its [StatementTxn.sourceText] (the line as it was in the file) keeps it as the entry's origin (kind STATEMENT).
  * Everything is saved in one transaction, oldest first (which also keeps the search index fast), so a failure saves nothing.
  *
@@ -111,6 +115,20 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
             if (transferTwin != null) { taken += transferTwin; matched++; continue }
             val twin = q.entriesLikeStatementRow(rowAccount.value, kind, t.minor, dayStart - DAY_MILLIS, dayStart + 2 * DAY_MILLIS).executeAsList().firstOrNull { it !in taken }
             if (twin != null) { taken += twin; matched++; continue }
+            // an ordinary line that is one side of a transfer between the person's own accounts already in the app (captured from the bank's two texts, say): not an expense or income on top
+            // of it. One transfer answers once for each side, so the other account's statement can still match it. A same-amount line is the transfer's side only when it reads like one: its
+            // words say transfer (TPT, FT, IMPS, NEFT, RTGS, "transfer", "sweep", own account), or it names the other account's last four digits, or this same file holds the other side's row.
+            // Otherwise it is a real payment that happens to be the same amount (a Zomato order on the day of a 5,000 transfer) and is imported as it is.
+            if (counter == null) {
+                val outgoing = t.flow == Flow.SPENDING
+                val from = dayStart - DAY_MILLIS; val until = dayStart + 2 * DAY_MILLIS
+                val side = if (outgoing) "out" else "in"
+                val candidates = if (outgoing) q.transfersOutOfLikeStatementRow(rowAccount.value, t.minor, from, until).executeAsList().map { it.id to it.other }
+                    else q.transfersIntoLikeStatementRow(rowAccount.value, t.minor, from, until).executeAsList().map { it.id to it.other }
+                val words = t.description + " " + t.sourceText.orEmpty()
+                val transfer = candidates.firstOrNull { (id, other) -> "$id|$side" !in taken && (readsLikeTransfer(words, other) || fileHasOtherSide(txns, t, account.value, other)) }
+                if (transfer != null) { taken += "${transfer.first}|$side"; matched++; continue }
+            }
             val at = dayStart + NOON_MILLIS
             val money = Money(t.minor, currency)
             // labels only when the file had some: null leaves an entry's labels alone, which for a new entry is none
@@ -130,6 +148,22 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
         }
         ImportResult(imported, there, spend, income, matched, transfers, transferMinor)
     }
+
+    /** Whether a statement line's words say it is a move between the person's own accounts: transfer wording, or the last four digits of the other account ([other], when it has some set). */
+    private fun readsLikeTransfer(words: String, other: String?): Boolean {
+        if (TransferWording.saysOrRail(words)) return true
+        val last4 = other?.let { q.accountLookOf(it).executeAsOneOrNull()?.last4 } ?: return false
+        var at = words.indexOf(last4)
+        while (at >= 0) {
+            if ((at == 0 || !words[at - 1].isDigit()) && (at + 4 >= words.length || !words[at + 4].isDigit())) return true
+            at = words.indexOf(last4, at + 1)
+        }
+        return false
+    }
+
+    /** Whether the file has the row that is the other side of [t]: on the [other] account, the opposite direction, the same amount, within a day. */
+    private fun fileHasOtherSide(txns: List<StatementTxn>, t: StatementTxn, account: String, other: String?): Boolean =
+        other != null && txns.any { u -> u !== t && (u.accountId ?: account) == other && u.flow != t.flow && u.minor == t.minor && u.counterAccount == null && kotlin.math.abs(u.date.toEpochDays() - t.date.toEpochDays()) <= 1 }
 
     private fun looksLikeCardPayment(t: StatementTxn, cardSide: Boolean) =
         if (cardSide) t.flow == Flow.INCOME && CardPayments.looksLikePaymentReceived(t.description) else t.flow == Flow.SPENDING && CardPayments.looksLikePaymentToCard(t.description)

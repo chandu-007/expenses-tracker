@@ -40,11 +40,11 @@ class CategoryPickerUiTest {
 
     @Test
     fun aLongCategoryListShowsTwentyFourChipsAndMoreOpensASearchableListWhoseChoiceIsThenShownAndSaved() {
-        makeCategories(52); launch() // 8 defaults + 52, in the database before the screen loads it
+        makeCategories(52); launch() // the new install's expense defaults + 52, in the database before the screen loads it
         tap("add"); waitFor("amount")
         compose.waitUntil(10_000) { has("more_categories") }
         assertEquals(24, chips().size, "chips shown")
-        compose.onNodeWithTag("more_categories").assertTextContains("More (36)")
+        compose.onNodeWithTag("more_categories").assertTextContains("More (${app.expenses.core.domain.StarterCategories.expenseOrder.size + 52 - 24})")
         compose.onNodeWithTag("more_categories", useUnmergedTree = true).performScrollTo().performClick(); waitFor("category_search")
         compose.onNodeWithTag("category_search", useUnmergedTree = true).performTextInput("extra 05")
         compose.waitUntil(10_000) { has("category_option_" + runBlocking { container.write { ok -> ok.categories.list().first { it.name == "Extra 051" }.id } }) }
@@ -62,7 +62,7 @@ class CategoryPickerUiTest {
     @Test
     fun withFewCategoriesThereIsNoMoreChipAndEveryCategoryIsAChip() {
         launch(); tap("add"); waitFor("amount")
-        assertEquals(8, chips().size)
+        assertEquals(app.expenses.core.domain.StarterCategories.expenseOrder.size, chips().size, "every starter category of a new install is a chip")
         assertTrue(!has("more_categories"))
     }
 }

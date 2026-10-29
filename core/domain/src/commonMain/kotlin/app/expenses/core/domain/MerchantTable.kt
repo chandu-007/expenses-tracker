@@ -5,7 +5,7 @@ package app.expenses.core.domain
  * and every way the name shows up in a UPI address, a payee string or an SMS ([aliases], lower case words; the display name itself is always one of them). [display] null is a
  * category keyword that is not a merchant ("electricity"): it files a payment but never renames it.
  */
-class Merchant(val display: String?, val category: String?, val aliases: List<String>)
+class Merchant(val display: String?, val category: String?, val aliases: List<String>, /** A better home among the newer starter categories ([StarterCategories.EXPENSE_MORE]), used when the person has that category; [category] is then the fallback. */ val home: String? = null)
 
 /**
  * The data behind [DefaultRules]: Indian merchants and utilities by their public brand names, **written from public knowledge of the brands, not from anyone's transactions**. To add a
@@ -19,10 +19,41 @@ internal object MerchantTable {
     /** The categories a starter can name: the app's own seven starters. A name only takes effect when the person still has a visible category of that name. */
     val CATEGORIES = setOf(FOOD, GROCERIES, TRANSPORT, BILLS, SHOPPING, HEALTH, FUN)
 
-    private fun m(display: String, category: String?, vararg aliases: String) = Merchant(display, category, (listOf(display.lowercase()) + aliases).distinct())
-    private fun kw(category: String, vararg words: String) = Merchant(null, category, words.toList())
+    // The newer starter categories ([StarterCategories.EXPENSE_MORE]). A merchant may name one as its [Merchant.home]: a person who has that category (every new install, and anyone who added it from Suggested
+    // categories) gets it suggested; a person who has not keeps the coarse [Merchant.category] the merchant always had, so nothing changes for an existing ledger that did not ask for it.
+    private const val RENT = "Rent"; private const val UTILITIES = "Utilities"; private const val MOBILE = "Internet and mobile"; private const val INSURANCE = "Insurance"; private const val EDUCATION = "Education"
+    private const val FUEL = "Fuel"; private const val TRAVEL = "Travel"; private const val SUBS = "Subscriptions"; private const val INVEST = "Investments"; private const val LOANS = "Loan EMI"
+    private const val CARE = "Personal care"; private const val GIVING = "Gifts and donations"; private const val TAXES = "Taxes"
 
-    val all: List<Merchant> = listOf(
+    /** The better home of an EXISTING merchant (by display name). Its [Merchant.category] is unchanged. */
+    val HOMES: Map<String, String> = buildMap {
+        for (n in listOf("Netflix", "Prime Video", "Amazon Prime", "Disney+ Hotstar", "JioHotstar", "JioCinema", "Spotify", "YouTube Premium", "SonyLIV", "ZEE5", "Apple Music", "Gaana", "JioSaavn", "Wynk Music", "Audible",
+            "Kindle Unlimited", "Xbox", "hoichoi", "Sun NXT", "Voot", "MX Player", "Eros Now", "ALTBalaji", "Apple TV", "Crunchyroll", "Hungama", "iCloud")) put(n, SUBS)
+        for (n in listOf("Indian Oil", "BPCL", "HPCL", "Jio-bp", "Nayara Energy", "Reliance Petrol", "Shell India", "Essar Oil")) put(n, FUEL)
+        for (n in listOf("IRCTC", "redBus", "IndiGo", "Air India", "Vistara", "SpiceJet", "Akasa Air", "AirAsia", "MakeMyTrip", "Goibibo", "Cleartrip", "EaseMyTrip", "ixigo", "RailYatri", "ConfirmTkt", "AbhiBus", "Zingbus", "FlixBus")) put(n, TRAVEL)
+        for (n in listOf("BESCOM", "TNEB", "MSEDCL", "Tata Power", "Adani Electricity", "Bharat Gas", "Indane", "HP Gas", "Mahanagar Gas", "Indraprastha Gas", "Adani Total Gas", "Gujarat Gas", "BSES", "CESC", "Torrent Power",
+            "Delhi Jal Board", "BWSSB", "HMWSSB", "KSEB", "APSPDCL", "TSSPDCL", "UPPCL", "PSPCL", "WBSEDCL", "DHBVN", "UHBVN", "JVVNL", "PGVCL", "UGVCL", "DGVCL", "MGVCL", "CSPDCL", "TPDDL", "HESCOM", "MESCOM", "GESCOM", "CHESCOM")) put(n, UTILITIES)
+        for (n in listOf("Jio", "Airtel", "Vodafone Idea", "BSNL", "MTNL", "ACT Fibernet", "Hathway", "Tata Play", "Dish TV", "d2h", "Sun Direct", "JioFiber", "Airtel Xstream", "Excitel", "Tikona", "YOU Broadband", "Spectranet", "Den Networks", "Siti Cable")) put(n, MOBILE)
+        for (n in listOf("LIC", "HDFC Life", "ICICI Prudential", "SBI Life", "Max Life", "Bajaj Allianz", "Tata AIA", "Digit Insurance", "Acko", "Policybazaar", "New India Assurance", "Kotak Life", "PNB MetLife", "Aditya Birla Sun Life",
+            "Reliance General Insurance", "Star Health", "Niva Bupa", "Care Health Insurance")) put(n, INSURANCE)
+    }
+
+    private fun m(display: String, category: String?, vararg aliases: String) = Merchant(display, category, (listOf(display.lowercase()) + aliases).distinct())
+    private fun kw(category: String?, vararg words: String, home: String? = null) = Merchant(null, category, words.toList(), home)
+    /**
+     * A merchant that is new with the newer categories: [category] is the coarse starter it falls back to for a person without [home] (null: no suggestion for them).
+     * Decision (review): a NEW merchant with a coarse fallback (Apple Services, ChatGPT, Google One -> Fun; a petrol pump -> Transport) gives a person without the newer category a
+     * suggestion where there was none before. That is accepted: it is only a suggestion on a card in To review, nothing is filed without a tap, and existing entries and reports are untouched.
+     * Likewise a person's own category that happens to be named like a newer one ("Fuel") is found by name and suggested for that merchant.
+     */
+    private fun n(display: String, category: String?, home: String, vararg aliases: String) = Merchant(display, category, (listOf(display.lowercase()) + aliases).distinct(), home)
+
+    /** Every merchant, each with its [Merchant.home] when it has one. */
+    val all: List<Merchant> get() = merged
+
+    private val merged: List<Merchant> by lazy { base.map { m -> val h = m.display?.let(HOMES::get); if (h == null || m.home != null) m else Merchant(m.display, m.category, m.aliases, h) } }
+
+    private val base: List<Merchant> = listOf(
         // ---- Food: delivery, restaurants, cafes, sweets
         m("Swiggy", FOOD, "swiggyupi", "swiggy food", "bundl technologies"), m("Zomato", FOOD, "zomato order", "zomato online"),
         m("Domino's", FOOD, "dominos", "dominos pizza", "domino's pizza", "jubilant foodworks"), m("KFC", FOOD, "kfc india", "devyani international"), m("McDonald's", FOOD, "mcdonalds", "hardcastle restaurants"),
@@ -82,7 +113,7 @@ internal object MerchantTable {
         m("Bajaj Allianz", BILLS, "bajaj allianz life"), m("Tata AIA", BILLS, "tata aia life"), m("Digit Insurance", BILLS, "go digit"), m("Acko", BILLS, "acko general insurance"), m("Policybazaar", BILLS, "policy bazaar"),
         m("New India Assurance", BILLS), m("Kotak Life", BILLS, "kotak life insurance"), m("PNB MetLife", BILLS, "pnb metlife"), m("Aditya Birla Sun Life", BILLS, "absli"), m("Reliance General Insurance", BILLS),
         m("Spectranet", BILLS, "spectra net"), m("Den Networks", BILLS, "den broadband"), m("Siti Cable", BILLS, "siti networks"),
-        kw(BILLS, "electricity", "broadband", "recharge"),
+        kw(BILLS, "electricity", home = UTILITIES), kw(BILLS, "broadband", "recharge", home = MOBILE),
         // ---- Shopping: marketplaces, fashion, electronics, home, beauty
         m("Amazon", SHOPPING, "amazon india", "amazon seller services", "amazon in", "amzn"), m("Amazon Pay", SHOPPING, "amazonpay", "amazon pay india", "amazon payments"), m("Flipkart", SHOPPING, "flipkart internet", "flipkart payments"),
         m("Myntra", SHOPPING), m("Ajio", SHOPPING), m("Meesho", SHOPPING), m("Nykaa", SHOPPING, "nykaa fashion", "fsn e commerce"), m("Tata CLiQ", SHOPPING, "tata cliq", "tatacliq"),
@@ -113,9 +144,9 @@ internal object MerchantTable {
         m("Pristyn Care", HEALTH, "pristyncare"), m("Even Healthcare", HEALTH), m("Ayu Health", HEALTH, "ayuhealth"), m("Kauvery Hospital", HEALTH, "kauvery"), m("Sir Ganga Ram Hospital", HEALTH, "ganga ram hospital"),
         m("Clove Dental", HEALTH),
         // ---- Fun: streaming, music, movies, games, subscriptions, parks
-        m("Netflix", FUN, "netflix india", "netflix com"), m("Prime Video", FUN, "amazon prime video"), m("Amazon Prime", FUN, "amazon prime membership"), m("Disney+ Hotstar", FUN, "hotstar", "disney hotstar", "disney plus hotstar", "star india"),
+        m("Netflix", FUN, "netflix india", "netflix com"), m("Prime Video", FUN, "amazon prime video"), m("Amazon Prime", FUN, "amazon prime membership", "amzn prime"), m("Disney+ Hotstar", FUN, "hotstar", "disney hotstar", "disney plus hotstar", "star india"),
         m("JioHotstar", FUN, "jio hotstar", "jiohotstar"), m("JioCinema", FUN, "jio cinema", "jiocinema"), m("Spotify", FUN, "spotify india"), m("BookMyShow", FUN, "book my show", "bigtree entertainment"), m("PVR", FUN, "pvr inox", "pvr cinemas"),
-        m("INOX", FUN, "inox leisure", "inox movies"), m("YouTube Premium", FUN, "youtube premium", "youtube music"), m("SonyLIV", FUN, "sony liv", "sonyliv"), m("ZEE5", FUN, "zee 5"), kw(FUN, "disney"),
+        m("INOX", FUN, "inox leisure", "inox movies"), m("YouTube Premium", FUN, "youtube premium", "youtube music", "youtubepremium", "google youtubepremium", "google youtube premium"), m("SonyLIV", FUN, "sony liv", "sonyliv"), m("ZEE5", FUN, "zee 5"), kw(FUN, "disney", home = SUBS),
         m("Apple Music", FUN), m("Gaana", FUN), m("JioSaavn", FUN, "jio saavn", "saavn"), m("Wynk Music", FUN, "wynk"), m("Audible", FUN), m("Kindle Unlimited", FUN), m("Xbox", FUN, "xbox game pass"),
         m("PlayStation", FUN, "playstation store", "sony playstation"), m("Dream11", FUN, "dream 11", "sporta technologies"), m("Zupee", FUN), m("Cinepolis", FUN, "cinepolis india"),
         m("Carnival Cinemas", FUN), m("Miraj Cinemas", FUN), m("Paytm Insider", FUN), m("hoichoi", FUN), m("Sun NXT", FUN, "sunnxt"), m("Voot", FUN), m("MX Player", FUN, "mxplayer"),
@@ -123,6 +154,43 @@ internal object MerchantTable {
         m("iCloud", FUN, "icloud storage"), m("Google Play", FUN, "google play store", "google play music", "google play games"), m("Wonderla", FUN, "wonderla holidays"), m("Imagica", FUN, "adlabs imagica"),
         m("Ramoji Film City", FUN), m("Nintendo", FUN, "nintendo eshop"),
        
+        // ---- The newer categories: services and merchants that are new, with the coarse starter they fall back to for a person who has not got the category (see [HOMES] for the existing merchants that moved)
+        // Subscriptions: apps and software billed every month or year (the bank strings are the ones cards show: APPLE.COM/BILL, GOOGLE *YouTubePremium, NETFLIX.COM, OPENAI *CHATGPT SUBSCR)
+        n("Apple Services", FUN, SUBS, "apple com bill", "apple services", "itunes", "itunes com bill", "app store", "applecombill"), n("Google One", FUN, SUBS, "google storage", "google one storage", "google google one"),
+        n("Microsoft 365", FUN, SUBS, "office 365", "microsoft office", "microsoft family", "msft microsoft 365"), n("Adobe", FUN, SUBS, "adobe systems", "adobe creative cloud", "adobe inc", "adobe systems software"),
+        n("ChatGPT", FUN, SUBS, "openai", "openai llc", "chat gpt", "chatgpt subscription", "chatgpt subscr", "openai chatgpt", "openai chatgpt subscr"), n("Canva", FUN, SUBS, "canva pty"), n("Notion", FUN, SUBS, "notion labs"),
+        n("Dropbox", FUN, SUBS), n("LinkedIn Premium", FUN, SUBS, "linkedin", "linkedin corporation"), n("Duolingo", FUN, SUBS, "duolingo plus", "duolingo super"), n("Amazon Music", FUN, SUBS, "amazon music unlimited"),
+        n("Times Prime", FUN, SUBS, "timesprime"), n("Lionsgate Play", FUN, SUBS, "lionsgate"), n("Discovery Plus", FUN, SUBS), n("Aha Video", FUN, SUBS),
+        // Fuel and travel
+        n("Hindustan Petroleum Pump", TRANSPORT, FUEL, "petrol pump", "fuel station", "petrol bunk"),
+        n("Booking.com", null, TRAVEL, "booking com", "bookingcom"), n("Airbnb", null, TRAVEL), n("OYO", null, TRAVEL, "oyo rooms"), n("Agoda", null, TRAVEL), n("Treebo", null, TRAVEL, "treebo hotels"), n("FabHotels", null, TRAVEL, "fab hotels"),
+        n("Yatra", null, TRAVEL, "yatra online"), n("Thomas Cook", null, TRAVEL, "thomas cook india"), n("SOTC Travel", null, TRAVEL, "sotc"), n("Taj Hotels", null, TRAVEL, "indian hotels company", "taj hotel"),
+        n("Marriott", null, TRAVEL, "marriott hotels"), n("Lemon Tree Hotels", null, TRAVEL, "lemon tree"), n("IXIGO Trains", TRANSPORT, TRAVEL, "ixigo trains"),
+        // Education
+        n("BYJU'S", null, EDUCATION, "byjus", "think and learn"), n("Unacademy", null, EDUCATION), n("Vedantu", null, EDUCATION), n("upGrad", null, EDUCATION), n("Coursera", null, EDUCATION), n("Udemy", null, EDUCATION),
+        n("Physics Wallah", null, EDUCATION, "physicswallah"), n("Simplilearn", null, EDUCATION), n("Great Learning", null, EDUCATION, "greatlearning"), n("Scaler", null, EDUCATION, "scaler academy"), n("Toppr", null, EDUCATION),
+        n("Testbook", null, EDUCATION), n("Allen Career Institute", null, EDUCATION, "allen career"), n("Aakash Institute", null, EDUCATION, "aakash educational"),
+        // Investments
+        n("Zerodha", null, INVEST, "zerodha broking", "zerodha coin"), n("Groww", null, INVEST, "nextbillion technology"), n("Upstox", null, INVEST, "rksv securities"), n("Kuvera", null, INVEST), n("ET Money", null, INVEST, "etmoney"),
+        n("INDmoney", null, INVEST, "ind money"), n("Paytm Money", null, INVEST), n("Smallcase", null, INVEST), n("Angel One", null, INVEST, "angel broking"), n("5paisa", null, INVEST, "5 paisa"),
+        kw(null, "mutual fund", "nps trust", home = INVEST),
+        // Loan EMI
+        n("Bajaj Finance", null, LOANS, "bajaj finserv", "bajaj finance limited"), n("Tata Capital", null, LOANS), n("HDB Financial", null, LOANS, "hdb financial services"), n("Fullerton India", null, LOANS),
+        n("Muthoot Finance", null, LOANS), n("Manappuram Finance", null, LOANS, "manappuram"), n("LIC Housing Finance", null, LOANS, "lic housing"), n("Poonawalla Fincorp", null, LOANS), n("KreditBee", null, LOANS),
+        n("Shriram Finance", null, LOANS), n("Mahindra Finance", null, LOANS, "mahindra and mahindra financial"), n("Hero FinCorp", null, LOANS), n("TVS Credit", null, LOANS), n("IIFL Finance", null, LOANS),
+        kw(null, "emi", "home loan", "car loan", "personal loan", home = LOANS),
+        // Taxes
+        n("Income Tax Department", null, TAXES, "income tax", "incometax", "income tax dept"), n("NSDL e-Gov", null, TAXES, "nsdl egov", "tin nsdl", "protean egov"), n("GST Network", null, TAXES, "gstn", "gst payment"),
+        kw(null, "property tax", "advance tax", "professional tax", "road tax", home = TAXES),
+        // Gifts and donations
+        n("Ketto", null, GIVING), n("Milaap", null, GIVING), n("GiveIndia", null, GIVING, "give india"), n("Akshaya Patra", null, GIVING, "akshaya patra foundation"), n("CRY", null, GIVING, "child rights and you"),
+        n("Smile Foundation", null, GIVING), n("Tirumala Tirupati Devasthanams", null, GIVING, "ttd", "tirupati devasthanam"), n("ISKCON", null, GIVING), n("Siddhivinayak Temple", null, GIVING, "shree siddhivinayak"),
+        // Personal care
+        n("Urban Company", null, CARE, "urbanclap", "urban clap"), n("Lakme Salon", null, CARE, "lakme"), n("Naturals Salon", null, CARE), n("Jawed Habib", null, CARE), n("Green Trends", null, CARE),
+        n("VLCC", null, CARE), n("Kaya Clinic", null, CARE, "kaya skin clinic"), n("Looks Salon", null, CARE), n("Toni & Guy", null, CARE, "toni and guy"),
+        // Rent and housing society
+        n("NoBrokerHood", null, RENT, "nobroker hood"), n("MyGate", null, RENT, "my gate"), n("ApnaComplex", null, RENT, "apna complex"), n("NoBroker", null, RENT, "nobroker rent"), kw(null, "house rent", "society maintenance", "rent payment", home = RENT),
+
         // ---- Display only: payment apps, a clean name and no category
         m("Paytm", null, "paytm wallet", "one97 communications"), m("PhonePe", null, "phone pe", "phonepe wallet"), m("Google Pay", null, "gpay", "google pay india", "google india digital"),
     )

@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.StarterCategories
 import app.expenses.core.domain.Template
 import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
@@ -46,13 +47,46 @@ class CategoryStoreTest {
     // ---- defaults ----
 
     @Test
-    fun theEightExpenseDefaultsAndTheFiveIncomeOnesAreCreatedOnceTheExpenseNamesAsIds() {
-        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, names())
-        assertTrue(categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.EXPENSE }.all { it.id == it.name && it.parentId == null && !it.hidden })
-        assertEquals(CategoryStore.INCOME_DEFAULTS, categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.INCOME }.map { it.name })
+    fun aNewInstallGetsTheEightOriginalsAndTheNewerStartersOnceAndTheOriginalExpenseNamesAreTheirIds() {
+        val expense = StarterCategories.expenseOrder
+        assertEquals(StarterCategories.EXPENSE_FIRST, expense.take(8), "the original eight are where they always were, so the first chips of every form are unchanged")
+        val income = StarterCategories.INCOME_FIRST + StarterCategories.INCOME_MORE
+        assertEquals(CategoryStore.DEFAULTS, StarterCategories.EXPENSE_FIRST); assertEquals(CategoryStore.INCOME_DEFAULTS, StarterCategories.INCOME_FIRST)
+        assertEquals(expense + income, names())
+        assertTrue(categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.EXPENSE }.all { it.parentId == null && !it.hidden && (it.id == it.name || it.id == StarterCategories.expenseId(it.name)) })
+        assertTrue(categories.list().filter { it.name in CategoryStore.DEFAULTS }.all { it.id == it.name }, "the original expense starters keep their names as ids")
+        assertEquals(income, categories.list().filter { it.kind == app.expenses.core.domain.CategoryKind.INCOME }.map { it.name })
+        assertEquals((expense + income).size, categories.list().map { it.id }.toSet().size, "ids are distinct")
+        assertEquals(expense.size + income.size, categories.list().map { it.name.lowercase() }.toSet().size, "no name twice")
         CategoryStore(db, clock, { 2_000L }) // a second start must not add them again
-        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, names())
+        assertEquals(expense + income, names())
         assertTrue(db.schemaQueries.opsSince("", 1_000).executeAsList().none { it.entity == "category" }, "seeding is the same on every device and is not logged")
+    }
+
+    @Test
+    fun anInstallThatAlreadyHasCategoriesGetsNoneOfTheNewerOnesNotEvenAfterAnUpgradeThatAddsIncomeCategories() {
+        // an install from before the newer starters: the eight originals and the five income ones, as the old code created them
+        val old = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
+        CategoryStore.DEFAULTS.forEachIndexed { i, n -> old.schemaQueries.insertCategory(n, n, null, null, i.toLong(), "EXPENSE") }
+        CategoryStore.INCOME_DEFAULTS.forEachIndexed { i, n -> old.schemaQueries.insertCategory("income:" + n.lowercase().filter { it.isLetterOrDigit() }, n, null, null, (100 + i).toLong(), "INCOME") }
+        old.schemaQueries.putSetting("income_categories_seeded", "1")
+        val before = CategoryStore(old, clock, { 1L }).list()
+        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, before.map { it.name }, "an existing ledger is exactly what it was")
+        // the oldest installs had no income categories at all: the upgrade adds the original five, and still none of the newer ones
+        val older = ExpensesDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) })
+        CategoryStore.DEFAULTS.forEachIndexed { i, n -> older.schemaQueries.insertCategory(n, n, null, null, i.toLong(), "EXPENSE") }
+        assertEquals(CategoryStore.DEFAULTS + CategoryStore.INCOME_DEFAULTS, CategoryStore(older, clock, { 1L }).list().map { it.name })
+        // and a person who deleted one of the originals is not given the newer ones either
+        categories.delete("income:otherincome")
+        CategoryStore(db, clock, { 3_000L })
+        assertTrue("Other income" !in names())
+    }
+
+    @Test
+    fun theNewerStartersCanBeDeletedRenamedAndNothingBringsThemBack() {
+        categories.delete("cat:cashwithdrawal"); categories.rename("cat:rent", "House rent")
+        CategoryStore(db, clock, { 4_000L })
+        assertTrue("Cash withdrawal" !in names()); assertTrue("House rent" in names() && "Rent" !in names())
     }
 
     // ---- create, rename, colour, hide ----
@@ -132,11 +166,11 @@ class CategoryStoreTest {
         assertEquals(listOf("Groceries", "Food", "Transport"), names().take(3))
         categories.move("Groceries", -1) // already first
         assertEquals("Groceries", names().first())
-        categories.move("Other income", 1) // already last
-        assertEquals("Other income", names().last())
+        categories.move("Freelance and business", 1) // already last
+        assertEquals("Freelance and business", names().last())
         categories.move("Groceries", 1)
         assertEquals(listOf("Food", "Groceries", "Transport"), names().take(3))
-        assertEquals(CategoryStore.DEFAULTS.size + CategoryStore.INCOME_DEFAULTS.size, categories.list().map { it.position }.toSet().size, "positions are distinct after moves")
+        assertEquals(StarterCategories.EXPENSE_FIRST.size + StarterCategories.EXPENSE_MORE.size + StarterCategories.INCOME_FIRST.size + StarterCategories.INCOME_MORE.size, categories.list().map { it.position }.toSet().size, "positions are distinct after moves")
     }
 
     // ---- delete and merge ----

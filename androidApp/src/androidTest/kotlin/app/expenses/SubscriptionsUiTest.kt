@@ -79,5 +79,25 @@ class SubscriptionsUiTest {
         assertTrue(item.schedule.start.toEpochDays() >= today.toEpochDay(), "the first date is not in the past: ${item.schedule.start}")
         assertTrue(item.schedule.start.toEpochDays() - today.toEpochDay() <= 31, "and is the next one on the usual gap")
     }
+
+    @Test
+    fun theRowSaysTheLastPriceTheNextDateAndWhenThePriceWentUp() {
+        // the new price has to repeat before it is called a change: three at 499, two at 649
+        for ((i, ago) in listOf(125, 95, 65, 35, 5).withIndex()) spend("n$i", "NETFLIX.COM", if (i < 3) 49_900L else 64_900L, ago)
+        open(); waitFor("subscription_Netflix")
+        assertTrue(textOf("subscription_when_Netflix").startsWith("₹649.00 every month · next about"), textOf("subscription_when_Netflix"))
+        assertTrue(textOf("subscription_last_Netflix").startsWith("Last charged ₹649.00 on"), textOf("subscription_last_Netflix"))
+        assertEquals("Price went up from ₹499.00", textOf("subscription_price_Netflix"))
+    }
+
+    @Test
+    fun aJioPlanEvery28DaysIsFoundAsOneAndRemindMeRepeatsItEveryFourWeeks() {
+        for ((i, ago) in listOf(144, 116, 88, 60, 32, 4).withIndex()) spend("j$i", "Jio Prepaid", 29_900, ago)
+        open(); waitFor("subscription_Jio")
+        assertTrue(textOf("subscription_when_Jio").contains("every 28 days"), textOf("subscription_when_Jio"))
+        tap("subscription_repeat_Jio"); waitFor("subscription_repeats_Jio")
+        val item = runBlocking { container.write { ok -> ok.recurring.list().single() } }!!
+        assertEquals(app.expenses.core.domain.RepeatUnit.WEEK, item.schedule.unit); assertEquals(4, item.schedule.every)
+    }
 }
 

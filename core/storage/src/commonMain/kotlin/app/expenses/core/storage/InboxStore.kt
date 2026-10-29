@@ -53,6 +53,13 @@ class InboxStore(private val db: ExpensesDb) {
         before != null && before.status == InboxStatus.DISMISSED.name
     }
 
+    /** Takes back a [confirm] whose entry is being undone: the item is pending again with [body] (the text it had, which adding it forgot). False when it was not confirmed. */
+    fun unconfirm(id: String, body: String?): Boolean = db.transactionWithResult {
+        val before = q.inboxById(id).executeAsOneOrNull()
+        q.reopenConfirmedInbox(body, id)
+        before != null && before.status == InboxStatus.CONFIRMED.name
+    }
+
     private fun resolve(id: String, status: InboxStatus, entryId: String?): Boolean = db.transactionWithResult {
         val before = q.inboxById(id).executeAsOneOrNull()
         q.resolveInbox(status.name, entryId, id)

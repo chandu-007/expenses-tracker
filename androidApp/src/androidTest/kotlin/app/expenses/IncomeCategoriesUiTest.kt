@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -37,8 +38,9 @@ class IncomeCategoriesUiTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    private val incomeIds = listOf("income:salary", "income:interest", "income:giftsreceived", "income:refundsandcashback", "income:otherincome")
-    private val expenseIds = listOf("Food", "Groceries", "Transport", "Bills", "Shopping", "Health", "Fun", "Other")
+    // every starter category of a new install, the newer ones included (the test runs on a fresh install)
+    private val incomeIds = (app.expenses.core.domain.StarterCategories.INCOME_FIRST + app.expenses.core.domain.StarterCategories.INCOME_MORE).map(app.expenses.core.domain.StarterCategories::incomeId)
+    private val expenseIds = app.expenses.core.domain.StarterCategories.expenseOrder.map(app.expenses.core.domain.StarterCategories::expenseId)
 
     @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } } }
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); runBlocking { container.startFresh() } }
@@ -143,7 +145,8 @@ class IncomeCategoriesUiTest {
     fun theBudgetScreenOffersNoIncomeCategoryForALimit() {
         launch(); tap("budget_summary"); waitFor("budget_row_overall")
         for (id in expenseIds) {
-            compose.onNode(hasScrollAction() and hasAnyDescendant(hasTestTag("budget_row_overall")), useUnmergedTree = true).performScrollToNode(hasTestTag("budget_row_$id"))
+            // the list is long now: the overall row leaves the screen as it scrolls, so the list is found as the screen's scrollable, not by that row
+            compose.onAllNodes(hasScrollAction(), useUnmergedTree = true).onFirst().performScrollToNode(hasTestTag("budget_row_$id"))
             waitFor("budget_row_$id")
             assertOffers("budget_row_", listOf(id), incomeIds) // the income rows would sit among these, if they were there at all
         }
@@ -154,10 +157,11 @@ class IncomeCategoriesUiTest {
         runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Rs.1,250.00 debited from A/c XX1234 on 05-10-26 to VPA shop@okhdfc (UPI Ref 111111111111). Not you? Call 18002586161", 5_000) }
         launch(); openFromMenu("open_capture"); tap("open_rules"); waitFor("rule_pattern")
         waitFor("rule_category_Food")
-        assertOffers("rule_category_", expenseIds, incomeIds)
+        // the first ten are chips, the rest are behind "More" (CATEGORY_CHIPS)
+        assertOffers("rule_category_", expenseIds.take(10), incomeIds)
         tap("rules_back"); tap("capture_back"); openFromMenu("open_inbox"); waitFor("inbox_back")
         val id = db { ok -> ok.inbox.list().first().id }
         tap("inbox_change_$id"); waitFor("inbox_category_${id}_Food")
-        assertOffers("inbox_category_${id}_", expenseIds, incomeIds)
+        assertOffers("inbox_category_${id}_", expenseIds.take(10), incomeIds)
     }
 }

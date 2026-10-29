@@ -41,22 +41,44 @@ class SuggestedCategoriesUiTest {
         val before = cats().size
         compose.openMore(); tap("manage_categories"); tap("suggested_categories")
         waitFor("suggested_add")
-        tap("suggested_pick_Rent")                       // a whole new group: the group and both of its subcategories
+        tap("suggested_pick_Home")                       // a whole group the install does not start with: the group and its four subcategories
         tap("suggested_child_Transport_Fuel")            // one subcategory under a category the app starts with
         tap("suggested_child_Transport_Cab and auto")
         tap("suggested_add")
         waitFor("categories_back")
         compose.waitUntil(10_000) { cats().size > before }
         val all = cats()
-        assertEquals(before + 5, all.size, "Rent and its two subcategories, plus Fuel and Cab and auto")
-        val rent = all.single { it.parentId == null && it.name == "Rent" }
-        assertEquals(setOf("House rent", "Maintenance charges"), all.filter { it.parentId == rent.id }.map { it.name }.toSet())
+        assertEquals(before + 7, all.size, "Home and its four subcategories, plus Fuel and Cab and auto")
+        val home = all.single { it.parentId == null && it.name == "Home" }
+        assertEquals(setOf("Furniture and appliances", "Repairs", "Maid and help", "Decor"), all.filter { it.parentId == home.id }.map { it.name }.toSet())
         assertEquals(1, all.count { it.parentId == null && it.name == "Transport" }, "Transport is the one the app started with, not a second one")
         assertEquals(setOf("Fuel", "Cab and auto"), all.filter { it.parentId == "Transport" }.map { it.name }.toSet(), "added under the existing Transport (its id is its name)")
         // asking again for what is now there adds nothing: the add button has nothing to do
         tap("suggested_categories"); waitFor("suggested_add")
-        tap("suggested_pick_Rent"); compose.waitForIdle()
-        assertEquals(before + 5, cats().size)
+        tap("suggested_pick_Home"); compose.waitForIdle()
+        assertEquals(before + 7, cats().size)
+    }
+
+    @Test
+    fun aNewInstallHasTheNewerStartersAndTheScreenSaysSoWhileAnOlderOneAddsThemInOneStep() {
+        // a new install: the newer starters are there and marked as such on the screen
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
+        assertTrue(cats().any { it.name == "Subscriptions" } && cats().any { it.name == "Dividends" && it.kind == app.expenses.core.domain.CategoryKind.INCOME })
+        compose.openMore(); tap("manage_categories"); tap("suggested_categories"); waitFor("suggested_add")
+        assertTrue(has("suggested_group_Subscriptions") && has("suggested_pick_Dividends"))
+        scenario?.close()
+        // an install from before them: take them away (as it never had them), then add two in one go
+        runBlocking { container.write { ok -> app.expenses.core.domain.StarterCategories.newExpense.forEach { ok.categories.delete(it.first) }; app.expenses.core.domain.StarterCategories.newIncome.forEach { ok.categories.delete(it.first) } } }
+        assertTrue(cats().none { it.name == "Subscriptions" || it.name == "Dividends" })
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
+        compose.openMore(); tap("manage_categories"); tap("suggested_categories"); waitFor("suggested_add")
+        tap("suggested_pick_Subscriptions"); tap("suggested_pick_Dividends"); tap("suggested_pick_Fuel")
+        tap("suggested_add"); waitFor("categories_back")
+        compose.waitUntil(10_000) { cats().any { it.name == "Dividends" } }
+        val all = cats()
+        assertEquals(app.expenses.core.domain.CategoryKind.EXPENSE, all.single { it.name == "Subscriptions" && it.parentId == null }.kind)
+        assertEquals(app.expenses.core.domain.CategoryKind.INCOME, all.single { it.name == "Dividends" && it.parentId == null }.kind, "an income group is added as income")
+        assertEquals(1, all.count { it.name == "Fuel" && it.parentId == null })
     }
 
     @Test

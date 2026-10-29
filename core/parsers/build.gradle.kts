@@ -30,6 +30,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.datetime)
+            // PayeeGuess reads a bank narration ("TPT-note-name") with the statement import's own tidy-up, which lives in the domain module
+            implementation(project(":core:domain"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

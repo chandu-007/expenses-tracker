@@ -612,6 +612,10 @@ SELECT COUNT(*) FROM op_log WHERE entity = 'attachment' AND row_id = :id AND fie
 entryBySourceRef:
 SELECT id, deleted, kind FROM entry WHERE source = :source AND source_ref = :sourceRef;
 
+-- A deleted transfer made by "Make this a transfer" lets go of its bank reference when the conversion is undone (the unique index covers deleted entries).
+clearSourceRef:
+UPDATE entry SET source_ref = NULL WHERE id = :id;
+
 allCaptureRules:
 SELECT * FROM capture_rule ORDER BY position, id;
 
@@ -656,6 +660,22 @@ WHERE deleted = 0 AND kind = 'TRANSFER' AND to_amount_minor = :amount AND occurr
 entriesWithReference:
 SELECT id, occurred_at, source_ref, merchant, amount_minor, kind FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
 
+-- Entries read from a text that could be one half of a transfer between the person's own accounts: a plain expense (money out) or income (money in) of exactly
+-- this amount, whose time of happening is in a window (an index range: the caller narrows it by the time the text arrived), that nothing else is tied to (no shared part, refund, expectation of money back, bill, repeating item or attachment, and not split between categories). Its note and tags carry over to the transfer.
+transferCandidates:
+SELECT e.id, e.kind, e.account_id, e.occurred_at, e.merchant, o.text AS origin_text, o.sender AS origin_sender, o.kind AS origin_kind, o.received_at AS origin_at
+FROM entry e LEFT JOIN entry_origin o ON o.entry_id = e.id
+WHERE e.deleted = 0 AND e.source = 'sms' AND e.kind IN ('EXPENSE', 'INCOME') AND e.amount_minor = :amount AND e.currency = :currency AND e.account_id IS NOT NULL
+  AND e.occurred_at >= :fromMillis AND e.occurred_at < :untilMillis
+  AND NOT EXISTS (SELECT 1 FROM entry_share s WHERE s.entry_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM entry r WHERE r.refunds_entry = e.id AND r.deleted = 0)
+  AND NOT EXISTS (SELECT 1 FROM entry_expect x WHERE x.entry_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM bill b WHERE b.entry_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM recurring_done d WHERE d.entry_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM attachment a WHERE a.entry_id = e.id)
+  AND (SELECT COUNT(*) FROM entry_split sp WHERE sp.entry_id = e.id) <= 1
+ORDER BY e.occurred_at, e.id;
+
 -- Expenses a refund of :amount could be for: at least that much, in a window before it, best amount match first, then nearest.
 refundCandidates:
 SELECT id, merchant, note, amount_minor, occurred_at FROM entry
@@ -676,6 +696,16 @@ ORDER BY e.occurred_at DESC LIMIT 300;
 -- Entries from another source (a text, a notification, typed by hand) that a statement row might be: same account, kind and amount, in a window.
 entriesLikeStatementRow:
 SELECT id FROM entry WHERE deleted = 0 AND account_id = :account AND kind = :kind AND amount_minor = :amount
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
+
+-- A transfer between the person's own accounts that an ordinary statement row (one not said to be a transfer) is one side of: a debit row of the source account, or a credit row of
+-- the destination account, same amount, in a window, from any source but another statement (a captured pair of texts, a Mark paid, a hand-typed transfer).
+transfersOutOfLikeStatementRow:
+SELECT id, counter_account_id AS other FROM entry WHERE deleted = 0 AND kind = 'TRANSFER' AND account_id = :account AND amount_minor = :amount
+  AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
+
+transfersIntoLikeStatementRow:
+SELECT id, account_id AS other FROM entry WHERE deleted = 0 AND kind = 'TRANSFER' AND counter_account_id = :account AND to_amount_minor = :amount
   AND occurred_at >= :fromMillis AND occurred_at < :untilMillis AND (source IS NULL OR source <> 'csv');
 
 -- A transfer already recorded between these two accounts for a statement row: same direction, amount, in a window, from any source (a Mark paid, a text, another statement).
@@ -825,6 +855,10 @@ UPDATE inbox SET status = 'PENDING', entry_id = NULL WHERE id = :id AND status !
 -- Undo of a skip: the text is put back too (the screen kept it in memory for the few seconds Undo is offered), so the item reads as it did
 reopenDismissedInbox:
 UPDATE inbox SET status = 'PENDING', entry_id = NULL, body = :body WHERE id = :id AND status = 'DISMISSED';
+
+-- Undo of "make this a transfer": the item that was added goes back to waiting, with the text it had (kept in memory for the few seconds Undo is offered).
+reopenConfirmedInbox:
+UPDATE inbox SET status = 'PENDING', entry_id = NULL, body = :body WHERE id = :id AND status = 'CONFIRMED';
 
 insertCaptureEvent:
 INSERT INTO capture_event(at, sender_root, outcome) VALUES (?, ?, ?);

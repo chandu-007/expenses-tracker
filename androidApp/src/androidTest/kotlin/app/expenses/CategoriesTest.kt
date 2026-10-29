@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -190,7 +191,10 @@ class CategoriesTest {
         launch(); waitFor("add")
         openManager()
         compose.onNodeWithTag("up_Food").assertIsNotEnabled()
-        compose.onNodeWithTag("down_Other").assertIsNotEnabled()
+        // the last expense category of a new install (the list is long, so it is scrolled to)
+        compose.onNodeWithTag("categories_list").performScrollToNode(hasTestTag("down_cat:cashwithdrawal"))
+        compose.onNodeWithTag("down_cat:cashwithdrawal").assertIsNotEnabled()
+        compose.onNodeWithTag("categories_list").performScrollToNode(hasTestTag("up_Food"))
         compose.onNodeWithTag("down_Food").performClick()
         compose.waitUntil(10_000) { names().take(2) == listOf("Groceries", "Food") }
         assertEquals(listOf("Groceries", "Food", "Transport"), names().take(3))

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,7 +44,11 @@ class CategoryKindsUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String, ms: Long = 10_000) = compose.waitUntil(ms) { has(tag) }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
-    private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
+    private fun tap(tag: String) {
+        // a new install lists 23 expense categories: a row that is not on screen yet is scrolled to in the (lazy) list
+        if (!has(tag)) runCatching { compose.onNodeWithTag("categories_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+        waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick()
+    }
     private fun kinds() = runBlocking { container.write { ok -> ok.categories.list().associate { it.name to it.kind } } } ?: emptyMap()
 
     private fun openManager() {

@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.StarterCategories
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.RecurringItem
 import app.expenses.core.domain.RecurringKind
@@ -152,7 +153,7 @@ class BackupStoreTest {
         assertFailsWith<IllegalArgumentException> { b.backup.restore(broken) }
         assertEquals(0L, b.entries())
         assertTrue(b.db.schemaQueries.selectAccounts().executeAsList().isEmpty(), "the accounts that came before the bad entry were rolled back too")
-        assertEquals(13, b.categories.list().size, "only the seeded defaults (eight for expenses, five for income)")
+        assertEquals(CategoryStore.DEFAULTS.size + StarterCategories.EXPENSE_MORE.size + CategoryStore.INCOME_DEFAULTS.size + StarterCategories.INCOME_MORE.size, b.categories.list().size, "only the seeded defaults")
         b.backup.restore(data) // and a good restore still works afterwards
         assertEquals(10L, b.entries())
     }
@@ -219,9 +220,86 @@ class BackupStoreTest {
         val c = Device("c")
         c.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, c.inr))
         c.ledger.save(Expense(EntryId("t"), 1, AccountId("cash"), c.m(100), listOf(CategorySplit(CategoryId("Transport"), c.m(100)))))
-        val src = Device("s"); src.categories.rename("Transport", "Travel")
+        val src = Device("s"); src.categories.rename("Transport", "Commute")
         c.backup.restore(roundTrip(src))
         assertEquals("Transport", c.categories.list().first { it.id == "Transport" }.name)
+    }
+
+    // ---- the newer starter categories of a new install ----
+
+    @Test
+    fun aBackupFromBeforeTheNewerStartersRestoresToExactlyItsCategoriesOnANewInstall() {
+        // a ledger as an older version made it: only the original starters (the newer ones are taken out by hand, as an old install never had them)
+        val old = Device("old")
+        for (id in StarterCategories.newExpense.map { it.first } + StarterCategories.newIncome.map { it.first }) old.categories.delete(id)
+        old.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, old.inr))
+        val rent = old.categories.create("Rent") // a person's own "Rent", with another id
+        old.ledger.save(Expense(EntryId("r"), 1, AccountId("cash"), old.m(100), listOf(CategorySplit(CategoryId(rent.id), old.m(100)))))
+        val fresh = Device("fresh")
+        assertTrue(fresh.categories.list().any { it.id == "cat:rent" }, "a new install has the newer starter Rent")
+        fresh.backup.restore(roundTrip(old))
+        assertEquals(old.categories.list().map { it.name to it.id }, fresh.categories.list().map { it.name to it.id }, "the restored ledger has its categories and no others: no second Rent")
+        assertEquals(1, fresh.categories.list().count { it.name == "Rent" })
+    }
+
+    private fun oldLedgerWithOwnRentAndFuel(): Device {
+        val old = Device("old")
+        for (id in StarterCategories.newExpense.map { it.first } + StarterCategories.newIncome.map { it.first }) old.categories.delete(id)
+        old.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, old.inr))
+        val rent = old.categories.create("rent", colorArgb = 0xFF112233) // another capitalisation, a colour of its own
+        val fuel = old.categories.create("Fuel")
+        old.ledger.save(Expense(EntryId("r"), 1, AccountId("cash"), old.m(100), listOf(CategorySplit(CategoryId(rent.id), old.m(100)))))
+        old.ledger.save(Expense(EntryId("f"), 2, AccountId("cash"), old.m(200), listOf(CategorySplit(CategoryId(fuel.id), old.m(200)))))
+        return old
+    }
+
+    @Test
+    fun aPhoneWithAnEntryAlreadyDoesNotGetASecondRentOrFuelWhenARestoreBringsItsOwn() {
+        val fresh = Device("fresh")
+        fresh.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, fresh.inr))
+        fresh.ledger.save(Expense(EntryId("first"), 5, AccountId("cash"), fresh.m(50), listOf(CategorySplit(CategoryId("Other"), fresh.m(50)))), EntryDetails(merchant = "Test"))
+        fresh.backup.restore(roundTrip(oldLedgerWithOwnRentAndFuel()))
+        val tops = fresh.categories.list().filter { it.parentId == null && it.kind == app.expenses.core.domain.CategoryKind.EXPENSE }
+        assertEquals(1, tops.count { it.name.equals("Rent", ignoreCase = true) }, "one Rent, the backup's")
+        assertEquals(1, tops.count { it.name == "Fuel" })
+        assertEquals("rent", tops.first { it.name.equals("Rent", ignoreCase = true) }.name); assertEquals(0xFF112233L, tops.first { it.name == "rent" }.colorArgb)
+        // the starters the backup does not have stay on a device in use
+        assertTrue(fresh.categories.list().any { it.id == "cat:insurance" })
+        // the pristine starter was merged into the backup's category (not lost with a dangling id)
+        assertEquals(tops.first { it.name == "Fuel" }.id, fresh.db.resolveCategory("cat:fuel"))
+    }
+
+    @Test
+    fun aStarterThatHasBeenUsedOrHasARuleOnItIsNotMergedAwayEvenWhenTheNamesMatch() {
+        val fresh = Device("fresh")
+        fresh.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, fresh.inr))
+        fresh.ledger.save(Expense(EntryId("first"), 5, AccountId("cash"), fresh.m(50), listOf(CategorySplit(CategoryId("cat:rent"), fresh.m(50)))), EntryDetails(merchant = "Landlord")) // used
+        CaptureRuleStore(fresh.db).add("rule-1", "diesel", "cat:fuel") // a rule points at it
+        fresh.backup.restore(roundTrip(oldLedgerWithOwnRentAndFuel()))
+        val names = fresh.categories.list().filter { it.parentId == null }.map { it.name.lowercase() }
+        assertEquals(2, names.count { it == "rent" }, "the used one is the person's, so it stays: two Rents, as it would be for any restore onto a ledger in use")
+        assertEquals(2, names.count { it == "fuel" }, "a rule points at the starter Fuel: left alone")
+    }
+
+    @Test
+    fun aBackupThatCarriesANewerStarterTakesItsVersionAndOneDeletedThereStaysDeleted() {
+        val a = Device("a")
+        a.categories.rename("cat:subscriptions", "Apps and subscriptions"); a.categories.delete("cat:taxes"); a.categories.setHidden("income:dividends", true)
+        val b = Device("b")
+        b.backup.restore(roundTrip(a))
+        assertEquals(a.categories.list(), b.categories.list())
+        assertTrue(b.categories.list().none { it.name == "Taxes" })
+    }
+
+    @Test
+    fun aDeviceInUseKeepsItsNewerStartersWhateverTheBackupLacks() {
+        val inUse = Device("use")
+        inUse.ledger.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, inUse.inr))
+        inUse.ledger.save(Expense(EntryId("x"), 1, AccountId("cash"), inUse.m(100), listOf(CategorySplit(CategoryId("Other"), inUse.m(100)))))
+        val old = Device("old")
+        for (id in StarterCategories.newExpense.map { it.first } + StarterCategories.newIncome.map { it.first }) old.categories.delete(id)
+        inUse.backup.restore(roundTrip(old))
+        assertTrue(inUse.categories.list().any { it.id == "cat:rent" }, "an untouched starter on a device that already has entries is not taken away")
     }
 
     // ---- a file that has been through email, a chat or a cloud drive ----

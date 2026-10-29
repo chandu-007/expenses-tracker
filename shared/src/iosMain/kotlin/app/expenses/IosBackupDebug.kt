@@ -29,8 +29,8 @@ internal expect val isSimulatorBuild: Boolean
 private const val ONLY_IN_TESTS = "refused: this is a test entry and does nothing outside a test run"
 
 /** The app's platform with a throw-away in-memory database, so a test can restore and back up without touching the person's data; files go through the real attachment store. */
-private class ScratchPlatform(base: IosPlatform) : Platform by base {
-    override fun openDriver(): SqlDriver = NativeSqliteDriver(ExpensesDb.Schema, "scratch-backup-test.db", onConfiguration = { it.copy(inMemory = true) })
+internal class ScratchPlatform(base: IosPlatform, private val name: String = "scratch-backup-test.db") : Platform by base {
+    override fun openDriver(): SqlDriver = NativeSqliteDriver(ExpensesDb.Schema, name, onConfiguration = { it.copy(inMemory = true) })
 }
 
 /**

@@ -5,6 +5,7 @@ import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.CategoryRules
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.StarterCategories
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
 import kotlin.random.Random
@@ -179,34 +180,40 @@ class CategoryStore(
     private fun newId(): String = Random.nextBytes(8).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     /**
-     * The first time, creates the eight default categories. Their ids equal their names, so entries recorded before categories
-     * could be managed keep pointing at the right one. Seeding is not written to the sync log: every device creates the same rows.
+     * The first time, creates the default categories: the eight original expense ones (their ids equal their names, so entries recorded before categories could be managed keep
+     * pointing at the right one) and, on a **new** install only, the newer ones ([StarterCategories.EXPENSE_MORE], [StarterCategories.INCOME_MORE]). An install that already has categories gets
+     * none of them: that would change its reports. Seeding is not written to the sync log: every device creates the same rows.
      */
     private fun seedDefaults() {
-        if (q.categoryCount().executeAsOne() == 0L) db.transaction {
-            DEFAULTS.forEachIndexed { i, name -> q.insertCategory(name, name, null, null, i.toLong(), CategoryKind.EXPENSE.name) }
+        val fresh = q.categoryCount().executeAsOne() == 0L
+        if (fresh) db.transaction {
+            for (name in DEFAULTS) q.insertCategory(name, name, null, null, StarterCategories.expensePosition(name).toLong(), CategoryKind.EXPENSE.name)
+            for ((id, name, position) in StarterCategories.newExpense) q.insertCategory(id, name, null, null, position.toLong(), CategoryKind.EXPENSE.name)
         }
-        seedIncomeDefaults()
+        seedIncomeDefaults(fresh)
     }
 
     /**
      * Once, adds the income categories (an upgrade has none, and a new install gets them with the expense ones). Their ids are fixed, so every device
-     * creates the same rows and nothing is logged; the marker stops them coming back after the person deletes or renames them.
+     * creates the same rows and nothing is logged; the marker stops them coming back after the person deletes or renames them. Only a new install gets the newer income categories
+     * ([StarterCategories.INCOME_MORE]); an upgrade that is only now getting income categories gets the original five.
      */
-    private fun seedIncomeDefaults() {
+    private fun seedIncomeDefaults(fresh: Boolean) {
         if (q.settingValue(INCOME_SEEDED).executeAsOneOrNull() != null) return
         db.transaction {
             INCOME_DEFAULTS.forEachIndexed { i, name ->
                 val id = "income:" + name.lowercase().filter { it.isLetterOrDigit() }
                 if (q.categoryById(id).executeAsOneOrNull() == null) q.insertCategory(id, name, null, null, (100 + i).toLong(), CategoryKind.INCOME.name)
             }
+            if (fresh) for ((id, name, position) in StarterCategories.newIncome) if (q.categoryById(id).executeAsOneOrNull() == null) q.insertCategory(id, name, null, null, position.toLong(), CategoryKind.INCOME.name)
             q.putSetting(INCOME_SEEDED, "1")
         }
     }
 
     companion object {
-        val DEFAULTS = listOf("Food", "Groceries", "Transport", "Bills", "Shopping", "Health", "Fun", "Other")
-        val INCOME_DEFAULTS = listOf("Salary", "Interest", "Gifts received", "Refunds and cashback", "Other income")
+        /** The original eight expense starters (an existing install has exactly these); see [StarterCategories] for the newer ones a new install adds. */
+        val DEFAULTS = StarterCategories.EXPENSE_FIRST
+        val INCOME_DEFAULTS = StarterCategories.INCOME_FIRST
         private const val INCOME_SEEDED = "income_categories_seeded"
     }
 }

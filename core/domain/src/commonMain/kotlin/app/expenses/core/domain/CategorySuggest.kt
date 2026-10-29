@@ -20,7 +20,7 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
 }
 
 /** [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. */
-enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON }
+enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -53,7 +53,10 @@ object CategorySuggest {
         history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
         // below the person's own choices: a common merchant, then "a payment to a person" (no merchant to go by, so the catch-all)
         // the payee only, never the whole text: a bank's own name or footer ("Airtel Payments Bank") must not pick a category
-        payee?.let { DefaultRules.categoryNameFor(it) }?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.STARTER) } }
+        // (a merchant's better home among the newer starter categories first, when the person has it; else the coarse one it always had)
+        payee?.let { DefaultRules.categoryNamesFor(it) }?.firstNotNullOfOrNull { name -> byName[name.lowercase()]?.takeIf { it in usable } }?.let { return CategorySuggestion(it, SuggestionSource.STARTER) }
+        // the bank's own charges name no merchant: the words of the text say what they are (only when the person has the category)
+        CategoryHints.categoryNameFor(body)?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.WORDS) } }
         if (toAPerson) byName["other"]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.PERSON) }
         return null
     }

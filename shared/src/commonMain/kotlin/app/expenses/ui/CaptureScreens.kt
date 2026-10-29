@@ -65,20 +65,28 @@ fun InboxScreen(
     onPaste: ((String?, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
     /** "Skipped X · Undo" after a skip: what to offer, taking it back, and the bar going away. */
     undo: app.expenses.ScreenUndo? = null, onUndo: (String) -> Unit = {}, onUndoGone: (String) -> Unit = {},
+    /** Two waiting texts of one transfer added as ONE transfer: the money-out item, the money-in item, the account it left and the account it reached. */
+    onConfirmPair: (outId: String, intoId: String, fromId: String, toId: String, done: (String?) -> Unit) -> Unit,
+    /** "These are separate": the two texts of a combined card stay two items. */
+    onApart: (outId: String, intoId: String) -> Unit,
+    /** "Make this a transfer": the waiting item replaces the earlier expense or income it is the other half of (item, that entry, from account, to account). */
+    onConvert: (itemId: String, earlierId: String, fromId: String, toId: String, done: (String?) -> Unit) -> Unit,
 ) {
     var confirmingAll by rememberSaveable { mutableStateOf(false) }
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     val paste = if (onPaste != null) rememberPasteState() else null
     // those that need no decision: not a repeat, not a related entry, an account the person has used for this bank card before (or the only account there is),
     // and an ordinary payment (a transfer or refund asks to be looked at)
-    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" }
+    // (and not one that might be half of a transfer: that is looked at, not added in bulk)
+    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() }
     val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     val easyIds = easy.map { it.id }.toSet()
     // items from the same payee (or, with no payee, the same bank): "Add all from <payee>" on their cards adds the ones among them that need no decision
     val byPayee = rows.groupBy { inboxGroupKey(it) }
     fun addTogether(list: List<InboxRowUi>) { refused.clear(); list.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }
     val cur = app.expenses.core.domain.BaseCurrency.current
-    fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit }.sumOf { it.amountMinor }, cur).formatted()
+    // a combined transfer card is money out of one account and money in to another: it counts on both sides
+    fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit || (credit && it.pairedItemId.isNotEmpty()) }.sumOf { it.amountMinor }, cur).formatted()
     if (confirmingAll) AlertDialog(
         onDismissRequest = { confirmingAll = false }, title = { Text("Add ${easy.size} items?") },
         text = { Text("Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, or whose account is not yet known, are left for you to check.") },
@@ -107,7 +115,7 @@ fun InboxScreen(
             if (onPaste != null) item(key = "paste") { PasteBox(onPaste, paste!!, Modifier.animateItem()) }
             item(key = "summary") {
                 Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${rows.size} to review", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_count"))
+                    Text("${rows.sumOf { if (it.pairedItemId.isNotEmpty()) 2 else 1 }} to review", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_count"))
                     Text("${total(rows, false)} out · ${total(rows, true)} in. Check each one, or add the clear ones together.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (refused.isNotEmpty()) Text("${refused.size} could not be added: ${refused.first()}", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_add_all_problem"))
                     if (easy.size >= 2) Button(onClick = { confirmingAll = true }, modifier = Modifier.testTag("inbox_add_all")) { Text("Add all ${easy.size} clear ones") }
@@ -116,10 +124,12 @@ fun InboxScreen(
             }
             items(rows, key = { it.id }) { r ->
                 val same = byPayee[inboxGroupKey(r)].orEmpty()
-                InboxCard(
+                if (r.pairedItemId.isNotEmpty()) TransferPairCard(r, accounts, onConfirmPair, onApart, Modifier.animateItem())
+                else InboxCard(
                     r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem(),
                     swipeable = r.id in easyIds,
                     payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
+                    onConvert = onConvert,
                 )
             }
         }
@@ -139,6 +149,7 @@ private fun InboxCard(
     swipeable: Boolean = false,
     /** The items from this card's payee that need no decision, when two or more pending items share the payee; empty otherwise (no button). */
     payeeGroup: List<InboxRowUi> = emptyList(), onAddPayee: (List<InboxRowUi>) -> Unit = {},
+    onConvert: (String, String, String, String, (String?) -> Unit) -> Unit,
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var reporting by remember(r.id) { mutableStateOf(false) }
@@ -210,6 +221,15 @@ private fun InboxCard(
             // warnings first: a repeat or a related entry changes what the right action is
             r.relatedNote?.let { Callout(it, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_related_${r.id}")) }
             r.duplicateNote?.let { Callout(it, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_duplicate_${r.id}")) }
+            // the other half of this is already in the ledger as an expense or income: offer to make the two one transfer (the earlier entry goes, and Undo brings it back)
+            if (r.convertEntryId.isNotEmpty()) {
+                Callout(r.convertNote, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_convert_note_${r.id}"))
+                TextButton(onClick = { onConvert(r.id, r.convertEntryId, r.fromAccountId, r.toAccountId) { p -> problem = p } }, modifier = Modifier.testTag("inbox_convert_${r.id}")) { Text("Make it a transfer") }
+                // the Undo lives in memory (it needs the text, which adding an item forgets), so it is offered only while this screen is open: say so
+                Text("You can undo this until you leave this screen.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_convert_undo_note_${r.id}"))
+            }
+            if (r.transferHint.isNotEmpty()) Callout(r.transferHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_transfer_hint_${r.id}"))
+            if (r.setupHint.isNotEmpty()) Callout(r.setupHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_setup_digits_${r.id}"))
             // where it will go: the decision, with its own Change next to it
             Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (paired && r.treatment == "TRANSFER") {
@@ -282,6 +302,53 @@ private fun InboxCard(
             }
         }
     }
+    }
+}
+
+/**
+ * One card for the two texts of one move of money between the person's own accounts ("Transfer from Main to Savings ₹45,250.75"): the text that says money left one account and the text
+ * that says it arrived in another. Add records ONE transfer (neither text is also an expense or income); "These are separate" keeps them as two items. Both original texts are one tap away.
+ */
+@Composable
+private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirmPair: (String, String, String, String, (String?) -> Unit) -> Unit, onApart: (String, String) -> Unit, modifier: Modifier = Modifier) {
+    val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "your account" }
+    var showText by rememberSaveable(r.id) { mutableStateOf(false) }
+    var problem by remember(r.id) { mutableStateOf<String?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    androidx.compose.material3.Card(
+        modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                CategoryAvatar(r.payee ?: "Transfer", r.payee ?: "Transfer", Modifier.padding(end = 12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Transfer from ${nameOf(r.fromAccountId)} to ${nameOf(r.toAccountId)} ${r.amountText}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_transfer_${r.id}"))
+                    Text(
+                        "Between your own accounts · ${r.dateText}" + (r.payee?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_meta_${r.id}"),
+                    )
+                }
+            }
+            Text(
+                (if (r.pairBasis == "NAMED_ACCOUNT") "Two texts, one move of money: one names the other account's digits. " else "Two texts, one move of money: the same amount went out of one account and into another within minutes. ") +
+                    "Added as one transfer, it is neither spending nor income.",
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_transfer_why_${r.id}"),
+            )
+            problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirmPair(r.id, r.pairedItemId, r.fromAccountId, r.toAccountId) { p -> problem = p } },
+                    enabled = r.fromAccountId.isNotEmpty() && r.toAccountId.isNotEmpty(), modifier = Modifier.weight(1f).testTag("inbox_transfer_add_${r.id}"),
+                ) { Text("Add transfer") }
+                OutlinedButton(onClick = { onApart(r.id, r.pairedItemId) }, modifier = Modifier.testTag("inbox_transfer_apart_${r.id}")) { Text("These are separate") }
+            }
+            TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("inbox_transfer_show_${r.id}")) { Text(if (showText) "Hide messages" else "Show both messages") }
+            if (showText) Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Money out of ${nameOf(r.fromAccountId)}: ${r.body}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_transfer_text_out_${r.id}"))
+                Text("Money into ${nameOf(r.toAccountId)}: ${r.pairedBody}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_transfer_text_in_${r.id}"))
+            }
+        }
     }
 }
 

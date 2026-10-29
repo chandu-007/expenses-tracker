@@ -44,18 +44,22 @@ object BillParser {
     /** Something is owed or will be taken: due, payable, a bill or statement that is ready, a pay-by date, an EMI or premium falling due, an auto-debit. */
     private val cue = Regex(
         """(?i)\b(?:due|payable|overdue)\b(?!\s+to\b)|\bpay(?:ment)?\s+(?:by|before|on\s+or\s+before)\b|\blast\s+date\b|\bbill\b[^.]{0,40}\b(?:generated|ready|amount|of)\b""" +
-            """|\bstatement\b[^.]{0,40}\b(?:generated|ready)\b|\bwill\s+be\s+(?:auto[- ]?)?debited\b|\bauto[- ]?debit\b|\bscheduled\s+(?:to\s+be\s+)?debit""",
+            """|\bstatement\b[^.]{0,40}\b(?:generated|ready)\b|\b(?:will|to)\s+be\s+(?:auto[- ]?)?debited\b|\bauto[- ]?debit\b|\bscheduled\s+(?:to\s+be\s+)?debit""" +
+            """|$AUTOPAY_SCHEDULED|\bpre[- ]?debit\b""",
     )
     /** An explicit deadline or a promised debit: what separates "pay Rs 900 by 25-Oct" from a spend alert that quotes "Due Rs 5000" as a balance. */
     private val deadline = Regex(
-        """(?i)\bdue\s*(?:date|on|by)\b|\bis\s+due\b|\bpay(?:ment)?\s+(?:by|before|on\s+or\s+before)\b|\blast\s+date\b|\bwill\s+be\s+(?:auto[- ]?)?debited\b|\bscheduled\s+(?:to\s+be\s+)?debit""",
+        """(?i)\bdue\s*(?:date|on|by)\b|\bis\s+due\b|\bpay(?:ment)?\s+(?:by|before|on\s+or\s+before)\b|\blast\s+date\b|\b(?:will|to)\s+be\s+(?:auto[- ]?)?debited\b|\bscheduled\s+(?:to\s+be\s+)?debit|$AUTOPAY_SCHEDULED|\bpre[- ]?debit\b""",
     )
-    private val futureDebit = Regex("""(?i)will\s+be\s+(?:auto[- ]?)?debited|scheduled\s+(?:to\s+be\s+)?debit""")
+    private val futureDebit = Regex("""(?i)(?:will|to)\s+be\s+(?:auto[- ]?)?debited|scheduled\s+(?:to\s+be\s+)?debit|$AUTOPAY_SCHEDULED""")
 
     /** Words of something that already happened to money. A text with these is a transaction unless it also states a deadline. */
     private val happened = Regex("""(?i)\b(?:spent|debited|credited|cleared|refund(?:ed)?|withdrawn|used\s+at|purchase|charged)\b""")
 
-    private val autoDebitWords = Regex("""(?i)will\s+be\s+(?:auto[- ]?)?debited|auto[- ]?debit|standing\s+instruction|mandate|scheduled\s+(?:to\s+be\s+)?debit""")
+    private val autoDebitWords = Regex("""(?i)(?:will|to)\s+be\s+(?:auto[- ]?)?debited|auto[- ]?debit|auto[- ]?pay|pre[- ]?debit|standing\s+instruction|mandate|scheduled\s+(?:to\s+be\s+)?debit""")
+
+    /** "Auto-pay of Rs.199 for NETFLIX is scheduled on 05-11-2026": an auto-pay that is coming, not one that happened. */
+    private const val AUTOPAY_SCHEDULED = """\bauto[- ]?pay\b.{0,80}?\b(?:is|are|has\s+been)\s+scheduled\b"""
 
     private const val NUM = """([0-9][0-9,]*(?:\.[0-9]{1,2})?)"""
     private const val CUR = """(?:rs\.?|inr|₹)"""

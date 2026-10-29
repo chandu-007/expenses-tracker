@@ -60,8 +60,11 @@ import app.expenses.core.parsers.SenderRules
 import app.expenses.core.domain.DupEntry
 import app.expenses.core.domain.DupStrength
 import app.expenses.core.domain.Duplicates
+import app.expenses.core.domain.TransferPair
+import app.expenses.core.domain.TransferPairs
 import app.expenses.core.domain.PendingKey
 import app.expenses.core.domain.CategorySuggest
+import app.expenses.core.domain.CategorySuggestion
 import app.expenses.core.domain.SimilarCandidate
 import app.expenses.core.domain.SimilarEntries
 import app.expenses.core.domain.SuggestionSource
@@ -172,6 +175,18 @@ data class InboxRowUi(
     val payeeKind: String = "",
     /** Whether the person can give this payee a name of their own (there is an address or name in the text to attach it to). */
     val nameable: Boolean = false,
+    /** With [treatment] "PAIR": the other waiting text of the same transfer (this row stands for both), its words, and the last four digits it carries; [pairBasis] is what tied them (see PairBasis). */
+    val pairedItemId: String = "",
+    val pairedBody: String = "",
+    val pairedLast4: String = "",
+    val pairBasis: String = "",
+    /** An entry the person already added from an earlier text that is the other half of this one (an expense for money in, income for money out), and what to say about it: "Make this a transfer". */
+    val convertEntryId: String = "",
+    val convertNote: String = "",
+    /** "Might be a transfer to your other account ..." for a text whose other half has not arrived; empty otherwise. */
+    val transferHint: String = "",
+    /** "Set the last four digits of your accounts so I can recognise transfers": when the text looks like a transfer but its accounts could not be told; empty otherwise. */
+    val setupHint: String = "",
 )
 
 /** Someone lent to or borrowed from. */
@@ -245,7 +260,11 @@ data class AccountRowUi(
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
 /** One charge that keeps coming, as the Subscriptions screen shows it. */
-data class SubscriptionRowUi(val key: String, val name: String, val amountText: String, val cadenceText: String, val nextText: String, val yearlyText: String, /** A repeating item with this name already exists, so no reminder needs making. */ val repeats: Boolean = false)
+data class SubscriptionRowUi(
+    val key: String, val name: String, val amountText: String, val cadenceText: String, val nextText: String, val yearlyText: String, /** A repeating item with this name already exists, so no reminder needs making. */ val repeats: Boolean = false,
+    /** "Last charged ₹99 on 12 Oct": the latest price and day. */ val lastText: String = "",
+    /** "Price went up from ₹75" or "Price went down from ₹99" when the latest price differs from what it was by 5% or more; empty otherwise. */ val priceNote: String = "", val priceUp: Boolean = false,
+)
 
 data class SubscriptionsUi(val rows: List<SubscriptionRowUi> = emptyList(), val monthlyText: String = "", val yearlyText: String = "", val ignored: Int = 0)
 
@@ -1102,7 +1121,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             for (p in app.expenses.core.domain.CategoryCatalog.plan(ok.categories.list(), picks)) {
                 val parent = ids[p.parent] ?: ok.categories.list().firstOrNull { it.parentId == null && it.name.equals(p.parent, ignoreCase = true) }?.id
                 val child = p.child
-                if (child == null) { ids[p.parent] = ok.categories.create(p.parent).id; added++ }
+                if (child == null) { ids[p.parent] = ok.categories.create(p.parent, kind = if (p.income) app.expenses.core.domain.CategoryKind.INCOME else app.expenses.core.domain.CategoryKind.EXPENSE).id; added++ }
                 else { ok.categories.create(child, parent ?: error("The group ${p.parent} was not created")); added++ }
             }
         }
@@ -1908,7 +1927,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val repeats = Duplicates.repeatsOfPending(items.map { PendingKey(it.id, it.direction, it.amountMinor, it.receivedAt, it.reference, it.sender.trim().uppercase(), it.source == CaptureKeys.NOTIFICATION && !AppSources.isEmailName(it.sender), it.accountLast4, AppSources.isEmailName(it.sender)) })
         val byId = items.associateBy { it.id }
         val dayMs = 86_400_000L
-        return items.map { i ->
+        val base = items.map { i ->
             val day = (i.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: dateOfMillis(i.receivedAt, zone))
             val dayStart = { d: LocalDate -> d.startOfDayMillis(zone) }
             val from = dayStart(day.minusDays(Duplicates.DAY_WINDOW)); val until = dayStart(day.plusDays(Duplicates.DAY_WINDOW + 1))
@@ -1966,7 +1985,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val history = if (i.direction == "DEBIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
                 SimilarEntries.topCategory(clean, (similarCandidates(ok, clean, "EXPENSE") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "EXPENSE") else emptyList()).distinctBy { it.id })
             } else null
-            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history) else null
+            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history)
+                // cash taken out at an ATM that is not moved to a cash account (the person has none): "Cash withdrawal", when they have that category
+                ?: byName["cash withdrawal"]?.takeIf { it in usable && kind == MessageKind.ATM_WITHDRAWAL && treatment == "PAYMENT" }?.let { CategorySuggestion(it, SuggestionSource.WORDS) }
+            else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(i.receivedAt),
                 i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
@@ -1975,9 +1997,145 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 nameable = rawPayee != null,
                 payeeKind = when (PayeeKinds.of(rawPayee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
-                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.HISTORY -> "your earlier entries"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; null -> "" },
+                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.HISTORY -> "your earlier entries"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; SuggestionSource.WORDS -> "the words of the text"; null -> "" },
             )
         }
+        return withTransfers(ok, items, base, accounts)
+    }
+
+    // ---- own-account transfers: one card for the two texts of one move of money ----
+
+    /**
+     * Puts together the two waiting texts of one move of money between the person's own accounts, and marks the rest. [rows] are the ordinary rows of [items]. Only a plain payment that is
+     * not a flagged repeat takes part; the accounts must both be known by the digits the texts carry (or the account remembered for that bank and digits), so a person who has not set the last
+     * four digits on an account gets no pairing and is told so on the card. What comes back:
+     *  - the two rows of a pair replaced by one row ([InboxRowUi.treatment] "PAIR", [InboxRowUi.pairedItemId] the other text);
+     *  - a row whose other half was already added as an expense or income gets [InboxRowUi.convertEntryId];
+     *  - a lone row gets [InboxRowUi.transferHint] (it might be a transfer) or [InboxRowUi.setupHint] (the digits would let this be recognised).
+     * Nothing is recorded here; adding anything is the person's tap. Costs a few lookups per waiting item, and nothing when the person has fewer than two accounts to move money between.
+     */
+    private fun withTransfers(ok: AppContainer.Opened.Ok, items: List<app.expenses.core.storage.InboxItem>, rows: List<InboxRowUi>, accounts: List<app.expenses.core.storage.db.Account>): List<InboxRowUi> {
+        val scan = TransferScan.of(ok, items, rows.filter { it.treatment == "PAYMENT" && it.duplicateNote == null }.mapTo(HashSet()) { it.id }, accounts) ?: return rows
+        val byId = items.associateBy { it.id }
+        val rowById = rows.associateBy { it.id }
+        val names = scan.accountNames
+        fun money(minor: Long) = Money(minor, inr).formatted()
+        val pairAt = HashMap<String, TransferPair>()
+        for (p in scan.pairs) { pairAt[p.out.id] = p; pairAt[p.into.id] = p }
+        val emitted = HashSet<String>()
+        val out = ArrayList<InboxRowUi>(rows.size)
+        for (r in rows) {
+            val p = pairAt[r.id]
+            if (p != null) {
+                if (!emitted.add(p.out.id)) continue
+                val o = rowById.getValue(p.out.id); val n = rowById.getValue(p.into.id)
+                out += o.copy(
+                    payee = PayeeGuess.of(n.body) ?: PayeeGuess.of(o.body), direction = "DEBIT", accountId = p.out.accountId.orEmpty(), categoryId = "", treatment = "PAIR", treatmentLabel = "transfer",
+                    fromAccountId = p.out.accountId.orEmpty(), toAccountId = p.into.accountId.orEmpty(), pairedItemId = n.id, pairedBody = n.body, pairedLast4 = n.last4.orEmpty(),
+                    pairBasis = p.basis.name, nameable = false, payeeKind = "", categoryNote = "", relatedNote = null,
+                )
+                continue
+            }
+            val offer = scan.offers[r.id]
+            if (offer != null) {
+                val (pair, e) = offer
+                val earlier = if (pair.out.accepted) pair.out else pair.into
+                val amount = money(byId.getValue(r.id).amountMinor)
+                val note = "Make this a transfer: it matches the earlier $amount ${if (e.outgoing) "expense from" else "income into"} ${names[earlier.accountId]}"
+                out += r.copy(convertEntryId = e.entryId, convertNote = note, fromAccountId = pair.out.accountId.orEmpty(), toAccountId = pair.into.accountId.orEmpty())
+                continue
+            }
+            val lone = scan.lone[r.id]
+            if (lone == null) { out += r; continue }
+            val might = lone.mightBeTo
+            val setup = scan.digitsWouldHelp && (lone.side.hinted || lone.namesOther || lone.side.namesAccountId != null) && (lone.side.accountId == null || lone.namesOther)
+            out += r.copy(
+                transferHint = might?.let { "Might be a transfer ${if (lone.side.outgoing) "to" else "from"} your other account, $it. If its other text arrives, the two are put together." }.orEmpty(),
+                setupHint = if (might == null && setup) "Might be a transfer between your own accounts. Set the last four digits of your accounts (More > Accounts) so I can recognise transfers." else "",
+            )
+        }
+        return out
+    }
+
+    /** "These are separate": the person says these two waiting texts are not one transfer; they are never put together again. */
+    fun keepApart(outId: String, intoId: String) = withStore { ok ->
+        ok.templates.putSetting(TransferScan.apartKey(outId, intoId), "1")
+        _inbox.value = inboxRows(ok)
+    }
+
+    /**
+     * Adds the two waiting texts [outId] (money out of [fromId]) and [intoId] (money into [toId]) as ONE transfer: neither becomes an expense or income. [onDone] gets null, or why not.
+     * The person has to tap for this; nothing is added by itself.
+     */
+    fun confirmTransferPair(outId: String, intoId: String, fromId: String, toId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val out = ok.inbox.get(outId) ?: return@write "That item is no longer in the inbox."
+                    val into = ok.inbox.get(intoId) ?: return@write "That item is no longer in the inbox."
+                    if (out.currency != BaseCurrency.current.code || into.currency != out.currency) return@write "This is in ${out.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
+                    if (out.direction != "DEBIT" || into.direction != "CREDIT" || out.amountMinor != into.amountMinor) return@write "These two texts are not the same amount going out and coming in."
+                    val at = app.expenses.core.domain.CaptureTime.entryTime(out.txnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, out.receivedAt, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    val title = PayeeGuess.of(into.body.orEmpty()) ?: PayeeGuess.of(out.body.orEmpty()) ?: "Transfer to ${accountNames[toId] ?: "your account"}"
+                    val draft = EntryDraft(null, DraftKind.TRANSFER, Money(out.amountMinor, BaseCurrency.current).toPlainString(), "", emptyList(), fromId, toId, title, at)
+                    val entry = (when (val r = EntryDrafts.build(draft, EntryId(Uuid.random().toString()), BaseCurrency.current)) { is DraftResult.Ok -> r.entry; is DraftResult.Problem -> return@write r.message }) as app.expenses.core.domain.ledger.Transfer
+                    ok.transfers.addPair(entry, title, out.reference ?: into.reference ?: out.id, outId, intoId)
+                    // the account each text's own digits stand for is remembered, as for any added item
+                    if (out.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(out.issuer, out.accountLast4), fromId)
+                    if (into.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(into.issuer, into.accountLast4), toId)
+                    _inbox.value = inboxRows(ok)
+                    refresh(ok)
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** What "Make it a transfer" changed, held for the few seconds its Undo is offered. */
+    @Volatile private var madeTransfer: app.expenses.core.storage.CaptureTransfers.Replaced? = null
+
+    /**
+     * The waiting text [itemId] is the other half of the entry [earlierId], which the person added earlier as an expense or income: the earlier entry is deleted (it can be restored) and
+     * one transfer from [fromId] to [toId] takes its place, all or nothing. "Made it a transfer · Undo" is offered. [onDone] gets null, or why not. Never done without a tap.
+     */
+    fun makeTransfer(itemId: String, earlierId: String, fromId: String, toId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val item = ok.inbox.get(itemId) ?: return@write "That item is no longer in the inbox."
+                    if (item.currency != BaseCurrency.current.code) return@write "This is in ${item.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
+                    val earlier = ok.transfers.earlier(item.amountMinor, item.currency, item.receivedAt, TransferScan.EARLIER_QUERY_MS).firstOrNull { it.entryId == earlierId } ?: return@write "The earlier entry is no longer there, or has changed."
+                    // the earlier entry must be the half on the account the card said
+                    if (earlier.accountId != (if (earlier.outgoing) fromId else toId)) return@write "The earlier entry is on another account than this card said."
+                    val at = earlier.occurredAt
+                    val title = PayeeGuess.of(item.body.orEmpty()) ?: earlier.originText?.let { PayeeGuess.of(it) } ?: "Transfer to ${accountNames[toId] ?: "your account"}"
+                    val draft = EntryDraft(null, DraftKind.TRANSFER, Money(item.amountMinor, BaseCurrency.current).toPlainString(), "", emptyList(), fromId, toId, title, at)
+                    val entry = (when (val r = EntryDrafts.build(draft, EntryId(Uuid.random().toString()), BaseCurrency.current)) { is DraftResult.Ok -> r.entry; is DraftResult.Problem -> return@write r.message }) as app.expenses.core.domain.ledger.Transfer
+                    madeTransfer = ok.transfers.replaceEarlier(entry, title, item.reference ?: item.id, itemId, earlierId)
+                    if (item.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(item.issuer, item.accountLast4), if (item.direction == "CREDIT") toId else fromId)
+                    _inbox.value = inboxRows(ok)
+                    refresh(ok)
+                    _inboxUndo.value = ScreenUndo("$MADE_TRANSFER_UNDO$itemId", "Made it a transfer")
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    private fun undoMadeTransfer(itemId: String) {
+        val held = madeTransfer?.takeIf { it.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
+        madeTransfer = null
+        withStore { ok ->
+            try { ok.transfers.undoReplace(held) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            _inbox.value = inboxRows(ok); refresh(ok)
+        }
+    }
+
+    private companion object {
+        /** The id of the Undo bar of "Make it a transfer": this and the item's id. */
+        const val MADE_TRANSFER_UNDO = "transfer:"
     }
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)
@@ -2126,6 +2284,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** Brings back the item whose skip was just offered for Undo, as it was (its text included). */
     fun undoDismissCapture(id: String) {
+        if (id.startsWith(MADE_TRANSFER_UNDO)) { undoMadeTransfer(id.removePrefix(MADE_TRANSFER_UNDO)); return }
         val held = skippedCapture?.takeIf { it.first == id } // taken now: the bar clears it as soon as it is gone, before the store work below runs
         if (held == null) return
         withStore { ok ->
@@ -2136,7 +2295,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** The Undo bar for a skip has gone (used, or timed out): what was kept for it is let go. A newer skip's own offer is left alone. */
     fun inboxUndoGone(id: String) {
-        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null }
+        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null }
     }
 
     /**
@@ -2624,12 +2783,18 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
         val ignored = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
         val all = SubscriptionFinder.find(samples, today.toEpochDays().toInt())
-        val shown = all.filter { it.key !in ignored }
+        val shown = all.filter { !it.ignoredBy(ignored) } // by merchant and cadence: a changed typical price does not bring a hidden row back
         val dayFmt = DatePattern("d MMM")
-        fun cadence(d: Int) = when (d) { 30 -> "every month"; 91 -> "every 3 months"; else -> "every year" }
-        val existing = ok.recurring.list().map { SubscriptionFinder.keyOf(it.name) }.toSet()
+        fun cadence(d: Int) = when (d) { 28 -> "every 28 days"; 30 -> "every month"; 84 -> "every 12 weeks"; 91 -> "every 3 months"; 182 -> "every 6 months"; else -> "every year" }
+        val existing = ok.recurring.list().map { it.name.trim().lowercase() }.toSet()
         return SubscriptionsUi(
-            shown.map { SubscriptionRowUi(it.key, it.name, Money(it.amountMinor, inr).formatted(), cadence(it.cadenceDays), "next about " + dayFmt.format(localDateOfEpochDay(it.nextDay.toLong())), Money(it.yearlyMinor, inr).formatted() + " a year", repeats = it.key in existing) },
+            shown.map {
+                SubscriptionRowUi(
+                    it.key, it.name, Money(it.amountMinor, inr).formatted(), cadence(it.cadenceDays), "next about " + dayFmt.format(localDateOfEpochDay(it.nextDay.toLong())), Money(it.yearlyMinor, inr).formatted() + " a year",
+                    repeats = it.name.trim().lowercase() in existing, lastText = "Last charged ${Money(it.amountMinor, inr).formatted()} on ${dayFmt.format(localDateOfEpochDay(it.lastDay.toLong()))}",
+                    priceNote = it.previousAmountMinor?.let { before -> (if (it.priceWentUp) "Price went up from " else "Price went down from ") + Money(before, inr).formatted() }.orEmpty(), priceUp = it.priceWentUp,
+                )
+            },
             Money(shown.sumOf { it.monthlyMinor }, inr).formatted(), Money(shown.sumOf { it.yearlyMinor }, inr).formatted(), all.size - shown.size,
         )
     }
@@ -2644,13 +2809,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
         val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt()).firstOrNull { it.key == key } ?: return@withStore
-        if (ok.recurring.list().any { SubscriptionFinder.keyOf(it.name) == key }) return@withStore
-        val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, key).executeAsOneOrNull() ?: return@withStore
+        if (ok.recurring.list().any { it.name.trim().lowercase() == sub.name.trim().lowercase() }) return@withStore
+        // the latest charge is looked up by the merchant as it was written on it (the finder's key may be a clean name for several spellings)
+        val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, sub.lastName.trim().lowercase()).executeAsOneOrNull() ?: return@withStore
         val category = ok.db.schemaQueries.splitsOf(latest.id).executeAsList().firstOrNull()?.category_id
-        val (unit, every) = when (sub.cadenceDays) { 30 -> RepeatUnit.MONTH to 1; 91 -> RepeatUnit.MONTH to 3; else -> RepeatUnit.YEAR to 1 }
+        val (unit, every) = when (sub.cadenceDays) { 28 -> RepeatUnit.WEEK to 4; 30 -> RepeatUnit.MONTH to 1; 84 -> RepeatUnit.WEEK to 12; 91 -> RepeatUnit.MONTH to 3; 182 -> RepeatUnit.MONTH to 6; else -> RepeatUnit.YEAR to 1 }
         // the next date on the gap that is not in the past
         var start = localDateOfEpochDay(sub.nextDay.toLong())
-        while (start < today) start = if (unit == RepeatUnit.YEAR) start.plus(1, kotlinx.datetime.DateTimeUnit.YEAR) else start.plus(every, kotlinx.datetime.DateTimeUnit.MONTH)
+        while (start < today) start = when (unit) { RepeatUnit.YEAR -> start.plus(1, kotlinx.datetime.DateTimeUnit.YEAR); RepeatUnit.WEEK -> start.plus(every * 7, kotlinx.datetime.DateTimeUnit.DAY); else -> start.plus(every, kotlinx.datetime.DateTimeUnit.MONTH) }
         ok.recurring.save(RecurringItem(Uuid.random().toString(), sub.name, Money(sub.amountMinor, inr), category?.let(::CategoryId), AccountId(latest.account_id ?: return@withStore), sub.name, Schedule(unit, every, start)))
         _subscriptions.value = subscriptionsUi(ok)
         refresh(ok)

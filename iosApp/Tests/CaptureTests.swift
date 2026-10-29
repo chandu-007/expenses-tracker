@@ -166,3 +166,18 @@ final class SharedTextTests: XCTestCase {
         XCTAssertEqual(again.intValue, 0, "the queue was emptied")
     }
 }
+
+/// Own-account transfers: the two texts HDFC Bank sends for one move of money (invented digits 1234 and 5678), through the app's real message path into a scratch database.
+final class OwnTransferTests: XCTestCase {
+    private let host = CryptoServices()
+
+    func testTheDebitAndTheCreditOfOneTransferArePairedWhenBothAccountsHaveTheirDigits() async throws {
+        let answer = try await IosTransferDebug.shared.pairTheTwoTexts(host: host, digitsOnSavings: true)
+        XCTAssertEqual(answer, "captured=2 pairs=1 from=Bank to=Savings basis=NAMED_ACCOUNT")
+    }
+
+    func testNothingIsPairedWhenTheDestinationAccountHasNoDigits() async throws {
+        let answer = try await IosTransferDebug.shared.pairTheTwoTexts(host: host, digitsOnSavings: false)
+        XCTAssertEqual(answer, "captured=2 pairs=0", "both texts are still captured as two items")
+    }
+}

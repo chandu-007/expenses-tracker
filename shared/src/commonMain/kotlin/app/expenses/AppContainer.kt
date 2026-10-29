@@ -58,6 +58,9 @@ class AppContainer(private val platform: Platform) {
         class Ok(val driver: SqlDriver, val db: ExpensesDb, val store: LedgerStore, val templates: TemplateStore, val categories: CategoryStore, val budgets: BudgetStore, val recurring: RecurringStore, val notifications: NotificationService, val backup: BackupStore, val csv: CsvExport, val reports: ReportStore, val statements: StatementImporter, val savedSearches: SavedSearchStore, val attachments: AttachmentStore, val currency: BaseCurrencyStore, val cards: CardStore, val inbox: InboxStore, val captureRules: CaptureRuleStore, val people: PeopleStore, val bills: BillStore, val looks: AccountLookStore, val origins: OriginStore) : Opened {
             /** What the person expects back for expenses ("I expect this back"): a side table, so it needs only the database. */
             val expects: app.expenses.core.storage.ExpectStore = app.expenses.core.storage.ExpectStore(db)
+
+            /** "This is a transfer between my own accounts": two waiting texts become one transfer, or a waiting text replaces the earlier expense or income it is the other half of. */
+            val transfers: app.expenses.core.storage.CaptureTransfers = app.expenses.core.storage.CaptureTransfers(db, store, inbox, origins)
         }
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */
