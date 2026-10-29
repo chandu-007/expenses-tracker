@@ -300,4 +300,30 @@ class CaptureTransfersTest {
         d.ledger.save(Expense(EntryId("plainer"), 2_200, AccountId("main"), m, listOf(CategorySplit(CategoryId("Food"), m))), EntryDetails(source = "sms", sourceRef = "q-ref"))
         assertEquals(setOf("plainer"), transfers.earlier(amount, "INR", 2_100, 24 * 3_600_000L).map { it.entryId }.toSet())
     }
+
+    @Test
+    fun anExpenseWithAnExpectationOpenOrClosedOrWithAnAttachmentIsNotOffered() {
+        val m = Money(amount, Currency.INR)
+        fun expense(id: String, at: Long) = d.ledger.save(Expense(EntryId(id), at, AccountId("main"), m, listOf(CategorySplit(CategoryId("Food"), m))), EntryDetails(source = "sms", sourceRef = "ref-$id"))
+        val expects = ExpectStore(d.db)
+        expense("open", 1_000); expects.set("open", "Ravi", null, amount)
+        expense("closed", 1_100); expects.set("closed", "Ravi", null, amount); expects.close("closed")
+        expense("pic", 1_200); q.insertAttachment("att2", "pic", "bill.jpg", "image/jpeg", 10, "00", 1L)
+        expense("plain", 1_300)
+        assertEquals(setOf("plain"), transfers.earlier(amount, "INR", 1_200, 24 * 3_600_000L).map { it.entryId }.toSet(), "an open or closed expectation, or an attachment, is never offered")
+    }
+
+    @Test
+    fun theWaitingListHidesAnExpectationWhoseEntryIsDeletedWhateverDeletedItAndShowsItAgainOnRestore() {
+        val expects = ExpectStore(d.db)
+        val m = Money(amount, Currency.INR)
+        d.ledger.save(Expense(EntryId("e1"), 1_000, AccountId("main"), m, listOf(CategorySplit(CategoryId("Food"), m))), EntryDetails(merchant = "Dinner", source = "manual"))
+        expects.set("e1", "Ravi", null, amount)
+        assertEquals(listOf("e1"), expects.waiting().map { it.entryId })
+        d.ledger.delete(EntryId("e1"))   // a plain delete, a conversion, an import's replacement: the same soft delete
+        assertTrue(expects.waiting().isEmpty(), "no orphan of a deleted expense")
+        assertTrue(expects.all().isEmpty(), "and a backup does not carry it either")
+        d.ledger.restore(EntryId("e1"))
+        assertEquals(listOf("e1"), expects.waiting().map { it.entryId })
+    }
 }
