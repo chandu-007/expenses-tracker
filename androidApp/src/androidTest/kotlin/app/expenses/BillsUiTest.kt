@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -74,7 +75,7 @@ class BillsUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun reveal(tag: String) { if (has("bills_list") && !has(tag)) runCatching { compose.onNodeWithTag("bills_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) } }
-    private fun tap(tag: String) { compose.waitUntil(10_000) { reveal(tag); has(tag) }; compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+    private fun tap(tag: String) { compose.waitUntil(10_000) { reveal(tag); has(tag) }; compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() } // a bar that scrolls sideways (the bulk actions) keeps its last buttons out of reach until scrolled to
     private fun gone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun openBills() { launch(); compose.openMore(); tap("open_bills"); waitFor("bills_list") }
     private fun shade(): List<Pair<String, String>> = manager.activeNotifications.map { (it.notification.extras.getCharSequence("android.title")?.toString().orEmpty()) to (it.notification.extras.getCharSequence("android.text")?.toString().orEmpty()) }

@@ -1,11 +1,13 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -162,5 +164,25 @@ class BulkEditTest {
         tap("search_undo")
         compose.waitUntil(10_000) { categoryOf("a") == "Food" && categoryOf("b") == "Food" }
         waitGone("search_notice")
+    }
+
+    /** The bulk bar's actions scroll sideways; Delete must never be among the ones past the edge of a phone (it was, once "Make transfer" came before it): shown, whole, with no scrolling. */
+    private fun assertInReach(tag: String) {
+        val node = compose.onNodeWithTag(tag, useUnmergedTree = true)
+        node.assertIsDisplayed()
+        val b = node.fetchSemanticsNode().boundsInRoot; val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(b.width > 0f && b.left >= root.left && b.right <= root.right, "$tag is at $b but the screen is $root: it is not wholly on screen without scrolling the bar")
+    }
+
+    @Test
+    fun deleteIsWithinReachWithoutScrollingTheBarOnHomeAndOnSearchWhenExpensesAreSelected() {
+        expense("a", "Alpha Cafe"); expense("b", "Beta Cafe")
+        launch(); hold("row_Alpha Cafe"); waitFor("bulk_transfer") // an expense is selected: the bar also offers Make transfer, the button that once pushed Delete out of sight
+        assertInReach("bulk_delete"); assertInReach("bulk_cancel")
+        tap("bulk_cancel"); waitGone("bulk_bar")
+        tap("open_search"); waitFor("search_text")
+        compose.onNodeWithTag("search_text").performTextInput("Cafe")
+        waitFor("result_a"); hold("result_a"); waitFor("bulk_transfer")
+        assertInReach("bulk_delete")
     }
 }

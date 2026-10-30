@@ -115,6 +115,8 @@ fun BulkBar(
                     tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Remove $t") }, onClick = { menu = null; onRemoveTag(t) }, modifier = Modifier.testTag("bulk_tag_remove_$t")) }
                 }
             }
+            // Delete comes before the rarer "Make transfer": the row scrolls sideways, and what runs past a ~360dp phone's edge must be the action used least, never Delete
+            TextButton(onClick = onDelete, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             if (onMakeTransfer != null && selection != BulkSelection.INCOME) Box {
                 TextButton(onClick = { menu = "transfer" }, modifier = Modifier.testTag("bulk_transfer")) { Text("Make transfer") }
                 DropdownMenu(expanded = menu == "transfer", onDismissRequest = { menu = null }) {
@@ -122,7 +124,6 @@ fun BulkBar(
                     accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onMakeTransfer(a.id) }, modifier = Modifier.testTag("bulk_transfer_to_${a.name}")) }
                 }
             }
-            TextButton(onClick = onDelete, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }
         }
         }
     }
