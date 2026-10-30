@@ -1061,6 +1061,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val text = if (r.skipped == 0) head else "$head ${r.skipped} skipped${r.why?.let { ": $it" }.orEmpty()}."
         val undo = if (r.undoKinds.isNotEmpty()) UndoUi("", text, kindChanges = r.undoKinds) else null
         refresh(ok, undo = undo)
+        // nothing changed: no Undo bar says so on Home, so the message bar does (Search has its own notice)
+        if (undo == null) _state.update { st -> (st as? UiState.Ready)?.copy(message = text) ?: st }
         _search.update { it.copy(notice = text, undo = undo) }
     }
 

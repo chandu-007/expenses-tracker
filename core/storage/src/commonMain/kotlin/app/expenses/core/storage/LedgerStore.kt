@@ -137,6 +137,19 @@ class LedgerStore(
         }
     }
 
+    /**
+     * Sets (or, with null, clears) the bank reference of an entry outside an edit, and logs it like any field change. Only for a reference that moves from one entry to the one that
+     * replaces it ([KindChanges]): the unique index on (source, reference) covers deleted entries too, so the two cannot hold it together. No-op when nothing changes.
+     */
+    fun setSourceRef(id: EntryId, sourceRef: String?) {
+        db.transaction {
+            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("Unknown entry: ${id.value}")
+            if (row.source_ref == sourceRef) return@transaction
+            q.setSourceRef(sourceRef, id.value)
+            q.insertOp(clock.now(nowMillis()).encode(), "entry", id.value, "source_ref", sourceRef)
+        }
+    }
+
     /** Soft-deletes an entry. An expense that still has refunds cannot be deleted; delete its refunds first. */
     fun delete(id: EntryId) {
         db.transaction {

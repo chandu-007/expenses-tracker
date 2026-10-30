@@ -24,6 +24,20 @@ class EntryHistoryTest {
     }
 
     @Test
+    fun theBankReferenceMovingWithATypeChangeIsNotARevisionAndDoesNotTurnADeleteOrARestoreIntoAnEdit() {
+        val ops = listOf(
+            op(100, "kind", "EXPENSE"), op(100, "amount_minor", "10000"), op(100, "source_ref", "UPI-1"),
+            op(300, "source_ref", null), op(300, "deleted", "1"), // the reference passes to the new entry in the same step as the delete
+            op(500, "source_ref", "UPI-1"), op(500, "deleted", "0"), // and comes back with the Undo
+            op(600, "source_ref", null), // alone (a clock tick between the two writes): nothing to show
+        )
+        val r = EntryHistory.revisions(ops)
+        assertEquals(listOf(RevisionKind.CREATED, RevisionKind.DELETED, RevisionKind.RESTORED), r.map { it.kind })
+        assertEquals(emptyList(), fmt.lines(r[1].changes), "no line about the reference")
+        assertEquals(emptyList(), fmt.lines(r[2].changes))
+    }
+
+    @Test
     fun anOrderOfOpsThatArrivesOutOfOrderIsReplayedByTime() {
         val r = EntryHistory.revisions(listOf(op(200, "amount_minor", "2"), op(100, "amount_minor", "1"), op(100, "kind", "EXPENSE")))
         assertEquals(listOf(100L, 200L), r.map { it.atMillis })

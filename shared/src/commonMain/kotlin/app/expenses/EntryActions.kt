@@ -346,15 +346,17 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     fun bulkMakeTransfer(ids: List<String>, toAccount: String): BulkResult {
         val todo = ArrayList<EntryDraft>(); var skipped = 0; val reasons = LinkedHashSet<String>()
         for (id in ids.distinct()) {
+            val row = ok.db.schemaQueries.entryById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L }
             val d = (editable(id) as? Editable.Form)?.takeIf { it.canChangeKind }?.draft
+            // a shared, foreign-currency or refunded expense is read-only in the editor, but it is an expense: it is skipped for its own reason, not for not being one
             val problem = when {
-                d == null || d.kind != DraftKind.EXPENSE -> "only expenses can be made transfers"
-                d.accountId == toAccount -> "an expense can't be a transfer to the account it was paid from"
-                else -> ok.kindChanges.refusal(id)
+                row == null || row.kind != "EXPENSE" -> "only expenses can be made transfers"
+                row.account_id == toAccount -> "an expense can't be a transfer to the account it was paid from"
+                else -> ok.kindChanges.refusal(id) ?: if (d == null) "this expense is not in ${BaseCurrency.current.code}, so it can't be changed here" else null
             }
             val draft = d?.copy(kind = DraftKind.TRANSFER, toAccountId = toAccount, category = "", splits = emptyList(), expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "")
             when {
-                problem != null -> { skipped++; reasons += problem.replaceFirstChar { it.lowercase() } }
+                problem != null -> { skipped++; reasons += problem.trimEnd('.').replaceFirstChar { it.lowercase() } }
                 draft == null || EntryDrafts.build(draft, EntryId("preview"), BaseCurrency.current) !is DraftResult.Ok -> { skipped++; reasons += "it could not be made a transfer" }
                 else -> todo += draft
             }

@@ -194,6 +194,37 @@ class KindChangesTest {
     }
 
     @Test
+    fun undoingAnEarlierChangeAfterALaterOneChangedTheSameEntryAgainIsRefusedCleanlyAndChangesNothing() {
+        capturedExpense(ref = "UPI-7")
+        val start = books()
+        val ab = changes.change("atm", transfer("b", "main", "cash"), "x", emptyList())
+        val bc = changes.change("b", income("c"), "x", emptyList())
+        val mid = books()
+        val e = assertFailsWith<IllegalArgumentException> { changes.undo(ab) }
+        assertEquals(KindChanges.CANT_UNDO, e.message); assertEquals("This change can't be undone any more.", e.message)
+        assertEquals(mid, books(), "nothing changed"); assertEquals("c", q.entryBySourceRef("sms", "UPI-7").executeAsOne().id)
+        assertEquals(1L, q.entryById("atm").executeAsOne().deleted); assertNull(q.entryById("atm").executeAsOne().source_ref)
+        // the order that works: the later change first, then the earlier one
+        changes.undo(bc); assertEquals("b", q.entryBySourceRef("sms", "UPI-7").executeAsOne().id)
+        changes.undo(ab)
+        assertEquals(start, books()); assertEquals("atm", q.entryBySourceRef("sms", "UPI-7").executeAsOne().id)
+    }
+
+    @Test
+    fun theReferenceMovesAreLoggedAndHistoryShowsNoLineAboutThem() {
+        capturedExpense(ref = "UPI-8")
+        now += 1_000; val c = changes.change("atm", transfer("t1", "main", "cash"), "x", emptyList())
+        fun refOps(id: String) = q.opsOfRow("entry", id).executeAsList().filter { it.field_ == "source_ref" }.map { it.value_ }
+        assertEquals(listOf("UPI-8", null), refOps("atm"), "created with it, cleared when it passed on")
+        assertEquals(listOf("UPI-8"), refOps("t1"))
+        now += 1_000; changes.undo(c)
+        assertEquals(listOf("UPI-8", null, "UPI-8"), refOps("atm"), "and back with the Undo"); assertEquals(listOf("UPI-8", null), refOps("t1"))
+        val fmt = app.expenses.core.domain.HistoryFormat(inr, { it }, { it }, { it.toString() })
+        for (id in listOf("atm", "t1")) for (r in ledger.history(EntryId(id))) assertTrue(fmt.lines(r.changes).none { it.label.contains("eference", true) || it.after == "UPI-8" || it.before == "UPI-8" })
+        assertEquals(listOf(RevisionKind.CREATED, RevisionKind.DELETED, RevisionKind.RESTORED), ledger.history(EntryId("atm")).map { it.kind })
+    }
+
+    @Test
     fun anEntryWithNoReferenceOrOriginChangesAndUndoesToo() {
         ledger.save(expense("hand"), EntryDetails(merchant = "Auto"))
         val c = changes.change("hand", transfer("t1", "main", "cash"), "Auto", emptyList())

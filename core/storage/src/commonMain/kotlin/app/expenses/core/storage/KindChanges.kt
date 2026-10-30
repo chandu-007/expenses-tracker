@@ -32,7 +32,7 @@ class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, p
 
         val reference = row.source_ref
         // the unique index on (source, reference) covers deleted entries too: the new entry takes the reference over, and Undo hands it back
-        if (reference != null) q.clearSourceRef(oldId)
+        if (reference != null) ledger.setSourceRef(EntryId(oldId), null)
         val origin = origins.get(oldId)
         ledger.delete(EntryId(oldId))
         ledger.save(entry, EntryDetails(merchant = merchant?.takeIf { it.isNotBlank() }, note = row.note, source = row.source, sourceRef = reference, tags = tags))
@@ -64,17 +64,26 @@ class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, p
      */
     fun undo(c: Changed) {
         ledger.atomically {
+            // a later change of the new entry (a transfer made an expense, say) passed the reference on again: this one can no longer be undone, and nothing is touched
+            if (c.oldSourceRef != null) {
+                val old = q.entryById(c.oldId).executeAsOneOrNull() ?: throw IllegalArgumentException(CANT_UNDO)
+                val holder = q.entryBySourceRef(old.source, c.oldSourceRef).executeAsOneOrNull()
+                require(holder == null || holder.id == c.newId || holder.id == c.oldId) { CANT_UNDO }
+            }
             ledger.delete(EntryId(c.newId))
-            q.clearSourceRef(c.newId)
+            ledger.setSourceRef(EntryId(c.newId), null)
             origins.remove(c.newId)
             attachments.move(c.newId, c.oldId)
-            if (c.oldSourceRef != null) q.setSourceRef(c.oldSourceRef, c.oldId)
+            if (c.oldSourceRef != null) ledger.setSourceRef(EntryId(c.oldId), c.oldSourceRef)
             ledger.restore(EntryId(c.oldId))
         }
     }
 
     companion object {
         /** Why an expense with "I expect this back" (open, or closed) is not changed: the expectation belongs to the expense. */
+        /** Why an Undo is refused: a later change of the same entry has taken over what this one handed on. */
+        const val CANT_UNDO = "This change can't be undone any more."
+
         const val EXPECTED_BACK = "Turn off \"I expect this back\" first: save the expense with it off, then change its type."
     }
 }

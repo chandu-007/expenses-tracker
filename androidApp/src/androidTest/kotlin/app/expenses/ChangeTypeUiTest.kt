@@ -13,7 +13,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToLog
 import androidx.test.core.app.ActivityScenario
@@ -350,5 +352,27 @@ class ChangeTypeUiTest {
         db { ok -> ok.store.atomically { r.undoKinds.asReversed().forEach { EntryActions(ok).undoKindChange(it) } } }
         assertEquals(listOf("EXPENSE", "EXPENSE", "INCOME"), kinds()); assertEquals(before, db { ok -> ok.store.balances() })
         assertEquals(setOf("a", "b", "i"), liveRows().map { it.id }.toSet())
+    }
+
+    @Test
+    fun aRefundedExpenseIsSkippedForItsOwnReasonAndWhenNothingChangesHomeSaysWhy() {
+        accounts(); seedExpense("r", "Shoes")
+        db { ok -> ok.store.save(Refund(EntryId("rf"), long, AccountId("bank"), Money(10_000, inr), EntryId("r")), EntryDetails(merchant = "Shoe return")) }
+        val r = db { ok -> EntryActions(ok).bulkMakeTransfer(listOf("r"), "savings") }
+        assertEquals(0, r.changed); assertEquals(1, r.skipped); assertEquals("this expense has refunds, so its type can't be changed here", r.why, "it is an expense: not 'only expenses can be made transfers'")
+        // from Home: nothing changes, no Undo bar, so the message bar says why
+        launch(); compose.onNodeWithTag("row_Shoes", useUnmergedTree = true).performTouchInput { longClick() }; waitText("1 selected")
+        tap("bulk_transfer"); tap("bulk_transfer_to_Savings")
+        waitText("Nothing changed. 1 skipped: this expense has refunds, so its type can't be changed here.")
+        assertEquals(setOf("r", "rf"), liveRows().map { it.id }.toSet()); assertEquals("EXPENSE", liveRows().first { it.id == "r" }.kind)
+    }
+
+    @Test
+    fun undoingAnEarlierChangeAfterALaterOneIsRefusedWithAMessageNotACrash() {
+        accounts(); seedExpense(source = "sms", ref = "UPI-3")
+        val first = db { ok -> EntryActions(ok).changeKind(draftOf("e1", DraftKind.TRANSFER, to = "savings")) }
+        db { ok -> EntryActions(ok).changeKind(draftOf(first.newId, DraftKind.INCOME, category = "income:salary")) }
+        val e = assertFailsWith<IllegalArgumentException> { db { ok -> EntryActions(ok).undoKindChange(first) } }
+        assertEquals("This change can't be undone any more.", e.message)
     }
 }

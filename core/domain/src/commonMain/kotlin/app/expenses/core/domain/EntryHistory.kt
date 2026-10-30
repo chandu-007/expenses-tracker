@@ -26,10 +26,13 @@ object EntryHistory {
                 if (was != op.value) changes += FieldChange(op.field, state[op.field], op.value)
                 state[op.field] = op.value
             }
-            if (changes.isEmpty()) continue
+            // The bank reference moves between an entry and the one that replaces it when its type is changed: that is bookkeeping, not something the person did to this entry,
+            // so it is neither a revision of its own nor a reason to call a delete or a restore an edit.
+            val said = changes.filter { it.field != SOURCE_REF }
+            if (changes.isEmpty() || said.isEmpty() && before.isNotEmpty()) continue
             val kind = when {
                 before.isEmpty() -> RevisionKind.CREATED
-                changes.size == 1 && changes[0].field == DELETED -> if (changes[0].after == "1") RevisionKind.DELETED else RevisionKind.RESTORED
+                said.size == 1 && said[0].field == DELETED -> if (said[0].after == "1") RevisionKind.DELETED else RevisionKind.RESTORED
                 else -> RevisionKind.EDITED
             }
             out += Revision(at, kind, changes, before, LinkedHashMap(state))
@@ -38,6 +41,7 @@ object EntryHistory {
     }
 
     private const val DELETED = "deleted"
+    private const val SOURCE_REF = "source_ref"
 }
 
 /** A change worded for a person: "Amount: ₹100.00 → ₹150.00". [before] is null when the field was empty. */

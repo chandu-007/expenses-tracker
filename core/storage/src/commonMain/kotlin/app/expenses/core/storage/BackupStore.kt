@@ -120,7 +120,7 @@ class BackupStore(
         val present = BackupCounts(
             accounts = data.accounts.count { q.accountById(it.id).executeAsOneOrNull() != null },
             categories = data.categories.count { q.categoryById(it.id).executeAsOneOrNull() != null },
-            entries = data.entries.count { q.entryById(it.id).executeAsOneOrNull() != null },
+            entries = data.entries.count { entryHere(it) },
             templates = data.templates.count { q.templateById(it.id).executeAsOneOrNull() != null },
             budgets = data.budgets.count { q.budgetByScope(it.scope).executeAsOneOrNull() != null },
             recurring = data.recurring.count { q.recurringById(it.id).executeAsOneOrNull() != null },
@@ -207,7 +207,9 @@ class BackupStore(
         // a bill still waiting (FOUND) is not restored: it was never added, and its message is not in the file; a restore keeps what the person acted on
         for (b in data.bills.filter { it.status != BillStatus.FOUND.name }) q.insertBill(b.id, "backup", "", b.issuer, b.kind, b.title, b.amountMinor, b.minDueMinor, b.currency, b.dueDate, b.accountLast4, b.reference, if (b.autoDebit) 1L else 0L, b.receivedAt, null, b.status, null, b.paidAt, b.dedupeKey)
         val addedEntries = HashSet<String>()
-        for (e in data.entries) if (q.entryById(e.id).executeAsOneOrNull() == null) { ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags)); addedEntries += e.id }
+        // An entry whose bank reference another entry here already holds (live or deleted) is that same transaction: the type of an entry may have been changed since this backup, and the
+        // reference passed to the entry that replaced it. It is left out like one whose id is here, and never makes the restore fail on the unique index.
+        for (e in data.entries) if (!entryHere(e)) { ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags)); addedEntries += e.id }
         // "expecting this back" comes with an expense this restore added (one already here keeps whatever the person decided about it); a person who is not here is dropped, the free text stays
         for (x in data.expects) if (x.entryId in addedEntries && x.expectedMinor > 0 && q.entryById(x.entryId).executeAsOneOrNull()?.kind == "EXPENSE") {
             q.insertExpectRaw(x.entryId, x.from?.trim()?.takeIf { it.isNotEmpty() }?.take(ExpectStore.MAX_FROM), x.personId?.takeIf { q.personById(it).executeAsOneOrNull() != null }, x.expectedMinor, if (x.closed) 1L else 0L)
@@ -252,6 +254,10 @@ class BackupStore(
         }
         report.copy(added = report.added.copy(attachments = attached.size), attached = attached)
     }
+
+    /** Whether the phone already has [e]: an entry with its id (live or deleted), or one holding its bank reference. */
+    private fun entryHere(e: BackupEntry): Boolean =
+        q.entryById(e.id).executeAsOneOrNull() != null || e.sourceRef != null && q.entryBySourceRef(e.source, e.sourceRef).executeAsOneOrNull() != null
 
     private fun isUntouchedDefault(row: app.expenses.core.storage.db.Category): Boolean {
         val index = CategoryStore.DEFAULTS.indexOf(row.id)
