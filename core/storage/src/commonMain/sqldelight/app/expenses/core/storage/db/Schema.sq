@@ -616,6 +616,21 @@ SELECT id, deleted, kind FROM entry WHERE source = :source AND source_ref = :sou
 clearSourceRef:
 UPDATE entry SET source_ref = NULL WHERE id = :id;
 
+-- "Change the type" of an entry (expense, income, transfer): the bank reference moves to the entry that takes its place, and back if that is undone.
+setSourceRef:
+UPDATE entry SET source_ref = :sourceRef WHERE id = :id;
+
+-- Whether a bill is marked paid by this entry, or a repeating item posted it: those links are not moved, so a type change is refused for such an entry.
+entryPaysBill:
+SELECT EXISTS(SELECT 1 FROM bill WHERE entry_id = :entryId);
+
+entryFromRepeating:
+SELECT EXISTS(SELECT 1 FROM recurring_done WHERE entry_id = :entryId);
+
+-- The photos and files of an entry go to the entry that takes its place when its type is changed (and back on Undo).
+moveAttachments:
+UPDATE attachment SET entry_id = :to WHERE entry_id = :from;
+
 allCaptureRules:
 SELECT * FROM capture_rule ORDER BY position, id;
 

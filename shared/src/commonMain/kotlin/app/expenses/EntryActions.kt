@@ -42,8 +42,11 @@ data class OriginUi(val kindLabel: String, val text: String, val whenText: Strin
 
 /** What the edit screen may do with an entry. */
 sealed interface Editable {
-    /** An entry the form can edit (or, for a refund, create). [refundOf] is the title of the refunded expense; [canRefund] offers a refund from this expense. */
-    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false, val origin: OriginUi? = null) : Editable
+    /**
+     * An entry the form can edit (or, for a refund, create). [refundOf] is the title of the refunded expense; [canRefund] offers a refund from this expense;
+     * [canChangeKind] offers the chips that change an expense, income or transfer into one of the others (see [EntryActions.changeKind]).
+     */
+    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false, val origin: OriginUi? = null, val canChangeKind: Boolean = false) : Editable
 
     /** Shown read-only, with the reason it cannot be edited here yet, so nothing is changed by accident. */
     data class ReadOnly(val id: String, val title: String, val reason: String, val origin: OriginUi? = null) : Editable
@@ -137,12 +140,12 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
                             expectBack = x != null, expectFrom = x?.from.orEmpty(), expectPersonId = x?.personId.orEmpty(),
                             expectAmount = x?.expectedMinor?.takeIf { it != row.amount_minor }?.let { Money(it, BaseCurrency.current).toPlainString() }.orEmpty(),
                         ) },
-                        title = "Edit expense", canRefund = true,
+                        title = "Edit expense", canRefund = true, canChangeKind = true,
                     )
                 }
             }
-            "INCOME" -> Editable.Form(base.copy(kind = DraftKind.INCOME, category = row.category_id.orEmpty()), "Edit income")
-            "TRANSFER" -> Editable.Form(base.copy(kind = DraftKind.TRANSFER, toAccountId = row.counter_account_id.orEmpty()), "Edit transfer")
+            "INCOME" -> Editable.Form(base.copy(kind = DraftKind.INCOME, category = row.category_id.orEmpty()), "Edit income", canChangeKind = true)
+            "TRANSFER" -> Editable.Form(base.copy(kind = DraftKind.TRANSFER, toAccountId = row.counter_account_id.orEmpty()), "Edit transfer", canChangeKind = true)
                 .takeIf { row.to_currency == null || row.to_currency == BaseCurrency.current.code && row.to_amount_minor == row.amount_minor }
                 ?: readOnly("This transfer is between currencies, which can't be edited here yet.")
             "REFUND" -> {
@@ -213,6 +216,28 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     }
 
     /**
+     * Changes the type of an expense, income or transfer being edited ([draft] is the form as the person left it, its [EntryDraft.kind] the new type): the entry is replaced by one of the
+     * new type that carries its date, account, title, note, tags, source, bank reference, original text and attachments, all or nothing (see [app.expenses.core.storage.KindChanges]).
+     * Nothing is learned from it (no capture rule, no "last used" category or account). Returns what [undoKindChange] needs. Throws [IllegalArgumentException] with a reason the person can
+     * read, changing nothing, when the entry cannot be changed here (shared, foreign currency, refunds, "I expect this back", tied to a bill or a repeating item) or the draft breaks a rule.
+     */
+    fun changeKind(draft: EntryDraft): app.expenses.core.storage.KindChanges.Changed {
+        val oldId = draft.id ?: throw IllegalArgumentException("Only an entry that exists can change its type.")
+        val form = editable(oldId) as? Editable.Form
+        if (form == null || !form.canChangeKind) throw IllegalArgumentException("This entry's type can't be changed here.")
+        if (draft.kind == form.draft.kind || draft.kind != DraftKind.EXPENSE && draft.kind != DraftKind.INCOME && draft.kind != DraftKind.TRANSFER) throw IllegalArgumentException("Choose another type.")
+        val newId = Uuid.random().toString()
+        val entry = when (val r = EntryDrafts.build(draft, EntryId(newId), BaseCurrency.current)) {
+            is DraftResult.Ok -> r.entry
+            is DraftResult.Problem -> throw IllegalArgumentException(r.message)
+        }
+        return ok.kindChanges.change(oldId, entry, draft.note.trim().ifEmpty { null }, draft.tags)
+    }
+
+    /** Puts back what [changeKind] did: the original entry returns as it was and the changed one goes. */
+    fun undoKindChange(changed: app.expenses.core.storage.KindChanges.Changed) = ok.kindChanges.undo(changed)
+
+    /**
      * Money came back for an expense that was expected back: it is recorded as a refund of that expense into [accountId] (the refund rules apply: never more than
      * what is still refundable). A blank [amountText] is what is still expected. Returns the refund's id, so Undo can take it back. Throws [IllegalArgumentException]
      * with a reason the user can read.
@@ -263,7 +288,11 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * What a bulk change did. [undo] puts everything back; [skipped] counts selected entries the change does not apply to, with [why].
      * [undoDrafts] are the earlier versions of changed entries, [undoRestore] the ids to bring back after a delete (in the order to restore them).
      */
-    data class BulkResult(val changed: Int, val skipped: Int, val why: String?, val undoDrafts: List<EntryDraft> = emptyList(), val undoRestore: List<String> = emptyList()) {
+    data class BulkResult(
+        val changed: Int, val skipped: Int, val why: String?, val undoDrafts: List<EntryDraft> = emptyList(), val undoRestore: List<String> = emptyList(),
+        /** What [bulkMakeTransfer] did, in the order it was done: Undo puts each back (last first). */
+        val undoKinds: List<app.expenses.core.storage.KindChanges.Changed> = emptyList(),
+    ) {
         fun text(what: String): String {
             if (changed == 0 && skipped == 0) return "Nothing to change."
             val head = if (changed == 0) "Nothing changed." else "$what $changed ${if (changed == 1) "entry" else "entries"}."
@@ -307,6 +336,31 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     /** Removes [tag] (ignoring case) from every selected entry that has it. */
     fun bulkRemoveTag(ids: List<String>, tag: String): BulkResult = bulkEdit(ids, "shared or foreign-currency entries can't be edited here") { d ->
         if (d.tags.none { it.equals(tag, ignoreCase = true) }) null else d.copy(tags = d.tags.filterNot { it.equals(tag, ignoreCase = true) })
+    }
+
+    /**
+     * Makes every selected plain expense a transfer from its own account to [toAccount] (see [changeKind]: each is replaced by a transfer that carries its date, title, note, tags, source and
+     * attachments), all in one step that one Undo takes back. Skipped, with the reason named in the result: anything that is not an expense, an expense already on [toAccount], and what
+     * cannot change its type (shared, foreign currency, refunds, "I expect this back", tied to a bill or a repeating item). Nothing is learned from it.
+     */
+    fun bulkMakeTransfer(ids: List<String>, toAccount: String): BulkResult {
+        val todo = ArrayList<EntryDraft>(); var skipped = 0; val reasons = LinkedHashSet<String>()
+        for (id in ids.distinct()) {
+            val d = (editable(id) as? Editable.Form)?.takeIf { it.canChangeKind }?.draft
+            val problem = when {
+                d == null || d.kind != DraftKind.EXPENSE -> "only expenses can be made transfers"
+                d.accountId == toAccount -> "an expense can't be a transfer to the account it was paid from"
+                else -> ok.kindChanges.refusal(id)
+            }
+            val draft = d?.copy(kind = DraftKind.TRANSFER, toAccountId = toAccount, category = "", splits = emptyList(), expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "")
+            when {
+                problem != null -> { skipped++; reasons += problem.replaceFirstChar { it.lowercase() } }
+                draft == null || EntryDrafts.build(draft, EntryId("preview"), BaseCurrency.current) !is DraftResult.Ok -> { skipped++; reasons += "it could not be made a transfer" }
+                else -> todo += draft
+            }
+        }
+        val done = ok.store.atomically { todo.map { changeKind(it) } }
+        return BulkResult(done.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoKinds = done)
     }
 
     private object Skip

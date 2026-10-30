@@ -176,6 +176,7 @@ fun EntryListScreen(
     onBulkDelete: (List<String>) -> Unit,
     onBulkAddTag: (List<String>, String) -> Unit,
     onBulkRemoveTag: (List<String>, String) -> Unit,
+    onBulkTransfer: ((List<String>, String) -> Unit)? = null,
 ) {
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
@@ -263,6 +264,7 @@ fun EntryListScreen(
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
                 selection = bulkSelectionOf(state.rows, selected),
+                onMakeTransfer = onBulkTransfer?.let { go -> { to -> go(selected, to); selected = emptyList() } },
             )
             else HomeBar(
                 selected = if (moreOpen) "More" else "Home",

@@ -11,6 +11,7 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | Several entries added from a bill's items | Add form | Undo bar takes them all back | BillEntriesSaveTest |
 | "Same as..." move of similar entries | Similar dialog | Undo bar | |
 | Edit an entry | Editor | History: "Undo this edit" (a new revision, nothing lost) | HistoryUiTest |
+| Change an entry's type (expense, income, transfer), one or several | Editor chips, Search/Home selection "Make transfer" | Undo bar ("Changed to a transfer"): the new entry is deleted and the original restored exactly (same id, fields, reference, text, attachments) | KindChangesTest, ChangeTypeUiTest |
 | Skip a due repeating item | Home, Bills | Undo bar (`ok.recurring.undo`) | RecurringUiTest |
 | Delete a repeating item | Repeating screen | Confirm ("It stops repeating. Expenses already posted stay.") | RecurringUiTest |
 | Remove a quick entry (template) | Home | Confirm | |

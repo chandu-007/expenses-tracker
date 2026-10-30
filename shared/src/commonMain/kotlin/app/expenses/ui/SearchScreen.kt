@@ -94,6 +94,7 @@ fun SearchScreen(
     onBulkCategory: (List<String>, String) -> Unit,
     onBulkAccount: (List<String>, String) -> Unit,
     onBulkDelete: (List<String>) -> Unit,
+    onBulkTransfer: ((List<String>, String) -> Unit)? = null,
     tags: List<String>,
     onBulkAddTag: (List<String>, String) -> Unit,
     onBulkRemoveTag: (List<String>, String) -> Unit,
@@ -202,6 +203,7 @@ fun SearchScreen(
                 onDelete = { onBulkDelete(selected); selected = emptyList() },
                 onCancel = { selected = emptyList() },
                 selection = bulkSelectionOf(state.results, selected),
+                onMakeTransfer = onBulkTransfer?.let { go -> { to -> go(selected, to); selected = emptyList() } },
             )
             else tabBar()
         },

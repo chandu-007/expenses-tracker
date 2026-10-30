@@ -220,6 +220,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val history by viewModel.history.collectAsStateWithLifecycle(context = MAIN)
             val attachmentList by viewModel.attachments.collectAsStateWithLifecycle(context = MAIN)
             val attachmentProblem by viewModel.attachmentProblem.collectAsStateWithLifecycle(context = MAIN)
+            val editorProblem by viewModel.editorProblem.collectAsStateWithLifecycle(context = MAIN)
             val stagedList by viewModel.stagedAttachments.collectAsStateWithLifecycle(context = MAIN)
             val foreignRates by viewModel.foreignRates.collectAsStateWithLifecycle(context = MAIN)
             // closing the add form without saving deletes the files chosen for it (a save takes them first)
@@ -290,7 +291,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         EntryFormScreen(
                             title = e.title,
                             start = e.draft.let { d -> d.copy(accountId = d.accountId.ifEmpty { s.lastAccountId }) },
-                            kinds = listOf(e.draft.kind),
+                            kinds = if (e.canChangeKind) listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER) else listOf(e.draft.kind),
                             accounts = s.allAccounts.filter { a -> a.id == e.draft.accountId || a.id == e.draft.toAccountId || s.accounts.any { it.id == a.id } }, // an archived account stays pickable for an entry that uses it
                             categories = s.categories,
                             onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
@@ -300,10 +301,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
                             onRemoveAttachment = { a -> e.draft.id?.let { viewModel.removeAttachment(it, a.id) } },
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
-                            onSave = { d, _ -> viewModel.saveEntry(d, false) },
+                            onSave = { d, _ -> if (e.canChangeKind && d.kind != e.draft.kind) viewModel.saveChangingKind(d) else viewModel.saveEntry(d, false) },
                             onBack = viewModel::closeEditor,
                             refundOf = e.refundOf,
                             onHistory = e.draft.id?.let { id -> { viewModel.openHistory(id) } },
+                            kindChangeProblem = editorProblem,
                             onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
                             origin = e.origin,
                         )
@@ -433,7 +435,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             initialAccountId = searchAccount,
                             onOpen = { viewModel.openEditor(it.id) },
                             accounts = s.accounts,
-                            onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete,
+                            onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete, onBulkTransfer = viewModel::bulkMakeTransfers,
                             tags = s.tags, onBulkAddTag = viewModel::bulkAddTag, onBulkRemoveTag = viewModel::bulkRemoveTag,
                             onUndo = viewModel::undo,
                             saved = s.savedSearches, onSaveSearch = viewModel::saveSearch, onDeleteSaved = viewModel::deleteSavedSearch,
@@ -622,6 +624,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onBulkDelete = viewModel::bulkDelete,
                         onBulkAddTag = viewModel::bulkAddTag,
                         onBulkRemoveTag = viewModel::bulkRemoveTag,
+                        onBulkTransfer = viewModel::bulkMakeTransfers,
                         onToggleHideAmounts = { viewModel.setHideAmounts(!s.hideAmounts) },
                         onSafeToSpendOnHome = viewModel::setSafeToSpendOnHome,
                         onOpenCurrency = { currencyOpen = true; viewModel.loadCurrencyBlocker() },

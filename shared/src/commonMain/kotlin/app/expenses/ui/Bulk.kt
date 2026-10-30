@@ -76,6 +76,8 @@ fun BulkBar(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
     selection: BulkSelection = BulkSelection.MIXED,
+    /** Makes the selected expenses transfers to the chosen account (a cash withdrawal, money moved to another account); null where the screen does not offer it. */
+    onMakeTransfer: ((String) -> Unit)? = null,
 ) {
     var newTag by remember { mutableStateOf(false) }
     if (newTag) {
@@ -111,6 +113,13 @@ fun BulkBar(
                     DropdownMenuItem(text = { Text("New tag…") }, onClick = { menu = null; newTag = true }, modifier = Modifier.testTag("bulk_tag_new"))
                     tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Add $t") }, onClick = { menu = null; onAddTag(t) }, modifier = Modifier.testTag("bulk_tag_add_$t")) }
                     tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Remove $t") }, onClick = { menu = null; onRemoveTag(t) }, modifier = Modifier.testTag("bulk_tag_remove_$t")) }
+                }
+            }
+            if (onMakeTransfer != null && selection != BulkSelection.INCOME) Box {
+                TextButton(onClick = { menu = "transfer" }, modifier = Modifier.testTag("bulk_transfer")) { Text("Make transfer") }
+                DropdownMenu(expanded = menu == "transfer", onDismissRequest = { menu = null }) {
+                    Text("To", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onMakeTransfer(a.id) }, modifier = Modifier.testTag("bulk_transfer_to_${a.name}")) }
                 }
             }
             TextButton(onClick = onDelete, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }

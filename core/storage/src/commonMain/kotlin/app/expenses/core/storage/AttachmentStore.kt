@@ -33,6 +33,14 @@ class AttachmentStore(private val db: ExpensesDb, private val clock: HlcClock, p
         }
     }
 
+    /** Hands every attachment of [from] to [to] (the entry that takes its place when an entry's type is changed), as one logged change each, so nothing is left on a deleted entry. */
+    fun move(from: String, to: String) {
+        db.transaction {
+            for (a in q.attachmentsOf(from).executeAsList()) q.insertOp(clock.now(nowMillis()).encode(), "attachment", a.id, "entry_id", to)
+            q.moveAttachments(to, from)
+        }
+    }
+
     /** Every attachment id on record, so files left behind with no record can be found and removed. */
     fun allIds(): Set<String> = q.allAttachmentIds().executeAsList().toSet()
 

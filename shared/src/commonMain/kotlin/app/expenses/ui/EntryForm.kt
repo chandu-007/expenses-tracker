@@ -114,6 +114,43 @@ internal fun categoryFor(all: List<CategoryUi>, income: Boolean, current: String
     return serving(current)?.id ?: serving(last)?.takeIf { !it.hidden }?.id ?: all.firstOrNull { it.kind.serves(income) && !it.hidden }?.id.orEmpty()
 }
 
+/** The account an expense being edited was probably taken out to as cash: the person's only account of type CASH, when it is not the account the expense was paid from. Null otherwise. */
+internal fun cashWithdrawalAccount(accounts: List<AccountUi>, fromId: String): AccountUi? = accounts.filter { it.type == "CASH" }.singleOrNull()?.takeIf { it.id != fromId }
+
+/**
+ * The draft after the kind chip [k] is tapped. Adding: what is typed is kept; a category that does not serve the new kind is swapped for the last one used; a transfer starts on
+ * another account. Editing ([start] is the saved entry) is the same, and besides: going back to the saved type puts back everything the saved entry had (category, split, accounts),
+ * so flipping through the chips never loses any of it; an income that becomes a transfer is money that arrived in its account (the account is the "To"), a transfer that becomes
+ * income arrived in its "To" account; and an expense that becomes a transfer goes to the only Cash account when there is one (a cash withdrawal).
+ */
+internal fun switchedKind(draft: EntryDraft, start: EntryDraft, k: DraftKind, categories: List<CategoryUi>, accounts: List<AccountUi>, lastExpenseCategory: String, lastIncomeCategory: String): EntryDraft {
+    val editing = start.id != null
+    if (editing && k != draft.kind && k == start.kind) return draft.copy(kind = k, category = start.category, splits = start.splits, accountId = start.accountId, toAccountId = start.toAccountId)
+    // Switching kind keeps what is typed; a category only makes sense for expenses and income, and each has its own: one that does not serve the new kind is swapped for the last one used.
+    val swapped = when {
+        k == draft.kind -> draft.category
+        k == DraftKind.INCOME -> categoryFor(categories, true, draft.category, lastIncomeCategory)
+        k == DraftKind.EXPENSE || k == DraftKind.REFUND -> categoryFor(categories, false, draft.category, lastExpenseCategory)
+        else -> draft.category
+    }
+    var from = draft.accountId; var to = draft.toAccountId
+    if (editing && k != draft.kind) {
+        if (draft.kind == DraftKind.INCOME && k == DraftKind.TRANSFER) { to = draft.accountId; from = accounts.firstOrNull { it.id != draft.accountId }?.id.orEmpty() }
+        if (draft.kind == DraftKind.TRANSFER && k == DraftKind.INCOME) from = draft.toAccountId.ifEmpty { draft.accountId }
+        if (draft.kind == DraftKind.EXPENSE && k == DraftKind.TRANSFER) cashWithdrawalAccount(accounts, draft.accountId)?.let { to = it.id }
+    }
+    return draft.copy(kind = k, category = swapped, splits = if (k == DraftKind.EXPENSE) draft.splits else emptyList(), accountId = from, toAccountId = if (k == DraftKind.TRANSFER) to.ifEmpty { accounts.firstOrNull { it.id != from }?.id.orEmpty() } else to)
+}
+
+/** What saving will do when the type of the entry being edited was changed: said under the chips. */
+internal fun kindChangeNote(from: DraftKind, to: DraftKind, wasSplit: Boolean, cashName: String?): String {
+    fun noun(k: DraftKind) = when (k) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; else -> k.label.lowercase() }
+    val into = when (to) { DraftKind.EXPENSE -> "an expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "a transfer"; else -> to.label.lowercase() }
+    return "Saving changes this ${noun(from)} into $into. You can undo it right after." +
+        (if (cashName != null) " $cashName is chosen as the account the money went to, as for a cash withdrawal." else "") +
+        (if (wasSplit && to != DraftKind.EXPENSE) " The category split will be removed." else "")
+}
+
 /** Saves a draft that [EntryDrafts.build] accepted. */
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
@@ -152,6 +189,8 @@ fun EntryFormScreen(
     onOpenAttachment: (app.expenses.AttachmentUi) -> Unit = {},
     onRemoveAttachment: (app.expenses.AttachmentUi) -> Unit = {},
     attachmentProblem: String? = null,
+    /** Why saving a changed type was refused (the entry is tied to something that would be left behind): shown under the form while the type is still changed. */
+    kindChangeProblem: String? = null,
     people: List<app.expenses.PersonUi> = emptyList(),
     /** The rate used last for each foreign currency (units of the ledger's currency for one), to start the next entry in it from. */
     lastRates: Map<String, String> = emptyMap(),
@@ -166,6 +205,8 @@ fun EntryFormScreen(
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
+    // editing: the only Cash account was chosen for a cash withdrawal by the type change itself, not by the person (said in the note under the chips)
+    var cashPicked by rememberSaveable { mutableStateOf(false) }
     var pickingDate by rememberSaveable { mutableStateOf(false) }
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
     var pickingCategory by rememberSaveable { mutableStateOf(false) }
@@ -270,19 +311,18 @@ fun EntryFormScreen(
                         FilterChip(
                             selected = draft.kind == k,
                             onClick = {
-                                // Switching kind keeps what is typed; a category only makes sense for expenses and income, and each has its own: one that does not serve the new kind is swapped for the last one used.
-                                val swapped = when {
-                                    k == draft.kind -> draft.category
-                                    k == DraftKind.INCOME -> categoryFor(categories, true, draft.category, lastIncomeCategory)
-                                    k == DraftKind.EXPENSE || k == DraftKind.REFUND -> categoryFor(categories, false, draft.category, lastExpenseCategory)
-                                    else -> draft.category
-                                }
-                                draft = draft.copy(kind = k, category = swapped, splits = if (k == DraftKind.EXPENSE) draft.splits else emptyList(), toAccountId = if (k == DraftKind.TRANSFER) draft.toAccountId.ifEmpty { activeAccounts.firstOrNull { it.id != draft.accountId }?.id.orEmpty() } else draft.toAccountId)
+                                if (k != draft.kind) cashPicked = start.id != null && k == DraftKind.TRANSFER && draft.kind == DraftKind.EXPENSE && cashWithdrawalAccount(activeAccounts, draft.accountId) != null
+                                draft = switchedKind(draft, start, k, categories, activeAccounts, lastExpenseCategory, lastIncomeCategory)
                             },
                             label = { Text(k.label) }, modifier = Modifier.testTag("kind_${k.name}"),
                         )
                     }
                 }
+                if (start.id != null && draft.kind != start.kind) Text(
+                    kindChangeNote(start.kind, draft.kind, start.splits.size >= 2, activeAccounts.firstOrNull { it.id == draft.toAccountId }?.name?.takeIf { cashPicked && draft.kind == DraftKind.TRANSFER }),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("kind_change_note"),
+                )
+                if (kindChangeProblem != null && start.id != null && draft.kind != start.kind) Text(kindChangeProblem, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kind_change_problem"))
             }
             if (refundOf != null) Text("Refund of $refundOf", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("refund_of"))
             Column {
@@ -359,7 +399,7 @@ fun EntryFormScreen(
             if (draft.kind == DraftKind.TRANSFER) {
                 Text("To", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    activeAccounts.forEach { a -> FilterChip(selected = a.id == draft.toAccountId, onClick = { draft = draft.copy(toAccountId = a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("to_chip_${a.name}")) }
+                    activeAccounts.forEach { a -> FilterChip(selected = a.id == draft.toAccountId, onClick = { cashPicked = false; draft = draft.copy(toAccountId = a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("to_chip_${a.name}")) }
                 }
                 Text("Moving money between your own accounts is not spending or income: use it for an ATM withdrawal, paying a card bill, or topping up a wallet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -443,7 +483,8 @@ fun EntryFormScreen(
             // "I expect this back": a friend or an employer will pay it back. Not for a shared expense (what friends owe is already tracked there).
             val shared = draft.splitWith.isNotEmpty() || draft.paidBy.isNotEmpty()
             LaunchedEffect(shared) { if (shared && draft.expectBack) draft = draft.copy(expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "") }
-            if (draft.kind == DraftKind.EXPENSE && !shared) {
+            // (an entry being edited that was not an expense and is being made one cannot be expected back: that is set on an expense once it exists)
+            if (draft.kind == DraftKind.EXPENSE && !shared && (start.id == null || start.kind == DraftKind.EXPENSE)) {
                 FilterChip(selected = draft.expectBack, onClick = { draft = if (draft.expectBack) draft.copy(expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "") else draft.copy(expectBack = true) }, label = { Text("I expect this back") }, modifier = Modifier.testTag("expect_toggle"))
                 if (draft.expectBack) {
                     if (people.isNotEmpty()) {
@@ -508,7 +549,7 @@ fun EntryFormScreen(
             if (onHistory != null) {
                 OutlinedButton(onClick = onHistory, modifier = Modifier.testTag("history_open")) { Text("History of this entry") }
             }
-            if (onRefund != null) {
+            if (onRefund != null && draft.kind == start.kind) {
                 OutlinedButton(onClick = onRefund, modifier = Modifier.testTag("refund_start")) { Text("Record a refund for this expense") }
             }
         }

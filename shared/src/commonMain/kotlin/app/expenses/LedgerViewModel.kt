@@ -369,6 +369,8 @@ data class UndoUi(
     val bulkCreated: List<String> = emptyList(),
     /** True only for entries added through the Add form: Home then scrolls the new row into view (not for quick entries or a posted repeating item). */
     val reveal: Boolean = false,
+    /** For entries whose type was changed: what to put back, each in turn, last first (for one entry [entryId] is the new entry, which Undo removes). */
+    val kindChanges: List<app.expenses.core.storage.KindChanges.Changed> = emptyList(),
 )
 
 /** One transaction found in a statement, as shown in the preview. A [transfer] is money moving between the person's own accounts. */
@@ -764,6 +766,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     /**
+     * Saves the edit form of an expense, income or transfer whose type was changed: the entry is replaced by one of the new type (all or nothing), "Changed to a transfer · Undo" is offered,
+     * and Undo puts the original back exactly. On a rule it breaks, the reason is shown and the form is left as it was (the editor stays open and nothing changed).
+     */
+    fun saveChangingKind(draft: EntryDraft) = withStore { ok ->
+        val startedAt = TimeSource.Monotonic.markNow()
+        _editorProblem.value = null
+        val changed = try { EntryActions(ok).changeKind(draft) } catch (e: IllegalArgumentException) { _editorProblem.value = e.message ?: "The type could not be changed."; return@withStore }
+        _editor.value = null
+        val what = when (draft.kind) { DraftKind.EXPENSE -> "an expense"; DraftKind.INCOME -> "income"; else -> "a transfer" }
+        refreshQuickly(ok, undo = UndoUi(changed.newId, "Changed to $what", kindChanges = listOf(changed)))
+        lastSaveMillis = startedAt.elapsedNow().inWholeNanoseconds / 1e6
+    }
+
+    /**
      * Saves several new entries at once (the items of a bill, each as its own entry): all or none. Files chosen on the form, and [photoUri] (the photo the bill was
      * read from), are attached to the first one. One "Undo" takes them all back. On a rule they break, the reason is shown and nothing is saved.
      */
@@ -812,7 +828,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** Takes back an entry that was just added. */
     fun undo(u: UndoUi) = withStore { ok ->
-        if (u.bulkCreated.isNotEmpty()) ok.store.atomically { u.bulkCreated.forEach { EntryActions(ok).undo(it) } }
+        if (u.kindChanges.isNotEmpty()) ok.store.atomically { u.kindChanges.asReversed().forEach { EntryActions(ok).undoKindChange(it) } }
+        else if (u.bulkCreated.isNotEmpty()) ok.store.atomically { u.bulkCreated.forEach { EntryActions(ok).undo(it) } }
         else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it) } }
         else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
@@ -825,6 +842,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun openEditor(entryId: String) = withStore { ok ->
         _editor.value = EntryActions(ok).editable(entryId)
         _attachmentProblem.value = null
+        _editorProblem.value = null
         _attachments.value = attachmentsOf(ok, entryId)
     }
 
@@ -837,6 +855,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** Why the last attachment was refused, shown in the editor itself (the list's message bar is hidden behind it). */
     val attachmentProblem: StateFlow<String?> get() = _attachmentProblem
+
+    private val _editorProblem = MutableStateFlow<String?>(null)
+
+    /** Why the last change of an entry's type was refused: shown in the editor itself (Home's message bar is hidden behind it). */
+    val editorProblem: StateFlow<String?> get() = _editorProblem
 
     /** The attachments of the entry being edited. */
     val attachments: StateFlow<List<AttachmentUi>> get() = _attachments
@@ -911,6 +934,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun closeEditor() {
         _editor.value = null
+        _editorProblem.value = null
         _attachments.value = emptyList()
         _history.value = null
     }
@@ -1025,6 +1049,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun bulkAddTag(ids: List<String>, tag: String) = bulk("Tagged") { it.bulkAddTag(ids, tag) }
     fun bulkRemoveTag(ids: List<String>, tag: String) = bulk("Removed the tag from") { it.bulkRemoveTag(ids, tag) }
     fun bulkDelete(ids: List<String>) = bulk("Deleted") { it.bulkDelete(ids) }
+
+    /**
+     * Makes the selected expenses transfers from the account each was paid from to [toAccount] (a cash withdrawal, money moved to another account), all in one step with one Undo; the
+     * ones that can't be are skipped and the notice says why. Nothing is learned from it.
+     */
+    fun bulkMakeTransfers(ids: List<String>, toAccount: String) = withStore { ok ->
+        val r = EntryActions(ok).bulkMakeTransfer(ids, toAccount)
+        val name = ok.db.schemaQueries.selectAccounts().executeAsList().firstOrNull { it.id == toAccount }?.name ?: "that account"
+        val head = if (r.changed == 0) "Nothing changed." else "Changed ${r.changed} ${if (r.changed == 1) "expense" else "expenses"} to ${if (r.changed == 1) "a transfer" else "transfers"} to $name."
+        val text = if (r.skipped == 0) head else "$head ${r.skipped} skipped${r.why?.let { ": $it" }.orEmpty()}."
+        val undo = if (r.undoKinds.isNotEmpty()) UndoUi("", text, kindChanges = r.undoKinds) else null
+        refresh(ok, undo = undo)
+        _search.update { it.copy(notice = text, undo = undo) }
+    }
 
     /** Deletes an entry and offers to bring it back. */
     fun deleteEntry(row: RowUi) = withStore { ok ->
