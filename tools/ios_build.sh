@@ -10,7 +10,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEAM="${TEAM:-9V2G5RH624}"
-DEST='platform=iOS Simulator,name=iPhone 17,OS=26.5'
+# The simulator the tests run on: an iPhone 17 on iOS 26.5, chosen by its id. Two simulators may carry the same name, and a destination by name is then refused as ambiguous; the first one
+# that is booted, else the first available, is used (their ids sort booted before shut down).
+simulator() {
+  xcrun simctl list devices available -j | python3 -c '
+import json, sys
+found = sorted((d["state"] != "Booted", d["udid"]) for rt, ds in json.load(sys.stdin)["devices"].items() if rt.endswith("iOS-26-5") for d in ds if d["name"] == "iPhone 17")
+if not found: sys.exit(1)
+print(found[0][1])'
+}
 VERSION="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' iosApp/project.yml)"
 
 # The Kotlin/Native link runs inside the Gradle daemon, so that daemon needs the memory (gradle.properties keeps it small for Android builds).
@@ -22,6 +30,9 @@ project() { (cd iosApp && DEVELOPMENT_TEAM="$TEAM" xcodegen generate -q); }
 SIM_SIGN=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES)
 
 mode="${1:-test}"
+case "$mode" in
+  test|unit|build) DEST="id=$(simulator)" || { echo "no iPhone 17 simulator with iOS 26.5 is available" >&2; exit 1; } ;;
+esac
 case "$mode" in
   test)
     framework; project

@@ -1,5 +1,7 @@
 package app.expenses.core.parsers
 
+import app.expenses.core.domain.TransferWording
+
 /**
  * What a transaction text is about, beyond money in or out. It decides whether the ledger should record an expense or income, or move money
  * between the person's own accounts, or reverse an earlier payment (FR-LED-03). Read from the words only, and only while a text is still
@@ -22,7 +24,6 @@ object KindRules {
     private val cardPayment = Regex(
         """(?i)\b(?:re)?payment\s+of\b[^\n]{0,70}\b(?:received|towards)\b[^\n]{0,70}\bcard\b|\brepayment\b[^\n]{0,70}\bcredit\s+card\b|\bcredit\s+card\s+bill\b|\bcard\s+bill\b[^\n]{0,40}\bpaid\b|\btowards\s+(?:your\s+)?[\w\s]{0,30}credit\s+card\b|\bcc\s+(?:bill|payment)\b""",
     )
-    private val atmWithdrawal = Regex("""(?i)\bcash\s+withdraw\w*|\bwithdrawn\b|\batm\s*[-/]?\s*(?:wdl|withdrawal|cash)\b|\bwdl\s+at\s+atm\b|\bcash\s+wdl\b""")
     private val refundWords = Regex("""(?i)\brefund(?:ed)?\b|\breversal\b|\breversed\b|\brevoked\b""")
 
     fun of(body: String, direction: Direction): MessageKind {
@@ -30,7 +31,7 @@ object KindRules {
         return when {
             direction == Direction.CREDIT && refundWords.containsMatchIn(text) -> MessageKind.REFUND
             cardPayment.containsMatchIn(text) -> MessageKind.CARD_PAYMENT
-            direction == Direction.DEBIT && atmWithdrawal.containsMatchIn(text) && !refundWords.containsMatchIn(text) -> MessageKind.ATM_WITHDRAWAL
+            direction == Direction.DEBIT && TransferWording.saysAtmWithdrawal(text) && !refundWords.containsMatchIn(text) -> MessageKind.ATM_WITHDRAWAL
             else -> MessageKind.PAYMENT
         }
     }

@@ -187,6 +187,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var reporting by rememberSaveable { mutableStateOf(false) }
             var calendaring by rememberSaveable { mutableStateOf(false) }
             var subscribing by rememberSaveable { mutableStateOf(false) }
+            var transferring by rememberSaveable { mutableStateOf(false) }
             var goaling by rememberSaveable { mutableStateOf(false) }
             var searching by rememberSaveable { mutableStateOf(false) }
             // the account Search opens inside (from Home's account bar); null searches every account
@@ -239,10 +240,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 var tourIndex by rememberSaveable { mutableIntStateOf(0) }
                 // back to the home screen, with nothing of the tour left open
                 val closeEverything = {
-                    adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; goaling = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
+                    adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; transferring = false; goaling = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
                     billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
                     privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false
-                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
+                    viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeTransferCandidates(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                 }
                 val tourStep = guide?.steps?.getOrNull(tourIndex.coerceAtLeast(0))
@@ -318,7 +319,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 } }
                 val screenKey = listOf(
                     history != null, !wide && editing is Editable.Form, !wide && editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling,
+                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring,
                 ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
@@ -454,6 +455,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val subs by viewModel.subscriptions.collectAsStateWithLifecycle(context = MAIN)
                         BackHandler { subscribing = false; viewModel.closeSubscriptions() }
                         app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions, onRepeat = viewModel::repeatSubscription)
+                    }
+                    k == 26 -> {
+                        val found by viewModel.transferCandidates.collectAsStateWithLifecycle(context = MAIN)
+                        BackHandler { transferring = false; viewModel.closeTransferCandidates() }
+                        app.expenses.ui.TransferCandidatesScreen(
+                            found, onBack = { transferring = false; viewModel.closeTransferCandidates() }, onMake = viewModel::makeCandidateTransfers, onNotOne = viewModel::dismissTransferCandidates,
+                            onShowDismissed = viewModel::showDismissedTransferCandidates, onCreateCash = viewModel::createCashAccountForCandidates, onUndo = viewModel::undoCandidateTransfers, onUndoGone = viewModel::candidateTransfersUndoGone,
+                        )
                     }
                     k == 25 -> {
                         val goalState by viewModel.goals.collectAsStateWithLifecycle(context = MAIN)
@@ -601,6 +610,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenReports = { reporting = true; viewModel.openReports() },
                         onOpenCalendar = { calendaring = true; viewModel.openCalendar() },
                         onOpenSubscriptions = { subscribing = true; viewModel.openSubscriptions() },
+                        onOpenTransferCandidates = { transferring = true; viewModel.openTransferCandidates() },
                         onOpenGoals = { goaling = true; viewModel.openGoals() },
                         onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                         onOpenBills = { billsOpen = true; viewModel.watchBills(true) },

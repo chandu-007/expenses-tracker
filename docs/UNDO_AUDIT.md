@@ -12,6 +12,7 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | "Same as..." move of similar entries | Similar dialog | Undo bar | |
 | Edit an entry | Editor | History: "Undo this edit" (a new revision, nothing lost) | HistoryUiTest |
 | Change an entry's type (expense, income, transfer), one or several | Editor chips, Search/Home selection "Make transfer" | Undo bar ("Changed to a transfer"): the new entry is deleted and the original restored exactly (same id, fields, reference, text, attachments) | KindChangesTest, ChangeTypeUiTest |
+| Make transfers from Transfer candidates (cash withdrawals, moves between own accounts, transfers to yourself) | More, Transfer candidates | Undo bar on that screen ("Made N transfers"): every replaced entry is restored exactly and every transfer removed; for a move between two accounts the income that was deleted as the other half is brought back. The bar lives in memory like every other screen Undo bar; "Not a transfer" changes no entry and is undone with "Show the N you marked" | KindChangesTest, TransferCandidatesUiTest |
 | Skip a due repeating item | Home, Bills | Undo bar (`ok.recurring.undo`) | RecurringUiTest |
 | Delete a repeating item | Repeating screen | Confirm ("It stops repeating. Expenses already posted stay.") | RecurringUiTest |
 | Remove a quick entry (template) | Home | Confirm | |

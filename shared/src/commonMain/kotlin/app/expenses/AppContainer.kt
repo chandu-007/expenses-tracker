@@ -64,6 +64,9 @@ class AppContainer(private val platform: Platform) {
 
             /** "Change the type" of an expense, income or transfer: the entry is replaced by one of the new type, with an exact Undo. */
             val kindChanges: app.expenses.core.storage.KindChanges = app.expenses.core.storage.KindChanges(db, store, origins, expects, attachments)
+
+            /** "Transfer candidates": expenses and income that are really money moving between the person's own accounts, found for the person to convert (never converted by themselves). */
+            val transferCandidates: app.expenses.core.storage.TransferCandidateStore = app.expenses.core.storage.TransferCandidateStore(db, kindChanges, templates)
         }
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */

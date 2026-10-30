@@ -221,7 +221,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * Nothing is learned from it (no capture rule, no "last used" category or account). Returns what [undoKindChange] needs. Throws [IllegalArgumentException] with a reason the person can
      * read, changing nothing, when the entry cannot be changed here (shared, foreign currency, refunds, "I expect this back", tied to a bill or a repeating item) or the draft breaks a rule.
      */
-    fun changeKind(draft: EntryDraft): app.expenses.core.storage.KindChanges.Changed {
+    fun changeKind(draft: EntryDraft, fallbackNote: String? = null): app.expenses.core.storage.KindChanges.Changed {
         val oldId = draft.id ?: throw IllegalArgumentException("Only an entry that exists can change its type.")
         val form = editable(oldId) as? Editable.Form
         if (form == null || !form.canChangeKind) throw IllegalArgumentException("This entry's type can't be changed here.")
@@ -231,7 +231,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
             is DraftResult.Ok -> r.entry
             is DraftResult.Problem -> throw IllegalArgumentException(r.message)
         }
-        return ok.kindChanges.change(oldId, entry, draft.note.trim().ifEmpty { null }, draft.tags)
+        return ok.kindChanges.change(oldId, entry, draft.note.trim().ifEmpty { null }, draft.tags, fallbackNote)
     }
 
     /** Puts back what [changeKind] did: the original entry returns as it was and the changed one goes. */
@@ -343,26 +343,71 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * attachments), all in one step that one Undo takes back. Skipped, with the reason named in the result: anything that is not an expense, an expense already on [toAccount], and what
      * cannot change its type (shared, foreign currency, refunds, "I expect this back", tied to a bill or a repeating item). Nothing is learned from it.
      */
-    fun bulkMakeTransfer(ids: List<String>, toAccount: String): BulkResult {
-        val todo = ArrayList<EntryDraft>(); var skipped = 0; val reasons = LinkedHashSet<String>()
-        for (id in ids.distinct()) {
-            val row = ok.db.schemaQueries.entryById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L }
+    fun bulkMakeTransfer(ids: List<String>, toAccount: String): BulkResult = makeTransfers(ids.distinct().map { TransferMove(it, toAccount) }, allowIncome = false)
+
+    /**
+     * One transfer to make from "Transfer candidates": the expense or income [entryId] becomes a transfer between its own account and [otherAccountId] (an expense is money out of its account into
+     * [otherAccountId]; an income is money out of [otherAccountId] into its account). With [absorbsIncome] (an expense only) the income [absorbsIncome], the other half of the same move, is
+     * deleted (it can be brought back) so the move is counted once: [otherAccountId] must then be the account that income was paid into.
+     */
+    data class TransferMove(val entryId: String, val otherAccountId: String, val absorbsIncome: String? = null)
+
+    /**
+     * Makes each of [moves] a transfer, all in one step that one Undo takes back (see [changeKind]: each entry is replaced by a transfer that carries its date, title, note, tags, source,
+     * bank reference, original text and attachments). What cannot be changed is skipped and the result says why ([BulkResult.why]): an entry already part of another move in the same batch,
+     * one that is not an expense (or, with [allowIncome], an income), one on the account it would move to, and what cannot change its type (shared, foreign currency, refunds, "I expect this
+     * back", tied to a bill or a repeating item). Nothing is learned from it. [BulkResult.undoRestore] holds the incomes deleted as the second half of a pair.
+     */
+    fun makeCandidateTransfers(moves: List<TransferMove>): BulkResult = makeTransfers(moves, allowIncome = true)
+
+    /**
+     * [allowIncome] is true for Transfer candidates: there a lone entry is also skipped when the other half of its move is already in the ledger (its money-in was reversed, or the credit on the
+     * destination is a live income), and the income of a pair must have no attachment; its tags are added to the transfer and its note is carried when the transfer has none.
+     */
+    private fun makeTransfers(moves: List<TransferMove>, allowIncome: Boolean): BulkResult {
+        val q = ok.db.schemaQueries
+        val todo = ArrayList<EntryDraft>(); val absorbed = ArrayList<String>(); var skipped = 0; val reasons = LinkedHashSet<String>()
+        val used = HashSet<String>(); val carriedNote = HashMap<String, String?>()
+        fun skip(why: String) { skipped++; reasons += why.trimEnd('.').replaceFirstChar { it.lowercase() } }
+        for (m in moves) {
+            val id = m.entryId
+            val row = q.entryById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L }
+            val income = row?.kind == "INCOME"
             val d = (editable(id) as? Editable.Form)?.takeIf { it.canChangeKind }?.draft
             // a shared, foreign-currency or refunded expense is read-only in the editor, but it is an expense: it is skipped for its own reason, not for not being one
             val problem = when {
-                row == null || row.kind != "EXPENSE" -> "only expenses can be made transfers"
-                row.account_id == toAccount -> "an expense can't be a transfer to the account it was paid from"
-                else -> ok.kindChanges.refusal(id) ?: if (d == null) "this expense is not in ${BaseCurrency.current.code}, so it can't be changed here" else null
+                row == null || row.kind != "EXPENSE" && !(allowIncome && income) -> "only expenses can be made transfers"
+                !used.add(id) -> "an entry can only be part of one transfer at a time"
+                row.account_id == m.otherAccountId -> if (income) "an income can't be a transfer from the account it was paid into" else "an expense can't be a transfer to the account it was paid from"
+                allowIncome && m.absorbsIncome == null && ok.transferCandidates.otherHalfLive(id) -> "its matching money-${if (income) "out" else "in"} is already in your ledger"
+                else -> ok.kindChanges.refusal(id) ?: if (d == null) "this ${if (income) "income" else "expense"} is not in ${BaseCurrency.current.code}, so it can't be changed here" else null
             }
-            val draft = d?.copy(kind = DraftKind.TRANSFER, toAccountId = toAccount, category = "", splits = emptyList(), expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "")
+            val partner = m.absorbsIncome?.let { pid -> q.entryById(pid).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.kind == "INCOME" } }
+            val partnerProblem = when {
+                problem != null || m.absorbsIncome == null -> null
+                partner == null || income -> "the matching income is no longer there"
+                !used.add(partner.id) -> "an entry can only be part of one transfer at a time"
+                q.attachmentsOf(partner.id).executeAsList().isNotEmpty() -> "the matching income has attachments, which would be left behind"
+                partner.amount_minor != row!!.amount_minor || partner.account_id != m.otherAccountId -> "the matching income does not match any more"
+                else -> ok.kindChanges.refusal(partner.id)?.let { "the matching income: " + it.replaceFirstChar { c -> c.lowercase() } }
+            }
+            // the income of a pair is deleted: what it carried that the transfer can hold (its tags, and its note when the transfer has none) goes to the transfer; its words stay with it in the bin
+            val absorbedTags = partner?.let { ok.store.tagsOf(EntryId(it.id)) }.orEmpty()
+            val tags = d?.tags.orEmpty().let { own -> (own + absorbedTags.filter { t -> own.none { it.equals(t, ignoreCase = true) } }).take(TagRules.MAX_PER_ENTRY) }
+            val draft = d?.copy(kind = DraftKind.TRANSFER, accountId = if (income) m.otherAccountId else d.accountId, toAccountId = if (income) d.accountId else m.otherAccountId, category = "", splits = emptyList(), expectBack = false, expectFrom = "", expectPersonId = "", expectAmount = "", tags = tags)
             when {
-                problem != null -> { skipped++; reasons += problem.trimEnd('.').replaceFirstChar { it.lowercase() } }
-                draft == null || EntryDrafts.build(draft, EntryId("preview"), BaseCurrency.current) !is DraftResult.Ok -> { skipped++; reasons += "it could not be made a transfer" }
-                else -> todo += draft
+                problem != null -> skip(problem)
+                partnerProblem != null -> skip(partnerProblem)
+                draft == null || EntryDrafts.build(draft, EntryId("preview"), BaseCurrency.current) !is DraftResult.Ok -> skip("it could not be made a transfer")
+                else -> { todo += draft; partner?.let { absorbed += it.id; carriedNote[id] = it.note } }
             }
         }
-        val done = ok.store.atomically { todo.map { changeKind(it) } }
-        return BulkResult(done.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoKinds = done)
+        val done = ok.store.atomically {
+            val kinds = todo.map { changeKind(it, carriedNote[it.id]) }
+            absorbed.forEach { ok.store.delete(EntryId(it)) }
+            kinds
+        }
+        return BulkResult(done.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoKinds = done, undoRestore = absorbed.reversed())
     }
 
     private object Skip

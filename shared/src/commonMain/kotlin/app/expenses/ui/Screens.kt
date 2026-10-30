@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Info
@@ -146,6 +147,7 @@ fun EntryListScreen(
     onOpenReports: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenSubscriptions: () -> Unit = {},
+    onOpenTransferCandidates: () -> Unit = {},
     onOpenGoals: () -> Unit = {},
     onOpenLoans: () -> Unit,
     onOpenBills: () -> Unit = {},
@@ -308,6 +310,7 @@ fun EntryListScreen(
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
                         MoreRow("open_goals", Icons.Outlined.Flag, "Savings goals", "Save up for a trip or a laptop", onClick = onOpenGoals),
                         MoreRow("open_subscriptions", Icons.Outlined.Autorenew, "Subscriptions", "Charges that keep coming, and what they cost a year", onClick = onOpenSubscriptions),
+                        MoreRow("open_transfer_candidates", Icons.Outlined.CompareArrows, "Transfer candidates", "Cash withdrawals and moves between your accounts that are counted as spending", onClick = onOpenTransferCandidates),
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", "Who owes whom", onClick = onOpenLoans),
                     )),
                     MoreSection("Capture", teal.top, teal.bottom, listOf(

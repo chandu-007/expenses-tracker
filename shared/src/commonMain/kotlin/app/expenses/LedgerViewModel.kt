@@ -14,6 +14,7 @@ import app.expenses.core.domain.Goal
 import app.expenses.core.domain.GoalCodec
 import app.expenses.core.domain.GoalMath
 import app.expenses.core.domain.PeriodCompare
+import app.expenses.core.domain.ReferenceReuse
 import app.expenses.core.domain.SubscriptionFinder
 import app.expenses.core.domain.SubscriptionSample
 import app.expenses.core.domain.SpendingInsight
@@ -267,6 +268,26 @@ data class SubscriptionRowUi(
 )
 
 data class SubscriptionsUi(val rows: List<SubscriptionRowUi> = emptyList(), val monthlyText: String = "", val yearlyText: String = "", val ignored: Int = 0)
+
+/**
+ * One suggestion on the Transfer candidates screen. [id] is the entry (for a move between two accounts, the expense; [partnerId] is the income it pairs with, [toId]/[toName] the account that income
+ * was paid into). [outgoing] is true for an expense: money out of [fromName]; an income is money into [fromName] (its own account).
+ */
+data class TransferCandidateRowUi(
+    val id: String, val partnerId: String?, val title: String, val dateText: String, val amountText: String, val fromName: String, val outgoing: Boolean,
+    val toId: String, val toName: String, val reason: String,
+)
+
+/**
+ * A group of suggestions. [key] is "cash", "own" or "self". [destinations] are the accounts the group's entries can be moved to (empty for "own": each pair already names its two accounts),
+ * [suggested] the account to preselect (the one Cash account, for "cash" only), [preselect] whether every row starts selected, [canCreateCash] that there is no Cash account yet.
+ */
+data class TransferGroupUi(
+    val key: String, val title: String, val blurb: String, val rows: List<TransferCandidateRowUi>, val destinations: List<AccountUi>, val suggested: String?, val preselect: Boolean, val canCreateCash: Boolean,
+)
+
+/** The Transfer candidates screen: [loading] until the first reading is done, the [groups] found, how many were answered "Not a transfer" ([dismissed]), the [notice] of the last action and its [undo]. */
+data class TransferCandidatesUi(val groups: List<TransferGroupUi> = emptyList(), val dismissed: Int = 0, val loading: Boolean = false, val notice: String? = null, val undo: ScreenUndo? = null)
 
 /** One savings goal as the Goals screen shows it. */
 data class GoalRowUi(
@@ -1955,6 +1976,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return hit.title
     }
 
+    /** Whether a text pointing [textOutgoing] with the bank reference of the entry [entryId] (now of kind [kind]) is that entry's refund or reversal, or the same transaction again. */
+    private fun referenceVerdict(ok: AppContainer.Opened.Ok, entryId: String, kind: String, textOutgoing: Boolean): ReferenceReuse.Verdict {
+        val origin = ok.origins.get(entryId)
+        val original = origin?.let { app.expenses.core.parsers.OriginDirection.outgoing(it.sender, it.text, it.kind == app.expenses.core.storage.OriginKind.EMAIL) }
+        return ReferenceReuse.verdict(kind, original, textOutgoing)
+    }
+
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
         val usable = ok.categories.list().filter { !it.hidden && it.kind.forExpense }.map { it.id }.toSet() // suggestions are for debits, which are expenses
@@ -1978,7 +2006,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             // payment it undoes, and calling that a duplicate would have the person skip money coming back.
             val sameRefAll = i.reference?.let { r -> (ok.db.schemaQueries.entriesWithReference(r).executeAsList() + ok.db.schemaQueries.entriesWithReference("$r/reversal").executeAsList()).filter { it.amount_minor == i.amountMinor } }.orEmpty()
             val isCredit = i.direction == "CREDIT"
-            val (alike, opposite) = sameRefAll.partition { e -> e.kind == "TRANSFER" || (e.kind == "INCOME" || e.kind == "REFUND") == isCredit }
+            // an entry whose type the person changed (an expense made income, a transfer) is the same transaction whichever way a text with its reference points: [ReferenceReuse]
+            val (alike, opposite) = sameRefAll.partition { e -> referenceVerdict(ok, e.id, e.kind, textOutgoing = !isCredit) == ReferenceReuse.Verdict.SAME_TRANSACTION }
             val match = Duplicates.best(day.epochDay(), i.reference, (near + alike.map { dup(it.id, it.occurred_at, it.source_ref, it.merchant) }).distinctBy { it.id })
             val reverses = if (match == null) opposite.firstOrNull() else null
             val first = repeats[i.id]?.let { byId[it] }
@@ -2215,8 +2244,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     var sourceRef = i.reference ?: i.id
                     // the same reference on an entry that points the other way is the payment this one undoes: it gets its own key, not a refusal
                     ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
-                        val opposite = existing.kind != "TRANSFER" && (existing.kind == "INCOME" || existing.kind == "REFUND") != (i.direction == "CREDIT")
-                        if (opposite) sourceRef = "$sourceRef/reversal"
+                        // ...but only an entry the person left as it was can be undone by it: one whose type was changed holds the same transaction, and a second text for it is a repeat
+                        if (referenceVerdict(ok, existing.id, existing.kind, textOutgoing = i.direction != "CREDIT") == ReferenceReuse.Verdict.REVERSAL) sourceRef = "$sourceRef/reversal"
                     }
                     // the unique index on (source, reference) covers deleted entries too: say why instead of failing on it
                     ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
@@ -2954,6 +2983,125 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun showIgnoredSubscriptions() = withStore { ok -> ok.templates.putSetting(SETTING_SUBS_IGNORED, ""); _subscriptions.value = subscriptionsUi(ok) }
+
+    // ---- transfer candidates: expenses and income that are really money moving between the person's own accounts ----
+
+    private val _transferCandidates = MutableStateFlow<TransferCandidatesUi?>(null)
+    val transferCandidates: StateFlow<TransferCandidatesUi?> get() = _transferCandidates
+
+    /** What the last conversion did, kept in memory while its Undo bar is offered: the Undo needs the changes themselves (the entries it replaced and the incomes it deleted). */
+    private var lastCandidateTransfers: Pair<String, EntryActions.BulkResult>? = null
+
+    /** The person's own account that the original words of an entry name as the other end ("TPT-..." in a credit, "To A/c xxxxxxxxxx5678" in a debit), by the digits set on the accounts; null when there is none. */
+    private fun namedAccountReader(ok: AppContainer.Opened.Ok): (app.expenses.core.domain.CandidateEntry) -> String? {
+        val byDigits = ok.looks.all().filter { it.last4 != null }.groupBy { it.last4!! }
+        return { e ->
+            val counter = e.originText?.let { t -> (app.expenses.core.parsers.GenericAlertParser.parse(t) as? app.expenses.core.parsers.ParseResult.Parsed)?.alert?.counterLast4 }
+            counter?.let { byDigits[it].orEmpty().map { l -> l.accountId }.distinct().singleOrNull() }?.takeIf { it != e.accountId }
+        }
+    }
+
+    private fun transferCandidatesUi(ok: AppContainer.Opened.Ok, notice: String? = null, undo: ScreenUndo? = null): TransferCandidatesUi {
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList()
+        val names = accounts.associate { it.id to it.name }
+        val pickable = accounts.filter { it.archived == 0L && it.type != "LOAN" }.map { AccountUi(it.id, it.name, it.type) }
+        val found = ok.transferCandidates.scan(BaseCurrency.current.code, namedAccountReader(ok))
+        val fmt = DatePattern("d MMM yyyy")
+        fun row(c: app.expenses.core.domain.TransferCandidate): TransferCandidateRowUi {
+            val e = c.entry
+            return TransferCandidateRowUi(
+                e.id, c.partner?.id, e.title?.takeIf { it.isNotBlank() } ?: e.note?.takeIf { it.isNotBlank() } ?: if (e.outgoing) "Expense" else "Income",
+                fmt.format(dateOfMillis(e.at)), Money(e.amountMinor, BaseCurrency.current).formatted(), names[e.accountId] ?: "an account", e.outgoing,
+                c.partner?.accountId.orEmpty(), c.partner?.let { names[it.accountId] }.orEmpty(), c.reason,
+            )
+        }
+        val cashAccounts = pickable.filter { it.type == "CASH" }
+        val groups = buildList {
+            if (found.cashWithdrawals.isNotEmpty()) add(TransferGroupUi(
+                "cash", "Cash withdrawals", "Expenses that read as cash taken out at an ATM. Made transfers, they move money to your cash instead of counting as spending.",
+                found.cashWithdrawals.map(::row), pickable, cashAccounts.singleOrNull()?.id, cashAccounts.size == 1, cashAccounts.isEmpty(),
+            ))
+            if (found.ownAccounts.isNotEmpty()) add(TransferGroupUi(
+                "own", "Moves between your own accounts", "An expense and an income of the same amount, minutes apart, that read as one move of money. One transfer replaces both, so neither counts as spending or income.",
+                found.ownAccounts.map(::row), emptyList(), null, false, false,
+            ))
+            if (found.selfTransfers.isNotEmpty()) add(TransferGroupUi(
+                "self", "Transfers to yourself", "Entries whose own words say they were to or from yourself. Choose the other account.",
+                found.selfTransfers.map(::row), pickable, null, false, false,
+            ))
+        }
+        return TransferCandidatesUi(groups, ok.transferCandidates.dismissed().size, loading = false, notice = notice, undo = undo)
+    }
+
+    /** Opens the Transfer candidates screen: it reads the ledger off the main thread (the screen shows that it is working) and changes nothing. */
+    fun openTransferCandidates() {
+        _transferCandidates.value = TransferCandidatesUi(loading = true)
+        withStore { ok -> _transferCandidates.value = transferCandidatesUi(ok) }
+    }
+
+    fun closeTransferCandidates() { lastCandidateTransfers = null; _transferCandidates.value = null }
+
+    /**
+     * Makes the suggestions [rowIds] of [group] transfers, one step with one Undo: a "cash" or "self" row moves to [toAccount]; an "own" row becomes one transfer between its own two accounts and the
+     * income that was its other half is deleted (it comes back with Undo). What cannot be changed is skipped and the notice says how many and why.
+     */
+    fun makeCandidateTransfers(group: String, rowIds: List<String>, toAccount: String) = withStore { ok ->
+        val rows = _transferCandidates.value?.groups?.firstOrNull { it.key == group }?.rows.orEmpty().filter { it.id in rowIds }
+        if (rows.isEmpty()) return@withStore
+        val moves = rows.map { r -> if (group == "own") EntryActions.TransferMove(r.id, r.toId, r.partnerId) else EntryActions.TransferMove(r.id, toAccount) }
+        val r = try { EntryActions(ok).makeCandidateTransfers(moves) } catch (e: IllegalArgumentException) {
+            _transferCandidates.value = transferCandidatesUi(ok, "Nothing was changed: ${e.message ?: "the transfers could not be made"}")
+            return@withStore
+        }
+        val made = if (r.changed == 0) "Made no transfers" else "Made ${r.changed} ${if (r.changed == 1) "transfer" else "transfers"}"
+        val notice = (if (r.skipped == 0) "$made." else "$made, ${r.skipped} skipped${r.why?.let { ": $it" }.orEmpty()}.")
+        // a second batch while the first one's Undo is still offered is added to it: one Undo puts back everything made since the page was opened, and the bar says so
+        val prior = lastCandidateTransfers?.second?.takeIf { r.changed > 0 }
+        val all = if (prior == null) r else r.copy(changed = prior.changed + r.changed, undoKinds = prior.undoKinds + r.undoKinds, undoRestore = prior.undoRestore + r.undoRestore)
+        val id = Uuid.random().toString()
+        if (r.changed > 0) lastCandidateTransfers = id to all
+        refresh(ok)
+        // nothing changed: the Undo of an earlier batch, if its bar is still up, stays
+        val undo = if (r.changed > 0) ScreenUndo(id, if (prior == null) notice else "$notice Undo puts back all ${all.changed} made so far.") else _transferCandidates.value?.undo
+        _transferCandidates.value = transferCandidatesUi(ok, notice, undo)
+    }
+
+    /** Takes back the last conversion: the entries it replaced return as they were and the transfers go. */
+    fun undoCandidateTransfers(id: String) {
+        val held = lastCandidateTransfers?.takeIf { it.first == id } ?: return // taken now: the bar clears it as soon as it is gone, before the store work below runs
+        withStore { ok ->
+            val notice = try {
+                ok.store.atomically {
+                    held.second.undoKinds.asReversed().forEach { EntryActions(ok).undoKindChange(it) }
+                    held.second.undoRestore.forEach { EntryActions(ok).restore(it) }
+                }
+                "Put back ${held.second.changed} ${if (held.second.changed == 1) "entry" else "entries"} as they were."
+            } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            refresh(ok)
+            _transferCandidates.value = transferCandidatesUi(ok, notice)
+        }
+    }
+
+    fun candidateTransfersUndoGone(id: String) {
+        if (lastCandidateTransfers?.first == id) lastCandidateTransfers = null
+        _transferCandidates.update { it?.takeIf { s -> s.undo?.id == id }?.copy(undo = null) ?: it }
+    }
+
+    /** "Not a transfer": these suggestions (and, for a pair, both of its entries) are not suggested again. Nothing in the ledger changes. */
+    fun dismissTransferCandidates(group: String, rowIds: List<String>) = withStore { ok ->
+        val rows = _transferCandidates.value?.groups?.firstOrNull { it.key == group }?.rows.orEmpty().filter { it.id in rowIds }
+        if (rows.isEmpty()) return@withStore
+        ok.transferCandidates.dismiss(rows.flatMap { listOfNotNull(it.id, it.partnerId) })
+        _transferCandidates.value = transferCandidatesUi(ok, "Marked ${rows.size} as not ${if (rows.size == 1) "a transfer" else "transfers"}. They will not be suggested again.", _transferCandidates.value?.undo)
+    }
+
+    /** Brings back every suggestion that was answered "Not a transfer". */
+    fun showDismissedTransferCandidates() = withStore { ok -> ok.transferCandidates.clearDismissed(); _transferCandidates.value = transferCandidatesUi(ok, undo = _transferCandidates.value?.undo) }
+
+    /** Creates the account named Cash (the existing create-account path), after the person confirmed on the screen, and shows the suggestions again with it as the destination. */
+    fun createCashAccountForCandidates() = saveAccount(null, "Cash", "CASH", "", null, null, "") { problem ->
+        if (problem != null) _transferCandidates.update { it?.copy(notice = problem) } else withStore { ok -> _transferCandidates.value = transferCandidatesUi(ok, undo = _transferCandidates.value?.undo) }
+    }
 
     fun openCalendar() = calendarAction { CalendarRequest(0, null) }
     fun closeCalendar() { calendarRequest = null; _calendar.value = null }

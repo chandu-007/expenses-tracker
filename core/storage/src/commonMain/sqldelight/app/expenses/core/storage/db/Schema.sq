@@ -691,6 +691,45 @@ WHERE e.deleted = 0 AND e.source = 'sms' AND e.kind IN ('EXPENSE', 'INCOME') AND
   AND (SELECT COUNT(*) FROM entry_split sp WHERE sp.entry_id = e.id) <= 1
 ORDER BY e.occurred_at, e.id;
 
+-- "Transfer candidates": live expenses and income whose title, note or original words MAY say an ATM withdrawal or a transfer to oneself. Only a coarse text match, so a long ledger
+-- costs one scan and the words of the few that pass are read precisely in app.expenses.core.domain.TransferCandidates. Newest first, at most :limit rows.
+transferWordingRows:
+SELECT id, kind, account_id, occurred_at, amount_minor, merchant, note, origin_text, origin_at FROM (
+    SELECT e.id AS id, e.kind AS kind, e.account_id AS account_id, e.occurred_at AS occurred_at, e.amount_minor AS amount_minor, e.merchant AS merchant, e.note AS note,
+           o.text AS origin_text, o.received_at AS origin_at,
+           lower(COALESCE(e.merchant, '') || ' ' || COALESCE(e.note, '') || ' ' || COALESCE(o.text, '')) AS t
+    FROM entry e LEFT JOIN entry_origin o ON o.entry_id = e.id
+    WHERE e.deleted = 0 AND e.kind IN ('EXPENSE', 'INCOME') AND e.currency = :currency AND e.account_id IS NOT NULL AND e.original_amount_minor IS NULL
+)
+WHERE t LIKE '%atm%' OR t LIKE '%wdl%' OR t LIKE '%withdraw%' OR t LIKE '%nwd%' OR t LIKE '%awl%' OR t LIKE '%cash%' OR t LIKE '%self%'
+   OR t LIKE '%own a%' OR t LIKE '%own n%' OR t LIKE '%own v%' OR t LIKE '%own u%' OR t LIKE '%own b%'
+   OR t LIKE '%my a%' OR t LIKE '%my n%' OR t LIKE '%my v%' OR t LIKE '%my u%'
+ORDER BY occurred_at DESC, id
+LIMIT :limit;
+
+-- "Transfer candidates": is there a live entry of the opposite kind (:kind is INCOME for an expense and the other way round), the same amount, on another account, within a window of :at?
+-- Then the other half of a move is already in the ledger. An index range on when it happened.
+transferOtherHalfNear:
+SELECT EXISTS(
+    SELECT 1 FROM entry WHERE deleted = 0 AND kind = :kind AND currency = :currency AND amount_minor = :amount AND account_id IS NOT NULL AND account_id != :accountId
+      AND occurred_at >= :fromMillis AND occurred_at <= :untilMillis
+);
+
+-- "Transfer candidates": an expense and an income of exactly the same amount on different accounts, the expense within :windowMs of the income (an index range on when it happened, so a
+-- long ledger costs a range read per income). Whether the two are one move of money is decided by app.expenses.core.domain.TransferPairs. At most :limit rows.
+transferPairRows:
+SELECT x.id AS out_id, x.account_id AS out_account, x.occurred_at AS out_at, x.merchant AS out_merchant, x.note AS out_note, xo.text AS out_text, xo.received_at AS out_arrived,
+       i.id AS in_id, i.account_id AS in_account, i.occurred_at AS in_at, i.merchant AS in_merchant, i.note AS in_note, io.text AS in_text, io.received_at AS in_arrived,
+       i.amount_minor AS amount_minor
+FROM entry i
+JOIN entry x ON x.amount_minor = i.amount_minor AND x.occurred_at >= i.occurred_at - :windowMs AND x.occurred_at <= i.occurred_at + :windowMs
+LEFT JOIN entry_origin xo ON xo.entry_id = x.id
+LEFT JOIN entry_origin io ON io.entry_id = i.id
+WHERE i.deleted = 0 AND i.kind = 'INCOME' AND i.currency = :currency AND i.account_id IS NOT NULL AND i.original_amount_minor IS NULL
+  AND x.deleted = 0 AND x.kind = 'EXPENSE' AND x.currency = :currency AND x.account_id IS NOT NULL AND x.original_amount_minor IS NULL AND x.account_id != i.account_id
+ORDER BY i.occurred_at DESC, i.id, x.id
+LIMIT :limit;
+
 -- Expenses a refund of :amount could be for: at least that much, in a window before it, best amount match first, then nearest.
 refundCandidates:
 SELECT id, merchant, note, amount_minor, occurred_at FROM entry

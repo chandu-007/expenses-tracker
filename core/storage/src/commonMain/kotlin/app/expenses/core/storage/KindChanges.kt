@@ -19,11 +19,11 @@ class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, p
 
     /**
      * Replaces the live expense, income or transfer [oldId] with [entry] (of another kind, with its own new id). [merchant] is the title and [tags] the tags the person left on
-     * the form; the old note, source and bank reference carry over, so "Where this came from" still works and a text delivered again is still seen as already added.
+     * the form; the old note (or, when it has none, [fallbackNote]: the note of the other half of a move that is absorbed), source and bank reference carry over, so "Where this came from" still works and a text delivered again is still seen as already added.
      * Throws [IllegalArgumentException], changing nothing, when the entry is gone, is not a plain expense, income or transfer, is shared, in another currency, tied to a bill or a repeating
      * item, has "I expect this back" on, or [entry] breaks a ledger rule (two different accounts for a transfer, and so on).
      */
-    fun change(oldId: String, entry: DomainEntry, merchant: String?, tags: List<String>): Changed = ledger.atomically {
+    fun change(oldId: String, entry: DomainEntry, merchant: String?, tags: List<String>, fallbackNote: String? = null): Changed = ledger.atomically {
         val row = checked(oldId)
         val columns = EntryMapping.columns(entry)
         require(columns.kind != row.kind && (columns.kind == "EXPENSE" || columns.kind == "INCOME" || columns.kind == "TRANSFER")) { "Choose another type." }
@@ -35,7 +35,7 @@ class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, p
         if (reference != null) ledger.setSourceRef(EntryId(oldId), null)
         val origin = origins.get(oldId)
         ledger.delete(EntryId(oldId))
-        ledger.save(entry, EntryDetails(merchant = merchant?.takeIf { it.isNotBlank() }, note = row.note, source = row.source, sourceRef = reference, tags = tags))
+        ledger.save(entry, EntryDetails(merchant = merchant?.takeIf { it.isNotBlank() }, note = if (row.note.isNullOrBlank()) fallbackNote?.takeIf { it.isNotBlank() } ?: row.note else row.note, source = row.source, sourceRef = reference, tags = tags))
         if (origin != null) origins.put(entry.id.value, origin.kind, origin.sender, origin.text, origin.receivedAt)
         attachments.move(oldId, entry.id.value)
         Changed(entry.id.value, oldId, reference)

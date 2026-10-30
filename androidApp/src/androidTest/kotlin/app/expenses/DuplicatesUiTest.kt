@@ -10,6 +10,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.expenses.core.domain.Currency
+import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.EntryId
@@ -142,5 +143,74 @@ class DuplicatesUiTest {
         assertTrue(textOf("inbox_duplicate_$again").startsWith("Already in your ledger"), textOf("inbox_duplicate_$again"))
         tap("inbox_add_$again"); waitFor("inbox_problem_$again")
         assertEquals(2, entryCount())
+    }
+
+    // ---- a bank reference on an entry whose type the person changed ----
+
+    private fun addFirstPending(at: Long) {
+        launch(); openInbox(); val id = ids().getValue(at); waitFor("inbox_$id"); tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+    }
+
+    private fun liveKinds() = runBlocking { container.write { it.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().map { e -> e.kind } } }!!
+
+    private fun changeOnlyEntry(to: DraftKind, category: String) = runBlocking {
+        container.write { ok ->
+            val a = EntryActions(ok); val id = ok.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().single().id
+            a.changeKind((a.editable(id) as Editable.Form).draft.copy(kind = to, category = category))
+        }
+    }!!
+
+    private fun againText(at: Long, text: String) { ingest("AX-HDFCBK-S", text, at); tap("inbox_back"); openInbox() }
+
+    @Test
+    fun anExpenseChangedToIncomeMakesTheSameDebitTextArrivingAgainADuplicateNotAReversalAndUndoLeavesOneEntry() {
+        ingest("AX-HDFCBK-S", debit("121212121212"), 1_000)
+        addFirstPending(1_000)
+        val changed = changeOnlyEntry(DraftKind.INCOME, "income:salary")
+        assertEquals(listOf("INCOME"), liveKinds())
+        againText(3_000_000, debit("121212121212")) // the same transaction from another channel, as a second delivery
+        val again = ids().getValue(3_000_000); waitFor("inbox_duplicate_$again")
+        assertTrue(textOf("inbox_duplicate_$again").startsWith("Already in your ledger"), textOf("inbox_duplicate_$again"))
+        assertTrue(!has("inbox_related_$again"), "it is not called a refund or reversal")
+        tap("inbox_add_$again"); waitFor("inbox_problem_$again")
+        assertEquals(listOf("INCOME"), liveKinds(), "nothing was added")
+        runBlocking { container.write { EntryActions(it).undoKindChange(changed) } }
+        assertEquals(listOf("EXPENSE"), liveKinds(), "Undo of the change leaves the one original expense, with no second one beside it")
+    }
+
+    @Test
+    fun anIncomeChangedToAnExpenseMakesTheSameCreditTextArrivingAgainADuplicate() {
+        ingest("AX-HDFCBK-S", credit("343434343434"), 1_000)
+        addFirstPending(1_000)
+        changeOnlyEntry(DraftKind.EXPENSE, "Food")
+        againText(3_000_000, credit("343434343434"))
+        val again = ids().getValue(3_000_000); waitFor("inbox_duplicate_$again")
+        assertTrue(textOf("inbox_duplicate_$again").startsWith("Already in your ledger"), textOf("inbox_duplicate_$again"))
+        assertTrue(!has("inbox_related_$again"))
+        tap("inbox_add_$again"); waitFor("inbox_problem_$again"); assertEquals(listOf("EXPENSE"), liveKinds())
+    }
+
+    @Test
+    fun aGenuineReversalStillWorksBothWaysForEntriesThePersonLeftAsTheyWere() {
+        // money received, then a debit text carrying its reference: the payment being undone
+        ingest("AX-HDFCBK-S", credit("565656565656"), 1_000)
+        addFirstPending(1_000)
+        againText(3_000_000, debit("565656565656"))
+        val again = ids().getValue(3_000_000); waitFor("inbox_related_$again")
+        assertTrue(textOf("inbox_related_$again").contains("refund or reversal"), textOf("inbox_related_$again"))
+        assertTrue(!has("inbox_duplicate_$again"))
+        tap("inbox_add_$again"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals(listOf("INCOME", "EXPENSE"), liveKinds())
+    }
+
+    @Test
+    fun aTextWithNoReferenceIsNeverTakenForAReversalOfAChangedEntry() {
+        val noRef = "Rs.1,250.00 debited from A/c XX1234 on 05-10-26 to VPA shop@okhdfc. Not you? Call 18002586161"
+        ingest("AX-HDFCBK-S", noRef, 1_000)
+        addFirstPending(1_000)
+        changeOnlyEntry(DraftKind.INCOME, "income:salary")
+        againText(3_000_000, noRef)
+        val again = ids().getValue(3_000_000); waitFor("inbox_$again")
+        assertTrue(!has("inbox_related_$again"), "with no reference there is nothing to call a reversal")
     }
 }

@@ -49,6 +49,17 @@ Settings, Display, Font size and Display size at their largest.
 - [ ] A bank text the app misses: To review, Report, the redacted message shows no name, number or balance, with "Keep the amounts" off and on; send it by mail.
 - [ ] Protected copies: Your data, "Protect copies with a passphrase", on a real phone and a real folder (see the iPhone list for the lock/restart cases); restore the copy with the passphrase on a second phone.
 
+### Transfer candidates (More, Transfer candidates; after 0.9.0)
+- [ ] With your real history: the page opens within a second or two on a year or more of entries, says "Looking through your entries" first and then the groups. Nothing changes by opening it (look at Home before and after).
+- [ ] Cash withdrawals: the rows are real ATM withdrawals (from SMS or statement imports); note any ATM withdrawal it missed and any row that is not one (a shop with ATM in its name, a card purchase). With exactly one Cash account the rows start ticked; with none, "Create a Cash account" asks first.
+- [ ] A cash advance on a credit card is listed in the same group: converting it moves the money from the card to Cash (the card's owed amount stays, the spending line goes).
+- [ ] Moves between your own accounts: real pairs (the debit on one bank account and the credit on the other, a few minutes apart) appear, with the two accounts named; a same-amount payment to a person that is not your own move does not. Converting one pair leaves both balances unchanged and removes the entry from spending and from income.
+- [ ] Transfers to yourself: only entries that really say so (self transfer, to self, own account); none ticked, and you choose the other account.
+- [ ] Make transfers, then Undo on the bar: the same entries come back with their dates, categories, notes and photos; Home's balances and the month total match what they were before.
+- [ ] "Not a transfer" on a row, leave the page, kill the app and open it again: the row stays hidden; "Show the N you marked" brings it back.
+- [ ] VoiceOver or TalkBack: each row reads as one tick box ("ATM cash, 3 Mar, Main bank to Cash, ₹3,000.00, checked"); the buttons are reachable; the amounts hide with Hide amounts.
+- [ ] A tablet or an unfolded foldable: the page is one centred column, the same as Subscriptions.
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 

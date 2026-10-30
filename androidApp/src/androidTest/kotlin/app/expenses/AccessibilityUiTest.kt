@@ -297,6 +297,20 @@ class AccessibilityUiTest {
     }
 
     @Test
+    fun transferCandidates() {
+        runBlocking {
+            container.write { ok ->
+                ok.store.save(Expense(EntryId("atm"), System.currentTimeMillis() - 86_400_000L, AccountId("bank"), Money(300_000, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(300_000, Currency.INR)))), EntryDetails(merchant = "ATM cash"))
+                ok.store.save(Expense(EntryId("self"), System.currentTimeMillis() - 2 * 86_400_000L, AccountId("bank"), Money(450_000, Currency.INR), listOf(CategorySplit(CategoryId("Food"), Money(450_000, Currency.INR)))), EntryDetails(merchant = "Self transfer"))
+            }
+        }
+        launch(); compose.openMore(); tap("open_transfer_candidates"); waitFor("transfer_candidates_row_atm"); waitFor("transfer_candidates_row_self")
+        check("Transfer candidates", "transfer_candidates_list")
+        tap("transfer_candidates_row_self"); tap("transfer_candidates_dest_self"); waitFor("transfer_candidates_to_self_Cash")
+        check("Transfer candidates with a destination menu open", "transfer_candidates_to_self_Cash")
+    }
+
+    @Test
     fun more() {
         seedHome(); launch(); compose.openMore()
         check("More", "more_page")

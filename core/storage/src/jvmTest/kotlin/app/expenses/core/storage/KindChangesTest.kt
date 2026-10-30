@@ -366,4 +366,14 @@ class KindChangesTest {
         changes.undo(c)
         assertEquals(listOf("80C", "Trip"), ledger.tagsOf(EntryId("atm")).sorted(), "the original's tags are as they were"); assertEquals("ATM Koramangala", q.entryById("atm").executeAsOne().merchant)
     }
+
+    @Test
+    fun aFallbackNoteIsCarriedOnlyWhenTheEntryHasNoneOfItsOwn() {
+        ledger.save(expense("a", at = 1_000), EntryDetails(merchant = "ATM"))
+        changes.change("a", transfer("t1", "main", "cash"), "ATM", emptyList(), fallbackNote = "from the income")
+        assertEquals("from the income", q.entryById("t1").executeAsOne().note)
+        ledger.save(expense("b", at = 2_000), EntryDetails(merchant = "ATM", note = "own note"))
+        changes.change("b", transfer("t2", "main", "cash", at = 2_000), "ATM", emptyList(), fallbackNote = "from the income")
+        assertEquals("own note", q.entryById("t2").executeAsOne().note)
+    }
 }
