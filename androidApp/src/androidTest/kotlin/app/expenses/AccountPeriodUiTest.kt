@@ -76,7 +76,10 @@ class AccountPeriodUiTest {
     @Test
     fun searchThisAccountOpensSearchInsideItAndTheAccountCanBeChangedThere() {
         seed(); tap("balance_chip_Cash"); tap("account_search")
-        waitFor("search_text"); waitFor("result_n"); waitFor("result_o")
+        waitFor("search_text"); waitFor("result_n")
+        // Search opens with its box focused, so the keyboard comes up over the lower half of the screen and the list is a lazy list: the third result (3 months back) is composed only once
+        // it is scrolled into view. Whether the keyboard is already up when the results arrive decided if this passed (it failed about 1 run in 3); scrolling to the row asks for what the test means.
+        compose.onNodeWithTag("search_results", useUnmergedTree = true).performScrollToNode(hasTestTag("result_o")); waitFor("result_o")
         assertTrue(!has("result_b"), "only the cash account is searched")
         tap("search_account_Bank"); waitFor("result_b"); waitGone("result_n")
         tap("search_account_any"); waitFor("search_hint") // nothing else is chosen, so the search is back at its start
