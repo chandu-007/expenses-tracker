@@ -31,6 +31,9 @@ Settings, Display, Font size and Display size at their largest.
 - [ ] Allow text reading from More, Capture. The disclosure shows first, then Android's own permission.
 - [ ] A real bank text appears in To review with the right account (the last four digits decide which).
 - [ ] Add all from a payee when two or more waiting items come from the same shop.
+- [ ] An ICICI Bank credit card spend (it comes from a header ending ICICIT, for example BP-ICICIT-S) appears in To review with the shop's name, the spend (not the available limit), the card's last four digits and the date in the text.
+- [ ] More, Capture, Your bank's sender name: type a name (or paste a whole header such as AX-NAME-S) and tap Add: "Added NAME" shows, the box empties and the name appears as a chip below it; adding it again says "Already added"; the x on the chip ("Remove NAME" in TalkBack) takes it away. Leave the screen and come back: the chips are still there.
+- [ ] The Today and Quick add home-screen widgets (long-press the home screen, Widgets): with Hide amounts and the App lock off, the total shows as dots with an eye next to the title. Tap the eye: the amount appears at once (also if you placed the widget or opened the app a moment before) and stays until you tap the eye again. Add an entry in the app: the widget's total follows within a few seconds.
 
 ### Photos and statements
 - [ ] Read items from a photo: a real shop bill, good light, flat. See what it reads and what it misses.
