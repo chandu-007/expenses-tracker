@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Two cells wide and two high: what has been spent today and what is left each day. -->
+<!-- Today: 2 x 2. What has been spent today and what is left each day. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_today_description"
+    android:previewImage="@drawable/widget_preview_today"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="110dp"
     android:minHeight="110dp"

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Starts as 4 cells wide and 2 high; can be made as small as 2 by 1 or as large as the launcher allows. The layout adapts to the size (see QuickAddWidget). -->
+<!-- Standard: 4 cells wide, 2 high. This month, the comparison with last month and the quick entries; it adapts to whatever size it is resized to (see QuickAddWidget and WidgetSummary.plan). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"
+    android:previewImage="@drawable/widget_preview_standard"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="110dp"
     android:minHeight="40dp"

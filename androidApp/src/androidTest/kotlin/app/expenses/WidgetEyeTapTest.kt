@@ -86,7 +86,7 @@ class WidgetEyeTapTest {
     }
 
     /** Places the widget and returns its host view, or skips the test when this device will not let a test place one. */
-    private fun place(receiver: Class<*>): AppWidgetHostView {
+    private fun place(receiver: Class<*>, widthDp: Int = 250, heightDp: Int = 250): AppWidgetHostView {
         val provider = ComponentName(context, receiver)
         widgetId = host.allocateAppWidgetId()
         if (!tryBind(widgetId, provider)) {
@@ -96,8 +96,8 @@ class WidgetEyeTapTest {
         }
         assumeTrue("this device did not allow placing a widget from a test", manager.getAppWidgetInfo(widgetId) != null)
         val size = Bundle().apply {
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 250)
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 250); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 250)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, widthDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, widthDp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, heightDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, heightDp)
         }
         manager.updateAppWidgetOptions(widgetId, size)
         inst.runOnMainSync {
@@ -183,5 +183,36 @@ class WidgetEyeTapTest {
         place(QuickAddReceiver::class.java)
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
         waitFor("masked, no eye") { t, d -> "Spent this month" in t && !total(t) && "Show the amount" !in d && "Hide the amount" !in d && t.none { it.startsWith("₹") && it.any(Char::isDigit) } }
+    }
+
+    private fun resizeTo(widthDp: Int, heightDp: Int) {
+        val b = Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, widthDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, widthDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, heightDp); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, heightDp) }
+        manager.updateAppWidgetOptions(widgetId, b)
+        runBlocking { app.expenses.widget.refreshWidgets(context) }
+    }
+
+    @Test
+    fun theWidgetIsDrawnAtTheSmallMediumAndLargeSizesAndTheEyeUnlocksTheDetail() {
+        place(QuickAddReceiver::class.java, widthDp = 110, heightDp = 110)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        // small: the caption, the figure (masked), the eye and the round Add; no chips, no detail
+        waitFor("the small widget") { t, d -> "This month" in t && "Show the amount" in d && "Add an expense" in d && "Chai" !in t && "Where it went" !in t }
+        resizeTo(320, 146)
+        waitFor("the medium widget") { t, d -> "Spent this month" in t && "Chai" in t && "+ Add" in t && "Where it went" !in t }
+        resizeTo(320, 294)
+        waitFor("the large widget, still hiding the detail") { t, _ -> "Spent this month" in t && "Tap the eye to see this month in detail" in t && "Where it went" !in t && "Latest" !in t }
+        tap("Show the amount")
+        waitFor("the large widget with the figures shown") { t, d -> total(t) && "Hide the amount" in d && "Where it went" in t && "Latest" in t && "Chai" in t }
+    }
+
+    @Test
+    fun everyWidgetInThePickerHasAPreviewImageADescriptionAndTheSpendingName() {
+        val mine = manager.installedProviders.filter { it.provider.packageName == context.packageName }
+        assertTrue(mine.size == 5, "five widgets are offered: ${mine.map { it.provider.className }}")
+        for (p in mine) {
+            assertTrue(p.previewImage != 0, "${p.provider.className} has no preview image")
+            assertTrue(p.loadLabel(context.packageManager).startsWith("Spending"), p.loadLabel(context.packageManager))
+            if (android.os.Build.VERSION.SDK_INT >= 31) assertTrue(p.loadDescription(context)?.isNotBlank() == true, "${p.provider.className} has no description")
+        }
     }
 }

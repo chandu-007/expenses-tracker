@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class ExpensesApp : Application() {
     override fun onCreate() {
@@ -14,6 +15,15 @@ class ExpensesApp : Application() {
         Notifier.createChannels(this)
         NotificationWork.schedule(this)
         AutoExportWorker.schedule(this)
+    }
+
+    /**
+     * Before Android 12 a widget's text colours are decided when it is drawn, so light or dark mode changing (or the language) leaves it with the old ones until it is drawn again. While the app's
+     * process is alive that is done here; otherwise the hourly check and the next time the app opens do it. Widgets drawn on Android 12 and later follow the phone by themselves.
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (android.os.Build.VERSION.SDK_INT < 31) appScope.launch { runCatching { app.expenses.widget.refreshWidgets(this@ExpensesApp) } }
     }
 
     /** What the shared code needs from the phone. */

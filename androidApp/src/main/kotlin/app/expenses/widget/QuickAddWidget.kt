@@ -46,6 +46,9 @@ import androidx.glance.layout.width
 import androidx.compose.ui.unit.DpSize
 import app.expenses.R
 import app.expenses.core.domain.AmountMask
+import app.expenses.core.domain.RecentInput
+import app.expenses.core.domain.WidgetInsights
+import app.expenses.core.domain.WidgetSummary
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Money
 import androidx.glance.currentState
@@ -74,15 +77,20 @@ data class WidgetButton(val templateId: String, val label: String, val detail: S
 /** The "Added … · Undo" line, shown for a short time after a tap so a mistaken tap can be taken back. */
 data class WidgetUndo(val entryId: String, val text: String)
 
-/** Everything the widget draws. Kept separate from Glance so it can be built and tested without a launcher. [monthSpend] is what has been spent this calendar month, already masked when amounts are hidden. */
+/**
+ * Everything the widget draws. Kept separate from Glance so it can be built and tested without a launcher. [monthSpend] is what has been spent this calendar month, already masked when amounts are hidden.
+ * [insights] are the comparison, budget, categories and recent entries the bigger sizes add; they are empty unless the total is shown ([revealed]). [nothingYet] is true when this month has no spending.
+ * [today] is the Today widget's own figure line and [label] the caption it replaces "Spent this month" with.
+ */
 data class WidgetModel(
     val buttons: List<WidgetButton>, val undo: WidgetUndo?, val needsApp: Boolean, val monthSpend: String? = null,
     /** Whether the total is shown in full; false when it is masked. [canToggle] is false when the app's own Hide amounts or the App lock forces it masked, so the eye is not offered. */
     val revealed: Boolean = false, val canToggle: Boolean = false,
+    val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false,
 )
 
 /** What the widget reads from the database. */
-data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean)
+data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean, val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false)
 
 /** The widget's own switch for showing the month's total. Off unless the person turns it on from the widget: not everyone wants spending on the home screen. */
 internal const val SETTING_WIDGET_SHOW_TOTAL = "widget_show_total"
@@ -116,16 +124,13 @@ internal fun <T> reloadedOnRefresh(first: T, firstStamp: Long?, load: suspend ()
     return value
 }
 
-/** The sizes the widget is drawn for; the launcher picks the largest of these that fits the space the person gave it. */
-internal val SMALL = DpSize(110.dp, 60.dp)
-internal val WIDE = DpSize(250.dp, 60.dp)
-internal val MEDIUM = DpSize(250.dp, 110.dp)
-internal val LARGE = DpSize(250.dp, 250.dp)
-
-/** A home-screen widget: this month's spending, an Add button, and the saved quick entries as one-tap chips. It adapts to the size it is resized to. */
+/**
+ * A home-screen widget: this month's spending, an Add button, and the saved quick entries as one-tap chips; the taller sizes add how the month compares with the last, the budget and
+ * where the money went. It is drawn for the exact size it has been given ([SizeMode.Exact]), so bars are true to scale and the layout follows every resize ([WidgetSummary.plan]).
+ */
 class QuickAddWidget : GlanceAppWidget() {
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
-    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, WIDE, MEDIUM, LARGE))
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val stamp = getAppWidgetState<Preferences>(context, id)[REFRESHED] // read first: whatever is written after this is noticed by [reloadedOnRefresh]
@@ -133,7 +138,7 @@ class QuickAddWidget : GlanceAppWidget() {
         provideContent {
             val prefs = currentState<Preferences>()
             val loaded = reloadedOnRefresh(first, stamp) { load(context) }
-            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false))
+            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false, loaded?.insights ?: WidgetInsights.NONE, loaded?.nothingYet ?: false))
         }
     }
 
@@ -145,15 +150,40 @@ class QuickAddWidget : GlanceAppWidget() {
             fun shown(t: String) = if (hide) AmountMask.mask(t) else t
             val buttons = ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS).map { WidgetButton(it.id, it.name, shown(it.amount!!.formatted())) }
             val zone = java.time.ZoneId.systemDefault()
-            val first = java.time.LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val today = java.time.LocalDate.now(zone)
+            val first = today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
             val currency = BaseCurrency.current
-            val spent = ok.store.spendByCategory(currency, from = first).values.fold(Money.zero(currency)) { a, m -> a + m }
+            val byCategory = ok.store.spendByCategory(currency, from = first)
+            val spent = byCategory.values.fold(Money.zero(currency)) { a, m -> a + m }
             // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
             val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
             val canToggle = !hide && !locked
             val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
-            WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle)
+            // the rest of what the bigger sizes show is read only when it may be shown at all: a hidden widget costs what it always did
+            val insights = if (revealed) insights(ok, today, zone, currency, spent, byCategory) else WidgetInsights.NONE
+            WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty())
         }
+    }
+
+    /** The comparison with last month up to the same day, the overall budget, the top categories and the newest entries: a few indexed reads, all after the total itself was allowed to show. */
+    private fun insights(ok: AppContainer.Opened.Ok, today: java.time.LocalDate, zone: java.time.ZoneId, currency: app.expenses.core.domain.Currency, spent: Money, byCategory: Map<app.expenses.core.domain.ledger.CategoryId?, Money>): WidgetInsights {
+        val lastFirst = today.withDayOfMonth(1).minusMonths(1)
+        val sameDays = minOf(today.dayOfMonth, lastFirst.lengthOfMonth())
+        val lastFrom = lastFirst.atStartOfDay(zone).toInstant().toEpochMilli()
+        val lastUntil = lastFirst.plusDays(sameDays.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
+        val lastSoFar = ok.store.spendByCategory(currency, from = lastFrom, until = lastUntil).values.fold(Money.zero(currency)) { a, m -> a + m }
+        val categories = ok.categories.list()
+        val names = categories.associate { it.id to it.name }
+        val parents = categories.filter { it.parentId != null }.associate { it.id to it.parentId }
+        val bar = WidgetSummary.topCategories(byCategory.mapKeys { it.key?.value }, parents, names, max = WidgetSummary.Room.MAX_CATEGORIES)
+        val kToday = kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)
+        val overall = ok.budgets.status(kToday, kotlinx.datetime.TimeZone.currentSystemDefault(), currency).progress.firstOrNull { it.categoryId == null }
+        val recent = ok.db.schemaQueries.recentEntries(12).executeAsList().filter { it.currency == currency.code }
+            .map { RecentInput(it.kind, it.merchant ?: it.note, it.category_id?.let(names::get), Money(it.amount_minor, currency), it.occurred_at) }
+        return WidgetSummary.insights(
+            revealed = true, delta = WidgetSummary.delta(spent, lastSoFar), budget = WidgetSummary.budget(overall?.limit, overall?.spent ?: Money.zero(currency)),
+            categories = bar, recent = WidgetSummary.recent(recent, System.currentTimeMillis(), kotlinx.datetime.TimeZone.currentSystemDefault(), WidgetSummary.Room.MAX_RECENT),
+        )
     }
 
     companion object {
@@ -161,11 +191,11 @@ class QuickAddWidget : GlanceAppWidget() {
         fun monthFigure(spent: String, hide: Boolean, locked: Boolean, revealed: Boolean = true): String = if (hide || locked || !revealed) AmountMask.mask(spent) else spent
 
         /** Builds what to draw. The undo line is shown only while it is still allowed to work. */
-        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false): WidgetModel {
+        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false, insights: WidgetInsights = WidgetInsights.NONE, nothingYet: Boolean = false): WidgetModel {
             val id = prefs[LAST_ID]
             val at = prefs[LAST_AT]
             val undo = if (id != null && at != null && now - at in 0..UNDO_WINDOW_MILLIS) WidgetUndo(id, prefs[LAST_TEXT] ?: "Added") else null
-            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle)
+            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle, insights = insights, nothingYet = nothingYet)
         }
     }
 }
@@ -179,103 +209,9 @@ class QuickAddSmallReceiver : GlanceAppWidgetReceiver() { override val glanceApp
 class QuickAddWideReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = QuickAddWidget() }
 class QuickAddLargeReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = QuickAddWidget() }
 
-// the same values as res/values/widget_colors.xml and its night version, which the shapes use (Glance's resource colour provider is not public API)
-private val textColor = ColorProvider(day = Color(0xFF1C1B1F), night = Color(0xFFE6E1E5))
-private val mutedColor = ColorProvider(day = Color(0xFF625B71), night = Color(0xFFCAC4D0))
-private val onAccent = ColorProvider(day = Color(0xFFFFFFFF), night = Color(0xFF381E72))
+internal fun openIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity")
 
-/** How the content is laid out for a given size: what to show, so a small widget is not a squeezed big one. */
-internal data class WidgetLayout(val showChips: Int, val chipsInHeader: Boolean, val showUndo: Boolean, val showHint: Boolean, val compactHeader: Boolean) {
-    companion object {
-        fun of(size: DpSize, chipCount: Int, hasUndo: Boolean): WidgetLayout {
-            val compact = size.width < 180.dp || size.height < 90.dp
-            if (size.width < 180.dp) return WidgetLayout(0, false, false, false, true)
-            // short and wide: the spending, one chip (two when there is plenty of width) and the Add pill share one row
-            if (size.height < 100.dp) return WidgetLayout(minOf(if (size.width >= 340.dp) 2 else 1, chipCount), true, false, false, true)
-            // padding 20 dp, header 42 dp, each chip row 42 dp (34 and a gap of 8), the undo line 42 dp
-            val room = size.height.value - 20f - 42f - (if (hasUndo) 42f else 0f)
-            val rows = (room / 42f).toInt().coerceIn(0, 3)
-            return WidgetLayout(minOf(rows * 2, chipCount), false, hasUndo, chipCount == 0 && rows > 0, compact)
-        }
-    }
-}
-
-@Composable
-fun WidgetContent(model: WidgetModel) {
-    val size = LocalSize.current
-    val layout = WidgetLayout.of(size, model.buttons.size, model.undo != null)
-    Column(GlanceModifier.fillMaxSize().background(ImageProvider(R.drawable.widget_bg)).padding(10.dp)) {
-        Header(model, layout, size)
-        when {
-            model.needsApp -> Text("Open the app to unlock your data", style = TextStyle(color = mutedColor, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 6.dp))
-            layout.showHint -> Text("Save a quick entry in the app to see it here", style = TextStyle(color = mutedColor, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 6.dp))
-            !layout.chipsInHeader && layout.showChips > 0 -> model.buttons.take(layout.showChips).chunked(2).forEach { pair ->
-                Row(GlanceModifier.fillMaxWidth().padding(top = 8.dp)) {
-                    Chip(pair[0], GlanceModifier.defaultWeight())
-                    Spacer(GlanceModifier.width(8.dp))
-                    if (pair.size > 1) Chip(pair[1], GlanceModifier.defaultWeight()) else Spacer(GlanceModifier.defaultWeight())
-                }
-            }
-        }
-        if (layout.showUndo) model.undo?.let { u ->
-            Row(GlanceModifier.fillMaxWidth().padding(top = 8.dp).background(ImageProvider(R.drawable.widget_undo_bg)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(u.text, style = TextStyle(color = textColor, fontSize = 12.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
-                Text("Undo", style = TextStyle(color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.padding(start = 8.dp).clickable(actionRunCallback<UndoAction>(actionParametersOf(UNDO_ENTRY_ID to u.entryId))))
-            }
-        }
-    }
-}
-
-/** The top row: this month's spending (tap to open the app) and the Add pill; on a short, wide widget the first chips sit between them. */
-@Composable
-private fun Header(model: WidgetModel, layout: WidgetLayout, size: DpSize) {
-    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(GlanceModifier.defaultWeight().clickable(actionStartActivity(openIntent()))) {
-            val tiny = size.width < 180.dp
-            // the smallest size has room for the figure only: no caption, and no ".00" so a five-digit amount still fits
-            if (!tiny) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (model.monthSpend == null) "Expenses" else "Spent this month", style = TextStyle(color = mutedColor, fontSize = 11.sp), maxLines = 1)
-                // the eye shows or hides the total; it is offered only when the app's own settings do not already force it hidden
-                if (model.monthSpend != null && model.canToggle) Image(
-                    ImageProvider(if (model.revealed) R.drawable.ic_widget_eye_off else R.drawable.ic_widget_eye),
-                    contentDescription = if (model.revealed) "Hide the amount" else "Show the amount",
-                    colorFilter = ColorFilter.tint(mutedColor),
-                    modifier = GlanceModifier.padding(start = 8.dp).size(20.dp).clickable(actionRunCallback<ToggleTotalAction>()),
-                )
-            }
-            Text(
-                (model.monthSpend ?: "Quick add").let { if (tiny) it.removeSuffix(".00") else it },
-                style = TextStyle(color = textColor, fontSize = if (tiny) 13.sp else if (layout.compactHeader) 17.sp else 22.sp, fontWeight = FontWeight.Bold), maxLines = 1,
-            )
-        }
-        if (layout.chipsInHeader) model.buttons.take(layout.showChips).forEach { b ->
-            Spacer(GlanceModifier.width(6.dp))
-            Chip(b, GlanceModifier, showDetail = size.width >= 340.dp)
-        }
-        Spacer(GlanceModifier.width(if (size.width < 180.dp) 4.dp else 6.dp))
-        Box(
-            GlanceModifier.background(ImageProvider(R.drawable.widget_pill)).padding(horizontal = if (size.width < 180.dp) 9.dp else if (layout.compactHeader) 12.dp else 16.dp, vertical = 8.dp).clickable(actionStartActivity(addIntent())),
-            contentAlignment = Alignment.Center,
-        ) { Text(if (size.width < 180.dp) "+" else "+ Add", style = TextStyle(color = onAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)) }
-    }
-}
-
-@Composable
-private fun Chip(b: WidgetButton, modifier: GlanceModifier, showDetail: Boolean = true) {
-    // one line: the name, then the amount, so a chip is the same height at every size
-    Row(
-        modifier.background(ImageProvider(R.drawable.widget_chip_bg)).padding(horizontal = 12.dp, vertical = 8.dp)
-            .clickable(actionRunCallback<QuickAddAction>(actionParametersOf(TEMPLATE_ID to b.templateId))),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(b.label, style = TextStyle(color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.defaultWeight())
-        if (showDetail && b.detail.isNotEmpty()) Text(b.detail, style = TextStyle(color = mutedColor, fontSize = 12.sp), maxLines = 1, modifier = GlanceModifier.padding(start = 6.dp))
-    }
-}
-
-private fun openIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity")
-
-private fun addIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE)
+internal fun addIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE)
 
 /** Tap on a quick-entry button: records the expense and remembers it so it can be undone for a couple of minutes. */
 class QuickAddAction : ActionCallback {

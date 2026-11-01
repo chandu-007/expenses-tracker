@@ -18,6 +18,8 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.appWidgetBackground
+import androidx.glance.layout.height
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.color.ColorProvider
@@ -51,11 +53,12 @@ data class TodayData(val spentToday: String, val perDayLine: String?, val reveal
  */
 class TodayWidget : GlanceAppWidget() {
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
+    override val sizeMode: androidx.glance.appwidget.SizeMode = androidx.glance.appwidget.SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val stamp = getAppWidgetState<Preferences>(context, id)[REFRESHED] // read first, as the quick add widget does
         val first = loadToday(context)
-        provideContent { TodayContent(reloadedOnRefresh(first, stamp) { loadToday(context) }) }
+        provideContent { TodayContent(reloadedOnRefresh(first, stamp) { loadToday(context) }, androidx.glance.LocalSize.current.width.value.toInt(), androidx.glance.LocalSize.current.height.value.toInt()) }
     }
 
     internal suspend fun loadToday(context: Context): TodayData? {
@@ -80,26 +83,20 @@ class TodayWidget : GlanceAppWidget() {
 class TodayReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: GlanceAppWidget = TodayWidget() }
 
 @Composable
-private fun TodayContent(data: TodayData?) {
-    val text = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFF1C1B1F), night = androidx.compose.ui.graphics.Color(0xFFE6E1E5))
-    val muted = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFF625B71), night = androidx.compose.ui.graphics.Color(0xFFCAC4D0))
-    val onAccent = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFFFFFFF), night = androidx.compose.ui.graphics.Color(0xFF381E72))
-    val open = actionStartActivity(android.content.Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity"))
-    val add = actionStartActivity(android.content.Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE))
-    Column(GlanceModifier.fillMaxSize().background(ImageProvider(R.drawable.widget_bg)).padding(12.dp)) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Spent today", style = TextStyle(color = muted, fontSize = 11.sp), modifier = GlanceModifier.clickable(open))
-            if (data != null && data.canToggle) Image(
-                ImageProvider(if (data.revealed) R.drawable.ic_widget_eye_off else R.drawable.ic_widget_eye),
-                contentDescription = if (data.revealed) "Hide the amount" else "Show the amount", colorFilter = ColorFilter.tint(muted),
-                modifier = GlanceModifier.padding(start = 8.dp).size(20.dp).clickable(actionRunCallback<ToggleTotalAction>()),
-            )
-        }
-        Text(data?.spentToday ?: "Open the app", style = TextStyle(color = text, fontSize = 22.sp, fontWeight = FontWeight.Bold), maxLines = 1, modifier = GlanceModifier.padding(top = 2.dp).clickable(open))
-        data?.perDayLine?.let { Text(it, style = TextStyle(color = muted, fontSize = 12.sp), maxLines = 2, modifier = GlanceModifier.padding(top = 2.dp).clickable(open)) }
+private fun TodayContent(data: TodayData?, widthDp: Int, heightDp: Int) {
+    val open = actionStartActivity(openIntent())
+    Column(GlanceModifier.fillMaxSize().appWidgetBackground().background(ImageProvider(R.drawable.widget_bg)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Text("Spent today", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.clickable(open))
+        val text = data?.spentToday ?: "Open the app"
+        Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, 100f, 22f, 14f).sp, fontWeight = FontWeight.Bold), maxLines = 1, modifier = GlanceModifier.clickable(open))
+        if (heightDp >= 128) data?.perDayLine?.let { Text(it, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 2, modifier = GlanceModifier.padding(top = 2.dp).clickable(open)) }
         Spacer(GlanceModifier.defaultWeight())
-        Box(GlanceModifier.background(ImageProvider(R.drawable.widget_pill)).padding(horizontal = 16.dp, vertical = 8.dp).clickable(add), contentAlignment = Alignment.Center) {
-            Text("+ Add", style = TextStyle(color = onAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold))
+        // the eye and Add share the bottom row: at two cells wide there is not room for them beside the caption
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val t = if (widthDp < 120) 40.dp else 44.dp
+            if (data != null && data.canToggle) Eye(data.revealed, t)
+            Spacer(GlanceModifier.defaultWeight())
+            AddButton(wide = false, target = t)
         }
     }
 }

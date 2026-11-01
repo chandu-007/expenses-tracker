@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The widgets' colours. Android 11 and older (and any launcher without Material You) use this violet palette, the app's own; values-v31 swaps in the phone's wallpaper colours. Text pairs are checked for 4.5:1 (see WidgetColorsTest). -->
 <resources>
     <color name="widget_surface">#FFFFFBFE</color>
-    <color name="widget_chip">#FFEDE7F6</color>
+    <color name="widget_container">#FFF3EDF7</color>
+    <color name="widget_chip">#FFF3EDF7</color>
+    <color name="widget_accent_container">#FFEADDFF</color>
+    <color name="widget_on_accent_container">#FF21005D</color>
     <color name="widget_accent">#FF6750A4</color>
     <color name="widget_on_accent">#FFFFFFFF</color>
     <color name="widget_text">#FF1C1B1F</color>
-    <color name="widget_muted">#FF625B71</color>
+    <color name="widget_muted">#FF49454F</color>
+    <color name="widget_track">#FFE7E0EC</color>
+    <color name="widget_positive">#FF17744A</color>
+    <color name="widget_negative">#FFB3261E</color>
     <color name="widget_undo">#FFFFE9D6</color>
 </resources>
