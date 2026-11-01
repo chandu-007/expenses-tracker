@@ -84,7 +84,8 @@ class SearchDatesUiTest {
         waitFor("result_b"); waitFor("result_c"); assertTrue(!has("result_a"), "from only: the 3rd is before it")
         waitFor("search_date_summary")
         pick("search_date_to", 10)
-        waitGone("result_c"); assertTrue(has("result_b") && !has("result_a"), "the 10th alone: both ends are included, the whole day")
+        waitGone("result_c"); waitFor("result_b") // the list is rebuilt by the search that just ran: wait for the 10th to be back before judging what else is in it
+        assertTrue(has("result_b") && !has("result_a") && !has("result_c"), "the 10th alone: both ends are included, the whole day")
         tap("search_date_from_clear"); waitFor("result_a")
         assertTrue(has("result_b") && !has("result_c"), "to only: the 3rd and the 10th")
         tap("search_date_to_clear"); waitGone("search_date_summary")

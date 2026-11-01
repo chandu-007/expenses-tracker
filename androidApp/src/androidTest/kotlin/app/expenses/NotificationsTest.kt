@@ -71,6 +71,8 @@ class NotificationsTest {
     @After fun cleanUp() {
         compose.waitForIdle(); scenario?.close()
         resetApp()
+        // a test that fails before it clears the shade must not leave its notices for the next test class to run in this process (SearchDatesUiTest failed after one, 1 Nov 2026)
+        manager.cancelAll()
     }
 
     private fun launch() {
@@ -193,7 +195,9 @@ class NotificationsTest {
                 ok.store.save(Expense(EntryId("big"), System.currentTimeMillis() - 60L * 86_400_000, AccountId("amex"), Money(40_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(40_000, inr)))), EntryDetails(merchant = "Phone"))
                 // due within the next days whatever today's date is (and "overdue" when that wraps past the 28th, which also reminds)
                 val target = java.time.LocalDate.now().plusDays(2).dayOfMonth.coerceAtMost(28)
-                ok.cards.save(app.expenses.core.domain.CardTerms("amex", statementDay = 1, dueDay = target, remindDaysBefore = 10))
+                // the statement was cut ten days ago, whatever today's date is: a statement made today or in the last two days is announced as well ("statement is ready"), which is a second notice, as on the 1st to the 3rd of a month
+                val statementDay = java.time.LocalDate.now().minusDays(10).dayOfMonth.coerceAtMost(28)
+                ok.cards.save(app.expenses.core.domain.CardTerms("amex", statementDay = statementDay, dueDay = target, remindDaysBefore = 10))
             }
         }
         assertEquals(1, check())
