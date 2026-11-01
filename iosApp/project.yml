@@ -9,8 +9,8 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.10.2"
-    CURRENT_PROJECT_VERSION: "32"
+    MARKETING_VERSION: "0.10.3"
+    CURRENT_PROJECT_VERSION: "33"
 targets:
   Expenses:
     type: application

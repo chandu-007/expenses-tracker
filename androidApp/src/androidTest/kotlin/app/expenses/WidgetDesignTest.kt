@@ -26,6 +26,8 @@ import app.expenses.core.domain.ledger.Expense
 import app.expenses.widget.QuickAddWidget
 import app.expenses.widget.WidgetButton
 import app.expenses.widget.WidgetContent
+import app.expenses.widget.HiddenBy
+import app.expenses.widget.hiddenBy
 import app.expenses.widget.WidgetModel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -107,11 +109,51 @@ class WidgetDesignTest {
     }
 
     @Test
-    fun whenTheAppForcesTheTotalHiddenThereIsNoEyeAndTheNoteSaysSo() = runGlanceAppWidgetUnitTest {
+    fun whenTheAppForcesTheTotalHiddenThereIsNoEyeAndTheNoteSaysWhyAndTapsOpenTheApp() = runGlanceAppWidgetUnitTest {
         setAppWidgetSize(DpSize(320.dp, 294.dp))
-        provideComposable { WidgetContent(hidden(canToggle = false)) }
+        provideComposable { WidgetContent(hidden(canToggle = false).copy(hiddenBy = HiddenBy.APP_LOCK)) }
         onNode(hasContentDescription("Show the amount")).assertDoesNotExist(); onNode(hasContentDescription("Hide the amount")).assertDoesNotExist()
-        onNode(hasText("Amounts are hidden")).assertExists()
+        onNode(hasText(HiddenBy.APP_LOCK.note)).assertExists(); onNode(hasText("Spent this month · App lock is on")).assertExists()
+        onNode(hasText("Tap the eye to see this month in detail")).assertDoesNotExist()
+    }
+
+    @Test
+    fun hideAmountsIsNamedToo() = runGlanceAppWidgetUnitTest {
+        setAppWidgetSize(DpSize(320.dp, 294.dp))
+        provideComposable { WidgetContent(hidden(canToggle = false).copy(hiddenBy = HiddenBy.HIDE_AMOUNTS)) }
+        onNode(hasText(HiddenBy.HIDE_AMOUNTS.note)).assertExists(); onNode(hasText("Spent this month · Amounts hidden")).assertExists()
+    }
+
+    @Test
+    fun everySizeSaysWhyTheFigureIsMaskedInAFewWords() {
+        for ((w, h) in listOf(110 to 60, 110 to 110, 250 to 80, 320 to 110, 320 to 294)) for (why in HiddenBy.values()) runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(w.dp, h.dp))
+            provideComposable { WidgetContent(hidden(canToggle = false).copy(hiddenBy = why)) }
+            val words = if (w >= 180) "Spent this month · ${why.caption}" else why.caption
+            onNode(hasText(words)).assertExists()
+            onNode(hasContentDescription("Show the amount")).assertDoesNotExist()
+            // adding stays possible, whatever hides the figure: the round "+" under 300 dp wide, the "+ Add" pill from there
+            if (w >= 300) onNode(hasText("+ Add")).assertExists() else onNode(hasContentDescription("Add an expense")).assertExists()
+        }
+    }
+
+    @Test
+    fun whenTheDataCannotBeReadEverySizeSaysToOpenTheApp() {
+        for ((w, h) in listOf(110 to 60, 110 to 110, 250 to 80, 320 to 294)) runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(w.dp, h.dp))
+            provideComposable { WidgetContent(WidgetModel(emptyList(), null, needsApp = true)) }
+            // the figure line is the words themselves, or (at the biggest size) the line under the header: either way a plain sentence and no "Quick add" that looks like a working widget
+            if (h >= 100 && w >= 180) onNode(hasText("Open the app to unlock your data")).assertExists() else onNode(hasText("Open the app")).assertExists()
+            onNode(hasText("Quick add")).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun theAppLockWinsOverHideAmountsWhenBothAreOn() {
+        assertEquals(HiddenBy.APP_LOCK, hiddenBy(hide = true, locked = true))
+        assertEquals(HiddenBy.HIDE_AMOUNTS, hiddenBy(hide = true, locked = false))
+        assertEquals(HiddenBy.APP_LOCK, hiddenBy(hide = false, locked = true))
+        assertEquals(null, hiddenBy(hide = false, locked = false))
     }
 
     @Test

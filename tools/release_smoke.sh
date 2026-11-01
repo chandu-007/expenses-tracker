@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Smoke test of the RELEASE (R8-minified) build, which the debug and instrumented tests never run. Builds ./gradlew :androidApp:assembleRelease, installs the APK
-# on the shared emulator and drives the app through its main flows, including reading items from a photo of a bill (ML Kit, the part R8 once broke).
+# Smoke test of the RELEASE (R8-minified) build, which the debug and instrumented tests never run. Builds ./gradlew :androidApp:assembleRelease, checks with
+# tools/check_release_keeps.py that R8 kept the classes that are created by name (widget tap callbacks, widgets, manifest components), installs the APK on the shared
+# emulator and drives the app through its main flows, including reading items from a photo of a bill (ML Kit, the part R8 once broke) and, on Android 12 and later,
+# the home-screen widget placed through the launcher (eye, quick-entry chips, from a process that was not running, Hide amounts).
 # See tools/release_smoke.py for the steps and docs/RELEASE_CHECKLIST.md for where this fits in a release.
 #
 # Usage: tools/release_smoke.sh [--no-build]
 #   --no-build     reuse the APK already in androidApp/build/outputs/apk/release (use after a build you just made)
-# Environment: ANDROID_SERIAL (default emulator-5554; a physical device is refused unless SMOKE_ALLOW_PHYSICAL=1, because the app is uninstalled first),
-#              ADB (default ~/Library/Android/sdk/platform-tools/adb). Needs the emulator running (AVD API26: see docs/RELEASE_CHECKLIST.md).
+# Environment: ANDROID_SERIAL (default: the running emulator; with two running, the one with the newer Android; a physical device is refused unless SMOKE_ALLOW_PHYSICAL=1, because
+#              the app is uninstalled first), ADB (default ~/Library/Android/sdk/platform-tools/adb), SMOKE_LOCK_HELD=1 (the caller already holds /tmp/emu.lock), SMOKE_WIDGETS=0
+#              (skip the widget steps). Needs an emulator running: AVD API34 for the widget steps, API26 for the rest (docs/RELEASE_CHECKLIST.md).
 # The release build is signed with the owner's key when the EXPENSES_STORE_* Gradle properties exist (androidApp/build.gradle.kts); otherwise it is unsigned and a
 # copy signed with the debug key is made in /tmp so that it installs. Exit status: 0 PASS, 1 a step failed (named in the output), 2 the build or signing failed.
 set -u
@@ -42,5 +45,8 @@ fi
 APKSIGNER="${APKSIGNER:-$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)}"
 [ -x "$APKSIGNER" ] && "$APKSIGNER" verify --print-certs "$APK" 2>&1 | grep -m1 "certificate DN" | sed 's/^/   signer: /'
 ls -l "$APK" | awk '{print "   size: " $5 " bytes"}'
+
+# R8 must have kept the classes that Glance and Android create by name (the widget eye, chips and Undo did nothing in 0.10.0 to 0.10.2 because it had not)
+python3 tools/check_release_keeps.py "$APK" || { echo "R8 check failed: see above"; exit 1; }
 
 exec python3 tools/release_smoke.py "$APK"

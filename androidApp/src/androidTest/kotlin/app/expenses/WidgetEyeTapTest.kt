@@ -182,7 +182,48 @@ class WidgetEyeTapTest {
         runBlocking { container.write { it.templates.putSetting("widget_show_total", "1"); it.templates.putSetting("hide_amounts", "1") } }
         place(QuickAddReceiver::class.java)
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
-        waitFor("masked, no eye") { t, d -> "Spent this month" in t && !total(t) && "Show the amount" !in d && "Hide the amount" !in d && t.none { it.startsWith("₹") && it.any(Char::isDigit) } }
+        waitFor("masked, no eye, and saying why") { t, d -> "Spent this month · Amounts hidden" in t && !total(t) && "Show the amount" !in d && "Hide the amount" !in d && t.none { it.startsWith("₹") && it.any(Char::isDigit) } }
+    }
+
+    private fun entries() = runBlocking { container.write { ok -> ok.db.schemaQueries.recentEntries(20).executeAsList() }!! }
+
+    @Test
+    fun aChipOnThePlacedWidgetAddsTheEntryThroughTheRealCallbackPathAndUndoTakesItBack() {
+        val before = entries().size
+        place(QuickAddReceiver::class.java, widthDp = 320, heightDp = 294)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("the chip is on the widget") { t, _ -> "Chai" in t && "₹20.00" in t }
+        tapText("Chai")
+        waitFor("the widget confirms the entry and offers Undo") { t, _ -> t.any { it.startsWith("Added Chai") } && "Undo" in t }
+        val added = entries()
+        assertTrue(added.size == before + 1 && added.any { it.amount_minor == 2_000L && it.merchant == "Tea stall" }, "the chip did not add its entry: ${added.map { it.amount_minor }}")
+        tapText("Undo")
+        waitFor("the confirmation is gone after Undo") { t, _ -> t.none { it.startsWith("Added Chai") } }
+        assertTrue(entries().size == before, "Undo did not take the entry back")
+    }
+
+    @Test
+    fun withHideAmountsOnAChipStillAddsAndTheWidgetsConfirmationHasNoAmount() {
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        val before = entries().size
+        place(QuickAddReceiver::class.java, widthDp = 320, heightDp = 294)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("the chip, with its amount masked") { t, _ -> "Chai" in t && "₹••••" in t && "₹20.00" !in t }
+        tapText("Chai")
+        waitFor("the confirmation without an amount") { t, _ -> t.any { it.startsWith("Added Chai") && it.none(Char::isDigit) } }
+        assertTrue(entries().size == before + 1, "the chip did not add its entry")
+    }
+
+    /** Fires the PendingIntent behind the view that shows this text (a chip's name, the Undo word), as a tap on it from the launcher would. */
+    private fun tapText(text: String) {
+        var done = false
+        inst.runOnMainSync {
+            val v = hostView?.let { views(it) }.orEmpty().filterIsInstance<TextView>().firstOrNull { it.text.toString() == text }
+            var target: View? = v
+            while (target != null && !target.hasOnClickListeners()) target = target.parent as? View
+            if (target != null) done = target.performClick()
+        }
+        assertTrue(done, "nothing on the widget answered a tap on '$text'")
     }
 
     private fun resizeTo(widthDp: Int, heightDp: Int) {

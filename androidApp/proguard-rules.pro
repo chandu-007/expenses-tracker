@@ -11,3 +11,12 @@
 -keep class com.google.mlkit.** { *; }
 -keep class com.google.android.gms.internal.mlkit_** { *; }
 -keep class com.google.android.gms.tasks.** { *; }
+
+# Home-screen widgets (Glance). A tap on the widget's eye, a quick-entry chip or Undo runs an ActionCallback that Glance creates BY NAME:
+# Class.forName(name).getDeclaredConstructor().newInstance(). Glance's own rule keeps the classes but, with R8's full mode, not their constructors, and nothing in the
+# app calls them, so R8 deleted them: every tap on the release build ended in `NoSuchMethodException: <init> []` in the log and did nothing on the screen, while the
+# debug build and every instrumented test worked. The constructors are therefore kept for every callback, present and future.
+-keep class * implements androidx.glance.appwidget.action.ActionCallback { <init>(); }
+# Glance tells widgets apart by their class name (GlanceAppWidgetManager.getGlanceIds(javaClass), updateAll). R8 merged TodayWidget into QuickAddWidget (one class, one name, a hidden
+# class-id field), so an update of one asked Glance to redraw the slots of both with the wrong widget. Keeping every GlanceAppWidget as its own class stops the merge.
+-keep class * extends androidx.glance.appwidget.GlanceAppWidget { <init>(); }

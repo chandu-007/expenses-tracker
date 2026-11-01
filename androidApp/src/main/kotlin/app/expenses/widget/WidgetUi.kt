@@ -57,6 +57,19 @@ internal object WidgetColors {
     val negative = ColorProvider(R.color.widget_negative)
 }
 
+/**
+ * The small caption above the figure. When the app itself keeps the figure masked it says why ("App lock is on", "Amounts hidden"), and when the data could not be read at all it is just the app's
+ * name, so that a masked or empty widget never looks broken; tapping the figure or the caption opens the app.
+ */
+internal fun caption(model: WidgetModel, long: Boolean): String {
+    val base = if (model.monthSpend == null) "Expenses" else if (long) "Spent this month" else "This month"
+    val why = model.hiddenBy ?: return base
+    return if (long) "$base · ${why.caption}" else why.caption
+}
+
+/** The figure line: this month's total as the widget may show it, and "Open the app" (which a tap does) when the database could not be read. */
+internal fun figure(model: WidgetModel): String = model.monthSpend ?: if (model.needsApp) "Open the app" else "Quick add"
+
 /** A Glance figure's size so that [text] fits in [availableDp] on one line: as big as [maxSp], never under [minSp]. Bold digits and the rupee sign are about 0.6 em wide, and a little more is kept back. */
 internal fun amountSp(text: String, availableDp: Float, maxSp: Float, minSp: Float = 14f): Float = (availableDp / (text.length.coerceAtLeast(1) * 0.66f)).coerceIn(minSp, maxSp)
 
@@ -90,8 +103,8 @@ fun WidgetContent(model: WidgetModel) {
 private fun Tiny(model: WidgetModel, widthDp: Int) {
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Column(GlanceModifier.defaultWeight().clickable(actionStartActivity(openIntent()))) {
-            Text(if (model.monthSpend == null) "Expenses" else "This month", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
-            val text = (model.monthSpend ?: "Quick add").removeSuffix(".00")
+            Text(caption(model, long = false), style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
+            val text = figure(model).removeSuffix(".00")
             Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, widthDp - 24f - 48f - 4f, 18f, 12f).sp, fontWeight = FontWeight.Bold), maxLines = 1)
         }
         AddButton(wide = false)
@@ -105,8 +118,8 @@ private fun Tiny(model: WidgetModel, widthDp: Int) {
 @Composable
 private fun Square(model: WidgetModel, showDelta: Boolean, widthDp: Int, heightDp: Int) {
     val eye = model.monthSpend != null && model.canToggle
-    val caption = if (model.monthSpend == null) "Expenses" else "This month"
-    val text = (model.monthSpend ?: "Quick add").let { if (it.length > 9) it.removeSuffix(".00") else it }
+    val caption = caption(model, long = false)
+    val text = figure(model).let { if (it.length > 9) it.removeSuffix(".00") else it }
     if (widthDp < 140) {
         Column(GlanceModifier.fillMaxSize()) {
             Text(caption, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.clickable(actionStartActivity(openIntent())))
@@ -140,8 +153,8 @@ private fun Square(model: WidgetModel, showDelta: Boolean, widthDp: Int, heightD
 private fun Wide(model: WidgetModel, chips: Int, wideAdd: Boolean, widthDp: Int) {
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Column(GlanceModifier.defaultWeight().clickable(actionStartActivity(openIntent()))) {
-            Text(if (model.monthSpend == null) "Expenses" else "Spent this month", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
-            val text = model.monthSpend ?: "Quick add"
+            Text(caption(model, long = true), style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
+            val text = figure(model)
             Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, widthDp - 24f - 44f - (if (wideAdd) 90f else 48f) - chips * 90f, 22f, 15f).sp, fontWeight = FontWeight.Bold), maxLines = 1)
         }
         if (model.monthSpend != null && model.canToggle) Eye(model.revealed, 44.dp)
@@ -161,10 +174,10 @@ private fun Card(model: WidgetModel, plan: app.expenses.core.domain.WidgetPlan, 
         Row(GlanceModifier.fillMaxWidth().height(WidgetSummary.Room.HEADER.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(GlanceModifier.defaultWeight().clickable(actionStartActivity(openIntent()))) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (model.monthSpend == null) "Expenses" else "Spent this month", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
+                    Text(caption(model, long = true), style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
                     if (plan.showDelta) ins.delta?.let { Spacer(GlanceModifier.width(8.dp)); Delta(it, withWords = widthDp >= 400) }
                 }
-                val text = model.monthSpend ?: "Quick add"
+                val text = figure(model)
                 val avail = widthDp - 2 * 14f - (if (model.monthSpend != null && model.canToggle) 48f else 0f) - (if (plan.wideAdd) 96f else 52f)
                 Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, avail, 24f, 15f).sp, fontWeight = FontWeight.Bold), maxLines = 1)
             }
@@ -172,7 +185,7 @@ private fun Card(model: WidgetModel, plan: app.expenses.core.domain.WidgetPlan, 
             AddButton(wide = plan.wideAdd)
         }
         when {
-            model.needsApp -> Text("Open the app to unlock your data", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 6.dp))
+            model.needsApp -> Text("Open the app to unlock your data", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 6.dp).clickable(actionStartActivity(openIntent())))
             else -> {
                 if (plan.showUndo) model.undo?.let { Undo(it) }
                 if (plan.chips > 0) Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
@@ -198,7 +211,7 @@ private fun Card(model: WidgetModel, plan: app.expenses.core.domain.WidgetPlan, 
                     ins.recent.take(plan.recent).forEach { RecentRow(it) }
                 }
                 if (model.revealed && model.nothingYet && plan.categories == 0 && heightDp >= 146) Text("Nothing spent yet this month", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 8.dp))
-                if (plan.hiddenNote) Text(if (model.canToggle) "Tap the eye to see this month in detail" else "Amounts are hidden", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 8.dp))
+                if (plan.hiddenNote) Text(model.hiddenBy?.note ?: "Tap the eye to see this month in detail", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 8.dp).clickable(actionStartActivity(openIntent())))
             }
         }
     }

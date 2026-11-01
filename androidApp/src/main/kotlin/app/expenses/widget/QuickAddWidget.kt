@@ -3,6 +3,9 @@ package app.expenses.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.os.Process
+import android.os.SystemClock
+import android.util.Log
 import app.expenses.BuildConfig
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -70,6 +73,7 @@ import app.expenses.AppContainer
 import app.expenses.core.domain.formatted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 
 /** One quick-entry button on the widget: [label] is its name, [detail] its amount. */
 data class WidgetButton(val templateId: String, val label: String, val detail: String = "")
@@ -78,19 +82,46 @@ data class WidgetButton(val templateId: String, val label: String, val detail: S
 data class WidgetUndo(val entryId: String, val text: String)
 
 /**
+ * Why the app keeps the month's figure masked whatever the eye says, in the words the widget shows so that a masked widget never looks broken. [caption] replaces "This month" (short: it has to
+ * fit above the figure of a 2 x 2), [note] is the full sentence the bigger sizes add. Tapping either opens the app.
+ */
+enum class HiddenBy(val caption: String, val note: String) {
+    APP_LOCK("App lock is on", "Amounts stay hidden while the App lock is on. Tap to open the app."),
+    HIDE_AMOUNTS("Amounts hidden", "Hide amounts is on in the app (More). Tap to open the app."),
+}
+
+/**
  * Everything the widget draws. Kept separate from Glance so it can be built and tested without a launcher. [monthSpend] is what has been spent this calendar month, already masked when amounts are hidden.
  * [insights] are the comparison, budget, categories and recent entries the bigger sizes add; they are empty unless the total is shown ([revealed]). [nothingYet] is true when this month has no spending.
- * [today] is the Today widget's own figure line and [label] the caption it replaces "Spent this month" with.
+ * [needsApp] is true when the database could not be read at all (the widget then says so and a tap opens the app).
  */
 data class WidgetModel(
     val buttons: List<WidgetButton>, val undo: WidgetUndo?, val needsApp: Boolean, val monthSpend: String? = null,
     /** Whether the total is shown in full; false when it is masked. [canToggle] is false when the app's own Hide amounts or the App lock forces it masked, so the eye is not offered. */
     val revealed: Boolean = false, val canToggle: Boolean = false,
     val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false,
+    /** Set exactly when [canToggle] is false because of a setting of the app: the widget then says which one. */
+    val hiddenBy: HiddenBy? = null,
 )
 
 /** What the widget reads from the database. */
-data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean, val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false)
+data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean, val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false, val hiddenBy: HiddenBy? = null)
+
+/**
+ * One tag for everything the widgets log, so that a widget that does nothing on a phone can be diagnosed from `adb logcat -s ExpensesWidget`. It never logs an amount, a name or any text from the ledger:
+ * only which action ran, how it ended and how long it took.
+ */
+internal object WidgetLog {
+    const val TAG = "ExpensesWidget"
+    fun i(message: String) { Log.i(TAG, message) }
+    fun w(message: String) { Log.w(TAG, message) }
+    fun e(message: String, t: Throwable? = null) { Log.e(TAG, message, t) }
+
+    /** How long this process has lived: near zero means the tap itself started the app's process (nothing was warm), which is when a slow start matters. */
+    fun processAgeMs(): Long = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime()
+}
+
+internal fun hiddenBy(hide: Boolean, locked: Boolean): HiddenBy? = if (locked) HiddenBy.APP_LOCK else if (hide) HiddenBy.HIDE_AMOUNTS else null
 
 /** The widget's own switch for showing the month's total. Off unless the person turns it on from the widget: not everyone wants spending on the home screen. */
 internal const val SETTING_WIDGET_SHOW_TOTAL = "widget_show_total"
@@ -138,31 +169,43 @@ class QuickAddWidget : GlanceAppWidget() {
         provideContent {
             val prefs = currentState<Preferences>()
             val loaded = reloadedOnRefresh(first, stamp) { load(context) }
-            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false, loaded?.insights ?: WidgetInsights.NONE, loaded?.nothingYet ?: false))
+            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false, loaded?.insights ?: WidgetInsights.NONE, loaded?.nothingYet ?: false, loaded?.hiddenBy))
         }
     }
 
-    /** The quick entries and this month's spending, read through the write lock like every other read of the database. Null when the data is not available. */
+    /**
+     * The quick entries and this month's spending, read through the write lock like every other read of the database. Null when the data is not available (the key is gone, or the database
+     * could not be opened or read): the widget then says "Open the app" instead of showing Glance's "Problem loading widget", and the reason is in the log (tag [WidgetLog.TAG]).
+     */
     internal suspend fun load(context: Context): WidgetData? {
         val container = (context.applicationContext as ExpensesApp).container
-        return container.write { ok ->
-            val hide = ok.templates.setting("hide_amounts") == "1"
-            fun shown(t: String) = if (hide) AmountMask.mask(t) else t
-            val buttons = ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS).map { WidgetButton(it.id, it.name, shown(it.amount!!.formatted())) }
-            val zone = java.time.ZoneId.systemDefault()
-            val today = java.time.LocalDate.now(zone)
-            val first = today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val currency = BaseCurrency.current
-            val byCategory = ok.store.spendByCategory(currency, from = first)
-            val spent = byCategory.values.fold(Money.zero(currency)) { a, m -> a + m }
-            // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
-            val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
-            val canToggle = !hide && !locked
-            val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
-            // the rest of what the bigger sizes show is read only when it may be shown at all: a hidden widget costs what it always did
-            val insights = if (revealed) insights(ok, today, zone, currency, spent, byCategory) else WidgetInsights.NONE
-            WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty())
+        val data = try {
+            container.write { ok ->
+                val hide = ok.templates.setting("hide_amounts") == "1"
+                fun shown(t: String) = if (hide) AmountMask.mask(t) else t
+                val buttons = ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS).map { WidgetButton(it.id, it.name, shown(it.amount!!.formatted())) }
+                val zone = java.time.ZoneId.systemDefault()
+                val today = java.time.LocalDate.now(zone)
+                val first = today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val currency = BaseCurrency.current
+                val byCategory = ok.store.spendByCategory(currency, from = first)
+                val spent = byCategory.values.fold(Money.zero(currency)) { a, m -> a + m }
+                // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
+                val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
+                val canToggle = !hide && !locked
+                val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
+                // the rest of what the bigger sizes show is read only when it may be shown at all: a hidden widget costs what it always did
+                val insights = if (revealed) insights(ok, today, zone, currency, spent, byCategory) else WidgetInsights.NONE
+                WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty(), hiddenBy = hiddenBy(hide, locked))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            WidgetLog.e("reading the widget's figures failed", e)
+            return null
         }
+        if (data == null) WidgetLog.w("the widget's figures could not be read: the database key is unavailable")
+        return data
     }
 
     /** The comparison with last month up to the same day, the overall budget, the top categories and the newest entries: a few indexed reads, all after the total itself was allowed to show. */
@@ -191,11 +234,11 @@ class QuickAddWidget : GlanceAppWidget() {
         fun monthFigure(spent: String, hide: Boolean, locked: Boolean, revealed: Boolean = true): String = if (hide || locked || !revealed) AmountMask.mask(spent) else spent
 
         /** Builds what to draw. The undo line is shown only while it is still allowed to work. */
-        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false, insights: WidgetInsights = WidgetInsights.NONE, nothingYet: Boolean = false): WidgetModel {
+        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false, insights: WidgetInsights = WidgetInsights.NONE, nothingYet: Boolean = false, hiddenBy: HiddenBy? = null): WidgetModel {
             val id = prefs[LAST_ID]
             val at = prefs[LAST_AT]
             val undo = if (id != null && at != null && now - at in 0..UNDO_WINDOW_MILLIS) WidgetUndo(id, prefs[LAST_TEXT] ?: "Added") else null
-            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle, insights = insights, nothingYet = nothingYet)
+            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle, insights = insights, nothingYet = nothingYet, hiddenBy = hiddenBy)
         }
     }
 }
@@ -213,25 +256,46 @@ internal fun openIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "a
 
 internal fun addIntent() = Intent().setClassName(BuildConfig.APPLICATION_ID, "app.expenses.MainActivity").setAction(MainActivity.ACTION_ADD_EXPENSE)
 
+/**
+ * Runs the body of one widget tap and turns an exception into a line in the log (tag [WidgetLog.TAG]) and a null result, instead of a tap that silently does nothing. The log has which tap it was, how
+ * old the process was (near zero: the tap started the app's process) and how long it took; never an amount or a name.
+ */
+private suspend fun <T> guarded(what: String, step: Boolean = false, block: suspend () -> T): T? {
+    val started = SystemClock.elapsedRealtime()
+    if (!step) WidgetLog.i("$what: tapped (process age ${WidgetLog.processAgeMs()} ms)")
+    return try {
+        block().also { if (!step) WidgetLog.i("$what: finished in ${SystemClock.elapsedRealtime() - started} ms") }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        WidgetLog.e("$what: failed after ${SystemClock.elapsedRealtime() - started} ms", e)
+        null
+    }
+}
+
 /** Tap on a quick-entry button: records the expense and remembers it so it can be undone for a couple of minutes. */
 class QuickAddAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val templateId = parameters[TEMPLATE_ID] ?: return
+        val templateId = parameters[TEMPLATE_ID]
+        if (templateId == null) { WidgetLog.w("chip: tapped without a quick entry id, nothing done"); return }
         val container = (context.applicationContext as ExpensesApp).container
-        val added = container.write { ok -> EntryActions(ok).quickAdd(templateId) }
+        // with Hide amounts on the confirmation (the widget's undo line and the message) says "₹••••" like the chips do
+        val added = guarded("chip") { container.write { ok -> EntryActions(ok).quickAdd(templateId, maskAmount = ok.templates.setting("hide_amounts") == "1") } }
         if (added != null) {
-            updateAppWidgetState(context, glanceId) { prefs ->
-                prefs[LAST_ID] = added.entryId
-                prefs[LAST_TEXT] = added.text
-                prefs[LAST_AT] = System.currentTimeMillis()
+            guarded("chip: remembering the undo", step = true) {
+                updateAppWidgetState(context, glanceId) { prefs ->
+                    prefs[LAST_ID] = added.entryId
+                    prefs[LAST_TEXT] = added.text
+                    prefs[LAST_AT] = System.currentTimeMillis()
+                }
             }
-        }
+        } else WidgetLog.w("chip: nothing was added (the quick entry is gone, or the database could not be opened)")
         refreshWidgets(context)
         toast(context, added?.text ?: "Could not add this entry. Open the app.")
         // Someone who only uses the widget never opens the app, so tidy the search index here, after the confirmation is
         // already on screen. Without this, unmerged index segments pile up until SQLite forces a 50-100 ms merge in the
         // middle of a save (measured at about 1,000 unmerged saves). Bounded, and does nothing if there is nothing to merge.
-        if (added != null) container.maintain(budgetMillis = WIDGET_MAINTENANCE_MILLIS)
+        if (added != null) guarded("chip: tidying the search index", step = true) { container.maintain(budgetMillis = WIDGET_MAINTENANCE_MILLIS) }
     }
 }
 
@@ -241,10 +305,16 @@ suspend fun refreshWidgets(context: Context) {
     refresh(TodayWidget(), context)
 }
 
-/** Bumps [REFRESHED] in each copy's state, which is what makes a widget with a live composition read the database again, then asks for the redraw. */
+/** Bumps [REFRESHED] in each copy's state, which is what makes a widget with a live composition read the database again, then asks for the redraw. One widget failing must not stop the other. */
 private suspend fun refresh(widget: GlanceAppWidget, context: Context) {
-    GlanceAppWidgetManager(context).getGlanceIds(widget.javaClass).forEach { id -> updateAppWidgetState(context, id) { it[REFRESHED] = (it[REFRESHED] ?: 0L) + 1 } }
-    widget.updateAll(context)
+    try {
+        GlanceAppWidgetManager(context).getGlanceIds(widget.javaClass).forEach { id -> updateAppWidgetState(context, id) { it[REFRESHED] = (it[REFRESHED] ?: 0L) + 1 } }
+        widget.updateAll(context)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        WidgetLog.e("redrawing ${widget.javaClass.simpleName} failed", e)
+    }
 }
 
 /** How long the widget may spend merging the search index after a tap. */
@@ -260,7 +330,15 @@ const val WIDGET_MAINTENANCE_MILLIS = 300L
 class ToggleTotalAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val container = (context.applicationContext as ExpensesApp).container
-        container.write { ok -> ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1") "0" else "1") }
+        val nowShown = guarded("eye") {
+            container.write { ok ->
+                val show = ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) != "1"
+                ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (show) "1" else "0")
+                show
+            }
+        }
+        if (nowShown == null) { WidgetLog.w("eye: the setting could not be changed (the database could not be opened)"); toast(context, "Could not read your data. Open the app.") }
+        else WidgetLog.i("eye: the total is now ${if (nowShown) "shown" else "hidden"}")
         refreshWidgets(context)
     }
 }
@@ -268,15 +346,23 @@ class ToggleTotalAction : ActionCallback {
 /** Tap on Undo: takes back the last widget entry, but only within [UNDO_WINDOW_MILLIS]. */
 class UndoAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val entryId = parameters[UNDO_ENTRY_ID] ?: return
+        val entryId = parameters[UNDO_ENTRY_ID]
+        if (entryId == null) { WidgetLog.w("undo: tapped without an entry id, nothing done"); return }
         val container = (context.applicationContext as ExpensesApp).container
-        val undone = container.write { ok -> EntryActions(ok).undo(entryId, UNDO_WINDOW_MILLIS) } == true
-        updateAppWidgetState(context, glanceId) { prefs -> prefs.remove(LAST_ID); prefs.remove(LAST_TEXT); prefs.remove(LAST_AT) }
+        val undone = guarded("undo") { container.write { ok -> EntryActions(ok).undo(entryId, UNDO_WINDOW_MILLIS) } } == true
+        guarded("undo: forgetting the undo", step = true) { updateAppWidgetState(context, glanceId) { prefs -> prefs.remove(LAST_ID); prefs.remove(LAST_TEXT); prefs.remove(LAST_AT) } }
         refreshWidgets(context)
         toast(context, if (undone) "Undone" else "Too late to undo from here")
     }
 }
 
-private suspend fun toast(context: Context, text: String) = withContext(Dispatchers.Main) {
-    Toast.makeText(context.applicationContext, text, Toast.LENGTH_SHORT).show()
+/** A short message on the screen; never lets a refusal to show one (some phones restrict messages from the background) undo the tap that is already done. */
+private suspend fun toast(context: Context, text: String) {
+    try {
+        withContext(Dispatchers.Main) { Toast.makeText(context.applicationContext, text, Toast.LENGTH_SHORT).show() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        WidgetLog.w("the message could not be shown: ${e.javaClass.simpleName}")
+    }
 }

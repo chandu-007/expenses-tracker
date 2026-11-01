@@ -1,5 +1,6 @@
 package app.expenses
 
+import app.expenses.core.domain.AmountMask
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DraftKind
@@ -74,13 +75,13 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         return id
     }
 
-    /** Records the expense of a saved quick entry. Null if it does not exist or has no fixed amount. */
-    fun quickAdd(templateId: String, occurredAt: Long = now(), id: String = Uuid.random().toString()): Added? {
+    /** Records the expense of a saved quick entry. Null if it does not exist or has no fixed amount. With [maskAmount] (Hide amounts is on) the confirmation text has dots where the amount is. */
+    fun quickAdd(templateId: String, occurredAt: Long = now(), id: String = Uuid.random().toString(), maskAmount: Boolean = false): Added? {
         val t = ok.templates.list().firstOrNull { it.id == templateId } ?: return null
         val amount = t.amount ?: return null
         val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value, occurredAt, id)
         ok.templates.recordUse(templateId)
-        return Added(id, "Added ${t.name} ${amount.formatted()}")
+        return Added(id, "Added ${t.name} ${amount.formatted().let { if (maskAmount) AmountMask.mask(it) else it }}")
     }
 
     /**

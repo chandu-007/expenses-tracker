@@ -283,6 +283,36 @@ class QuickAddWidgetTest {
         assertTrue(recentEntries().isEmpty())
     }
 
+    /** Glance creates the class behind every tap by name, with no arguments. The debug build never removes a constructor, so this only guards the shape (no parameters added); the minified build is checked by tools/check_release_keeps.py. */
+    @Test
+    fun everyTapCallbackCanBeCreatedByNameTheWayGlanceDoesIt() {
+        for (c in listOf(QuickAddAction::class.java, UndoAction::class.java, app.expenses.widget.ToggleTotalAction::class.java)) {
+            val made = Class.forName(c.name).getDeclaredConstructor().newInstance()
+            assertTrue(made is androidx.glance.appwidget.action.ActionCallback, c.name)
+        }
+    }
+
+    @Test
+    fun withHideAmountsOnTheUndoLineAndTheMessageCarryNoAmountButTheEntryIsRecordedInFull() {
+        saveChai()
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        runBlocking { QuickAddAction().onAction(context, glanceId, actionParametersOf(TEMPLATE_ID to "chai")) }
+        val state = runBlocking { androidx.glance.appwidget.state.getAppWidgetState(context, androidx.glance.state.PreferencesGlanceStateDefinition, glanceId) }
+        assertEquals("Added Chai ₹••••", state[LAST_TEXT])
+        assertEquals(2_000L, recentEntries().single().amount_minor)
+    }
+
+    @Test
+    fun theWidgetReadsWhyItIsMaskedFromTheSettings() {
+        saveChai()
+        assertNull(runBlocking { QuickAddWidget().load(context) }!!.hiddenBy)
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        val hidden = runBlocking { QuickAddWidget().load(context) }!!
+        assertEquals(app.expenses.widget.HiddenBy.HIDE_AMOUNTS, hidden.hiddenBy)
+        assertTrue(!hidden.canToggle && hidden.monthSpend.none { it.isDigit() })
+        assertEquals(app.expenses.widget.HiddenBy.HIDE_AMOUNTS, runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.hiddenBy)
+    }
+
     // ---- the system side ----
 
     @Test
