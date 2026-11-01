@@ -505,28 +505,55 @@ def find_in_picker(text, low=0.2, tries=16):
     raise StepFailed(f"the widget picker never showed {text!r}. Visible: {screen.texts()[:40]}")
 
 
+def drag_out(x, y, tx, ty, steps=6):
+    """A real long press and drag with touch events (`input draganddrop` is too quick for the launcher on the emulator): press, wait for the drag to start, move in steps, hold, release."""
+    def event(action, px, py):
+        sh("input", "motionevent", action, str(int(px)), str(int(py)))
+    event("DOWN", x, y)
+    time.sleep(1.4)
+    for i in range(1, steps + 1):
+        event("MOVE", x + (tx - x) * i / steps, y + (ty - y) * i / steps)
+        time.sleep(0.25)
+    time.sleep(1.0)
+    event("UP", tx, ty)
+
+
+def place_widget(label_text, drop_y=0.34, drop_x=0.5, check_text="Spent this month", attempts=4):
+    """Places the widget named [label_text] through the Pixel Launcher's own widget picker (long press, Widgets, the app's entry, drag the preview onto the home screen). Retries the whole
+    sequence, since the launcher can still be settling after an app closed or can ignore a first long press."""
+    last = None
+    for attempt in range(attempts):
+        try:
+            go_home()
+            w, h = screen_size()
+            for _ in range(4):
+                sh("input", "swipe", str(w // 2), str(int(h * 0.45)), str(w // 2), str(int(h * 0.45)), "1300")  # a long press on the empty home screen
+                time.sleep(1.5)
+                if screen.refresh().find(text="Widgets"):
+                    break
+                go_home()
+            tap("the launcher's Widgets entry", text="Widgets", timeout=15)
+            time.sleep(2)
+            tap_xy(*find_in_picker("Expenses").centre)  # the app's entry opens its list of widgets
+            time.sleep(1.5)
+            label = find_in_picker(label_text, low=0.35)
+            # the preview is drawn above its name: drag it onto the empty part of the home screen
+            drag_out(w // 2, label.bounds[1] - 230, int(w * drop_x), int(h * drop_y))
+            time.sleep(3)
+            # the launcher shows a resize frame after a drop and `uiautomator dump` sees nothing while it animates: tap an empty spot first (it leaves the frame), then read
+            tap_xy(w // 2, int(h * 0.85))
+            time.sleep(2)
+            wait_for("the widget on the home screen", text=check_text, contains=True, timeout=15)
+            return
+        except StepFailed as e:
+            last = e
+            print(f"      placing the widget: attempt {attempt + 1} did not work ({str(e)[:120]}); trying again", flush=True)
+    raise StepFailed(f"the widget could not be placed in {attempts} attempts: {last}")
+
+
 def step_place_widget():
     adb("logcat", "-c", check=False)  # what is checked at the end is only what these steps caused
-    go_home()
-    w, h = screen_size()
-    for attempt in range(4):  # the first long press can come before the launcher has settled after the app closed
-        sh("input", "swipe", str(w // 2), str(int(h * 0.45)), str(w // 2), str(int(h * 0.45)), "1300")  # a long press on the empty home screen
-        time.sleep(1.5)
-        if screen.refresh().find(text="Widgets"):
-            break
-        go_home()
-    tap("the launcher's Widgets entry", text="Widgets", timeout=15)
-    time.sleep(2)
-    tap_xy(*find_in_picker("Expenses").centre)  # the app's entry opens its list of widgets
-    time.sleep(1.5)
-    label = find_in_picker(WIDGET_LABEL, low=0.35)
-    # the preview is drawn above its name: drag it onto the empty part of the home screen
-    sh("input", "draganddrop", str(w // 2), str(label.bounds[1] - 230), str(w // 2), str(int(h * 0.34)), "1500")
-    time.sleep(3)
-    # the launcher shows a resize frame after a drop and `uiautomator dump` sees nothing while it animates: tap an empty spot first (it leaves the frame), then read
-    tap_xy(w // 2, int(h * 0.85))
-    time.sleep(2)
-    wait_for("the widget on the home screen", text="Spent this month", contains=True, timeout=30)
+    place_widget(WIDGET_LABEL)
 
 
 def step_widget_eye():
@@ -602,8 +629,20 @@ def step_widget_cold_process():
 
 def toggle_hide_amounts():
     launch_app()
-    tap("the More tab", text="More")
-    row = screen.refresh().find(text="Hide amounts") or screen.find(text="Show amounts")
+    for _ in range(4):  # the second time the app is resumed, not started: the first tap can land while it is still coming back
+        tap("the More tab", text="More")
+        time.sleep(1)
+        if screen.refresh().find(text="Search settings and tools"):
+            break
+    w, h = screen_size()
+    row = None
+    for _ in range(8):  # the row is below the fold of the More page
+        screen.refresh()
+        row = next((n for n in screen.nodes if n.text in ("Hide amounts", "Show amounts") and h * 0.1 < n.centre[1] < h * 0.85), None)
+        if row:
+            break
+        sh("input", "swipe", str(w // 2), str(int(h * 0.7)), str(w // 2), str(int(h * 0.3)), "400")
+        time.sleep(0.7)
     if row is None:
         raise StepFailed(f"the More page has no 'Hide amounts' row. Visible: {screen.texts()[:40]}")
     tap_xy(*row.centre)
