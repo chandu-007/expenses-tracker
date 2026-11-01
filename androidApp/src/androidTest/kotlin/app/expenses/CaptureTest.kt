@@ -80,6 +80,15 @@ class CaptureTest {
     }
 
     @Test
+    fun anIciciCardSpendFromTheTransactionHeaderIsCapturedWithTheSpendNotTheLimit() {
+        val spend = "INR 482.35 spent using ICICI Bank Card XX4417 on 01-Nov-26 on GREENCART. Avl Limit: INR 1,16,387.86. If not you, call 1800 2662/SMS BLOCK 4417 to 9000000000."
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("BP-ICICIT-S", spend, 5_000), "ICICIT is ICICI's card header (0.9.0 dropped it as not allowlisted)")
+        val i = pending().single()
+        assertEquals("ICICI Bank", i.issuer); assertEquals(48_235, i.amountMinor); assertEquals("DEBIT", i.direction); assertEquals("4417", i.accountLast4); assertEquals("2026-11-01", i.txnDate)
+        assertEquals(1L, events()[("ICICIT" to "CAPTURED")], "counted under its own header root")
+    }
+
+    @Test
     fun aHeaderThePersonAddedIsCapturedFromThenOn() {
         assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", debit))
         runBlocking { container.write { it.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, "mycoop, otherco") } }

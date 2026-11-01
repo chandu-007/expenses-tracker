@@ -10,6 +10,13 @@ object PayeeGuess {
     private val vpa = Regex("""(?i)\b(?:to|from|by|at)\s+(?:vpa\s+)?([a-z0-9][\w.\-]{1,}@[a-z][\w.\-]*)""")
     private val upiPath = Regex("""(?i)upi/(?:p2[am]|[a-z]+)/\d{6,}/([A-Za-z][A-Za-z0-9 &.\-]{1,30})""")
     private val atName = Regex("""(?i)\b(?:at|to|from|towards)\s+([A-Za-z][A-Za-z0-9&'.\-]*(?:\s+[A-Za-z0-9&'.\-]+){0,3}?)(?=\s+(?:on|via|ref|upi|using|through|txn|trf|avl|bal|available|\(|\.|,|;|$))""")
+    /**
+     * ICICI's card alert names the shop after the date, with "on" and no "at": "spent using ICICI Bank Card XX1234 on 05-Nov-26 on ACME STORES. Avl Limit: ...". The name runs to the
+     * full stop that ends the sentence (a dot inside a name, "AMAZON.IN", is kept) or to the limit that follows.
+     */
+    private val onNameAfterDate = Regex(
+        """(?i)\b\d{1,2}[-/ ](?:\d{1,2}|[a-z]{3})[-/ ]\d{2,4}\s+on\s+([A-Za-z][A-Za-z0-9&'.\-]*(?:\s+[A-Za-z0-9&'.\-]+){0,3}?)(?=\.(?:\s|$)|\s+(?:avl|avail\w*|limit|bal|ref|upi|txn)\b|,|;|$)""",
+    )
     private val notNames = setOf("your", "you", "a/c", "ac", "account", "vpa", "card", "bank", "self", "the", "us", "me", "info", "credit", "debit", "upi", "rs", "inr")
 
     /** A payment app's notification starts with the person's name as its title, which the capture joins to the text as "Name: text". */
@@ -59,6 +66,7 @@ object PayeeGuess {
             val name = m.groupValues[1].trim().trimEnd('.', '-')
             if (name.length >= 3 && name.lowercase() !in notNames && name.split(' ').first().lowercase() !in notNames && !name.any { it.isDigit() } ) return name
         }
+        onNameAfterDate.find(text)?.groupValues?.get(1)?.trim()?.trimEnd('.', '-')?.takeIf { it.length >= 3 && looksLikeName(it) }?.let { return it }
         // a bank that prints a narration instead of "to <name>": the person or note in it, read as the statement import reads the same line
         return narration(text)?.let(NarrationTitle::of)
     }

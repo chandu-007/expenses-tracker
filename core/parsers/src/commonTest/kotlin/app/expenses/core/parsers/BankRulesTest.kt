@@ -18,7 +18,8 @@ class BankRulesTest {
     /** Header root to one invented text that bank sends. A bank, card or payment-app text must be read as a transaction; a utility's as a bill (or a transaction). */
     private val samples: Map<String, String> = mapOf(
         "HDFCBK" to "Txn Rs.20.00 On HDFC Bank Card 0862 At ACME STORES by UPI 628374659283", "HDFCBN" to "Txn Rs.20.00 On HDFC Bank Card 0862 At ACME STORES by UPI 628374659283",
-        "ICICIB" to "ICICI Bank Acct XX123 debited for Rs 450.00 on 05-Jun-26; ACME STORES credited. UPI:628374659283.", "SBIINB" to "Dear UPI user A/C X1234 debited by 450.00 on date 05Jun26 trf to ACME Refno 628374659283",
+        "ICICIB" to "ICICI Bank Acct XX123 debited for Rs 450.00 on 05-Jun-26; ACME STORES credited. UPI:628374659283.",
+        "ICICIT" to "INR 1,250.00 spent using ICICI Bank Card XX4321 on 05-Jun-26 on ACME STORES. Avl Limit: INR 90,000.00. If not you, call 18002662/SMS BLOCK 4321 to 9000000000.", "SBIINB" to "Dear UPI user A/C X1234 debited by 450.00 on date 05Jun26 trf to ACME Refno 628374659283",
         "SBIPSG" to "Dear Customer, A/C X1234 debited by 450.00 on date 05Jun26 trf to ACME Refno 628374659283", "SBICRD" to "Rs.1,250.00 spent on your SBI Card ending 4321 at ACME STORES on 05/06/26",
         "SBIUPI" to "Dear UPI user A/C X1234 debited by 450.00 on date 05Jun26 trf to ACME Refno 628374659283", "AXISBK" to "Spent Card no. XX4321 INR 1250.00 05-06-26 12:30:00 ACME STORES",
         "KOTAKB" to "Sent Rs.450.00 from Kotak Bank AC X1234 to shop@upi on 05-06-26. UPI Ref 628374659283.", "IDFCFB" to debit, "INDUSB" to "Your a/c XX1234 is debited by Rs. 450.00 on 05-06-26 for ACME",

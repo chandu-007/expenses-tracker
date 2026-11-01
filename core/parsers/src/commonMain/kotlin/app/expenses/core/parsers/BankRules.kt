@@ -35,7 +35,8 @@ data class BankRule(
 object BankRules {
     val ALL: List<BankRule> = listOf(
         BankRule("HDFCBK", "HDFC Bank", cardTxnLayout = true), BankRule("HDFCBN", "HDFC Bank", cardTxnLayout = true),
-        BankRule("ICICIB", "ICICI Bank"),
+        // ICICIB sends the account alerts; ICICIT sends the credit card ones ("INR 482.35 spent using ICICI Bank Card XX1234 ...", seen from BP-ICICIT-S on a tester's phone in 0.9.0)
+        BankRule("ICICIB", "ICICI Bank"), BankRule("ICICIT", "ICICI Bank"),
         BankRule("SBIINB", "SBI", emailAliases = listOf("state bank of india")), BankRule("SBIPSG", "SBI"),
         BankRule("SBICRD", "SBI Card", SenderKind.CARD), BankRule("SBIUPI", "SBI"),
         BankRule("AXISBK", "Axis Bank"),
