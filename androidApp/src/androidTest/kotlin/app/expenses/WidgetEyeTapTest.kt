@@ -215,4 +215,25 @@ class WidgetEyeTapTest {
             if (android.os.Build.VERSION.SDK_INT >= 31) assertTrue(p.loadDescription(context)?.isNotBlank() == true, "${p.provider.className} has no description")
         }
     }
+
+    @Test
+    fun aShownTotalStaysShownAcrossRedrawsTheHourlyCheckAnAddedEntryAndTheScreenGoingOff() {
+        place(QuickAddReceiver::class.java)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("masked at first") { t, d -> "Show the amount" in d && !total(t) }
+        tap("Show the amount")
+        waitFor("shown") { t, d -> total(t) && "Hide the amount" in d }
+        // a redraw, the hourly background check (which redraws the widgets), and an entry added from the widget's own path
+        runBlocking { app.expenses.widget.refreshWidgets(context) }
+        runBlocking { NotificationWork.checkNow(context, container) }
+        runBlocking { container.write { ok -> app.expenses.EntryActions(ok).quickAdd("chai") } }
+        runBlocking { app.expenses.widget.refreshWidgets(context) }
+        // the screen going off and on again
+        inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_SLEEP").close(); Thread.sleep(1500)
+        inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_WAKEUP").close(); Thread.sleep(1500)
+        runBlocking { app.expenses.widget.refreshWidgets(context) }
+        Thread.sleep(4_000) // longer than the 45 s composition is not needed: the state is the setting, and nothing resets it
+        waitFor("still shown after all of that") { t, d -> t.any { it.startsWith("₹") && it.any(Char::isDigit) && it != "₹20.00" } && "Hide the amount" in d }
+        assertTrue(runBlocking { container.write { it.templates.setting("widget_show_total") } } == "1", "the setting is untouched by redraws, the hourly check, a quick add and screen off")
+    }
 }
