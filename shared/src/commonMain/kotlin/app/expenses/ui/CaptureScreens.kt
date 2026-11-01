@@ -367,7 +367,6 @@ fun CaptureSettingsScreen(
     onTestMessage: ((String, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
 ) {
     if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage); return }
-    var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture
     // Google Play's rule for the text permission: a prominent disclosure, answered with a tap, before Android's own permission question
@@ -415,9 +414,8 @@ fun CaptureSettingsScreen(
             if (settings.emailOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("email_capture_access_missing"))
             HorizontalDivider()
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
-            OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))
+            TrustedSendersEditor(settings.extraHeaders, onHeaders)
             Text("Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { onHeaders(headers) }, modifier = Modifier.testTag("capture_headers_save")) { Text("Save names") }
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
             OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }

@@ -77,7 +77,6 @@ private fun SetupStep(number: Int, title: String, tag: String, content: @Composa
 @Composable
 internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null) {
     val platform = LocalPlatform.current
-    var headers by rememberSaveable(settings.extraHeaders) { mutableStateOf(settings.extraHeaders) }
     Scaffold(topBar = { AreaTopBar("Capture from texts", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Bank texts on iPhone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("shortcuts_title"))
@@ -143,9 +142,8 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             Text("This depends on iOS, not on this app: it may show a banner when the automation runs, even with Run Immediately. It works only for messages in the Messages app (SMS, iMessage, RCS), not for WhatsApp or other apps. Messages from unknown senders, or ones iOS files under Unknown Senders or Junk, may not start the automation at all, and a bank's alphabetic sender is often treated that way. It cannot run before you have unlocked the phone once after a restart. If a transaction is missing, copy its text and use Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_limits"))
             HorizontalDivider()
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
-            OutlinedTextField(headers, { headers = it }, label = { Text("Extra sender names (one per line)") }, modifier = Modifier.fillMaxWidth().testTag("capture_headers"))
+            TrustedSendersEditor(settings.extraHeaders, onHeaders)
             Text("Used when the automation passes Sender. Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { onHeaders(headers) }, modifier = Modifier.testTag("capture_headers_save")) { Text("Save names") }
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
             OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }
