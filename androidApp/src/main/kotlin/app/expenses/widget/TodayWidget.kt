@@ -2,6 +2,10 @@ package app.expenses.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.datastore.preferences.core.Preferences
+import androidx.glance.appwidget.state.getAppWidgetState
+import androidx.glance.state.GlanceStateDefinition
+import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -46,9 +50,12 @@ data class TodayData(val spentToday: String, val perDayLine: String?, val reveal
  * the month total on the quick-add widget: hidden unless the person turned them on from the eye, and hidden whenever Hide amounts or the App lock is on.
  */
 class TodayWidget : GlanceAppWidget() {
+    override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val data = loadToday(context)
-        provideContent { TodayContent(data) }
+        val stamp = getAppWidgetState<Preferences>(context, id)[REFRESHED] // read first, as the quick add widget does
+        val first = loadToday(context)
+        provideContent { TodayContent(reloadedOnRefresh(first, stamp) { loadToday(context) }) }
     }
 
     internal suspend fun loadToday(context: Context): TodayData? {

@@ -6,6 +6,13 @@ import android.content.Intent
 import app.expenses.BuildConfig
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.glance.appwidget.state.getAppWidgetState
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
@@ -89,6 +96,25 @@ val UNDO_ENTRY_ID = ActionParameters.Key<String>("undo_entry_id")
 internal val LAST_ID = stringPreferencesKey("last_id")
 internal val LAST_TEXT = stringPreferencesKey("last_text")
 internal val LAST_AT = longPreferencesKey("last_at")
+/** Counts how often [refreshWidgets] asked this widget to read the database again. See [reloadedOnRefresh]. */
+internal val REFRESHED = longPreferencesKey("refreshed")
+
+/**
+ * What a widget draws from the database, read again whenever [refreshWidgets] bumps [REFRESHED] in its state.
+ *
+ * Glance keeps a widget's composition alive for about 45 seconds after it draws (longer while taps keep arriving). An update that finds it alive does NOT run
+ * `provideGlance` again: it only re-reads the widget's Glance state and recomposes. Data read once in `provideGlance` therefore stays as it was, and a tap on the
+ * eye (which changes the database, then asks for an update) redrew the widget with the old, still masked figures. Reading again here, keyed on the state that
+ * every refresh changes, makes the redraw show what the database says whether or not a composition was alive. [firstStamp] is the counter as it was before [first]
+ * was read, so a refresh that lands between that read and the first composition is not lost.
+ */
+@Composable
+internal fun <T> reloadedOnRefresh(first: T, firstStamp: Long?, load: suspend () -> T): T {
+    val stamp = currentState<Preferences>()[REFRESHED]
+    var value by remember { mutableStateOf(first) }
+    LaunchedEffect(stamp) { if (stamp != firstStamp) value = load() }
+    return value
+}
 
 /** The sizes the widget is drawn for; the launcher picks the largest of these that fits the space the person gave it. */
 internal val SMALL = DpSize(110.dp, 60.dp)
@@ -102,9 +128,11 @@ class QuickAddWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, WIDE, MEDIUM, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val loaded = load(context)
+        val stamp = getAppWidgetState<Preferences>(context, id)[REFRESHED] // read first: whatever is written after this is noticed by [reloadedOnRefresh]
+        val first = load(context)
         provideContent {
             val prefs = currentState<Preferences>()
+            val loaded = reloadedOnRefresh(first, stamp) { load(context) }
             WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false))
         }
     }
@@ -273,14 +301,26 @@ class QuickAddAction : ActionCallback {
 
 /** Redraws every widget of the app (quick add and Today) from the database. Called whenever what they show may have changed. */
 suspend fun refreshWidgets(context: Context) {
-    QuickAddWidget().updateAll(context)
-    TodayWidget().updateAll(context)
+    refresh(QuickAddWidget(), context)
+    refresh(TodayWidget(), context)
+}
+
+/** Bumps [REFRESHED] in each copy's state, which is what makes a widget with a live composition read the database again, then asks for the redraw. */
+private suspend fun refresh(widget: GlanceAppWidget, context: Context) {
+    GlanceAppWidgetManager(context).getGlanceIds(widget.javaClass).forEach { id -> updateAppWidgetState(context, id) { it[REFRESHED] = (it[REFRESHED] ?: 0L) + 1 } }
+    widget.updateAll(context)
 }
 
 /** How long the widget may spend merging the search index after a tap. */
 const val WIDGET_MAINTENANCE_MILLIS = 300L
 
-/** Tap on the eye: flips whether the month's total is shown, for every copy of the widget, and redraws them. */
+/**
+ * Tap on the eye: flips whether the month's total is shown, for every copy of both widgets, and redraws them.
+ *
+ * Design: a shown total stays shown until the eye is tapped again; it is not put back after a while or when the screen locks. The person chose to show it on
+ * their own home screen, and re-masking on a timer would hide it again while they are still reading it. What does mask it regardless is the App lock and the
+ * app's own Hide amounts, both of which also take the eye away (see [QuickAddWidget.load]).
+ */
 class ToggleTotalAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val container = (context.applicationContext as ExpensesApp).container
