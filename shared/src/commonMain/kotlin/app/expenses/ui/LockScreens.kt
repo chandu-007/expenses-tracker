@@ -115,6 +115,7 @@ fun SecurityScreen(
             Text(
                 "While locked the screens are blank, and this app is hidden from the recent-apps view and screenshots. " +
                     "The home-screen widget, the quick-settings tile and notifications are not behind the lock: they only add an expense, show a short alert, or (the Mark paid button on a bill notice) mark a bill you are tracking as paid. " +
+                    "While the lock is on the widget keeps the month's total and every other figure hidden (it says so), and tapping its figure opens the app. " +
                     "Your data is always encrypted on the phone, whether or not the lock is on.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

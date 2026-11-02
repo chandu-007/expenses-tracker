@@ -167,20 +167,27 @@ def screen_size():
     return int(m.group(1)), int(m.group(2))
 
 
-def scroll_to_and_tap(what, text, max_swipes=8):
-    """The form scrolls: swipes up until the text is on screen, then taps it."""
-    _, h = screen_size()
-    for _ in range(max_swipes):
-        screen.refresh()
-        n = screen.find(text=text)
-        # only when it is well inside the form: a node cut off by the pinned Save bar would be tapped on the bar
-        if n and n.centre[1] < h * 0.58 and n.bounds[3] - n.bounds[1] >= 20:
-            tap_xy(*n.centre)
-            time.sleep(0.8)
-            return n
-        w, h = screen_size()
-        sh("input", "swipe", str(w // 2), str(int(h * 0.53)), str(w // 2), str(int(h * 0.18)), "400")  # inside the form, above the pinned Save bar and the keyboard
-        time.sleep(0.6)
+def scroll_to_and_tap(what, text, max_swipes=14):
+    """The form scrolls: swipes up until the text is on screen, then (if it was scrolled past, for instance under a keyboard that changed the form's size) back down, then taps it."""
+    w, h = screen_size()
+    columns = [w // 2, 25, int(w * 0.92)]  # a swipe that starts on a control (a pad, a chip row) may not scroll the form: the page margins always do
+    for direction in ("up", "down"):
+        stuck = 0
+        for _ in range(max_swipes):
+            screen.refresh()
+            n = screen.find(text=text)
+            # only when it is well inside the form: a node cut off by the pinned Save bar would be tapped on the bar
+            if n and n.centre[1] < h * 0.58 and n.bounds[3] - n.bounds[1] >= 20 and n.centre[1] > h * 0.12:
+                tap_xy(*n.centre)
+                time.sleep(0.8)
+                return n
+            seen = tuple(screen.texts())
+            a, b = (0.5, 0.3) if direction == "up" else (0.3, 0.5)  # short and slowish, so that a fling does not carry the field past the window: inside the form, above the pinned Save bar and the keyboard
+            x = columns[stuck % len(columns)]
+            sh("input", "swipe", str(x), str(int(h * a)), str(x), str(int(h * b)), "700")
+            time.sleep(0.6)
+            if tuple(screen.refresh().texts()) == seen:
+                stuck += 1  # nothing moved: the next swipe starts in another column
     raise StepFailed(f"scrolling to {what}: never found {text!r}. Visible: {screen.texts()[:40]}")
 
 
@@ -255,24 +262,19 @@ def step_install(apk):
 def step_first_launch():
     sh("am", "force-stop", PACKAGE)
     sh("am", "start", "-n", f"{PACKAGE}/.MainActivity")  # not `monkey`: on Android 14 it sometimes exits with an error without starting anything
-    # the tour is shown on a fresh install; it can be skipped
-    end = time.time() + 40
+    # the tour is shown on a fresh install; it can be skipped. A slow first start can swallow a tap or show the tour late, so keep looking until the welcome card is there
+    end = time.time() + 120
     while True:
         screen.refresh()
-        if screen.find(text="Skip the tour"):
-            tap("Skip the tour", text="Skip the tour")
-            for _ in range(3):  # a slow emulator can swallow the first tap
-                time.sleep(2)
-                if screen.refresh().find(text="Skip the tour") is None:
-                    break
-                tap("Skip the tour", text="Skip the tour")
-            break
         if screen.find(text="Add my first expense"):
-            break  # no tour this time
+            break
+        if screen.find(text="Skip the tour"):
+            tap_xy(*screen.find(text="Skip the tour").centre)
+            time.sleep(2.5)
+            continue
         if time.time() > end:
             raise StepFailed(f"the tour or the welcome card never appeared. Visible: {screen.texts()[:40]}")
         time.sleep(1)
-    wait_for("the welcome card", text="Add my first expense", timeout=20)
 
 
 def step_add_expense():
@@ -586,11 +588,23 @@ def search_count(term, amount):
     return count
 
 
+def wait_gone(what, text=None, desc=None, contains=False, timeout=30):
+    """Waits until no node with the given text or description is on screen."""
+    end = time.time() + timeout
+    while True:
+        screen.refresh()
+        if not screen.find(text=text, desc=desc, contains=contains):
+            return
+        if time.time() > end:
+            raise StepFailed(f"waiting for {what}: still on screen after {timeout}s. Visible: {screen.texts()[:40]}")
+        time.sleep(1.5)
+
+
 def step_widget_chip():
     go_home()
     chip = wait_for(f"the {QUICK_NOTE} chip on the widget", text=QUICK_NOTE, timeout=30)
     tap_xy(*chip.centre)
-    wait_for("the confirmation on the widget", text=f"Added {QUICK_NOTE}", contains=True, timeout=30)
+    wait_for("the confirmation on the widget", text=f"✓ {QUICK_NOTE}", contains=True, timeout=30)
     eye = wait_for("the eye", desc="Show the amount", timeout=15)
     tap_xy(*eye.centre)
     wait_for(f"the total {TOTAL_AFTER_CHIP} (the chip's entry counted)", text=TOTAL_AFTER_CHIP, timeout=30)
@@ -621,6 +635,13 @@ def step_widget_cold_process():
     chip = wait_for(f"the {QUICK_NOTE} chip (cold process)", text=QUICK_NOTE, timeout=30)
     tap_xy(*chip.centre)
     wait_for(f"the total {TOTAL_AFTER_COLD_CHIP} after a chip tap that had to start the app's process", text=TOTAL_AFTER_COLD_CHIP, timeout=45)
+    wait_for("the confirmation on the widget after the cold chip tap", text=f"✓ {QUICK_NOTE}", contains=True, timeout=15)
+    # the confirmation leaves by itself within seconds, with nothing touched and the app's process gone (`am kill`, not `force-stop`, which would also cancel the scheduled job): the one-time job
+    # draws the widget again once the 10 seconds are up
+    sh("am", "kill", PACKAGE)
+    wait_gone("the confirmation line to leave the widget by itself", text=f"✓ {QUICK_NOTE}", contains=True, timeout=90)
+    if "undo line: the time is up" not in adb("logcat", "-d", "-s", "ExpensesWidget:I", check=False):
+        raise StepFailed("the line left, but not through the expiry job (no 'undo line: the time is up' in the log)")
     ages = widget_log_ages()[before:]
     print(f"      process age at each tap in this step (ms): {ages}")
     if len(ages) < 2 or max(ages[:2]) > 30_000:
@@ -657,7 +678,7 @@ def step_widget_hide_amounts():
         raise StepFailed("the widget offers the eye although Hide amounts is on")
     chip = wait_for(f"the {QUICK_NOTE} chip", text=QUICK_NOTE, timeout=15)
     tap_xy(*chip.centre)
-    added = wait_for("the confirmation on the widget", text=f"Added {QUICK_NOTE}", contains=True, timeout=30)
+    added = wait_for("the confirmation on the widget", text=f"✓ {QUICK_NOTE}", contains=True, timeout=30)
     if any(c.isdigit() for c in added.text):
         raise StepFailed(f"the confirmation shows an amount although Hide amounts is on: {added.text!r}")
     toggle_hide_amounts()

@@ -72,6 +72,7 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         (application as ExpensesApp).lock.onStart(this)
         viewModel.postAutomatic()
+        viewModel.refreshIfChangedOutside() // the widget's quick add or Undo, a capture or a notification button may have written while the screen was away
     }
 
     /** When the screen leaves the foreground the user is not waiting on anything: a good moment to tidy the search index. */

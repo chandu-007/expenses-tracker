@@ -73,6 +73,14 @@ import app.expenses.AppContainer
 import app.expenses.core.domain.formatted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 
 /** One quick-entry button on the widget: [label] is its name, [detail] its amount. */
@@ -126,8 +134,12 @@ internal fun hiddenBy(hide: Boolean, locked: Boolean): HiddenBy? = if (locked) H
 /** The widget's own switch for showing the month's total. Off unless the person turns it on from the widget: not everyone wants spending on the home screen. */
 internal const val SETTING_WIDGET_SHOW_TOTAL = "widget_show_total"
 
-/** How long after a tap the widget will still undo it. */
-const val UNDO_WINDOW_MILLIS = 120_000L
+/**
+ * How long the "✓ Chai ₹20 added  Undo" line stays on the widget after a tap: long enough to read it and to take back a slip, short enough that the widget goes back to being calm. The line is drawn only
+ * while now is before the moment stored with it ([LAST_AT] plus this), so every redraw (the eye, the app leaving the screen, the hourly check) drops it by itself; [scheduleUndoExpiry] makes sure one
+ * redraw happens right after it runs out even when nothing else does. A tap on Undo after that is refused ([EntryActions.undo] checks the entry's age) and says so.
+ */
+const val UNDO_WINDOW_MILLIS = 10_000L
 private const val MAX_BUTTONS = 6
 
 val TEMPLATE_ID = ActionParameters.Key<String>("template_id")
@@ -273,7 +285,7 @@ private suspend fun <T> guarded(what: String, step: Boolean = false, block: susp
     }
 }
 
-/** Tap on a quick-entry button: records the expense and remembers it so it can be undone for a couple of minutes. */
+/** Tap on a quick-entry button: records the expense and remembers it so it can be undone for [UNDO_WINDOW_MILLIS]. */
 class QuickAddAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val templateId = parameters[TEMPLATE_ID]
@@ -283,12 +295,15 @@ class QuickAddAction : ActionCallback {
         val added = guarded("chip") { container.write { ok -> EntryActions(ok).quickAdd(templateId, maskAmount = ok.templates.setting("hide_amounts") == "1") } }
         if (added != null) {
             guarded("chip: remembering the undo", step = true) {
+                // one change of this widget's state: the confirmation line AND the order to read the new total, so the total and the line arrive together
                 updateAppWidgetState(context, glanceId) { prefs ->
                     prefs[LAST_ID] = added.entryId
-                    prefs[LAST_TEXT] = added.text
+                    prefs[LAST_TEXT] = "✓ ${added.name} ${added.amount.removeSuffix(".00")} added"
                     prefs[LAST_AT] = System.currentTimeMillis()
+                    prefs[REFRESHED] = (prefs[REFRESHED] ?: 0L) + 1
                 }
             }
+            guarded("chip: scheduling the undo line's end", step = true) { scheduleUndoExpiry(context) }
         } else WidgetLog.w("chip: nothing was added (the quick entry is gone, or the database could not be opened)")
         refreshWidgets(context)
         toast(context, added?.text ?: "Could not add this entry. Open the app.")
@@ -296,6 +311,29 @@ class QuickAddAction : ActionCallback {
         // already on screen. Without this, unmerged index segments pile up until SQLite forces a 50-100 ms merge in the
         // middle of a save (measured at about 1,000 unmerged saves). Bounded, and does nothing if there is nothing to merge.
         if (added != null) guarded("chip: tidying the search index", step = true) { container.maintain(budgetMillis = WIDGET_MAINTENANCE_MILLIS) }
+    }
+}
+
+private const val UNDO_EXPIRY_WORK = "widget-undo-expiry"
+
+/**
+ * Redraws the widgets just after the Undo line has run out, without the app having to run. Two ways, either is enough: while the app's process still lives (it usually does for a while after a tap)
+ * a coroutine waits the exact time; and a one-time WorkManager job with that delay (no new permission: the system runs it when it can, normally within seconds) covers the process being gone by then.
+ * A second tap replaces the job. Redraws are idempotent, so both running does no harm.
+ */
+private fun scheduleUndoExpiry(context: Context) {
+    val app = context.applicationContext as ExpensesApp
+    val after = UNDO_WINDOW_MILLIS + 500L
+    app.appScope.launch { delay(after); runCatching { refreshWidgets(app) } }
+    WorkManager.getInstance(app).enqueueUniqueWork(UNDO_EXPIRY_WORK, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<WidgetUndoExpiryWorker>().setInitialDelay(after + 500L, TimeUnit.MILLISECONDS).build())
+}
+
+/** The one-time job behind [scheduleUndoExpiry]: draws the widgets again. */
+class WidgetUndoExpiryWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        WidgetLog.i("undo line: the time is up, redrawing (process age ${WidgetLog.processAgeMs()} ms)")
+        runCatching { refreshWidgets(applicationContext) }
+        return Result.success()
     }
 }
 

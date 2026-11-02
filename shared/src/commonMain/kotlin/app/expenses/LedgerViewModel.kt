@@ -2471,6 +2471,18 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
     }
 
+    /**
+     * The app came back to the front. Anything that wrote to the ledger while the screen was away (a home-screen widget's quick add or Undo, a captured text or notification, a button on a
+     * notification, a text shared from another app) is not in what this screen holds: the view model lives on while the activity is stopped. A cheap fingerprint ([DataSignature], two small reads)
+     * says whether anything moved since the last rebuild; only then the rows and this period's total are put right at once ([refreshQuickly]) and the rest follows. Nothing is read or rebuilt
+     * when nothing changed, and nothing happens before the first load has finished (that load reads everything).
+     */
+    fun refreshIfChangedOutside() = withStore { ok ->
+        val seen = seenSignature ?: return@withStore
+        if (container.dataSignature(ok) == seen) return@withStore
+        refreshQuickly(ok, undo = (_state.value as? UiState.Ready)?.undo)
+    }
+
     // ---- statement import ----
 
     /** Reads a statement file the user picked and guesses its layout. Nothing is saved. */
@@ -3466,6 +3478,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** How long the last save took until the new entry and the period total were on screen (the write plus the quick update), in milliseconds. Read by the timing gate. */
     @Volatile var lastSaveMillis: Double = 0.0
 
+    /** What the database looked like at the end of the last rebuild of the screen (null until the first one); see [refreshIfChangedOutside]. */
+    @Volatile private var seenSignature: DataSignature? = null
+
+    /** How many times the whole screen state has been rebuilt. Read by tests that check a return to the app does not rebuild when nothing changed. */
+    @Volatile var refreshCount: Int = 0
+        private set
+
     /** How long the rebuild that follows a save took after the new entry was already on screen, in milliseconds. Read by the timing gate. */
     @Volatile var lastSettleMillis: Double = 0.0
 
@@ -3540,6 +3559,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val layout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT))
         balancesVisible = HomeSection.BALANCES in layout.visible()
         scheduleSlowFigures()
+        seenSignature = container.dataSignature(ok) // read inside the write lock, after everything this rebuild wrote: anything that moves it later happened without this screen
+        refreshCount++
         _state.value = UiState.Ready(
             rows = rowsOf(loaded),
             periodSpend = spent.formatted(),

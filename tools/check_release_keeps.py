@@ -9,7 +9,8 @@ widgets apart by class name, cannot cope with. Debug builds and every instrument
 Checks (each failure is printed with the class):
   1 every class that implements Glance's ActionCallback has a no-argument constructor (at least ToggleTotalAction, QuickAddAction, UndoAction exist);
   2 QuickAddWidget and TodayWidget (the GlanceAppWidget subclasses) exist as two separate classes, each with one;
-  3 every component declared in the merged manifest (application, activities, services, receivers, providers) exists with a no-argument constructor.
+  3 every component declared in the merged manifest (application, activities, services, receivers, providers) exists with a no-argument constructor;
+  4 every WorkManager worker of the app (hourly check, snooze, automatic copy, the widget's Undo-line expiry) still has its (Context, WorkerParameters) constructor: WorkManager creates it by name.
 
 Usage: tools/check_release_keeps.py path/to/app.apk [path/to/mapping.txt]   (mapping defaults to androidApp/build/outputs/mapping/release/mapping.txt)
 Exit status: 0 all good, 1 a check failed, 2 the tools or inputs are missing. Needs the Android SDK build-tools (dexdump) and cmdline-tools (apkanalyzer); ANDROID_HOME or ~/Library/Android/sdk.
@@ -29,6 +30,7 @@ ACTION_CALLBACK = "androidx.glance.appwidget.action.ActionCallback"
 GLANCE_APP_WIDGET = "androidx.glance.appwidget.GlanceAppWidget"
 EXPECTED_CALLBACKS = ["app.expenses.widget.ToggleTotalAction", "app.expenses.widget.QuickAddAction", "app.expenses.widget.UndoAction"]
 EXPECTED_WIDGETS = ["app.expenses.widget.QuickAddWidget", "app.expenses.widget.TodayWidget"]
+EXPECTED_WORKERS = ["app.expenses.NotificationWorker", "app.expenses.SnoozedNoticeWorker", "app.expenses.AutoExportWorker", "app.expenses.widget.WidgetUndoExpiryWorker"]
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 
 
@@ -163,6 +165,13 @@ def main():
     for c in widgets:
         if not c.has_default_constructor():
             failures.append(f"{readable(c.desc)} extends the widget base class but has no no-argument constructor")
+
+    for name in EXPECTED_WORKERS:
+        c = classes.get(descriptor(name))
+        if c is None:
+            failures.append(f"{name} is not in the APK (removed or renamed by R8)")
+        elif not any(n == "<init>" and t.startswith("(Landroid/content/Context;") and t.endswith(")V") and t.count(";") == 2 for n, t in c.direct):
+            failures.append(f"{name} has no (Context, WorkerParameters) constructor: WorkManager creates it by name")
 
     for name in manifest_components(apk):
         c = classes.get(descriptor(name))

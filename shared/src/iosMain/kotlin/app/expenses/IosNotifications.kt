@@ -101,6 +101,8 @@ object IosNotifications {
                 val c = IosCore.get(h).container
                 runCatching { IosSharedTexts.drain(c) }
                 runCatching { if (IosQuickAdds.drain(c) > 0) h.reloadWidgets() }
+                // what the extensions left is now in the ledger: the screen, which lives on while the app is in the background, has to show it when the app is in front again
+                runCatching { IosApp.peek()?.viewModel?.refreshIfChangedOutside() }
             }
             done(checkNow())
         }

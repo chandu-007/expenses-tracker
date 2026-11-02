@@ -194,12 +194,26 @@ class WidgetEyeTapTest {
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
         waitFor("the chip is on the widget") { t, _ -> "Chai" in t && "₹20.00" in t }
         tapText("Chai")
-        waitFor("the widget confirms the entry and offers Undo") { t, _ -> t.any { it.startsWith("Added Chai") } && "Undo" in t }
+        waitFor("the widget confirms the entry and offers Undo") { t, _ -> t.any { it.startsWith("✓ Chai") } && "Undo" in t }
         val added = entries()
         assertTrue(added.size == before + 1 && added.any { it.amount_minor == 2_000L && it.merchant == "Tea stall" }, "the chip did not add its entry: ${added.map { it.amount_minor }}")
         tapText("Undo")
-        waitFor("the confirmation is gone after Undo") { t, _ -> t.none { it.startsWith("Added Chai") } }
+        waitFor("the confirmation is gone after Undo") { t, _ -> t.none { it.startsWith("✓ Chai") } }
         assertTrue(entries().size == before, "Undo did not take the entry back")
+    }
+
+    @Test
+    fun theConfirmationLeavesTheWidgetByItselfAfterTheTenSecondsAndNothingIsUndoneByItsLateTap() {
+        val before = entries().size
+        place(QuickAddReceiver::class.java, widthDp = 320, heightDp = 294)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("the chip is on the widget") { t, _ -> "Chai" in t }
+        tapText("Chai")
+        waitFor("the one-line confirmation with Undo, and the new total at once") { t, _ -> "✓ Chai ₹20 added" in t && "Undo" in t }
+        assertTrue(entries().size == before + 1, "the chip did not add its entry")
+        // nothing is touched from here: the line goes when its time is up, by the widget's own scheduled redraw, and the chips (the layout) are still there
+        waitFor("the line has gone by itself", millis = 60_000) { t, _ -> t.none { it.startsWith("✓ Chai") } && "Undo" !in t && "Chai" in t }
+        assertTrue(entries().size == before + 1, "the entry is still recorded: only the offer to undo it ended")
     }
 
     @Test
@@ -210,7 +224,7 @@ class WidgetEyeTapTest {
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
         waitFor("the chip, with its amount masked") { t, _ -> "Chai" in t && "₹••••" in t && "₹20.00" !in t }
         tapText("Chai")
-        waitFor("the confirmation without an amount") { t, _ -> t.any { it.startsWith("Added Chai") && it.none(Char::isDigit) } }
+        waitFor("the confirmation without an amount") { t, _ -> t.any { it.startsWith("✓ Chai") && it.none(Char::isDigit) } }
         assertTrue(entries().size == before + 1, "the chip did not add its entry")
     }
 

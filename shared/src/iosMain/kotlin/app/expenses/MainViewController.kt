@@ -61,6 +61,8 @@ internal class IosApp private constructor(private val host: IosHostServices) {
 
     companion object {
         private var instance: IosApp? = null
+        /** The app if it has been created (never creates it: a background refresh has no screen). */
+        fun peek(): IosApp? = instance
         fun get(host: IosHostServices): IosApp = instance ?: try {
             IosApp(host).also { instance = it }
         } catch (e: Throwable) {

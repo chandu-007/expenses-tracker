@@ -283,6 +283,18 @@ class QuickAddWidgetTest {
         assertTrue(recentEntries().isEmpty())
     }
 
+    @Test
+    fun theUndoOfferHasATenSecondWindowAndAQuickAddSchedulesItsEnd() {
+        assertEquals(10_000L, UNDO_WINDOW_MILLIS)
+        val prefs = mutablePreferencesOf(LAST_ID to "e1", LAST_TEXT to "✓ Chai ₹20 added", LAST_AT to 5_000_000L)
+        assertEquals(WidgetUndo("e1", "✓ Chai ₹20 added"), QuickAddWidget.model(listOf(chai), prefs, 5_000_000L + 9_999L).undo)
+        assertNull(QuickAddWidget.model(listOf(chai), prefs, 5_000_000L + UNDO_WINDOW_MILLIS + 1L).undo, "after the window the line is not drawn, by whatever redraw comes")
+        saveChai()
+        runBlocking { QuickAddAction().onAction(context, glanceId, actionParametersOf(TEMPLATE_ID to "chai")) }
+        val work = androidx.work.WorkManager.getInstance(context).getWorkInfosForUniqueWork("widget-undo-expiry").get()
+        assertTrue(work.any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING || it.state == androidx.work.WorkInfo.State.SUCCEEDED }, "the redraw at the end of the window was not scheduled: $work")
+    }
+
     /** Glance creates the class behind every tap by name, with no arguments. The debug build never removes a constructor, so this only guards the shape (no parameters added); the minified build is checked by tools/check_release_keeps.py. */
     @Test
     fun everyTapCallbackCanBeCreatedByNameTheWayGlanceDoesIt() {
@@ -298,7 +310,7 @@ class QuickAddWidgetTest {
         runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
         runBlocking { QuickAddAction().onAction(context, glanceId, actionParametersOf(TEMPLATE_ID to "chai")) }
         val state = runBlocking { androidx.glance.appwidget.state.getAppWidgetState(context, androidx.glance.state.PreferencesGlanceStateDefinition, glanceId) }
-        assertEquals("Added Chai ₹••••", state[LAST_TEXT])
+        assertEquals("✓ Chai ₹•••• added", state[LAST_TEXT])
         assertEquals(2_000L, recentEntries().single().amount_minor)
     }
 

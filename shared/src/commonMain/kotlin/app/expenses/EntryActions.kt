@@ -62,7 +62,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     private val now: () -> Long = nowMillis
 
     /** An expense that was just recorded: its id for undo, and the text to show the user. */
-    data class Added(val entryId: String, val text: String)
+    data class Added(val entryId: String, val text: String, val name: String = "", val amount: String = "")
 
     /** Records an expense and remembers its category and account as the next defaults. Returns its id. */
     fun recordExpense(amount: Money, category: String, note: String?, accountId: String, occurredAt: Long = now(), id: String = Uuid.random().toString()): String {
@@ -81,7 +81,8 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val amount = t.amount ?: return null
         val id = recordExpense(amount, t.category.value, t.merchant ?: t.name, t.account.value, occurredAt, id)
         ok.templates.recordUse(templateId)
-        return Added(id, "Added ${t.name} ${amount.formatted().let { if (maskAmount) AmountMask.mask(it) else it }}")
+        val shown = amount.formatted().let { if (maskAmount) AmountMask.mask(it) else it }
+        return Added(id, "Added ${t.name} $shown", t.name, shown)
     }
 
     /**

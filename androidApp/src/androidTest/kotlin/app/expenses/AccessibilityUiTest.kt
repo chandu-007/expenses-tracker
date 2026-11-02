@@ -292,7 +292,8 @@ class AccessibilityUiTest {
         assertTrue(errors.any { it.check == "TouchTargetSizeCheck" }, "the scan did not report a 20 dp touch target. Reported: $errors")
         if (!collect) { // and an ERROR that is not in [known] fails the check, which is what makes the other tests a guard
             val failure = runCatching { check("calibration", "bad_control") }.exceptionOrNull()
-            assertTrue(failure is AssertionError, "check() did not fail on an unknown ERROR: $failure")
+            // an AssertionError on the Android 8 emulator, the library's own AccessibilityViewCheckException on Android 14: either way the check failed, which is what is asked
+            assertTrue(failure is AssertionError || failure?.javaClass?.simpleName == "AccessibilityViewCheckException", "check() did not fail on an unknown ERROR: $failure")
         }
     }
 

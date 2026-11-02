@@ -90,12 +90,28 @@ class AppContainer(private val platform: Platform) {
         var steps = 0
         while (started.elapsedNow().inWholeMilliseconds < budgetMillis) {
             // the database is resolved after the write lock is held, so a close in between cannot hand this a shut driver
-            val more = writeLock.withLock { val ok = open() as? Opened.Ok ?: return 0; withContext(ioDispatcher) { FtsTuning.mergeStep(ok.driver) } }
+            val more = writeLock.withLock {
+                val ok = open() as? Opened.Ok ?: return 0
+                withContext(ioDispatcher) {
+                    // the merge command is itself a row written (SQLite counts it): it is index housekeeping, not a change to the ledger, so it is taken out of [dataSignature]
+                    val before = DataSignature.read(ok.driver).changes
+                    FtsTuning.mergeStep(ok.driver).also { maintenanceChanges += DataSignature.read(ok.driver).changes - before }
+                }
+            }
             if (!more) break
             steps++
         }
         return steps
     }
+
+    /** Rows the search index tidy-up ([maintain]) has written on the open connection; not changes to the ledger. Only touched under the write lock. */
+    @Volatile private var maintenanceChanges = 0L
+
+    /**
+     * What the database looks like, as a screen holding a picture of the ledger needs to know it: moves when anything but the index tidy-up wrote to it (through any call of [write] in this process,
+     * or, [DataSignature.version], from another connection). Read inside [write], so nothing can land between the read and the picture it is compared with.
+     */
+    fun dataSignature(ok: Opened.Ok): DataSignature = DataSignature.read(ok.driver).let { it.copy(changes = it.changes - maintenanceChanges) }
 
     /**
      * Runs [block] on the open store, off the main thread, one at a time across the whole process. Everything that
@@ -115,6 +131,7 @@ class AppContainer(private val platform: Platform) {
     suspend fun close() = writeLock.withLock {
         mutex.withLock {
             withContext(ioDispatcher) { (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } } }
+            maintenanceChanges = 0L // the next connection counts from zero
             opened = null
         }
     }
@@ -124,6 +141,7 @@ class AppContainer(private val platform: Platform) {
         mutex.withLock {
             withContext(ioDispatcher) {
                 (opened as? Opened.Ok)?.let { runCatching { it.driver.close() } }
+                maintenanceChanges = 0L
                 platform.resetDatabase()
                 // someone who wipes their ledger already knows the app: the guide is for a first install and for updates, not for starting over
                 doOpen().also { opened = it; (it as? Opened.Ok)?.templates?.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString()) }

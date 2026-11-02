@@ -304,11 +304,13 @@ private fun RecentRow(r: WidgetRecent) {
     }
 }
 
-/** The "Added Chai · Undo" line shown for a short time after a tap. */
+/** The "✓ Chai ₹20 added  Undo" line shown for [UNDO_WINDOW_MILLIS] after a tap, one calm tonal pill: the words on the left, the Undo word on the right with a touch area of its own (about 31 dp high, the whole of the right end). */
 @Composable
 private fun Undo(u: WidgetUndo) {
-    Row(GlanceModifier.fillMaxWidth().padding(top = 8.dp).background(ImageProvider(R.drawable.widget_undo_bg)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(u.text, style = TextStyle(color = WidgetColors.text, fontSize = 12.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
-        Text("Undo", style = TextStyle(color = WidgetColors.text, fontSize = 13.sp, fontWeight = FontWeight.Bold), modifier = GlanceModifier.padding(start = 8.dp).clickable(actionRunCallback<UndoAction>(actionParametersOf(UNDO_ENTRY_ID to u.entryId))))
+    Row(GlanceModifier.fillMaxWidth().padding(top = 8.dp).background(ImageProvider(R.drawable.widget_undo_bg)).padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(u.text, style = TextStyle(color = WidgetColors.text, fontSize = 12.sp, fontWeight = FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.defaultWeight())
+        Box(GlanceModifier.padding(horizontal = 8.dp, vertical = 7.dp).clickable(actionRunCallback<UndoAction>(actionParametersOf(UNDO_ENTRY_ID to u.entryId)))) {
+            Text("Undo", style = TextStyle(color = WidgetColors.text, fontSize = 13.sp, fontWeight = FontWeight.Bold))
+        }
     }
 }
