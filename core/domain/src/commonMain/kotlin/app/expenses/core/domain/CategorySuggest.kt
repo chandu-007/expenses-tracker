@@ -20,7 +20,7 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
 }
 
 /** [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. */
-enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS }
+enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS, KEYWORD }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -48,8 +48,7 @@ object CategorySuggest {
     ): CategorySuggestion? {
         val text = listOfNotNull(payee, body).joinToString(" ")
         rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
-        val key = payee?.let(::merchantKey)?.takeIf { it.length >= 2 }
-        key?.let { learned[it] }?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        PayeeKey.lookup(payee, learned)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
         history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
         // below the person's own choices: a common merchant, then "a payment to a person" (no merchant to go by, so the catch-all)
         // the payee only, never the whole text: a bank's own name or footer ("Airtel Payments Bank") must not pick a category
@@ -57,6 +56,8 @@ object CategorySuggest {
         payee?.let { DefaultRules.categoryNamesFor(it) }?.firstNotNullOfOrNull { name -> byName[name.lowercase()]?.takeIf { it in usable } }?.let { return CategorySuggestion(it, SuggestionSource.STARTER) }
         // the bank's own charges name no merchant: the words of the text say what they are (only when the person has the category)
         CategoryHints.categoryNameFor(body)?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.WORDS) } }
+        // the words of the payee's name ("tea stall", "medicals"), when the starter list does not know it: a guess, shown for the person to check
+        payee?.let { PayeeWords.categoryNamesFor(it) }?.firstNotNullOfOrNull { name -> byName[name.lowercase()]?.takeIf { it in usable } }?.let { return CategorySuggestion(it, SuggestionSource.KEYWORD) }
         if (toAPerson) byName["other"]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.PERSON) }
         return null
     }

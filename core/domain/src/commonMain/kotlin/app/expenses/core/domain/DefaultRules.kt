@@ -22,12 +22,13 @@ object DefaultRules {
     }
 
     /** Words that may stand around a merchant's name in a payee string without making it someone else: company suffixes, places, payment-gateway words. */
-    private val noise: Set<String> = setOf(
+    internal val noise: Set<String> = setOf(
         "pvt", "ltd", "limited", "private", "india", "indian", "llp", "inc", "co", "corp", "corporation", "company", "services", "service", "solutions", "technologies", "tech", "systems",
         "retail", "online", "ecommerce", "commerce", "payments", "payment", "pay", "upi", "qr", "order", "orders", "app", "store", "stores", "shop", "merchant", "mobile", "digital",
-        "internet", "wallet", "bill", "bills", "com", "electricity", "recharge", "broadband", "the", "and", "in", "ind", "rzp", "razorpay", "payu", "billdesk", "cashfree", "ccavenue", "paytm",
+        "internet", "wallet", "bill", "bills", "com", "electricity", "recharge", "broadband", "the", "and", "in", "ind", "rzp", "raz", "pyu", "ccav", "bdsk", "ptm", "ppay", "razorpay", "payu", "billdesk", "cashfree", "ccavenue", "paytm",
         "ka", "mh", "dl", "tn", "ap", "ts", "kl", "gj", "up", "wb", "rj", "hr", "pb", "mp",
         "bangalore", "bengaluru", "mumbai", "delhi", "new", "chennai", "hyderabad", "kolkata", "pune", "gurgaon", "gurugram", "noida", "ahmedabad", "jaipur", "kochi",
+        "blr", "bng", "mum", "hyd", "pnq", "chn", "ccu", "ncr", "mah",
     )
 
     /**
@@ -79,7 +80,7 @@ object DefaultRules {
         "store", "stores", "mart", "foods", "food", "restaurant", "restaurants", "cafe", "cafes", "hotel", "hotels", "pharmacy", "pharmacies", "medical", "medicals", "traders", "trading", "enterprises",
         "supermarket", "hypermarket", "bazaar", "bazar", "mall", "kitchen", "bakery", "sweets", "bhavan", "hospital", "hospitals", "clinic", "clinics", "labs", "lab", "diagnostics", "healthcare",
         "insurance", "ins", "allied", "life", "general", "seller", "marketplace", "cabs", "taxi", "fuel", "petrol", "pump", "station", "recharge", "prepaid", "postpaid", "bill", "payments", "dairy",
-        "pulse", "express", "fresh", "daily", "bank", "cinemas", "cinema", "studios", "entertainment", "network", "networks", "energy", "power", "gas", "oil", "sports", "fashion", "electronics", "digital",
+        "pulse", "express", "fresh", "daily", "bank", "cinemas", "cinema", "studios", "entertainment", "network", "networks", "energy", "power", "gas", "oil", "sports", "fashion", "electronics", "digital", "stn", "outlet", "dealer", "filling",
     )
 
     /**

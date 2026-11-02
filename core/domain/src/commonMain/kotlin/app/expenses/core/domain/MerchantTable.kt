@@ -96,7 +96,7 @@ internal object MerchantTable {
         m("KSRTC", TRANSPORT), m("TSRTC", TRANSPORT), m("MSRTC", TRANSPORT), m("APSRTC", TRANSPORT), m("Park Plus", TRANSPORT, "parkplus"), m("Yulu", TRANSPORT), m("Zoomcar", TRANSPORT, "zoom car"),
         m("Drivezy", TRANSPORT), m("BluSmart", TRANSPORT, "blu smart"), m("inDrive", TRANSPORT, "indrive", "indriver"), m("Meru Cabs", TRANSPORT, "meru"), m("Quick Ride", TRANSPORT, "quickride"),
         m("Paytm FASTag", TRANSPORT, "paytm fastag"),
-        m("Shell India", TRANSPORT, "shell petrol"), m("Essar Oil", TRANSPORT), m("Castrol", TRANSPORT, "castrol india"), m("Vogo", TRANSPORT, "vogo rentals"),
+        m("Shell India", TRANSPORT, "shell petrol", "shell india markets"), m("Essar Oil", TRANSPORT), m("Castrol", TRANSPORT, "castrol india"), m("Vogo", TRANSPORT, "vogo rentals"),
         // ---- Bills: telecom, power, gas, water, broadband, TV, insurers
         m("Jio", BILLS, "reliance jio", "jio recharge", "jio prepaid", "jio postpaid", "jiopay", "reliance jio infocomm"), m("Airtel", BILLS, "bharti airtel", "airtel prepaid", "airtel postpaid"),
         m("Vodafone Idea", BILLS, "vodafone", "vi postpaid", "vi prepaid", "idea cellular"), m("BSNL", BILLS, "bharat sanchar nigam"), m("MTNL", BILLS), m("BESCOM", BILLS, "bangalore electricity"),
@@ -116,7 +116,7 @@ internal object MerchantTable {
         kw(BILLS, "electricity", home = UTILITIES), kw(BILLS, "broadband", "recharge", home = MOBILE),
         // ---- Shopping: marketplaces, fashion, electronics, home, beauty
         m("Amazon", SHOPPING, "amazon india", "amazon seller services", "amazon in", "amzn"), m("Amazon Pay", SHOPPING, "amazonpay", "amazon pay india", "amazon payments"), m("Flipkart", SHOPPING, "flipkart internet", "flipkart payments"),
-        m("Myntra", SHOPPING), m("Ajio", SHOPPING), m("Meesho", SHOPPING), m("Nykaa", SHOPPING, "nykaa fashion", "fsn e commerce"), m("Tata CLiQ", SHOPPING, "tata cliq", "tatacliq"),
+        m("Myntra", SHOPPING, "myntra designs"), m("Ajio", SHOPPING), m("Meesho", SHOPPING), m("Nykaa", SHOPPING, "nykaa fashion", "fsn e commerce", "nykaa e retail"), m("Tata CLiQ", SHOPPING, "tata cliq", "tatacliq"),
         m("Decathlon", SHOPPING, "decathlon sports"), m("IKEA", SHOPPING, "ikea india"), m("Croma", SHOPPING, "infiniti retail", "chroma"), m("Lenskart", SHOPPING, "lenskart solutions"), m("Reliance Digital", SHOPPING),
         m("Shoppers Stop", SHOPPING), m("Pantaloons", SHOPPING), m("Westside", SHOPPING), m("Max Fashion", SHOPPING), m("Uniqlo", SHOPPING), m("Reliance Trends", SHOPPING),
         m("FirstCry", SHOPPING, "first cry"), m("Mamaearth", SHOPPING, "honasa consumer"), m("Purplle", SHOPPING), m("Tira Beauty", SHOPPING, "tira"), m("Sephora", SHOPPING), m("Bewakoof", SHOPPING),

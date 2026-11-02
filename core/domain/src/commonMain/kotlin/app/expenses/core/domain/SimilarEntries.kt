@@ -42,4 +42,14 @@ object SimilarEntries {
         val best = counts.values.max()
         return same.sortedByDescending { it.occurredAt }.first { counts[it.categoryId] == best }.categoryId
     }
+
+    /** What the earlier entries that look like [label] say: the leading category, how many are in it and how many are in others. Null when none read alike. */
+    fun profile(label: String, candidates: List<SimilarCandidate>): HistoryProfile? {
+        val same = candidates.filter { it.categoryId.isNotEmpty() && matches(label, it.label) }
+        if (same.isEmpty()) return null
+        val top = topCategory(label, candidates) ?: return null
+        val agree = same.count { it.categoryId == top }
+        val runnersUp = same.filter { it.categoryId != top }.groupingBy { it.categoryId }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+        return HistoryProfile(top, agree, same.size - agree, runnersUp)
+    }
 }

@@ -193,6 +193,24 @@ class CategoryStoreTest {
     }
 
     @Test
+    fun aMergedCategoryTakesTheCaptureRulesAndLearnedChoicesWithIt() {
+        val rules = CaptureRuleStore(db)
+        rules.add("r1", "bigbasket", "Groceries"); rules.learn("Freshpik", "Groceries"); rules.learn("Swiggy", "Food")
+        categories.merge("Groceries", "Food")
+        assertEquals("Food", rules.rules().single().categoryId, "the rule would otherwise point at a category that is gone and never apply")
+        assertEquals(mapOf("freshpik" to "Food", "swiggy" to "Food"), rules.learned())
+    }
+
+    @Test
+    fun aDeletedCategoryTakesWhatWasLearnedForItWithIt() {
+        val rules = CaptureRuleStore(db)
+        val pets = categories.create("Pets")
+        rules.learn("Pet Mart", pets.id); rules.learn("Swiggy", "Food")
+        categories.delete(pets.id)
+        assertEquals(mapOf("swiggy" to "Food"), rules.learned())
+    }
+
+    @Test
     fun mergingReMapsEverythingAndTheTotalsAreTheSumOfTheTwo() {
         expense("e1", 1_000, "Food")
         expense("e2", 2_500, "Groceries")

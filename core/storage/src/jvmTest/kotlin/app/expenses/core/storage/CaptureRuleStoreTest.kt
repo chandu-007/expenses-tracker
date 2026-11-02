@@ -48,6 +48,39 @@ class CaptureRuleStoreTest {
     }
 
     @Test
+    fun theSameShopWrittenDifferentlyIsOnePayeeToLearnAndToForget() {
+        store.learn("SWIGGY BANGALORE KA IN", "Food"); assertEquals(mapOf("swiggy" to "Food"), store.learned())
+        store.learn("swiggy@icici", "Food"); store.learn("Swiggy", "Food")
+        assertEquals(3, store.learnedUses().getValue("swiggy"), "three spellings, one payee, three times in a row")
+        store.learn("FRESHPIK 2231", "Groceries"); store.learn("freshpik@ybl", "Groceries"); assertEquals(2, store.learnedUses().getValue("freshpik"))
+        assertEquals("Swiggy", store.learnedRows().first { it.key == "swiggy" }.label, "the list shows how the payee was first written, not the address")
+        assertEquals("FRESHPIK 2231", store.learnedRows().first { it.key == "freshpik" }.label)
+        store.forget("FRESHPIK BANGALORE IN"); assertEquals(setOf("swiggy"), store.learned().keys, "forgetting by any spelling")
+        assertEquals(null, db.schemaQueries.settingValue("learned_label:freshpik").executeAsOneOrNull(), "the label goes with it")
+    }
+
+    @Test
+    fun aChoiceStoredUnderTheOldKeyIsCarriedOverWhenTheSamePayeeIsLearnedAgain() {
+        db.schemaQueries.learnMerchant("swiggybangalorekain", "Food"); db.schemaQueries.learnMerchant("swiggybangalorekain", "Food") // two choices recorded before the key changed
+        store.learn("SWIGGY BANGALORE KA IN", "Food")
+        assertEquals(mapOf("swiggy" to "Food"), store.learned(), "the old row moves to the new key")
+        assertEquals(3, store.learnedUses().getValue("swiggy"), "and keeps its count")
+        db.schemaQueries.learnMerchant("freshpikbangalorein", "Groceries")
+        store.learn("FRESHPIK BANGALORE IN", "Food")
+        assertEquals(mapOf("swiggy" to "Food", "freshpik" to "Food"), store.learned(), "a different choice replaces the old one")
+        assertEquals(1, store.learnedUses().getValue("freshpik"))
+    }
+
+    @Test
+    fun thePersonCanChangeAndForgetWhatWasLearnedByKey() {
+        store.learn("Swiggy", "Food")
+        store.setLearned("swiggy", "Groceries"); assertEquals(mapOf("swiggy" to "Groceries"), store.learned())
+        assertFailsWith<IllegalArgumentException> { store.setLearned("swiggy", "Nope") }
+        assertEquals("Swiggy", store.learnedRows().single().label)
+        store.forgetKey("swiggy"); assertEquals(emptyMap(), store.learned()); assertEquals(emptyList(), store.learnedRows())
+    }
+
+    @Test
     fun aChoiceIsLearnedPerPayeeKeyAndALaterDifferentChoiceReplacesIt() {
         store.learn("Swiggy@icici", "Food"); assertEquals(mapOf("swiggy" to "Food"), store.learned())
         store.learn("SWIGGY", "Groceries"); assertEquals(mapOf("swiggy" to "Groceries"), store.learned(), "the correction sticks")

@@ -229,7 +229,7 @@ class BackupStore(
         val haveRules = q.allCaptureRules().executeAsList().map { it.id }.toSet()
         for (r in data.captureRules) if (r.id !in haveRules && q.categoryById(r.categoryId).executeAsOneOrNull() != null) q.upsertCaptureRule(r.id, r.position.toLong(), r.pattern, r.categoryId)
         val haveKeys = q.allMerchantMap().executeAsList().map { it.key }.toSet()
-        for (m in data.merchantMap) if (m.key !in haveKeys && q.categoryById(m.categoryId).executeAsOneOrNull() != null) q.learnMerchant(m.key, m.categoryId)
+        for (m in data.merchantMap) if (m.key !in haveKeys && q.categoryById(m.categoryId).executeAsOneOrNull() != null) { q.learnMerchant(m.key, m.categoryId); if (m.uses > 1) q.setMerchantUses(m.uses.toLong(), m.key) }
         // Only for a card that exists here and has no terms yet; the terms of a card that was not restored have nothing to attach to.
         for (c in data.cardTerms) if (q.cardTermsOf(c.accountId).executeAsOneOrNull() == null && q.accountById(c.accountId).executeAsOneOrNull()?.let { it.deleted == 0L && it.type == "CREDIT_CARD" } == true) q.upsertCardTerms(c.accountId, c.statementDay.toLong(), c.dueDay.toLong(), c.minDuePercent.toLong(), c.remindDaysBefore.toLong())
         // Only for an account that exists here and has no look yet; names this version does not know, and digits that are not four, are dropped.

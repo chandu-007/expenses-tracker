@@ -654,6 +654,16 @@ ON CONFLICT(key) DO UPDATE SET category_id = excluded.category_id, uses = CASE W
 forgetMerchant:
 DELETE FROM merchant_map WHERE key = ?;
 
+-- Expenses with no category at all (not even one split), newest first: what a learned choice can still be applied to. Read only when the person opens the list of what the app learned.
+uncategorisedExpenses:
+SELECT e.id, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label
+FROM entry e
+WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND NOT EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = e.id)
+ORDER BY e.occurred_at DESC LIMIT :limit;
+
+setMerchantUses:
+UPDATE merchant_map SET uses = :uses WHERE key = :key;
+
 -- Past entries whose payee or note mentions a word (case-insensitive): what a rule would have caught, for testing it against history.
 entriesMentioning:
 SELECT COUNT(*) FROM entry WHERE deleted = 0 AND kind IN ('EXPENSE', 'INCOME') AND (merchant LIKE '%' || :word || '%' ESCAPE '\' OR note LIKE '%' || :word || '%' ESCAPE '\');
@@ -1261,6 +1271,16 @@ UPDATE recurring SET deleted = 1 WHERE id = :id;
 
 remapRecurring:
 UPDATE recurring SET category_id = :into WHERE category_id = :from;
+
+-- The person's capture rules and what was learned from their choices follow a merged category, and what was learned for a deleted one goes with it.
+remapCaptureRules:
+UPDATE capture_rule SET category_id = :into WHERE category_id = :from;
+
+remapMerchantMap:
+UPDATE merchant_map SET category_id = :into WHERE category_id = :from;
+
+deleteMerchantMapOf:
+DELETE FROM merchant_map WHERE category_id = :category;
 
 doneDays:
 SELECT day FROM recurring_done WHERE recurring_id = :id AND day >= :fromDay;

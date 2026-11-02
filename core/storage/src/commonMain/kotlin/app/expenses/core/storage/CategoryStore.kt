@@ -123,6 +123,8 @@ class CategoryStore(
             q.remapIncome(intoId, fromId)
             q.remapTemplates(intoId, fromId)
             q.remapRecurring(intoId, fromId)
+            q.remapCaptureRules(intoId, fromId)
+            q.remapMerchantMap(intoId, fromId)
             // A limit moves with the category unless the target already has its own, which then wins.
             q.budgetByScope(fromId).executeAsOneOrNull()?.let { src ->
                 val keep = q.budgetByScope(intoId).executeAsOneOrNull() == null
@@ -141,6 +143,7 @@ class CategoryStore(
             CategoryRules.checkDelete(list(), id, usage(id))?.let { throw IllegalArgumentException(it) }
             writeBudget(db, clock, nowMillis, id, null) // a limit on a category that is going away goes with it
             q.softDeleteCategory(id)
+            q.deleteMerchantMapOf(id)
             q.insertOp(clock.now(nowMillis()).encode(), "category", id, "deleted", "1")
         }
     }
