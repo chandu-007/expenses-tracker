@@ -60,7 +60,7 @@ object SkippedSenders {
         val s = suffix?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: NO_SUFFIX
         val fresh = before == null || before.lastAt < now - WINDOW_MS
         val kept = if (fresh) "" else before!!.suffixes
-        val suffixes = (kept + s).toSortedSet().joinToString("")
+        val suffixes = (kept + s).toSet().sorted().joinToString("")
         return SkippedCounter(root.trim().uppercase(), if (fresh) 1 else before!!.count + 1, now, suffixes)
     }
 
