@@ -75,7 +75,7 @@ private fun SetupStep(number: Int, title: String, tag: String, content: @Composa
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null) {
+internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null, skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {}) {
     val platform = LocalPlatform.current
     Scaffold(topBar = { AreaTopBar("Capture from texts", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -136,7 +136,7 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             Text("For a text or an email you already have, no setup is needed: touch and hold the message, tap Share (in Mail, the share button), choose Expenses, then open Expenses and look in To review. Or copy it and use Paste there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
             Text("What happens to the words", style = MaterialTheme.typography.labelMedium)
-            Text("The words of a text that is not a bank transaction (a person's message, a one-time password, an offer) are thrown away as soon as they are looked at: only a count is kept, shown in How capture is doing. The words of a transaction or a bill are kept until you add or skip it; after that only the amount, date and reference stay. Everything is read on this phone and nothing is sent anywhere.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_privacy"))
+            Text("The words of a text that is not a bank transaction (a person's message, a one-time password, an offer) are thrown away as soon as they are looked at: only a count is kept, shown in How capture is doing. When a text comes with a sender name that is not on the list, its words are looked at once, in memory, only to see whether they look like a payment; for a payment-looking one a short outline with every digit and every name removed is kept as well, so that you can choose to trust that sender. The words of a transaction or a bill are kept until you add or skip it; after that only the amount, date and reference stay. Everything is read on this phone and nothing is sent anywhere.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_privacy"))
             HorizontalDivider()
             Text("What iPhone does not allow", style = MaterialTheme.typography.labelMedium)
             Text("This depends on iOS, not on this app: it may show a banner when the automation runs, even with Run Immediately. It works only for messages in the Messages app (SMS, iMessage, RCS), not for WhatsApp or other apps. Messages from unknown senders, or ones iOS files under Unknown Senders or Junk, may not start the automation at all, and a bank's alphabetic sender is often treated that way. It cannot run before you have unlocked the phone once after a restart. If a transaction is missing, copy its text and use Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_limits"))
@@ -144,6 +144,7 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
             TrustedSendersEditor(settings.extraHeaders, onHeaders)
             Text("Used when the automation passes Sender. Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SkippedSendersSection(settings.extraHeaders, skipped, onTrustSkipped)
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
             OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }

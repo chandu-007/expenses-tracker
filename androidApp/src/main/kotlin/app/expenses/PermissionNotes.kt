@@ -12,7 +12,7 @@ import app.expenses.ui.PermissionRow
  */
 object PermissionNotes {
     val NOTES: Map<String, Pair<String, String>> = mapOf(
-        Manifest.permission.RECEIVE_SMS to ("Read bank texts" to "Lets the app see an incoming text so it can find a bank transaction in it. Texts from people and one-time passwords are ignored without being read, and nothing is sent anywhere. Only used if you turn on capture."),
+        Manifest.permission.RECEIVE_SMS to ("Read bank texts" to "Lets the app see an incoming text so it can find a bank transaction in it. Texts from people are ignored without being read. A text from a named sender that is not a known bank is looked at once, only to see whether it looks like a payment, then thrown away: only a count and, for a payment-looking one, a masked outline with no digits or names are kept. Nothing is sent anywhere. Only used if you turn on capture."),
         Manifest.permission.POST_NOTIFICATIONS to ("Notifications" to "Lets the app remind you of bills, card due dates and budgets."),
         Manifest.permission.USE_BIOMETRIC to ("Fingerprint or face unlock" to "Lets the app lock use your phone's fingerprint or face check. The app never sees your fingerprint."),
         "android.permission.USE_FINGERPRINT" to ("Fingerprint (older phones)" to "The same lock check on older Android versions."),

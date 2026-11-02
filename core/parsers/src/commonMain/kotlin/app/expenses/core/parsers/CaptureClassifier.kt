@@ -73,4 +73,16 @@ internal object MoneyMoved {
         val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
         return words.containsMatchIn(promise.replace(text, " ")) || upiRef.containsMatchIn(text) || cardTxn.containsMatchIn(text)
     }
+
+    /** [words] without "purchase", plus the words a UPI credit or transfer is worded with ("received Rs 300 from ...", "Rs 500 sent from A/c ..."). */
+    private val movedVerbs = Regex("""(?i)\b(?:debited|credited|spent|withdrawn|deducted|refunded|reversed|transferred|paid|received|sent|deposited)\b""")
+
+    /**
+     * Only a past-tense movement word outside a promise or an "ignore if already paid" line ([movedVerbs]): no UPI reference alone and no card layout. Used by [UnlistedSenders], which must be
+     * stricter than the bill rule above, because a text from a sender nobody listed has nothing else to vouch for it.
+     */
+    fun verbStated(body: String): Boolean {
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
+        return movedVerbs.containsMatchIn(promise.replace(text, " "))
+    }
 }

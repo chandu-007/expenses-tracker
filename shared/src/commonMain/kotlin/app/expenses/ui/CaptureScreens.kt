@@ -411,8 +411,10 @@ fun CaptureSettingsScreen(
     settings: CaptureSettingsUi, permissionGranted: Boolean, notifAccess: Boolean, onToggle: (Boolean) -> Unit, onToggleNotif: (Boolean) -> Unit, onToggleEmail: (Boolean) -> Unit, onOpenAccessSettings: () -> Unit, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit,
     /** Runs a text through the same reading as a message from the Shortcuts automation (iPhone's setup page uses it for "Send a test now"). */
     onTestMessage: ((String, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
+    /** Payment-looking texts skipped from senders not on the list, with a one-tap "Treat NAME as my bank" ([SkippedSendersSection]); empty when there are none. */
+    skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {},
 ) {
-    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage); return }
+    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage, skipped, onTrustSkipped); return }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture
     // Google Play's rule for the text permission: a prominent disclosure, answered with a tap, before Android's own permission question
@@ -423,7 +425,7 @@ fun CaptureSettingsScreen(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("This app uses the permission to receive text messages (RECEIVE_SMS) for one purpose: to find the payments, credits and bills in texts from your bank, card or biller, and put them in a list for you to approve, so you can track your money.")
-                Text("Each text is read on this phone, and the sender is checked first. Texts from people, one-time passwords and senders that are not a known bank or biller are ignored and thrown away: only a count is kept. Nothing is sent anywhere: the app has no internet access at all.")
+                Text("Each text is read on this phone, and the sender is checked first. Texts from people (phone numbers) are thrown away without being read. A text from a named sender that is not a known bank or biller is never added to your list: its words are looked at once, in memory, only to see whether they look like a payment, and then thrown away. Only a count is kept and, for a payment-looking one, a short outline with every digit and every name removed, so that you can choose to trust that sender. One-time passwords are never kept. Nothing is sent anywhere: the app has no internet access at all.")
                 Text("You can turn this off in this screen at any time. Android will ask you next; if you say no, the app works as before and you can add entries by hand.")
             }
         },
@@ -440,7 +442,7 @@ fun CaptureSettingsScreen(
             Text("What this does", style = MaterialTheme.typography.labelMedium)
             Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. If it says a bill is due (a card statement, electricity, water, gas, mobile, broadband, an EMI, an insurance premium), it is shown on the Bills page and you are told. You decide whether to add either.", style = MaterialTheme.typography.bodyMedium)
             Text("What it does not do", style = MaterialTheme.typography.labelMedium)
-            Text("Texts from people, one-time passwords and anything from a sender that is not on the list below are ignored without being read; the sender is checked first. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
+            Text("Texts from people are ignored without being read; the sender is checked first. A text from a name that is not on the list below is never added to To review: its words are looked at once, in memory, only to see whether they look like a payment, and then thrown away. Only a count is kept and, for a payment-looking one, a masked outline with every digit and every name removed, which this screen can offer so that you can trust that sender. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
             if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
             HorizontalDivider()
             }
@@ -462,6 +464,7 @@ fun CaptureSettingsScreen(
             Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
             TrustedSendersEditor(settings.extraHeaders, onHeaders)
             Text("Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SkippedSendersSection(settings.extraHeaders, skipped, onTrustSkipped)
             HorizontalDivider()
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
             OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }

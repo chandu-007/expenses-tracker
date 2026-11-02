@@ -166,6 +166,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val learnedUndo by viewModel.learnedUndo.collectAsStateWithLifecycle(context = MAIN)
             val inboxRows by viewModel.inbox.collectAsStateWithLifecycle(context = MAIN)
             val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle(context = MAIN)
+            val skippedSenders by viewModel.skippedSenders.collectAsStateWithLifecycle(context = MAIN)
             val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted) }
             val smsPermission = sms.granted
             val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
@@ -390,6 +391,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onOpenAccessSettings = { host.openNotificationAccessSettings() },
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                             onTestMessage = { text, done -> viewModel.pasteMessage(text) { r -> done(r); viewModel.loadCaptureSettings() } },
+                            skipped = skippedSenders, onTrustSkipped = viewModel::trustSkippedSender,
                         )
                     }
                     k == 8 -> {

@@ -36,7 +36,8 @@ class PasteOutcome(val message: String, val detail: String?, val kept: Boolean, 
 /**
  * Turns one message that reached the app without an operating-system hook (iPhone: a Shortcuts automation hands it over, or the person pastes it) into, at
  * most, one pending item in the review inbox. It is the logic of the Android `Capture.ingest` written without java.*, with the same promises: the sender is
- * judged before the body is read; a text that is not a transaction from a known sender leaves **only a count** (no words, no number) in capture health; a
+ * judged before the body is read; a text that is not a transaction from a known sender leaves **only a count** (no words, no number) in capture health (a text from an alphanumeric
+ * sender that is not on the list is looked at once in memory by [UnlistedCapture], and a payment-shaped one also leaves one masked outline); a
  * bank transaction becomes a pending [InboxItem]; a bill becomes a [Bill]. The Android class itself is untouched.
  *
  * Differences that exist because nothing here knows when a message arrived or who sent it for sure:
@@ -116,7 +117,8 @@ object MessageIngest {
                 is CaptureOutcome.Ignored -> {
                     val event = when (verdict.reason) {
                         IgnoreReason.PERSONAL_SENDER -> CaptureEventOutcome.PERSONAL_SENDER
-                        IgnoreReason.NOT_ALLOWLISTED -> CaptureEventOutcome.NOT_ALLOWLISTED
+                        // a text from a header nobody listed: its words are looked at once, in memory, only to see whether it is shaped like a payment (UnlistedCapture); the words are not kept
+                        IgnoreReason.NOT_ALLOWLISTED -> verdict.headerRoot?.takeIf { emailNames == null && named.isNotEmpty() && source == CaptureKeys.SMS }?.let { UnlistedCapture.judge(ok, now, it, text) } ?: CaptureEventOutcome.NOT_ALLOWLISTED
                         IgnoreReason.OTP -> CaptureEventOutcome.OTP
                         IgnoreReason.NOT_A_TRANSACTION -> CaptureEventOutcome.NOT_A_TRANSACTION
                         IgnoreReason.DECLINED -> CaptureEventOutcome.DECLINED
@@ -189,7 +191,7 @@ object MessageIngest {
         CaptureEventOutcome.BILL -> "Captured a bill, see Bills in Expenses"
         CaptureEventOutcome.DUPLICATE -> "Already captured: the same message was seen before"
         CaptureEventOutcome.PERSONAL_SENDER -> "Ignored: a text from a person"
-        CaptureEventOutcome.NOT_ALLOWLISTED -> "Ignored: the sender is not on the list of banks"
+        CaptureEventOutcome.NOT_ALLOWLISTED, CaptureEventOutcome.UNLISTED_PAYMENT -> "Ignored: the sender is not on the list of banks"
         CaptureEventOutcome.OTP -> "Ignored: a one-time password"
         CaptureEventOutcome.NOT_A_TRANSACTION -> "Ignored: not a bank transaction"
         CaptureEventOutcome.DECLINED -> "Ignored: a declined payment"

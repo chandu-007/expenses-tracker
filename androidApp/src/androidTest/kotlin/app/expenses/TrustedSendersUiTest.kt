@@ -95,7 +95,7 @@ class TrustedSendersUiTest {
         tap("sender_remove_MYCOOP")
         gone("sender_chip_MYCOOP"); waitFor("sender_chip_OTHERCO")
         compose.waitUntil(10_000) { stored() == "OTHERCO" }
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", 3_000))
+        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("VM-MYCOOP-S", 3_000), "a payment-shaped text from a name that is not on the list is skipped, and counted as such")
         assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-OTHERCO-S", 4_000))
         assertEquals(1, runBlocking { container.write { it.inbox.list() } }!!.count { it.issuer == "MYCOOP" }, "the earlier capture is not touched by removing the name")
     }
@@ -103,7 +103,7 @@ class TrustedSendersUiTest {
     @Test
     fun theNamesSurviveLeavingTheScreenAndRelaunchingAndAnAddedSenderIsCaptured() {
         launch(); openCapture()
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", 1_000))
+        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("VM-MYCOOP-S", 1_000))
         add("mycoop"); waitFor("sender_chip_MYCOOP")
         compose.waitUntil(10_000) { stored() == "MYCOOP" }
         tap("capture_back"); gone("capture_headers")

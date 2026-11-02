@@ -15,8 +15,9 @@ import java.security.MessageDigest
 import java.util.UUID
 
 /**
- * Turns one text or notification into, at most, one pending item in the review inbox. The sender is judged before the body is read; a text
- * that is not a transaction from an allowlisted header leaves **only a count** (no words, no number) in capture health.
+ * Turns one text or notification into, at most, one pending item in the review inbox. The sender is judged before the body is read; a text that is not a transaction from an
+ * allowlisted header leaves **only a count** (no words, no number) in capture health. The one exception to "before the body is read": a text from an ALPHANUMERIC header that is not on the
+ * list has its words looked at once, in memory, by [UnlistedCapture] to see whether they are shaped like a payment; then a masked outline (never the words) is kept as well.
  */
 object Capture {
     const val SMS = CaptureKeys.SMS
@@ -87,7 +88,8 @@ object Capture {
                     if (emailNames != null && r.reason == IgnoreReason.NOT_ALLOWLISTED && r.headerRoot == null) return@write CaptureEventOutcome.NOT_ALLOWLISTED
                     val event = when (r.reason) {
                         IgnoreReason.PERSONAL_SENDER -> CaptureEventOutcome.PERSONAL_SENDER
-                        IgnoreReason.NOT_ALLOWLISTED -> CaptureEventOutcome.NOT_ALLOWLISTED
+                        // a text from a header nobody listed: its words are looked at once, in memory, only to see whether it is shaped like a payment (UnlistedCapture); the words are not kept
+                        IgnoreReason.NOT_ALLOWLISTED -> r.headerRoot?.takeIf { emailNames == null && source == SMS }?.let { UnlistedCapture.judge(ok, now, it, body) } ?: CaptureEventOutcome.NOT_ALLOWLISTED
                         IgnoreReason.OTP -> CaptureEventOutcome.OTP
                         IgnoreReason.NOT_A_TRANSACTION -> CaptureEventOutcome.NOT_A_TRANSACTION
                         IgnoreReason.DECLINED -> CaptureEventOutcome.DECLINED
