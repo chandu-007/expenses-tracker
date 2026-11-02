@@ -19,6 +19,10 @@ data class ParsedAlert(
     val currency: String,
     val date: LocalDate?,
     val reference: String?,
+    /**
+     * The digits the text prints for its own account or card, with the length the text shows: three for banks that print only three ("ICICI Bank Acct XX123"), four otherwise ("Card XX3025",
+     * "A/c XX1234"); null when it prints none. See [AccountMasks] and [app.expenses.core.domain.AccountDigits]. The name is older than three-digit support (it is the column's and the backup's).
+     */
     val accountLast4: String?,
     val viaUpi: Boolean,
     /** For foreign-currency spends the alert shows both amounts; [amountMinor] is the rupees charged, this is what was spent abroad. */
@@ -26,8 +30,8 @@ data class ParsedAlert(
     val originalAmountMinor: Long? = null,
     val confidence: Confidence = Confidence.GENERIC,
     /**
-     * The last four digits of a second account the text names, when it names one: the other end of a transfer ("XXXXXXXXXX1234-TPT-..." in a credit's narration, "To A/c xxxxxxxxxx5678" in an IMPS debit).
-     * Never the same digits as [accountLast4]. See [TransferClues].
+     * The digits (three or four, as printed) of a second account the text names, when it names one: the other end of a transfer ("XXXXXXXXXX1234-TPT-..." in a credit's narration, "To A/c xxxxxxxxxx5678"
+     * in an IMPS debit, "& Acct XX001 credited" in ICICI's own-account IMPS). Never the same account as [accountLast4]. See [TransferClues].
      */
     val counterLast4: String? = null,
 )
@@ -65,8 +69,6 @@ object GenericAlertParser {
     )
     /** "credited to the beneficiary account" describes an outgoing payment seen from the sender's bank. */
     private val outgoingCreditPhrase = Regex("""(?i)\bbeneficiary\b""")
-    private val accountMask = Regex("""(?i)(?:a/?c|acct|account)\s*(?:no\.?)?\s*[:*]?\s*[x*]*(\d{3,6})(?:\b|-)""")
-    private val cardMask = Regex("""(?i)(?:card\s*(?:no\.?)?|ending(?:\s+in)?)\s*[:*]?\s*[x*]*(\d{4})\b""")
     private val refAfterWord = Regex("""(?i)(?:ref(?:erence)?(?:\s*(?:no\.?|number))?|txn\s*no|transaction\s+(?:no|number)|trxn\s*no|rrn|utr(?:\s*no)?)\.?\s*[:\-]?\s*([a-z]*\d[a-z0-9]{8,21})\b""")
     private val refAfterUpi = Regex("""(?i)\bupi\s+(\d{9,18})\b""")
     private val refInUpiPath = Regex("""(?i)upi/[a-z0-9]+/(\d{9,18})""")
@@ -112,7 +114,7 @@ object GenericAlertParser {
             }
         }
         // the account the text is about: the first "A/c" named, unless the text names the destination first ("sent to A/c 9876 via IMPS from A/c XX1234")
-        val ownLast4 = (if (direction == Direction.DECLINED) null else TransferClues.ownLast4(text, direction == Direction.DEBIT)) ?: (accountMask.find(text) ?: cardMask.find(text))?.groupValues?.get(1)?.takeLast(4)
+        val ownLast4 = (if (direction == Direction.DECLINED) null else TransferClues.ownLast4(text, direction == Direction.DEBIT)) ?: AccountMasks.read(text)
         return ParseResult.Parsed(
             ParsedAlert(
                 direction = direction,

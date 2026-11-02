@@ -51,6 +51,7 @@ import app.expenses.AccountUi
 import app.expenses.CaptureSettingsUi
 import app.expenses.CategoryUi
 import app.expenses.InboxRowUi
+import kotlinx.coroutines.launch
 
 /**
  * Transactions found in texts, waiting to be added to the ledger or skipped. Nothing here counts anywhere until it is added.
@@ -72,6 +73,10 @@ fun InboxScreen(
     onApart: (outId: String, intoId: String) -> Unit,
     /** "Make this a transfer": the waiting item replaces the earlier expense or income it is the other half of (item, that entry, from account, to account). */
     onConvert: (itemId: String, earlierId: String, fromId: String, toId: String, done: (String?) -> Unit) -> Unit,
+    /** "Which account is this?": the account the person picked for a waiting text (item, account), remembered for its bank and digits. */
+    onChooseAccount: (itemId: String, accountId: String) -> Unit = { _, _ -> },
+    /** "New account ending 123": makes an account (name, type) with the digits the text prints and uses it (item, name, type, answer: null or why not). */
+    onCreateAccount: (itemId: String, name: String, type: String, done: (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
 ) {
     var confirmingAll by rememberSaveable { mutableStateOf(false) }
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
@@ -82,7 +87,14 @@ fun InboxScreen(
     // (and a category that is only a guess from a name, a payment to a person, or a marketplace is looked at: it is never added in bulk or by a swipe; no category at all is fine, it stays Uncategorised)
     val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() && it.certainty != "check" }
     val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    // the waiting texts whose account is not known (they are never "clear"): how many, on how many bank cards, and where the first one is, for the one-tap way to answer
+    val needAccount = rows.count { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }
+    val needAccountCards = rows.filter { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }.map { it.issuer + "|" + it.last4 }.toSet().size
+    val firstAsking = rows.indexOfFirst { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val easyIds = easy.map { it.id }.toSet()
+    val askLeaders = rows.filter { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }.distinctBy { it.issuer + "|" + it.last4 }.mapTo(HashSet()) { it.id }
     // items from the same payee (or, with no payee, the same bank): "Add all from <payee>" on their cards adds the ones among them that need no decision
     val byPayee = rows.groupBy { inboxGroupKey(it) }
     fun addTogether(list: List<InboxRowUi>) { refused.clear(); list.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }
@@ -95,6 +107,7 @@ fun InboxScreen(
             val bare = easy.count { it.direction != "CREDIT" && it.categoryId.isEmpty() }
             Text(
                 "Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, whose account is not yet known, or whose category is only a guess, are left for you to check." +
+                    (if (needAccount > 0) " $needAccount ${if (needAccount == 1) "has" else "have"} no account yet: answer \"Which account is this?\" on its card." else "") +
                     if (bare > 0) " $bare of these have no category yet: they are added as Uncategorised, and you can file them from Reports later." else "",
                 modifier = Modifier.testTag("inbox_add_all_text"),
             )
@@ -120,7 +133,7 @@ fun InboxScreen(
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                 Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             if (onPaste != null) item(key = "paste") { PasteBox(onPaste, paste!!, Modifier.animateItem()) }
             item(key = "summary") {
                 Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -129,6 +142,13 @@ fun InboxScreen(
                     if (refused.isNotEmpty()) Text("${refused.size} could not be added: ${refused.first()}", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_add_all_problem"))
                     if (easy.size >= 2) Button(onClick = { confirmingAll = true }, modifier = Modifier.testTag("inbox_add_all")) { Text("Add all ${easy.size} clear ones") }
                     if (easy.isNotEmpty()) Text("Clear ones can also be swiped: right to add, left to skip.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_swipe_hint"))
+                    if (needAccount > 0) {
+                        Text(
+                            "$needAccount waiting ${if (needAccount == 1) "text needs" else "texts need"} an account first, so ${if (needAccount == 1) "it is" else "they are"} left out of Add all and swipe. Answer \"Which account is this?\" once for each bank card; the others of the same card follow.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_needs_account"),
+                        )
+                        OutlinedButton(onClick = { scope.launch { listState.animateScrollToItem(firstAsking + (if (onPaste != null) 1 else 0) + 1) } }, modifier = Modifier.testTag("inbox_fix_accounts")) { Text("Choose the account (${needAccountCards})") }
+                    }
                 }
             }
             items(rows, key = { it.id }) { r ->
@@ -138,7 +158,7 @@ fun InboxScreen(
                     r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem(),
                     swipeable = r.id in easyIds,
                     payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
-                    onConvert = onConvert,
+                    onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, askHere = r.id in askLeaders,
                 )
             }
         }
@@ -159,6 +179,10 @@ private fun InboxCard(
     /** The items from this card's payee that need no decision, when two or more pending items share the payee; empty otherwise (no button). */
     payeeGroup: List<InboxRowUi> = emptyList(), onAddPayee: (List<InboxRowUi>) -> Unit = {},
     onConvert: (String, String, String, String, (String?) -> Unit) -> Unit,
+    onChooseAccount: (String, String) -> Unit = { _, _ -> },
+    onCreateAccount: (String, String, String, (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
+    /** Whether this card carries the "Which account is this?" question: only the first waiting card of a bank card (issuer and digits) does; the others say they follow it. */
+    askHere: Boolean = true,
 ) {
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var reporting by remember(r.id) { mutableStateOf(false) }
@@ -169,7 +193,9 @@ private fun InboxCard(
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
     var toAcct by rememberSaveable(r.id) { mutableStateOf(r.toAccountId) }
     val paired = r.treatment != "PAYMENT" && !asPayment
-    var account by rememberSaveable(r.id) { mutableStateOf(r.accountId) }
+    // what the person picked on this card; until they do, the card follows the account the app has (so one chosen for this bank on another card shows here at once)
+    var pickedAccount by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    val account by rememberUpdatedState(pickedAccount ?: r.accountId)
     // what the person picked on this card, if anything; until they do, the card follows the app's suggestion, so a rule added or a choice made on another card shows here at once
     var picked by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
     val category by rememberUpdatedState(picked ?: r.categoryId)
@@ -241,6 +267,11 @@ private fun InboxCard(
             }
             if (r.transferHint.isNotEmpty()) Callout(r.transferHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_transfer_hint_${r.id}"))
             if (r.setupHint.isNotEmpty()) Callout(r.setupHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_setup_digits_${r.id}"))
+            // the account is not known (the digits fit none or several, or none are printed): ask once, remember the answer for this bank and these digits (the other waiting cards of it follow)
+            if (r.accountAsk.isNotEmpty() && pickedAccount == null && !paired) {
+                if (askHere) AccountQuestion(r, accounts, onChoose = { id -> onChooseAccount(r.id, id) }, onCreate = { name, type, done -> onCreateAccount(r.id, name, type, done) })
+                else Text("Which account is this? Answer on the first ${r.issuer}${r.last4?.let { " ending $it" } ?: ""} card above: this one follows.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_account_follow_${r.id}"))
+            }
             // where it will go: the decision, with its own Change next to it
             Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (paired && r.treatment == "TRANSFER") {
@@ -267,7 +298,7 @@ private fun InboxCard(
                         r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
                     }
                     if (changing) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { pickedAccount = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
                         if (!credit) {
                             val offered = offeredCategories(categories, income = false, keep = category)
                             // the first few as chips (and the chosen one, wherever it is); every other one is behind "More", in a list with search, as on the Add screen

@@ -1,14 +1,15 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.AccountLook
-import app.expenses.core.domain.AccountLooks
+import app.expenses.core.domain.AccountDigits
+import app.expenses.core.domain.AccountMatch
 import app.expenses.core.domain.CardNetwork
 import app.expenses.core.domain.CardTier
 import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.domain.sync.HlcClock
 import app.expenses.core.storage.db.ExpensesDb
 
-/** The network, tier and last four digits of accounts. Not thread-safe: use through the process-wide write lock. */
+/** The network, tier and last digits (three or four, see [AccountDigits]) of accounts. Not thread-safe: use through the process-wide write lock. */
 class AccountLookStore(private val db: ExpensesDb, private val clock: HlcClock, private val nowMillis: () -> Long) {
     private val q get() = db.schemaQueries
 
@@ -16,12 +17,12 @@ class AccountLookStore(private val db: ExpensesDb, private val clock: HlcClock, 
 
     fun all(): List<AccountLook> = q.allAccountLooks().executeAsList().map(::of)
 
-    /** Saves the look of a live account; a look with nothing set removes the row. Digits other than four are refused. */
+    /** Saves the look of a live account; a look with nothing set removes the row. Digits other than three or four are refused. */
     fun save(look: AccountLook) {
         db.transaction {
             val account = q.accountById(look.accountId).executeAsOneOrNull()
             require(account != null && account.deleted == 0L) { "That account no longer exists." }
-            AccountLooks.parseLast4(look.last4.orEmpty()).getOrElse { throw IllegalArgumentException(it.message) }
+            AccountDigits.parse(look.last4.orEmpty()).getOrElse { throw IllegalArgumentException(it.message) }
             val before = q.accountLookOf(look.accountId).executeAsOneOrNull()
             if (look.isEmpty) {
                 if (before != null) { q.deleteAccountLook(look.accountId); q.insertOp(clock.now(nowMillis()).encode(), "account_look", look.accountId, "deleted", "1") }
@@ -33,11 +34,15 @@ class AccountLookStore(private val db: ExpensesDb, private val clock: HlcClock, 
         }
     }
 
-    /** The account these last four digits point at, or null when none or more than one could be meant (see [AccountLooks.pick]). */
-    fun accountFor(last4: String?, preferCard: Boolean): String? {
-        if (last4 == null) return null
-        return AccountLooks.pick(q.accountsWithLast4(last4).executeAsList().map { it.id to AccountType.valueOf(it.type) }, preferCard)
-    }
+    /** The live accounts that carry digits, as [AccountMatch] needs them. */
+    fun candidates(): List<AccountMatch.Candidate> = q.accountsWithDigits().executeAsList().map { AccountMatch.Candidate(it.id, it.name, AccountType.valueOf(it.type), it.last4) }
+
+    /**
+     * The account these digits point at, or null when none or more than one could be meant (see [AccountMatch]). Three digits find an account saved with four, and the other way round.
+     * The bank is not looked at here: where the sender is known, call [AccountMatch.resolve] with [candidates].
+     */
+    fun accountFor(digits: String?, preferCard: Boolean): String? =
+        (AccountMatch.resolve(digits, null, candidates(), preferCard = preferCard) as? AccountMatch.Result.Found)?.accountId
 
     private fun of(r: app.expenses.core.storage.db.Account_look) = AccountLook(
         r.account_id, r.network?.let { n -> CardNetwork.entries.firstOrNull { it.name == n } }, r.tier?.let { t -> CardTier.entries.firstOrNull { it.name == t } }, r.last4,

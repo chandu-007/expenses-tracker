@@ -959,9 +959,9 @@ SELECT l.* FROM account_look l JOIN account a ON a.id = l.account_id WHERE a.del
 deleteAccountLook:
 DELETE FROM account_look WHERE account_id = :id;
 
--- The live accounts that carry these last four digits, to match a text or a bill to its account.
-accountsWithLast4:
-SELECT a.id, a.type FROM account_look l JOIN account a ON a.id = l.account_id WHERE l.last4 = :last4 AND a.deleted = 0 AND a.archived = 0 ORDER BY a.name;
+-- The live accounts that carry digits (three or four), to match a text or a bill to its account: the matching itself is AccountMatch, in memory, because three digits also find an account saved with four.
+accountsWithDigits:
+SELECT a.id, a.name, a.type, l.last4 FROM account_look l JOIN account a ON a.id = l.account_id WHERE l.last4 IS NOT NULL AND a.deleted = 0 AND a.archived = 0 ORDER BY a.name;
 
 -- What an account held at a moment: the same sum as accountBalances, limited to entries before :untilMillis (an exclusive end).
 accountBalanceBefore:

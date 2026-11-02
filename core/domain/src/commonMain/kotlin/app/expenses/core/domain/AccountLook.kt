@@ -9,31 +9,12 @@ enum class CardNetwork(val label: String) { VISA("Visa"), MASTERCARD("Mastercard
 enum class CardTier(val label: String) { CLASSIC("Classic"), PLATINUM("Platinum"), PREMIUM("Premium") }
 
 /**
- * What an account looks like and how texts find it. [network] and [tier] only matter for a credit card; [last4] (the last four digits of the card, or of the
- * account number as banks quote it, "A/c XX1234") is optional on any account and is how a bank text or a bill is matched to this account.
+ * What an account looks like and how texts find it. [network] and [tier] only matter for a credit card; [last4] (the last digits of the card, or of the account number as
+ * banks quote it, "A/c XX1234": four digits, or three for the banks that print only three, see [AccountDigits]) is optional on any account and is how a bank text or a bill is
+ * matched to this account ([AccountMatch]). The name is older than three-digit support: it is what the `account_look.last4` column and the backup call it.
  */
 data class AccountLook(val accountId: String, val network: CardNetwork? = null, val tier: CardTier? = null, val last4: String? = null) {
     val isEmpty get() = network == null && tier == null && last4 == null
-}
-
-object AccountLooks {
-    /** Blank means none. Otherwise exactly four digits, or null for "not valid". */
-    fun parseLast4(raw: String): Result<String?> {
-        val t = raw.trim()
-        if (t.isEmpty()) return Result.success(null)
-        return if (t.length == 4 && t.all { it in '0'..'9' }) Result.success(t) else Result.failure(IllegalArgumentException("Type the last four digits, like 4821, or leave it empty."))
-    }
-
-    /**
-     * The account a text's last four digits point at, from the accounts that carry those digits ([candidates]: id and type). One candidate is the answer. With
-     * several, a bill or a card statement ([preferCard]) means the credit card when there is exactly one; anything else is ambiguous and gives null, so
-     * the person is asked instead of the wrong account being used.
-     */
-    fun pick(candidates: List<Pair<String, AccountType>>, preferCard: Boolean): String? {
-        if (candidates.size == 1) return candidates.single().first
-        if (preferCard) candidates.filter { it.second == AccountType.CREDIT_CARD }.takeIf { it.size == 1 }?.let { return it.single().first }
-        return null
-    }
 }
 
 /** The colours of an account's tile, as ARGB. [top] to [bottom] is the gradient; [text] sits on it; [accent] is the network mark's second colour. */

@@ -1,5 +1,6 @@
 package app.expenses.core.parsers
 
+import app.expenses.core.domain.AccountDigits
 import app.expenses.core.domain.TransferWording
 
 /**
@@ -12,14 +13,14 @@ import app.expenses.core.domain.TransferWording
  * against real messages; a bank that words them differently simply does not get the combined card, and its two texts stay two items.
  */
 object TransferClues {
-    /** A masked account number: six or more mask characters then the last four digits ("XXXXXXXXXX1234", "xxxxxxxxxx5678"). A shorter mask is the text's own "A/c XX1234". */
-    private val maskedNumber = Regex("""(?i)[x*]{6,}(\d{4})\b""")
+    /** A masked account number: six or more mask characters then the last digits as the bank prints them, four or three ("XXXXXXXXXX1234", "xxxxxxxxxx5678"). A shorter mask is the text's own "A/c XX1234". */
+    private val maskedNumber = Regex("""(?i)[x*]{6,}(\d{3,4})\b""")
 
     /** "to a/c **5678", "from A/c XX1234": an account named after a direction word. */
     private val accountMention = Regex("""(?i)\b(?:a/?c|acct|account)\s*(?:no\.?)?\s*[:*]?\s*[x*]*(\d{3,6})(?:\b|-)""")
 
     /**
-     * The last four digits of the account a text is ABOUT when it names two accounts and the first named is not that one: "Rs 5000 sent to A/c 9876 via IMPS from A/c XX1234" is about 1234 (the
+     * The digits (three or four, as printed) of the account a text is ABOUT when it names two accounts and the first named is not that one: "Rs 5000 sent to A/c 9876 via IMPS from A/c XX1234" is about 1234 (the
      * account money left, for a debit), and "credited to A/c XX5678 ... from A/c XX1234" about 5678 (the account money reached, for a credit). Null when the text names fewer than two accounts, or
      * the first one named is already the right one, so the caller keeps its ordinary reading.
      */
@@ -31,18 +32,19 @@ object TransferClues {
             return w.lastIndexOf("from") to maxOf(w.lastIndexOf(" to "), w.lastIndexOf(" in "), w.lastIndexOf("into"), w.lastIndexOf("credited"), w.lastIndexOf("deposited"))
         }
         val chosen = mentions.firstOrNull { m -> after(m).let { (from, to) -> if (debit) from > to else to > from } } ?: return null
-        val digits = chosen.groupValues[1].takeLast(4)
-        return digits.takeIf { it.length == 4 && it != mentions.first().groupValues[1].takeLast(4) }
+        val digits = AccountDigits.fromRun(chosen.groupValues[1]) ?: return null
+        val first = AccountDigits.fromRun(mentions.first().groupValues[1])
+        return digits.takeIf { !AccountDigits.same(it, first) }
     }
 
     /**
-     * The last four digits of the other account a text names, or null. [own] is the digits of the account the text is about (so the account's own digits are never
+     * The digits (three or four, as printed) of the other account a text names, or null. [own] is the digits of the account the text is about (so the account's own digits are never
      * returned as the other end). A masked full number wins over an "A/c" mention because a bank prints the other party's number masked that way; otherwise the first
      * "A/c" mention that is not [own] is taken.
      */
     fun counterLast4(text: String, own: String?): String? {
-        maskedNumber.findAll(text).map { it.groupValues[1] }.firstOrNull { it != own }?.let { return it }
-        return accountMention.findAll(text).map { it.groupValues[1].takeLast(4) }.firstOrNull { it != own && it.length == 4 }
+        maskedNumber.findAll(text).map { it.groupValues[1] }.firstOrNull { !AccountDigits.same(it, own) }?.let { return it }
+        return accountMention.findAll(text).mapNotNull { AccountDigits.fromRun(it.groupValues[1]) }.firstOrNull { !AccountDigits.same(it, own) }
     }
 
     /**

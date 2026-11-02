@@ -8,6 +8,7 @@ them is "synthetic, unvalidated" until it is checked against real messages from 
 - Pinned commit: `add4c0278fc219f60390204b02abf20f5c5a2a00` (committed 2026-09-30)
 - Licence: MIT, Copyright (c) 2026 Akhil Narang. See `LICENSE-upstream`.
 - `expected.tsv` is **an answer key produced by that project's own parser**, not ground truth. Columns: file,
-  is-transaction, direction, amount in paise, date, reference, last 4 of account or card, channel.
+  is-transaction, direction, amount in paise, date, reference, last digits of account or card (up to four: **three** where the bank prints only three,
+  as the key holds them for 17 texts: ICICI and IDFC accounts such as `XX000`; `CorpusReportTest` checks that each is read as exactly three digits), channel.
   Rebuild with `tools/sms-corpus/build_answer_key.py` (needs Python 3.14).
 - Files under a `negative/` directory are messages that are not transactions.

@@ -193,10 +193,10 @@ private fun AccountDialog(
                         val digits = v.filter { it.isDigit() }
                         last4 = if (digits.length > 4 && v.length - last4.length <= 1) last4 else digits.takeLast(4)
                         problem = null
-                    }, label = { Text("Last 4 digits (optional)") }, singleLine = true,
+                    }, label = { Text("Last 3 or 4 digits (optional)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth().testTag("account_last4"),
                 )
-                Text("Of the card or the account number, as your bank's texts show it. It lets a text or a bill find this account by itself.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Of the card or the account number, as your bank's texts show it. It lets a text or a bill find this account by itself. Some banks show only 3 digits; enter what your bank texts show.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_last4_help"))
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("account_problem")) }
                 if (existing != null) {
                     Spacer(Modifier.height(4.dp))

@@ -148,4 +148,38 @@ class AccountTilesUiTest {
         tap("accounts_stack_close"); compose.waitUntil(10_000) { !has("accounts_stack_close") }
         compose.waitUntil(10_000) { gap() < 200f }
     }
+
+    private fun textOf(tag: String): String { waitFor(tag); return node(tag).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
+
+    @Test
+    fun theDigitsFieldTakesThreeOrFourDigitsRefusesTwoAndSaysWhySomeBanksShowOnlyThree() {
+        save(Account(AccountId("b"), "Savings", AccountType.BANK, inr))
+        launch(); openAccounts(); tap("account_Savings")
+        assertTrue(textOf("account_last4_help").contains("Some banks show only 3 digits; enter what your bank texts show"), textOf("account_last4_help"))
+        node("account_last4").performScrollTo()
+        type("account_last4", "12"); tap("account_save"); waitFor("account_problem")
+        assertEquals("Type 3 or 4 digits, like 821 or 4821, as your bank's texts show them, or leave it empty.", textOf("account_problem"))
+        assertNull(look("b"), "two digits are no digits: nothing saved")
+        type("account_last4", "821"); tap("account_save"); waitFor("account_Savings")
+        assertEquals(AccountLook("b", null, null, "821"), look("b"), "three digits are kept as three")
+        compose.onNodeWithTag("account_Savings").assertTextContains("821", substring = true) // the tile shows them
+        tap("account_Savings"); type("account_last4", "XX 123"); tap("account_save"); waitFor("account_Savings")
+        assertEquals("123", look("b")?.last4, "a paste with letters and a space keeps its three digits")
+        tap("account_Savings"); type("account_last4", "4821"); tap("account_save"); waitFor("account_Savings")
+        assertEquals("4821", look("b")?.last4, "four digits work as before")
+        tap("account_Savings"); type("account_last4", ""); tap("account_save"); waitFor("account_Savings")
+        assertNull(look("b"), "empty clears them")
+    }
+
+    @Test
+    fun anAccountSavedWithThreeDigitsIsSuggestedForABankTextThatShowsThoseThreeOrFourEndingTheSame() {
+        save(Account(AccountId("sav"), "ICICI Savings", AccountType.BANK, inr), Account(AccountId("hdf"), "HDFC Salary", AccountType.BANK, inr))
+        runBlocking { container.write { it.looks.save(AccountLook("sav", last4 = "123")); it.looks.save(AccountLook("hdf", last4 = "4123")) } }
+        val day = LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MMM-yy", java.util.Locale.ENGLISH))
+        runBlocking { Capture.ingest(container, Capture.SMS, "AX-ICICIB-S", "ICICI Bank Acct XX123 debited for Rs 500.00 on $day; XQZ KLM credited. UPI:628374659283. Call 18002662 for dispute.", System.currentTimeMillis()) }
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
+        val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
+        tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
+        assertEquals("sav", entries().single().account_id, "the ICICI account, not the HDFC one that ends in the same three digits")
+    }
 }

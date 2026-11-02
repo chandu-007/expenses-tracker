@@ -8,22 +8,6 @@ import kotlin.test.assertTrue
 
 class AccountLookTest {
     @Test
-    fun lastFourIsEmptyOrExactlyFourDigits() {
-        assertEquals(null, AccountLooks.parseLast4("  ").getOrThrow()); assertEquals("4821", AccountLooks.parseLast4(" 4821 ").getOrThrow())
-        for (bad in listOf("482", "48211", "48a1", "XX48", "4 82")) assertTrue(AccountLooks.parseLast4(bad).isFailure, bad)
-    }
-
-    @Test
-    fun oneCandidateIsTheAnswerAndSeveralNeedACardToBePreferredAndExactlyOne() {
-        val bank = "b" to AccountType.BANK; val c1 = "c1" to AccountType.CREDIT_CARD; val c2 = "c2" to AccountType.CREDIT_CARD
-        assertEquals("b", AccountLooks.pick(listOf(bank), preferCard = false))
-        assertEquals("c1", AccountLooks.pick(listOf(bank, c1), preferCard = true), "a card statement means the card, not the bank account with the same digits")
-        assertNull(AccountLooks.pick(listOf(bank, c1), preferCard = false), "ambiguous: ask, do not guess")
-        assertNull(AccountLooks.pick(listOf(c1, c2), preferCard = true), "two cards with the same digits")
-        assertNull(AccountLooks.pick(emptyList(), preferCard = true))
-    }
-
-    @Test
     fun everyNetworkAndFinishLooksDifferentExceptThePremiumFinishWhichIsOneSharedDarkAndGoldDesign() {
         val finishes = CardNetwork.entries.flatMap { n -> listOf(CardTier.CLASSIC, CardTier.PLATINUM).map { t -> CardDesigns.of(AccountType.CREDIT_CARD, n, t) } }
         assertEquals(finishes.size, finishes.toSet().size, "each network has a classic and a platinum look of its own")

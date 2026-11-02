@@ -16,7 +16,7 @@ data class FirstWeekInputs(
     val nowMillis: Long,
     /** The person closed the card. */
     val dismissed: Boolean,
-    /** An account that is not archived carries its last four digits. */
+    /** An account that is not archived carries its last digits (three or four). */
     val accountWithDigits: Boolean,
     /** Any budget limit is set. */
     val budgetSet: Boolean,
@@ -45,7 +45,7 @@ object FirstWeek {
         val age = (i.nowMillis - started).coerceAtLeast(0)
         if (age >= DAYS * DAY_MS) return emptyList()
         val all = buildList {
-            add(FirstWeekItem(FirstWeekStep.ACCOUNT_DIGITS, "Add an account with its last four digits", "The digits let a bank text find its account by itself", i.accountWithDigits))
+            add(FirstWeekItem(FirstWeekStep.ACCOUNT_DIGITS, "Add an account with its last 3 or 4 digits", "The digits let a bank text find its account by itself", i.accountWithDigits))
             add(FirstWeekItem(FirstWeekStep.BUDGET, "Set a budget", "A limit for the month, so Home can tell you how you are doing", i.budgetSet))
             when (i.capture) {
                 FirstWeekCapture.SWITCH -> add(FirstWeekItem(FirstWeekStep.CAPTURE, "Turn on capture", "Texts or payment notifications become entries for you to review", i.captureOn))

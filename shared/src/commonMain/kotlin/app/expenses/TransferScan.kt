@@ -1,15 +1,13 @@
 package app.expenses
 
-import app.expenses.core.domain.AccountLooks
+import app.expenses.core.domain.AccountMatch
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.TransferPair
 import app.expenses.core.domain.TransferPairs
 import app.expenses.core.domain.TransferSide
-import app.expenses.core.domain.ledger.AccountType
 import app.expenses.core.parsers.GenericAlertParser
 import app.expenses.core.parsers.ParseResult
 import app.expenses.core.parsers.TransferClues
-import app.expenses.core.storage.CaptureAccounts
 import app.expenses.core.storage.EarlierEntry
 import app.expenses.core.storage.InboxItem
 
@@ -50,15 +48,16 @@ class TransferScan private constructor(
             if (movable.size < 2 || eligible.isEmpty()) return null
             val names = movable.associate { it.id to it.name }
             val looks = ok.looks.all().filter { it.last4 != null }
-            val looksByDigits = looks.groupBy { it.last4!! }
-            val typeOf = accounts.associate { it.id to AccountType.valueOf(it.type) }
+            val resolver = AccountResolver(ok, accounts.mapTo(HashSet()) { it.id })
             val cache = HashMap<String, String?>()
-            /** The movable account these digits (as one bank prints them) stand for: the account carrying them, else the one remembered for this bank and digits. */
-            fun accountFor(issuer: String, digits: String?): String? {
+            /**
+             * The movable account these digits (as one bank prints them, three or four) stand for, only when exactly one could be meant ([AccountMatch]: the account carrying them, else the one remembered for this
+             * bank and digits, else one whose longer digits end the same). [ownBank]: the text is from [issuer] about its own account, so another bank's account is ruled out; false for the digits of the OTHER end,
+             * whose bank the text does not say. Several accounts that fit give null: a pair is never made on a guess.
+             */
+            fun accountFor(issuer: String, digits: String?, ownBank: Boolean = true): String? {
                 if (digits == null) return null
-                return cache.getOrPut("$issuer|$digits") {
-                    (AccountLooks.pick(looksByDigits[digits].orEmpty().mapNotNull { l -> typeOf[l.accountId]?.let { l.accountId to it } }, preferCard = false) ?: ok.templates.setting(CaptureAccounts.key(issuer, digits)))?.takeIf { it in names }
-                }
+                return cache.getOrPut("$issuer|$digits|$ownBank") { resolver.accountFor(issuer, digits, bankKnown = ownBank)?.takeIf { it in names } }
             }
             val byId = items.associateBy { it.id }
             val sides = LinkedHashMap<String, TransferSide>()
@@ -68,7 +67,7 @@ class TransferScan private constructor(
                 val body = i.body.orEmpty()
                 val counter = TransferClues.counterLast4(body, i.accountLast4)
                 val own = accountFor(i.issuer, i.accountLast4)
-                val names2 = accountFor(i.issuer, counter)?.takeIf { it != own }
+                val names2 = accountFor(i.issuer, counter, ownBank = false)?.takeIf { it != own }
                 namesOther[i.id] = counter != null && names2 == null
                 sides[i.id] = TransferSide(i.id, i.direction == "DEBIT", i.amountMinor, i.receivedAt, own, names2, TransferClues.hasTransferWords(body))
             }
@@ -90,7 +89,7 @@ class TransferScan private constructor(
                     earlierOf[key] = e
                     val parsed = e.originText?.let { t -> (GenericAlertParser.parse(t) as? ParseResult.Parsed)?.alert }
                     val own = accountFor(item.issuer, parsed?.accountLast4)
-                    entrySides[key] = TransferSide(key, e.outgoing, item.amountMinor, e.receivedAt ?: e.occurredAt, e.accountId, accountFor(item.issuer, parsed?.counterLast4)?.takeIf { it != e.accountId && it != own }, e.originText?.let(TransferClues::hasTransferWords) == true, accepted = true)
+                    entrySides[key] = TransferSide(key, e.outgoing, item.amountMinor, e.receivedAt ?: e.occurredAt, e.accountId, accountFor(item.issuer, parsed?.counterLast4, ownBank = false)?.takeIf { it != e.accountId && it != own }, e.originText?.let(TransferClues::hasTransferWords) == true, accepted = true)
                 }
             }
             val offers = HashMap<String, Pair<TransferPair, EarlierEntry>>()

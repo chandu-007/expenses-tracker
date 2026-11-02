@@ -48,7 +48,7 @@ object Duplicates {
 
     /**
      * For each pending item, the older pending item it probably repeats: same direction and amount, received within [PENDING_WINDOW_MS], and not a
-     * different bank reference (two payments of the same amount with different references are two payments) and not different last four digits when both name them,
+     * different bank reference (two payments of the same amount with different references are two payments) and not different digits of the account when both name them (three and four digits of one account are the same: [AccountDigits.same]),
      * and, for two texts from one sender, only when the
      * reference is the same: one bank rarely texts twice about one payment, but a person often pays the same amount twice. The exception is a payment app's
      * notifications ([PendingKey.fromApp]): an app often posts the same notification twice, so two from one app are a likely repeat. This is also how a payment app's
@@ -64,7 +64,7 @@ object Duplicates {
                 val window = if (sameRef && e.sender != later.sender) SAME_REFERENCE_WINDOW_MS else PENDING_WINDOW_MS
                 e.direction == later.direction && e.amountMinor == later.amountMinor && later.receivedAt - e.receivedAt <= window &&
                     !(e.reference != null && later.reference != null && !sameRef) &&
-                    !((e.fromMail || later.fromMail) && e.last4 != null && later.last4 != null && e.last4 != later.last4) &&
+                    !((e.fromMail || later.fromMail) && e.last4 != null && later.last4 != null && !AccountDigits.same(e.last4, later.last4)) &&
                     (e.sender != later.sender || (e.fromApp && later.fromApp) || sameRef)
             }
             if (earlier != null) out[later.id] = earlier.id

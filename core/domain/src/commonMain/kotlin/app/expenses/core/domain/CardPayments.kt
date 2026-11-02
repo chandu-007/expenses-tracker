@@ -137,7 +137,7 @@ object CardPayments {
     fun accountFor(description: String, accounts: List<CardRef>): String? {
         val digits = last4(description)
         if (digits != null) {
-            val hit = accounts.filter { it.last4 == digits }
+            val hit = accounts.filter { AccountDigits.same(it.last4, digits) } // an account saved with three digits is found by a line that shows four
             if (hit.size == 1) return hit.single().id
             if (hit.size > 1) return null
         }

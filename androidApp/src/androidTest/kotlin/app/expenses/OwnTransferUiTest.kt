@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -152,9 +153,9 @@ class OwnTransferUiTest {
     fun withNoDigitsOnTheDestinationAccountNothingIsPairedAndTheCardsAskForTheDigits() {
         twoAccounts(digitsOnSavings = false); ingest(out, now); ingest(into, now + 40_000)
         launch(); openInbox(); val o = idAt(now); val i = idAt(now + 40_000)
-        waitFor("inbox_$o"); waitFor("inbox_$i")
+        waitFor("inbox_$o"); compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$i")); waitFor("inbox_$i") // the cards are taller since a card can carry the account question
         assertTrue(!has("inbox_transfer_$o"), "no combined card")
-        assertTrue(textOf("inbox_setup_digits_$i").contains("Set the last four digits"), textOf("inbox_setup_digits_$i"))
+        assertTrue(textOf("inbox_setup_digits_$i").contains("Set the last 3 or 4 digits"), textOf("inbox_setup_digits_$i"))
         assertTrue(textOf("inbox_setup_digits_$i").contains("recognise transfers"))
     }
 

@@ -99,7 +99,8 @@ import app.expenses.core.storage.InboxStatus
 import app.expenses.core.parsers.BillKind
 import app.expenses.core.domain.CardTier
 import app.expenses.core.domain.CardNetwork
-import app.expenses.core.domain.AccountLooks
+import app.expenses.core.domain.AccountDigits
+import app.expenses.core.domain.AccountMatch
 import app.expenses.core.domain.AccountLook
 import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.parsers.PayeeKind
@@ -194,8 +195,15 @@ data class InboxRowUi(
     val convertNote: String = "",
     /** "Might be a transfer to your other account ..." for a text whose other half has not arrived; empty otherwise. */
     val transferHint: String = "",
-    /** "Set the last four digits of your accounts so I can recognise transfers": when the text looks like a transfer but its accounts could not be told; empty otherwise. */
+    /** "Set the last 3 or 4 digits of your accounts so I can recognise transfers": when the text looks like a transfer but its accounts could not be told; empty otherwise. */
     val setupHint: String = "",
+    /** Empty when the account for this text is known. Otherwise why it is asked: the card then shows "Which account is this?" with the account chips, and Add all and swipe leave it out. */
+    val accountAsk: String = "",
+    /** When several accounts carry the text's digits: only these (ids) are offered. Empty: every account is. */
+    val accountChoices: List<String> = emptyList(),
+    /** What a new account for this text starts as: its name ("ICICI Bank 123") and type ("BANK", or "CREDIT_CARD" when the text says credit card). The digits are [last4]. */
+    val newAccountName: String = "",
+    val newAccountType: String = "BANK",
 )
 
 /** Someone lent to or borrowed from. */
@@ -1368,7 +1376,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val clean = AccountRules.normalizeName(name)
                     AccountRules.checkName(all.map { Account(AccountId(it.id), it.name, AccountType.valueOf(it.type), inr) }, clean, id)?.let { return@write it }
                     val kind = AccountType.valueOf(type)
-                    val digits = AccountLooks.parseLast4(last4Text).getOrElse { return@write it.message }
+                    val digits = AccountDigits.parse(last4Text).getOrElse { return@write it.message }
                     val typed = openingText.trim()
                     val opening = if (typed.isEmpty()) 0L else (parseAmount(typed, inr)?.minorUnits ?: return@write "Enter the amount as a number, like 25000 or 1250.50")
                     if (id != null && all.first { it.id == id }.type.let { AccountType.valueOf(it).isLiability } != kind.isLiability &&
@@ -1977,7 +1985,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             if (b.currency != item.currency) return@firstOrNull false
             val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             if (due != null && (today < due.minusDays(30) || today > due.plusDays(15))) return@firstOrNull false
-            val sameAccount = if (b.accountLast4 != null && item.accountLast4 != null) b.accountLast4 == item.accountLast4 else b.issuer.equals(item.issuer, ignoreCase = true) && b.accountLast4 == null
+            val sameAccount = if (b.accountLast4 != null && item.accountLast4 != null) AccountDigits.same(b.accountLast4, item.accountLast4) else b.issuer.equals(item.issuer, ignoreCase = true) && b.accountLast4 == null
             val card = b.kind == BillKind.CREDIT_CARD.name
             // a payment into a card may be anything from the minimum to the whole; any other bill is paid in full
             val amountOk = if (card && item.direction == "CREDIT") item.amountMinor >= (b.minDueMinor ?: b.amountMinor) && item.amountMinor <= b.amountMinor else item.amountMinor == b.amountMinor
@@ -1996,6 +2004,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private fun inboxRows(ok: AppContainer.Opened.Ok): List<InboxRowUi> {
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
+        val resolver = AccountResolver(ok, accounts.mapTo(HashSet()) { it.id })
+        val accountNames = accounts.associate { it.id to it.name }
         val usable = ok.categories.list().filter { !it.hidden && it.kind.forExpense }.map { it.id }.toSet() // suggestions are for debits, which are expenses
         val rules = ok.captureRules.rules()
         val learnedRows = ok.captureRules.learnedRows()
@@ -2029,9 +2039,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 reverses != null -> "Carries the reference of ${if (isCredit) "the payment" else "the money received"} \"${reverses.merchant ?: "an entry"}\" on ${fmt.format(dateOfMillis(reverses.occurred_at, zone))}: looks like its refund or reversal, not a repeat"
                 else -> null
             }
-            // the account that carries the text's last four digits (a card when the text says card), else the one remembered for this bank and digits
-            val byDigits = ok.looks.accountFor(i.accountLast4, preferCard = i.body.orEmpty().contains("card", ignoreCase = true))?.takeIf { id -> accounts.any { it.id == id } }
-            val remembered = byDigits ?: ok.templates.setting(accountKey(i.issuer, i.accountLast4))?.takeIf { id -> accounts.any { it.id == id } }
+            // the account the text's digits point at (the same digits, else what the person chose for this bank and digits, else digits that end the same: AccountMatch), a card when the text says card
+            val accountMatch = resolver.resolve(i.issuer, i.accountLast4, preferCard = i.body.orEmpty().contains("card", ignoreCase = true))
+            val remembered = (accountMatch as? AccountMatch.Result.Found)?.accountId
+            val ask = AccountAsk.of(accountMatch, i.issuer, i.accountLast4, accountNames)
+            // with several accounts that fit the digits there is no guess: the person is asked, and Add waits for the answer (with no digits that fit any, the first account stays the suggestion, as before)
+            val goesTo = remembered ?: if (accountMatch is AccountMatch.Result.Several) "" else accounts.firstOrNull()?.id.orEmpty()
             val kind = KindRules.of(i.body.orEmpty(), if (i.direction == "CREDIT") Direction.CREDIT else Direction.DEBIT)
             val cards = accounts.filter { it.type == "CREDIT_CARD" }
             val cashAccounts = accounts.filter { it.type == "CASH" }
@@ -2076,7 +2089,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(i.receivedAt),
-                i.accountLast4, i.body.orEmpty(), payee, remembered ?: accounts.firstOrNull()?.id.orEmpty(), suggestion?.categoryId.orEmpty(),
+                i.accountLast4, i.body.orEmpty(), payee, goesTo, suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
                 duplicateNote = note.takeIf { reverses == null }, relatedNote = note.takeIf { reverses != null }, duplicateOfEntry = match?.entry?.id,
                 nameable = rawPayee != null,
@@ -2084,6 +2097,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
                 categoryNote = suggestion?.note.orEmpty(), certainty = when (suggestion?.certainty) { Certainty.SURE -> "sure"; Certainty.CHECK -> "check"; null -> "" },
                 categorySource = suggestion?.source?.name.orEmpty(), alternatives = suggestion?.alternatives.orEmpty(),
+                accountAsk = ask?.text.orEmpty(), accountChoices = ask?.choices.orEmpty(), newAccountName = AccountAsk.newName(i.issuer, i.accountLast4), newAccountType = AccountAsk.newType(i.body.orEmpty()),
             )
         }
         return withTransfers(ok, items, base, accounts)
@@ -2137,10 +2151,79 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val setup = scan.digitsWouldHelp && (lone.side.hinted || lone.namesOther || lone.side.namesAccountId != null) && (lone.side.accountId == null || lone.namesOther)
             out += r.copy(
                 transferHint = might?.let { "Might be a transfer ${if (lone.side.outgoing) "to" else "from"} your other account, $it. If its other text arrives, the two are put together." }.orEmpty(),
-                setupHint = if (might == null && setup) "Might be a transfer between your own accounts. Set the last four digits of your accounts (More > Accounts) so I can recognise transfers." else "",
+                setupHint = if (might == null && setup) "Might be a transfer between your own accounts. Set the last 3 or 4 digits of your accounts (More > Accounts) so I can recognise transfers." else "",
             )
         }
         return out
+    }
+
+    // ---- "Which account is this?": the account the person picks for a bank's texts is remembered, and the waiting texts of the same bank and digits follow it ----
+
+    /** What the last account choice changed, held for the few seconds its Undo is offered: the setting's key and what it held before, and the account created for the choice (removed again by Undo). */
+    private class AccountChoice(val itemId: String, val key: String, val before: String?, val createdAccountId: String?)
+    @Volatile private var accountChoice: AccountChoice? = null
+
+    /**
+     * "Which account is this?": the person picked [accountId] for the waiting text [id]. The choice is remembered for this bank and these digits (the setting an added item also writes), so the
+     * other waiting texts of the same bank and digits take the account at once and later ones start with it. "Using X for HDFC Bank ending 1234 · 2 more waiting texts follow" is offered with
+     * Undo, which puts the earlier state back. Nothing is added to the ledger.
+     */
+    fun chooseCaptureAccount(id: String, accountId: String) = withStore { ok ->
+        applyAccountChoice(ok, id, accountId, createdAccountId = null)?.let { problem -> _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st } }
+    }
+
+    /** Returns why not, or null. Runs inside the store lock. */
+    private fun applyAccountChoice(ok: AppContainer.Opened.Ok, id: String, accountId: String, createdAccountId: String?): String? {
+        val item = ok.inbox.get(id)?.takeIf { it.status == InboxStatus.PENDING } ?: return "That item is no longer in the inbox."
+        val account = ok.db.schemaQueries.accountById(accountId).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.archived == 0L } ?: return "That account is no longer there."
+        val key = accountKey(item.issuer, item.accountLast4)
+        val before = ok.templates.setting(key)
+        val askedBefore = _inbox.value.filter { it.id != id && it.accountAsk.isNotEmpty() && it.issuer == item.issuer && it.last4 == item.accountLast4 }.map { it.id }
+        ok.templates.putSettingIfChanged(key, accountId)
+        _inbox.value = inboxRows(ok)
+        val now = _inbox.value.associateBy { it.id }
+        val followed = askedBefore.count { now[it]?.let { r -> r.accountAsk.isEmpty() && r.accountId == accountId } == true }
+        accountChoice = AccountChoice(id, key, before, createdAccountId)
+        val bank = item.issuer + (item.accountLast4?.let { " ending $it" } ?: "")
+        val follows = if (followed == 0) "" else " · $followed more waiting ${if (followed == 1) "text follows" else "texts follow"}"
+        _inboxUndo.value = ScreenUndo("$ACCOUNT_CHOICE_UNDO$id", (if (createdAccountId != null) "Created ${account.name} and using it for $bank" else "Using ${account.name} for $bank") + follows)
+        return null
+    }
+
+    /**
+     * "New account ending 123": makes an account called [name] of [type] ("BANK", "CREDIT_CARD", ...) carrying the digits the waiting text [id] prints, and uses it for that bank and those digits as
+     * [chooseCaptureAccount] does. Undo takes the choice back and removes the account again (it has no entries yet). [onDone] gets null, or why not (a name already in use, say).
+     */
+    fun createCaptureAccount(id: String, name: String, type: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val item = ok.inbox.get(id)?.takeIf { it.status == InboxStatus.PENDING } ?: return@write "That item is no longer in the inbox."
+                    val all = ok.db.schemaQueries.selectAccounts().executeAsList()
+                    val clean = AccountRules.normalizeName(name)
+                    AccountRules.checkName(all.map { Account(AccountId(it.id), it.name, AccountType.valueOf(it.type), inr) }, clean, null)?.let { return@write it }
+                    val kind = AccountType.valueOf(type)
+                    val accountId = Uuid.random().toString()
+                    ok.store.saveAccount(Account(AccountId(accountId), clean, kind, inr, 0L, false))
+                    ok.looks.save(AccountLook(accountId, null, null, item.accountLast4?.takeIf { AccountDigits.isValid(it) }))
+                    refresh(ok)
+                    applyAccountChoice(ok, id, accountId, createdAccountId = accountId)
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    private fun undoAccountChoice(itemId: String) {
+        val held = accountChoice?.takeIf { it.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
+        accountChoice = null
+        withStore { ok ->
+            if (held.before == null) ok.templates.removeSetting(held.key) else ok.templates.putSetting(held.key, held.before)
+            held.createdAccountId?.let { created ->
+                try { ok.looks.save(AccountLook(created)); ok.store.deleteAccount(AccountId(created)) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            }
+            _inbox.value = inboxRows(ok); refresh(ok)
+        }
     }
 
     /** "These are separate": the person says these two waiting texts are not one transfer; they are never put together again. */
@@ -2222,6 +2305,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private companion object {
         /** The id of the Undo bar of "Make it a transfer": this and the item's id. */
         const val MADE_TRANSFER_UNDO = "transfer:"
+
+        /** The id of the Undo bar of "Which account is this?": this and the item's id. */
+        const val ACCOUNT_CHOICE_UNDO = "account:"
     }
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)
@@ -2439,6 +2525,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** Brings back the item whose skip was just offered for Undo, as it was (its text included). */
     fun undoDismissCapture(id: String) {
         if (id.startsWith(MADE_TRANSFER_UNDO)) { undoMadeTransfer(id.removePrefix(MADE_TRANSFER_UNDO)); return }
+        if (id.startsWith(ACCOUNT_CHOICE_UNDO)) { undoAccountChoice(id.removePrefix(ACCOUNT_CHOICE_UNDO)); return }
         val held = skippedCapture?.takeIf { it.first == id } // taken now: the bar clears it as soon as it is gone, before the store work below runs
         if (held == null) return
         withStore { ok ->
@@ -2449,7 +2536,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** The Undo bar for a skip has gone (used, or timed out): what was kept for it is let go. A newer skip's own offer is left alone. */
     fun inboxUndoGone(id: String) {
-        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null }
+        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null; accountChoice = null }
     }
 
     /**
@@ -3091,10 +3178,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** The person's own account that the original words of an entry name as the other end ("TPT-..." in a credit, "To A/c xxxxxxxxxx5678" in a debit), by the digits set on the accounts; null when there is none. */
     private fun namedAccountReader(ok: AppContainer.Opened.Ok): (app.expenses.core.domain.CandidateEntry) -> String? {
-        val byDigits = ok.looks.all().filter { it.last4 != null }.groupBy { it.last4!! }
+        val accounts = ok.db.schemaQueries.allAccounts().executeAsList().associateBy { it.id }
+        val withDigits = ok.looks.all().mapNotNull { l -> l.last4?.let { d -> accounts[l.accountId]?.let { a -> AccountMatch.Candidate(a.id, a.name, AccountType.valueOf(a.type), d) } } }
         return { e ->
             val counter = e.originText?.let { t -> (app.expenses.core.parsers.GenericAlertParser.parse(t) as? app.expenses.core.parsers.ParseResult.Parsed)?.alert?.counterLast4 }
-            counter?.let { byDigits[it].orEmpty().map { l -> l.accountId }.distinct().singleOrNull() }?.takeIf { it != e.accountId }
+            // the one account these digits (three or four, as the text printed them) point at; several that fit name none
+            (AccountMatch.resolve(counter, null, withDigits) as? AccountMatch.Result.Found)?.accountId?.takeIf { it != e.accountId }
         }
     }
 

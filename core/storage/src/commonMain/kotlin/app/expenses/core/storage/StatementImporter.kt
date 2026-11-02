@@ -149,16 +149,11 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
         ImportResult(imported, there, spend, income, matched, transfers, transferMinor)
     }
 
-    /** Whether a statement line's words say it is a move between the person's own accounts: transfer wording, or the last four digits of the other account ([other], when it has some set). */
+    /** Whether a statement line's words say it is a move between the person's own accounts: transfer wording, or the digits (three or four) of the other account ([other], when it has some set). */
     private fun readsLikeTransfer(words: String, other: String?): Boolean {
         if (TransferWording.saysOrRail(words)) return true
-        val last4 = other?.let { q.accountLookOf(it).executeAsOneOrNull()?.last4 } ?: return false
-        var at = words.indexOf(last4)
-        while (at >= 0) {
-            if ((at == 0 || !words[at - 1].isDigit()) && (at + 4 >= words.length || !words[at + 4].isDigit())) return true
-            at = words.indexOf(last4, at + 1)
-        }
-        return false
+        val digits = other?.let { q.accountLookOf(it).executeAsOneOrNull()?.last4 } ?: return false
+        return app.expenses.core.domain.AccountDigits.mentionedIn(words, digits)
     }
 
     /** Whether the file has the row that is the other side of [t]: on the [other] account, the opposite direction, the same amount, within a day. */

@@ -169,8 +169,8 @@ class NotificationService(
         for (b in tracked) {
             val day = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
             val near = due.filter { it.accountId !in silenced && kotlin.math.abs(it.dueDate.toEpochDays() - day.toEpochDays()) <= 2 }
-            // the account that carries the bill's last four digits, else the account remembered for its issuer and digits
-            val byDigits = b.accountLast4?.let { d -> app.expenses.core.domain.AccountLooks.pick(q.accountsWithLast4(d).executeAsList().map { it.id to app.expenses.core.domain.ledger.AccountType.valueOf(it.type) }, preferCard = true) }
+            // the account that carries the bill's last digits (three or four), else the account remembered for its issuer and digits
+            val byDigits = (app.expenses.core.domain.AccountMatch.resolve(b.accountLast4, null, q.accountsWithDigits().executeAsList().map { app.expenses.core.domain.AccountMatch.Candidate(it.id, it.name, app.expenses.core.domain.ledger.AccountType.valueOf(it.type), it.last4) }, preferCard = true) as? app.expenses.core.domain.AccountMatch.Result.Found)?.accountId
             val mapped = byDigits ?: q.settingValue(CaptureAccounts.key(b.issuer, b.accountLast4)).executeAsOneOrNull()
             val hit = if (mapped != null) near.firstOrNull { it.accountId == mapped } else near.singleOrNull()
             if (hit != null) silenced += hit.accountId

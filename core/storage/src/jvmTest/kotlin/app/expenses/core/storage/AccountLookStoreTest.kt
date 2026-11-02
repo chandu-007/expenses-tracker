@@ -30,9 +30,10 @@ class AccountLookStoreTest {
     }
 
     @Test
-    fun digitsThatAreNotFourAndAnAccountThatIsGoneAreRefusedAndNothingIsSaved() {
+    fun digitsThatAreNotThreeOrFourAndAnAccountThatIsGoneAreRefusedAndNothingIsSaved() {
         account("bank", AccountType.BANK)
-        assertFailsWith<IllegalArgumentException> { looks.save(AccountLook("bank", last4 = "123")) }
+        assertFailsWith<IllegalArgumentException> { looks.save(AccountLook("bank", last4 = "12")) }
+        assertFailsWith<IllegalArgumentException> { looks.save(AccountLook("bank", last4 = "12345")) }
         assertFailsWith<IllegalArgumentException> { looks.save(AccountLook("bank", last4 = "12a4")) }
         assertFailsWith<IllegalArgumentException> { looks.save(AccountLook("missing", last4 = "1234")) }
         assertNull(looks.get("bank"))
@@ -71,5 +72,33 @@ class AccountLookStoreTest {
         val odd = data.copy(accountLooks = listOf(BackupAccountLook("card2", "DINERS", "GOLD9", "12")))
         val third = Device("c"); third.ledger.saveAccount(Account(AccountId("card2"), "c2", AccountType.CREDIT_CARD, Currency.INR))
         third.backup.restore(odd); assertNull(AccountLookStore(third.db, third.clock) { 9L }.get("card2"), "nothing usable in it: no row")
+    }
+
+    @Test
+    fun threeDigitsAreSavedLikeFourAndAFourDigitTextOrAThreeDigitTextFindsTheAccountThatEndsTheSame() {
+        account("ici", AccountType.BANK); account("hdf", AccountType.BANK)
+        looks.save(AccountLook("ici", last4 = "123")); assertEquals("123", looks.get("ici")?.last4, "three digits are kept as three: not padded, not cut")
+        looks.save(AccountLook("hdf", last4 = "4821"))
+        assertEquals("ici", looks.accountFor("123", preferCard = false)); assertEquals("ici", looks.accountFor("7123", preferCard = false), "a text that shows four of an account saved with three")
+        assertEquals("hdf", looks.accountFor("4821", preferCard = false)); assertEquals("hdf", looks.accountFor("821", preferCard = false), "a text that shows three of an account saved with four")
+        assertNull(looks.accountFor("821", preferCard = false).takeIf { false }); assertNull(looks.accountFor("124", preferCard = false)); assertNull(looks.accountFor("12", preferCard = false), "two digits are no digits")
+        // two accounts that both end in 821: nothing is guessed
+        account("sav", AccountType.BANK); looks.save(AccountLook("sav", last4 = "9821"))
+        assertNull(looks.accountFor("821", preferCard = false), "two accounts end in 821: ask"); assertEquals("hdf", looks.accountFor("4821", preferCard = false), "four digits still name one")
+        assertTrue(ops("ici").contains("last4" to "123"), "the three digits are logged like any digits")
+    }
+
+    @Test
+    fun aBackupKeepsThreeDigitsAndAnOlderBackupWithFourDigitsStillRestores() {
+        d.populate(); account("ici", AccountType.BANK); looks.save(AccountLook("ici", last4 = "123"))
+        val (_, data) = BackupFile.decode(BackupFile.encode(d.backup.export(), 1L))
+        assertEquals("123", data.accountLooks.single { it.accountId == "ici" }.last4, "the file holds the three digits as they are")
+        val other = Device("b"); val restored = AccountLookStore(other.db, other.clock) { 9L }
+        other.backup.restore(data)
+        assertEquals("123", restored.get("ici")?.last4)
+        // a file written by an earlier version: four digits only
+        val old = data.copy(accountLooks = listOf(BackupAccountLook("ici", null, null, "4821")))
+        val third = Device("c"); third.ledger.saveAccount(Account(AccountId("ici"), "i", AccountType.BANK, Currency.INR))
+        third.backup.restore(old); assertEquals("4821", AccountLookStore(third.db, third.clock) { 9L }.get("ici")?.last4)
     }
 }

@@ -33,6 +33,7 @@ class CorpusReportTest {
         val unrecognised = mutableListOf<String>()
         val fieldMisses = mutableListOf<String>()
         val fieldHits = linkedMapOf("reference" to 0, "account" to 0, "date" to 0)
+        var threeTotal = 0; var threeRead = 0; var digitsRight = 0
 
         for (r in positives) {
             val stat = perBank.getOrPut(r.file.substringBefore('/')) { IntArray(3) }
@@ -52,6 +53,8 @@ class CorpusReportTest {
             if (dateOk) fieldHits["date"] = fieldHits.getValue("date") + 1
             if (refOk) fieldHits["reference"] = fieldHits.getValue("reference") + 1
             if (acctOk) fieldHits["account"] = fieldHits.getValue("account") + 1
+            if (r.last4.length == 3) { threeTotal++; if (a.accountLast4 == r.last4) threeRead++ }
+            if (acctOk && r.last4.isNotEmpty()) digitsRight++
             if (directionOk && amountOk && dateOk && refOk && acctOk) { fullyRight++; stat[1]++ }
             else fieldMisses += "${r.file}: " + listOfNotNull("direction".takeIf { !directionOk }, "amount".takeIf { !amountOk }, "date".takeIf { !dateOk }, "reference".takeIf { !refOk }, "account".takeIf { !acctOk }).joinToString()
         }
@@ -64,6 +67,8 @@ class CorpusReportTest {
         println("CORPUS unrecognised ${unrecognised.size}; non-transactions rejected $rejected/${negatives.size}")
         println("CORPUS per issuer (variants, fully right, recognised): " + perBank.entries.joinToString { "${it.key}=${it.value[0]}/${it.value[1]}/${it.value[2]}" })
         fieldMisses.forEach { println("CORPUS   field miss: $it") }
+        // some banks (ICICI and IDFC accounts in this corpus) print only three digits: the key holds them as three, and they must be read as three, never padded or cut
+        println("CORPUS three-digit account texts: read with exactly their three digits $threeRead of $threeTotal; account digits right on $digitsRight of ${positives.count { it.last4.isNotEmpty() }} texts that print any")
 
         // Regression floors for the generic layer (not accuracy claims) ...
         assertTrue(recognised >= 125, "recognised fell to $recognised")
@@ -72,5 +77,6 @@ class CorpusReportTest {
         // ... and a ceiling on silent errors: at most the two sign errors found so far, none on amount.
         assertTrue(confidentlyWrong.size <= 2, "confidently wrong results grew to ${confidentlyWrong.size}: $confidentlyWrong")
         assertEquals(0, wrongAmounts, "a recognised message produced a wrong amount: $confidentlyWrong")
+        assertTrue(threeTotal >= 17 && threeRead == threeTotal, "a three-digit account mask was not read as exactly three digits: $threeRead of $threeTotal")
     }
 }

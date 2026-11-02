@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -105,7 +106,7 @@ class DuplicatesUiTest {
         ingest("AX-HDFCBK-S", debit("666666666666", vpa = "other@ybl"), 1_000_000 + 60 * 60_000) // an hour later with its own reference: a second payment
         launch(); openInbox(); val byTime = ids()
         val first = byTime.getValue(1_000_000); val second = byTime.getValue(1_000_000 + 4 * 60_000); val third = byTime.getValue(1_000_000 + 60 * 60_000)
-        waitFor("inbox_duplicate_$second")
+        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$second")); waitFor("inbox_duplicate_$second")
         assertTrue(textOf("inbox_duplicate_$second").contains("same payment as the text from HDFC Bank"))
         assertTrue(!has("inbox_duplicate_$first") && !has("inbox_duplicate_$third"))
     }
@@ -136,7 +137,7 @@ class DuplicatesUiTest {
         ingest("AX-HDFCBK-S", debitText, 1_000); ingest("AX-HDFCBK-S", reversal, 2_000)
         launch(); openInbox()
         val first = ids().getValue(1_000); val second = ids().getValue(2_000)
-        waitFor("inbox_$first"); tap("inbox_add_$first"); compose.waitUntil(10_000) { !has("inbox_$first") }
+        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$first")); waitFor("inbox_$first"); tap("inbox_add_$first"); compose.waitUntil(10_000) { !has("inbox_$first") }
         tap("inbox_add_$second"); compose.waitUntil(10_000) { has("inbox_empty") }
         ingest("AX-HDFCBK-S", reversal, 3_000_000) // the same words again, stamped later: another delivery
         tap("inbox_back"); openInbox(); val again = ids().getValue(3_000_000); waitFor("inbox_duplicate_$again")

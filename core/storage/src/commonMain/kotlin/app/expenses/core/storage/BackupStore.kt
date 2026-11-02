@@ -236,7 +236,7 @@ class BackupStore(
         for (l in data.accountLooks) if (q.accountLookOf(l.accountId).executeAsOneOrNull() == null && q.accountById(l.accountId).executeAsOneOrNull()?.deleted == 0L) {
             val network = l.network?.takeIf { n -> app.expenses.core.domain.CardNetwork.entries.any { it.name == n } }
             val tier = l.tier?.takeIf { t -> app.expenses.core.domain.CardTier.entries.any { it.name == t } }
-            val digits = l.last4?.takeIf { app.expenses.core.domain.AccountLooks.parseLast4(it).isSuccess }
+            val digits = l.last4?.takeIf { app.expenses.core.domain.AccountDigits.parse(it).isSuccess }
             if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
         }
         for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX) || k.startsWith(RATE_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)

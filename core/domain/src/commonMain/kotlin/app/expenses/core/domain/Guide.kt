@@ -114,7 +114,7 @@ object Guide {
         GuideStep(
             "cards", "Account cards", "Every account is shown as a card, on this page and in the strip on Home, so you can tell them apart at a glance.",
             listOf(
-                "Add the last 4 digits of a card or an account number, as your bank's texts show them. A text or a bill then finds its account by itself.",
+                "Add the last 3 or 4 digits of a card or an account number, as your bank's texts show them (some banks show only 3). A text or a bill then finds its account by itself.",
                 "For a credit card, choose its network (Visa, Mastercard, RuPay, American Express) and tier, and its card takes that look.",
                 "The designs are drawn for this app; they copy no bank's card.",
             ),
