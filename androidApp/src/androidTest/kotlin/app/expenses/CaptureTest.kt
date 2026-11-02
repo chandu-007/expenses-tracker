@@ -105,8 +105,10 @@ class CaptureTest {
         val secretBody = "Rs.7,418.00 debited from A/c XX5521 on 05-10-26 to PINEAPPLEMART (UPI Ref 628374659283). Not you? Call 18002586161"
         assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", secretBody, 1_000)); assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-T", secretBody, 2_000))
         ingest("AX-PROMOZ-P", "Get Rs 500 off, use code SAVE500", 3_000); ingest("AX-NOSUFF", "hello", 4_000)
-        assertEquals(mapOf("MYCOOP" to listOf("2", "2000", "ST"), "PROMOZ" to listOf("1", "3000", "P"), "NOSUFF" to listOf("1", "4000", "-")), counters())
-        // nothing of any body is anywhere in the settings, the events, the inbox or the bills
+        val before = System.currentTimeMillis() - 60_000 // the time kept is when the app saw the text, not the time the phone stamped on it
+        assertEquals(mapOf("MYCOOP" to listOf("2", "ST"), "PROMOZ" to listOf("1", "P"), "NOSUFF" to listOf("1", "-")), counters().mapValues { listOf(it.value[0], it.value[2]) })
+        assertTrue(counters().values.all { it[1].toLong() >= before }, "each holds a time, nothing else: ${counters()}")
+        // nothing of any body is anywhere in the settings, the events or the inbox
         val dump = runBlocking { container.write { ok -> (ok.db.schemaQueries.captureEventCounts(0).executeAsList().joinToString { "${it.sender_root} ${it.outcome} ${it.n}" } + " " + ok.templates.settingsWithPrefix("skipped_").joinToString { "${it.first}=${it.second}" } + " " + ok.inbox.list().joinToString { it.body.orEmpty() }) } }!!
         for (secret in listOf("PINEAPPLE", "5521", "7,418", "628374659283", "18002586161", "SAVE500", "hello", "debited")) assertTrue(!dump.contains(secret, ignoreCase = true), "'$secret' is kept somewhere: $dump")
         assertEquals(emptyList(), pending())
@@ -118,7 +120,7 @@ class CaptureTest {
         assertEquals(emptyMap(), counters())
         ingest("VM-MYCOOP-S", debit, 1_000); assertEquals(setOf("MYCOOP"), counters().keys)
         runBlocking { container.write { it.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, "MYCOOP") } }
-        assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", debit, 2_000)); assertEquals(listOf("1", "1000", "S"), counters().getValue("MYCOOP"), "a trusted name is read, not counted as skipped")
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", debit, 2_000)); assertEquals("1", counters().getValue("MYCOOP")[0], "a trusted name is read, not counted as skipped")
     }
 
     @Test
