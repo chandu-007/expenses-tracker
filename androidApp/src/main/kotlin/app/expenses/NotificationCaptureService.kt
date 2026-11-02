@@ -3,6 +3,7 @@ package app.expenses
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import app.expenses.core.domain.NotificationAccess
 import app.expenses.core.parsers.AppSources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,14 @@ import kotlinx.coroutines.launch
  * dropped on the first line, without their words being read.
  */
 class NotificationCaptureService : NotificationListenerService() {
+    /**
+     * The system drops a listener's binding now and then (the process was killed and restarted, a phone maker's memory manager) and does not always bind it again by itself.
+     * While access is still given, ask for the binding back (Android's documented remedy); when the person has turned access off this does nothing.
+     */
+    override fun onListenerDisconnected() {
+        if (accessGranted(applicationContext)) requestRebind(android.content.ComponentName(this, NotificationCaptureService::class.java))
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         // never this app's own notifications (bill and card reminders, the weekly recap carry amounts): they must not feed back into capture
         val n = sbn.notification
@@ -71,11 +80,9 @@ class NotificationCaptureService : NotificationListenerService() {
         /**
          * Whether the system has given this app notification access (the person turns that on in the phone's settings, not here). Read straight from the setting on each call:
          * `NotificationManagerCompat.getEnabledListenerPackages` keeps the last answer and never refreshes it when the setting has become null, so a screen that looked again on
-         * returning to the app could still be told "yes".
+         * returning to the app could still be told "yes". The list is parsed by [NotificationAccess] (every valid component format, several entries, null).
          */
-        fun accessGranted(context: android.content.Context): Boolean {
-            val flat = android.provider.Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
-            return flat.split(':').any { android.content.ComponentName.unflattenFromString(it)?.packageName == context.packageName }
-        }
+        fun accessGranted(context: android.content.Context): Boolean =
+            NotificationAccess.granted(android.provider.Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners"), context.packageName)
     }
 }

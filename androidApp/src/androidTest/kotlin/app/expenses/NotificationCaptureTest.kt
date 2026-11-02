@@ -35,11 +35,14 @@ class NotificationCaptureTest {
         resetApp()
         before = shell("settings get secure enabled_notification_listeners").trim().takeIf { it != "null" && it.isNotEmpty() }
         shell("settings put secure enabled_notification_listeners ${context.packageName}/${NotificationCaptureService::class.java.name}")
+        // Android 14 does not bind a listener written only to the secure setting (the list the system keeps is not reloaded); its own command does, and is harmless on older versions
+        shell("cmd notification allow_listener ${context.packageName}/${NotificationCaptureService::class.java.name}")
         manager.createNotificationChannel(NotificationChannel("t", "test", NotificationManager.IMPORTANCE_DEFAULT))
         compose(10_000) { NotificationCaptureService.accessGranted(context) }
     }
 
     @After fun tearDown() {
+        shell("cmd notification disallow_listener ${context.packageName}/${NotificationCaptureService::class.java.name}")
         if (before == null) shell("settings delete secure enabled_notification_listeners") else shell("settings put secure enabled_notification_listeners $before")
         manager.cancelAll(); resetApp()
     }
