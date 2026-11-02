@@ -37,4 +37,16 @@ object PayeeKinds {
         val words = n.split(' ', '.').filter { it.isNotEmpty() }
         return words.size in 2..3 && words.all { w -> w.all { it.isLetter() } && w.lowercase() !in shopWords } && n.none { it.isDigit() } && app.expenses.core.domain.DefaultRules.displayNameFor(n) == null
     }
+
+    /**
+     * Whether whoever PAID the person looks like an individual, for how far a learned income category is trusted: a mobile number, a UPI address that is not a known business shape, or a
+     * name of letters that reads like a person's or is a single word. A company ("ACME SOFTWARE PVT LTD", "SAMPLE TRADERS") or a business QR is not. Wrongly "yes" only costs a look.
+     */
+    fun paysLikeAPerson(payer: String?): Boolean {
+        val p = payer?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        if ('@' in p) return of(p) != PayeeKind.BUSINESS
+        if (looksLikePerson(p)) return true
+        val words = p.split(' ', '.').filter { it.isNotEmpty() }
+        return words.size == 1 && words[0].all { it.isLetter() } && words[0].lowercase() !in shopWords
+    }
 }

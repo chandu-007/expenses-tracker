@@ -159,6 +159,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var captureOpen by rememberSaveable { mutableStateOf(false) }
             var rulesOpen by rememberSaveable { mutableStateOf(false) }
             var healthOpen by rememberSaveable { mutableStateOf(false) }
+            // the one-at-a-time review of expenses with no category, opened from the card on Home
+            var categorising by rememberSaveable { mutableStateOf(false) }
+            val categoriseState by viewModel.categorise.collectAsStateWithLifecycle(context = MAIN)
             var privacyOpen by rememberSaveable { mutableStateOf(false) }
             val health by viewModel.captureHealth.collectAsStateWithLifecycle(context = MAIN)
             val captureRules by viewModel.captureRules.collectAsStateWithLifecycle(context = MAIN)
@@ -247,7 +250,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val closeEverything = {
                     adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; transferring = false; goaling = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
                     billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
-                    privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false
+                    privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false; categorising = false; viewModel.closeCategorise()
                     viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeTransferCandidates(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                 }
@@ -314,6 +317,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             kindChangeProblem = editorProblem,
                             onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
                             origin = e.origin,
+                            suggestedCategory = e.suggestion,
                         )
                         }
                     }
@@ -324,7 +328,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 } }
                 val screenKey = listOf(
                     history != null, !wide && editing is Editable.Form, !wide && editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
-                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring,
+                    customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
                 ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
@@ -470,6 +474,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val subs by viewModel.subscriptions.collectAsStateWithLifecycle(context = MAIN)
                         BackHandler { subscribing = false; viewModel.closeSubscriptions() }
                         app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions, onRepeat = viewModel::repeatSubscription)
+                    }
+                    k == 27 -> {
+                        BackHandler { categorising = false; viewModel.closeCategorise() }
+                        app.expenses.ui.CategoriseScreen(
+                            categoriseState, s.categories, onChoose = viewModel::categoriseChoose, onSkip = viewModel::categoriseSkip, onBack = { categorising = false; viewModel.closeCategorise() },
+                            onUndo = viewModel::undoCategorise, onUndoGone = viewModel::categoriseUndoGone,
+                        )
                     }
                     k == 26 -> {
                         val found by viewModel.transferCandidates.collectAsStateWithLifecycle(context = MAIN)
@@ -641,6 +652,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenSecurity = { securing = true },
                         onDismissWelcome = viewModel::dismissWelcome,
                         onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
+                        onOpenCategorise = { categorising = true; viewModel.openCategorise() },
+                        onSnoozeCategorise = viewModel::snoozeCategoriseNudge,
                         onDismissFirstWeek = viewModel::dismissFirstWeek,
                         onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                         onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },

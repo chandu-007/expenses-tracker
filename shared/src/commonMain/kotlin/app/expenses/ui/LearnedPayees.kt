@@ -35,7 +35,7 @@ internal fun LazyListScope.learnedSection(
             HorizontalDivider()
             Text("What the app has learned", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("learned_title"))
             Text(
-                "When you choose a category for a payee in To review, or change one later, the app starts with it next time. Your rules above still come first. Forget one to start again from the starter list.",
+                "When you choose a category for a payee (or, for money you receive, a payer) in To review, or change one later, the app starts with it next time. Your rules above still come first. Forget one to start again from the starter list.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (learned.isEmpty()) Text("Nothing yet. It fills in as you add things from To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("learned_empty"))
@@ -51,7 +51,7 @@ private fun LearnedRow(l: LearnedUi, categories: List<CategoryUi>, onForget: (St
     Column(Modifier.fillMaxWidth().testTag("learned_${l.key}"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(l.label, style = MaterialTheme.typography.bodyLarge)
         Text(
-            "→ ${l.categoryName}" + if (l.uses >= 2) " · chosen ${l.uses} times in a row" else " · chosen once",
+            (if (l.income) "Money in · " else "") + "→ ${l.categoryName}" + if (l.uses >= 2) " · chosen ${l.uses} times in a row" else " · chosen once",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("learned_what_${l.key}"),
         )
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -59,9 +59,9 @@ private fun LearnedRow(l: LearnedUi, categories: List<CategoryUi>, onForget: (St
             TextButton(onClick = { picking = true }, modifier = Modifier.testTag("learned_change_${l.key}")) { Text("Change") }
             TextButton(onClick = { onForget(l.key) }, modifier = Modifier.testTag("learned_forget_${l.key}")) { Text("Forget") }
             if (l.waiting > 0) OutlinedButton(onClick = { onFile(l.key) }, modifier = Modifier.testTag("learned_file_${l.key}")) {
-                Text("File ${l.waiting} earlier ${if (l.waiting == 1) "expense" else "expenses"} with no category under ${l.categoryName}")
+                Text("File ${l.waiting} earlier ${if (l.income) (if (l.waiting == 1) "income" else "incomes") else (if (l.waiting == 1) "expense" else "expenses")} with no category under ${l.categoryName}")
             }
         }
     }
-    if (picking) CategoryPickerDialog(offeredCategories(categories, income = false, keep = l.categoryId), l.categoryId, onPick = { id -> picking = false; onChange(l.key, id) { p -> problem = p } }, onClose = { picking = false })
+    if (picking) CategoryPickerDialog(offeredCategories(categories, income = l.income, keep = l.categoryId), l.categoryId, onPick = { id -> picking = false; onChange(l.key, id) { p -> problem = p } }, onClose = { picking = false })
 }

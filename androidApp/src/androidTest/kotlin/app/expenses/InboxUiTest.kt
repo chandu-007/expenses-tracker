@@ -181,14 +181,19 @@ class InboxUiTest {
     }
 
     @Test
-    fun aCreditBecomesIncomeWithoutACategoryAndTheAccountChoiceIsRememberedForTheNextOne() {
+    fun aCreditFromAPersonWithNoPurposeInItsWordsGetsNoCategoryGuessButOffersIncomeChipsAndTheAccountChoiceIsRememberedForTheNextOne() {
+        // Until 0.10.4 every credit was income with no category by design ("credits get no category"; this test was named for that). Credits now get an income category by the same trust
+        // model as payments (see IncomeCaptureUiTest), so what this test still pins down is the safe default: money from a person whose words name no purpose gets NO guess, is not marked
+        // "check", offers the income chips, and Add without choosing one adds income with no category. The account half is unchanged.
         ingest(credit, 6_000); launch(); openInbox()
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
         waitFor("inbox_$id")
+        waitFor("inbox_income_${id}_income:salary")
+        assertTrue(!has("inbox_check_$id"), "no guess, nothing to check")
         tap("inbox_change_$id"); tap("inbox_account_${id}_cash")
         tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
         val e = entries().single()
-        assertEquals("INCOME", e.kind); assertEquals(500_000, e.amount_minor); assertEquals("cash", e.account_id)
+        assertEquals("INCOME", e.kind); assertEquals(500_000, e.amount_minor); assertEquals("cash", e.account_id); assertEquals(null, e.category_id, "no category chosen, none made up")
         ingest(debit, 7_000)
         runBlocking { container.write { ok -> ok.inbox.list().single().let { assertTrue(it.accountLast4 == "1234") } } }
         val row = runBlocking { container.write { ok -> ok.templates.setting("capture_acct:HDFC Bank:1234") } }

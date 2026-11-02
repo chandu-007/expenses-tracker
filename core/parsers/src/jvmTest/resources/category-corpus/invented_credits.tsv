@@ -1,0 +1,67 @@
+# tag	sender	expected income category name(s), '|' = any of these is right (REFUND = To review ties it to the expense it undoes), NONE = no category is the right answer	message ('\n' = new line). All names, digits and amounts are invented.
+upi_person	AX-HDFCBK-S	NONE	Credit Alert!\nRs.1250.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA ravi@ybl (UPI 628374659000)
+upi_person	VK-KOTAKB-S	NONE	Received Rs.1,250.00 in your Kotak Bank A/c X1234 from ravi@ybl on 09-Oct-26.UPI Ref:628374650001.
+upi_person	VM-SBIUPI-S	NONE	Dear UPI user A/C X1234 credited by Rs 1250.0 on 09Oct26 transfer from ravi@ybl Ref No 628374650002 -SBI
+upi_person	AX-HDFCBK-S	NONE	Credit Alert!\nRs.1250.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA meera.s@okaxis (UPI 628374659003)
+upi_person	VK-KOTAKB-S	NONE	Received Rs.1,250.00 in your Kotak Bank A/c X1234 from meera.s@okaxis on 09-Oct-26.UPI Ref:628374650004.
+upi_person	VM-SBIUPI-S	NONE	Dear UPI user A/C X1234 credited by Rs 1250.0 on 09Oct26 transfer from meera.s@okaxis Ref No 628374650005 -SBI
+upi_person	AX-HDFCBK-S	NONE	Credit Alert!\nRs.1250.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA 9876501234@paytm (UPI 628374659006)
+upi_person	VK-KOTAKB-S	NONE	Received Rs.1,250.00 in your Kotak Bank A/c X1234 from 9876501234@paytm on 09-Oct-26.UPI Ref:628374650007.
+upi_person	VM-SBIUPI-S	NONE	Dear UPI user A/C X1234 credited by Rs 1250.0 on 09Oct26 transfer from 9876501234@paytm Ref No 628374650008 -SBI
+upi_person	AX-HDFCBK-S	NONE	Credit Alert!\nRs.1250.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA anil.k@oksbi (UPI 628374659009)
+upi_person	VK-KOTAKB-S	NONE	Received Rs.1,250.00 in your Kotak Bank A/c X1234 from anil.k@oksbi on 09-Oct-26.UPI Ref:628374650010.
+upi_person	VM-SBIUPI-S	NONE	Dear UPI user A/C X1234 credited by Rs 1250.0 on 09Oct26 transfer from anil.k@oksbi Ref No 628374650011 -SBI
+upi_person	AX-HDFCBK-S	NONE	Credit Alert!\nRs.1250.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA sunita@ibl (UPI 628374659012)
+upi_person	VK-KOTAKB-S	NONE	Received Rs.1,250.00 in your Kotak Bank A/c X1234 from sunita@ibl on 09-Oct-26.UPI Ref:628374650013.
+upi_person	VM-SBIUPI-S	NONE	Dear UPI user A/C X1234 credited by Rs 1250.0 on 09Oct26 transfer from sunita@ibl Ref No 628374650014 -SBI
+imps_named	AX-ICICIB-S	NONE	Your A/c *1234 is credited with Rs.2000.00 on 13-10-26 by RAHUL SHARMA. RRN 628374651015. Available balance is Rs. 9154.17 - ICICI Bank
+imps_named	VM-IDFCFB-S	NONE	Your A/c XXXXXXX0000 has been credited with Rs. 2,500.00 on 21-10-2026. Info: NEFT/IN00000000000000/RAHUL SHARMA.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+neft_named	AX-HDFCBK-S	NONE	Update! INR 4,500.00 deposited in HDFC Bank A/c XX1234 on 29-OCT-26 for NEFT Cr-SAMPLE0INBX01-RAHUL SHARMA-Customer Name-SAMPLEH00000000000.Avl bal INR 20,000.00. Cheque deposits in A/C are subject to clearing
+imps_named	AX-ICICIB-S	NONE	Your A/c *1234 is credited with Rs.2000.00 on 13-10-26 by PRIYA NAIR. RRN 628374651018. Available balance is Rs. 9154.17 - ICICI Bank
+imps_named	VM-IDFCFB-S	NONE	Your A/c XXXXXXX0000 has been credited with Rs. 2,500.00 on 21-10-2026. Info: NEFT/IN00000000000000/PRIYA NAIR.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+neft_named	AX-HDFCBK-S	NONE	Update! INR 4,500.00 deposited in HDFC Bank A/c XX1234 on 29-OCT-26 for NEFT Cr-SAMPLE0INBX01-PRIYA NAIR-Customer Name-SAMPLEH00000000000.Avl bal INR 20,000.00. Cheque deposits in A/C are subject to clearing
+imps_named	AX-ICICIB-S	NONE	Your A/c *1234 is credited with Rs.2000.00 on 13-10-26 by SAMPLE TRADERS. RRN 628374651021. Available balance is Rs. 9154.17 - ICICI Bank
+imps_named	VM-IDFCFB-S	NONE	Your A/c XXXXXXX0000 has been credited with Rs. 2,500.00 on 21-10-2026. Info: NEFT/IN00000000000000/SAMPLE TRADERS.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+neft_named	AX-HDFCBK-S	NONE	Update! INR 4,500.00 deposited in HDFC Bank A/c XX1234 on 29-OCT-26 for NEFT Cr-SAMPLE0INBX01-SAMPLE TRADERS-Customer Name-SAMPLEH00000000000.Avl bal INR 20,000.00. Cheque deposits in A/C are subject to clearing
+imps_named	AX-ICICIB-S	NONE	Your A/c *1234 is credited with Rs.2000.00 on 13-10-26 by KUMAR AND SONS. RRN 628374651024. Available balance is Rs. 9154.17 - ICICI Bank
+imps_named	VM-IDFCFB-S	NONE	Your A/c XXXXXXX0000 has been credited with Rs. 2,500.00 on 21-10-2026. Info: NEFT/IN00000000000000/KUMAR AND SONS.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+neft_named	AX-HDFCBK-S	NONE	Update! INR 4,500.00 deposited in HDFC Bank A/c XX1234 on 29-OCT-26 for NEFT Cr-SAMPLE0INBX01-KUMAR AND SONS-Customer Name-SAMPLEH00000000000.Avl bal INR 20,000.00. Cheque deposits in A/C are subject to clearing
+salary_neft	AX-HDFCBK-S	Salary	Update! INR 85,000.00 deposited in HDFC Bank A/c XX1234 on 01-OCT-26 for NEFT Cr-HDFC0000001-ACME SOFTWARE PVT LTD-RAVI KUMAR-SALARY OCT-SAMPLEH00000000000.Avl bal INR 1,20,000.00. Cheque deposits in A/C are subject to clearing
+salary_neft	AX-ICICIB-S	Salary	ICICI Bank Acct XX234 credited Rs. 62,500.00 on 01-Oct-26; ACME SOFTWARE PVT LTD SALARY credited. UPI:000000000001. Call 18002662 for dispute.
+salary_imps	VK-KOTAKB-S	Salary	Rs.48,000.00 credited to your Kotak Bank A/c X1234 on 01-Oct-26 by ACME SOFTWARE PVT LTD. Info: SAL OCT 2026. Avl Bal Rs.52,310.45
+salary_neft	AX-HDFCBK-S	Salary	Update! INR 85,000.00 deposited in HDFC Bank A/c XX1234 on 01-OCT-26 for NEFT Cr-HDFC0000001-NORTHWIND SERVICES LTD-RAVI KUMAR-SALARY OCT-SAMPLEH00000000000.Avl bal INR 1,20,000.00. Cheque deposits in A/C are subject to clearing
+salary_neft	AX-ICICIB-S	Salary	ICICI Bank Acct XX234 credited Rs. 62,500.00 on 01-Oct-26; NORTHWIND SERVICES LTD SALARY credited. UPI:000000000001. Call 18002662 for dispute.
+salary_imps	VK-KOTAKB-S	Salary	Rs.48,000.00 credited to your Kotak Bank A/c X1234 on 01-Oct-26 by NORTHWIND SERVICES LTD. Info: SAL OCT 2026. Avl Bal Rs.52,310.45
+salary_neft	AX-HDFCBK-S	Salary	Update! INR 85,000.00 deposited in HDFC Bank A/c XX1234 on 01-OCT-26 for NEFT Cr-HDFC0000001-BLUE ORCHID CONSULTING-RAVI KUMAR-SALARY OCT-SAMPLEH00000000000.Avl bal INR 1,20,000.00. Cheque deposits in A/C are subject to clearing
+salary_neft	AX-ICICIB-S	Salary	ICICI Bank Acct XX234 credited Rs. 62,500.00 on 01-Oct-26; BLUE ORCHID CONSULTING SALARY credited. UPI:000000000001. Call 18002662 for dispute.
+salary_imps	VK-KOTAKB-S	Salary	Rs.48,000.00 credited to your Kotak Bank A/c X1234 on 01-Oct-26 by BLUE ORCHID CONSULTING. Info: SAL OCT 2026. Avl Bal Rs.52,310.45
+salary_sal	VM-IDFCFB-S	Salary	Your A/c XXXXXXX0000 has been credited with Rs. 52,000.00 on 01-10-2026. Info: NEFT/SAL/ACME TRADERS.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+salary_payroll	AX-AXISBK-S	Salary	INR 71,200.00 credited to your A/c no. XX1234 on 01-10-26 PAYROLL OCT. Avl Bal INR 83,000.00 -Axis Bank
+interest_idfc	VM-IDFCFB-S	Interest	Monthly interest of INR.1,000.00 earned on your Savings A/c XX0000 has been credited to your A/C on 31/08/26. New bal: INR.9,99,999.99. IDFC FIRST Bank
+interest_sbi	VM-SBIUPI-S	Interest	Dear Customer, your A/c X1234 is credited by Rs.512.00 on 30-09-26 by Int.Pd:01-07-26 to 30-09-26. Avl Bal Rs.14,210.00 -SBI
+interest_hdfc	AX-HDFCBK-S	Interest	Update! INR 421.00 deposited in HDFC Bank A/c XX1234 on 30-SEP-26 for CREDIT INTEREST CAPITALISED.Avl bal INR 12,310.00. Cheque deposits in A/C are subject to clearing
+interest_kotak	VK-KOTAKB-S	Interest	Rs.840.00 credited to your Kotak Bank A/c X1234 on 30-Sep-26 towards savings account interest. Avl Bal Rs.22,100.55
+interest_icici	AX-ICICIB-S	Interest	ICICI Bank Acct XX234 credited with Rs. 1,120.00 on 31-Mar-26. Info: INT.PD. Available balance is Rs. 31,000.00.
+interest_axis	AX-AXISBK-S	Interest	INR 640.00 credited to your A/c no. XX1234 on 30-09-26 SB INT CR. Avl Bal INR 9,820.00 -Axis Bank
+dividend_hdfc	AX-HDFCBK-S	Dividends	Update! INR 1,250.00 deposited in HDFC Bank A/c XX1234 on 12-SEP-26 for ACH C- SAMPLE LTD DIVIDEND-0000000000.Avl bal INR 21,310.00. Cheque deposits in A/C are subject to clearing
+dividend_icici	AX-ICICIB-S	Dividends	ICICI Bank Acct XX234 credited Rs. 760.00 on 14-Sep-26; DIVIDEND SAMPLE INDUSTRIES. UPI:000000000002. Call 18002662 for dispute.
+dividend_kotak	VK-KOTAKB-S	Dividends	Rs.2,400.00 credited to your Kotak Bank A/c X1234 on 20-Sep-26. Info: ACH CR DIVIDEND SAMPLEBANK. Avl Bal Rs.30,000.00
+refund_account	AX-HDFCBK-S	Refunds and cashback|REFUND	Update! INR 499.00 deposited in HDFC Bank A/c XX1234 on 15-OCT-26 for UPI-REFUND-SAMPLE SHOP-sample@ybl-000000000003.Avl bal INR 5,310.00. Cheque deposits in A/C are subject to clearing
+refund_icici	AX-ICICIB-S	Refunds and cashback|REFUND	ICICI Bank Acct XX234 credited Rs. 1,299.00 on 16-Oct-26; refund from SAMPLE STORES credited. UPI:000000000004. Call 18002662 for dispute.
+refund_card_hdfc	AX-HDFCBK-S	Refunds and cashback|REFUND	Refund of Rs.254.00 credited to your card ending 1234 from SAMPLE SHOP on 12-10-26
+reversal_card	AX-AXISBK-S	Refunds and cashback|REFUND	Transaction Reversed! Rs.399.00 credited to your Axis Bank Credit Card no. XX1234 on 12-10-26
+cashback_hdfc	AX-HDFCBK-S	Refunds and cashback	Cashback of Rs.35.00 credited to HDFC Bank A/c XX1234 on 18-OCT-26 for UPI txn 000000000005
+cashback_sbi	VM-SBIUPI-S	Refunds and cashback	Dear UPI user A/C X1234 credited by Rs 21.0 on 18Oct26 cashback Ref No 628374651200 -SBI
+cashback_kotak	VK-KOTAKB-S	Refunds and cashback	Rs.50.00 cashback credited to your Kotak Bank A/c X1234 on 19-Oct-26. Avl Bal Rs.8,100.00
+reimburse_neft	AX-HDFCBK-S	Reimbursement	Update! INR 3,200.00 deposited in HDFC Bank A/c XX1234 on 22-OCT-26 for NEFT Cr-SAMPLE0INBX01-ACME SOFTWARE PVT LTD-TRAVEL REIMBURSEMENT-SAMPLEH00000000000.Avl bal INR 9,310.00. Cheque deposits in A/C are subject to clearing
+rent_upi	AX-HDFCBK-S	Rent received	Credit Alert!\nRs.18000.00 credited to HDFC Bank A/c XX1234 on 03-10-26 from VPA tenant@ybl (UPI 628374659100) Rent Oct
+rent_imps	VK-KOTAKB-S	Rent received	Rs.15,000.00 credited to your Kotak Bank A/c X1234 on 03-Oct-26 by SUNIL MEHTA. Info: IMPS RENT OCT. Avl Bal Rs.19,000.00
+gift_upi	AX-HDFCBK-S	Gifts received	Credit Alert!\nRs.501.00 credited to HDFC Bank A/c XX1234 on 11-10-26 from VPA aunt@ybl (UPI 628374659101) birthday gift
+gift_shagun	VM-SBIUPI-S	Gifts received	Dear UPI user A/C X1234 credited by Rs 1100.0 on 12Oct26 transfer from meena@ybl shagun Ref No 628374651300 -SBI
+trap_name	AX-HDFCBK-S	NONE	Credit Alert!\nRs.300.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA salman@ybl (UPI 628374659102)
+trap_name	AX-HDFCBK-S	NONE	Credit Alert!\nRs.300.00 credited to HDFC Bank A/c XX1234 on 09-10-26 from VPA divya.interiors@ybl (UPI 628374659103)
+trap_name	VK-KOTAKB-S	NONE	Rs.700.00 credited to your Kotak Bank A/c X1234 on 10-Oct-26 by INTERNATIONAL TRADING CO. Avl Bal Rs.8,000.00
+trap_name	AX-ICICIB-S	NONE	ICICI Bank Acct XX234 credited Rs. 410.00 on 10-Oct-26; CURRENT AFFAIRS PUBLISHERS credited. UPI:000000000006. Call 18002662 for dispute.
+trap_name	VM-IDFCFB-S	NONE	Your A/c XXXXXXX0000 has been credited with Rs. 900.00 on 10-10-2026. Info: NEFT/IN00000000000001/SALAD BAR AND GRILL.\nNew bal: Rs. 99,999.99. Team IDFC FIRST Bank
+trap_mixed	AX-ICICIB-S	NONE	ICICI Bank Acct XX234 credited Rs. 150.00 on 10-Oct-26; interest on refund adjustment credited. UPI:000000000007. Call 18002662 for dispute.
+trap_mixed	AX-HDFCBK-S	NONE	Update! INR 2,300.00 deposited in HDFC Bank A/c XX1234 on 10-OCT-26 for NEFT Cr-SAMPLE0INBX01-ACME SOFTWARE PVT LTD-SALARY ADVANCE REIMBURSEMENT-SAMPLEH00000000000.Avl bal INR 9,310.00. Cheque deposits in A/C are subject to clearing

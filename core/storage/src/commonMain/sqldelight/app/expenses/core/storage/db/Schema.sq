@@ -374,6 +374,8 @@ CREATE TABLE spend_line (
 );
 
 CREATE INDEX spend_line_report ON spend_line(currency, occurred_at, category_id, mine_minor, cash_out_minor);
+-- Money going out with no category (what "N expenses have no category" on Home counts): only those rows are in the index, so counting or listing them never reads the rest of the ledger.
+CREATE INDEX spend_line_uncategorised ON spend_line(currency, occurred_at DESC) WHERE category_id IS NULL AND mine_minor > 0;
 
 -- Full-text index over merchant and note. The trigram tokenizer gives case-insensitive substring
 -- matching for queries of 3+ characters; shorter queries use searchShort. Kept in sync by triggers.
@@ -660,6 +662,31 @@ SELECT e.id, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label
 FROM entry e
 WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND NOT EXISTS (SELECT 1 FROM entry_split s WHERE s.entry_id = e.id)
 ORDER BY e.occurred_at DESC LIMIT :limit;
+
+-- Income with no category, newest first: what a learned income choice could still be applied to (read only when the list of what the app learned is open).
+uncategorisedIncomes:
+SELECT e.id, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label
+FROM entry e
+WHERE e.deleted = 0 AND e.kind = 'INCOME' AND e.category_id IS NULL
+ORDER BY e.occurred_at DESC LIMIT :limit;
+
+-- How many expenses have no category, counted up to :cap (the Home card says "500+" beyond it). Reads only the index spend_line_uncategorised and one row of entry per counted expense; an expense in
+-- another currency, a shared one, one with refunds and a deleted one are left out (they can't be filed from the review screen).
+uncategorisedExpenseCount:
+SELECT COUNT(*) FROM (
+  SELECT s.entry_id FROM spend_line s JOIN entry e ON e.id = s.entry_id
+  WHERE s.currency = :currency AND s.category_id IS NULL AND s.mine_minor > 0 AND e.deleted = 0 AND e.kind = 'EXPENSE' AND e.original_amount_minor IS NULL
+    AND NOT EXISTS (SELECT 1 FROM entry_share h WHERE h.entry_id = e.id) AND NOT EXISTS (SELECT 1 FROM entry r WHERE r.refunds_entry = e.id AND r.kind = 'REFUND' AND r.deleted = 0)
+  LIMIT :cap
+);
+
+-- The newest uncategorised expenses (ids, titles, notes, amounts), for the one-at-a-time review screen. Same rules as the count.
+uncategorisedExpenseList:
+SELECT e.id, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label, e.amount_minor, e.occurred_at, e.source
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.category_id IS NULL AND s.mine_minor > 0 AND e.deleted = 0 AND e.kind = 'EXPENSE' AND e.original_amount_minor IS NULL
+  AND NOT EXISTS (SELECT 1 FROM entry_share h WHERE h.entry_id = e.id) AND NOT EXISTS (SELECT 1 FROM entry r WHERE r.refunds_entry = e.id AND r.kind = 'REFUND' AND r.deleted = 0)
+ORDER BY s.occurred_at DESC LIMIT :limit;
 
 setMerchantUses:
 UPDATE merchant_map SET uses = :uses WHERE key = :key;

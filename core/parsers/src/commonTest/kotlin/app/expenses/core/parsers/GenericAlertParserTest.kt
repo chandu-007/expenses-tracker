@@ -138,4 +138,10 @@ class GenericAlertParserTest {
         assertIs<ParseResult.NotATransaction>(GenericAlertParser.parse("Txn Rs.20.00 pending at your branch. Visit us", "HDFCBK"), "no card: still no direction")
         assertEquals(Direction.CREDIT, (GenericAlertParser.parse("Txn Rs.500.00 credited to your HDFC Bank Card 0862 at 10-10", "HDFCBK") as ParseResult.Parsed).alert.direction, "a credit word still decides")
     }
+    @Test
+    fun anAmountWrittenWithADotAfterTheCurrencyIsAnAmountAndTheBalanceAfterItIsNot() {
+        val a = parsed("Monthly interest of INR.1,000.00 earned on your Savings A/c XX0000 has been credited to your A/C on 31/08/26. New bal: INR.9,99,999.99. IDFC FIRST Bank")
+        assertEquals(100_000L, a.amountMinor); assertEquals(Direction.CREDIT, a.direction)
+        assertEquals(Direction.CREDIT, (CaptureClassifier.classify("VM-IDFCFB-S", "Monthly interest of INR.1,000.00 earned on your Savings A/c XX0000 has been credited to your A/C on 31/08/26. New bal: INR.9,99,999.99. IDFC FIRST Bank") as CaptureOutcome.Transaction).alert.direction)
+    }
 }

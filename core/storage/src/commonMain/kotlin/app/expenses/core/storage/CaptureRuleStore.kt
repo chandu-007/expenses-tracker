@@ -4,8 +4,19 @@ import app.expenses.core.domain.CaptureRule
 import app.expenses.core.domain.PayeeKey
 import app.expenses.core.storage.db.ExpensesDb
 
-/** One thing the app learned: payees that read as [key] go to [categoryId]; [uses] is how many times in a row the person chose it. */
-data class Learned(val key: String, val categoryId: String, val uses: Int, /** How the payee was written when it was learned ("Swiggy"), for the list; the key when unknown. */ val label: String = key)
+/**
+ * One thing the app learned: payees that read as [key] go to [categoryId]; [uses] is how many times in a row the person chose it. A key that starts with [PayeeKey.INCOME_PREFIX] is a PAYER whose
+ * money in goes to an income category ([income]); every other key is a payee of money out, as before.
+ */
+data class Learned(val key: String, val categoryId: String, val uses: Int, /** How the payee was written when it was learned ("Swiggy"), for the list; the key when unknown. */ val label: String = key) {
+    val income: Boolean get() = PayeeKey.isIncomeKey(key)
+}
+
+/** A capture rule exactly as stored (its place in the order included), to put it back when its removal is undone. */
+data class RuleSnapshot(val id: String, val position: Long, val pattern: String, val categoryId: String)
+
+/** A learned choice exactly as stored (the count in a row and the label of the list included), to put it back when forgetting it is undone. */
+data class LearnedSnapshot(val key: String, val categoryId: String, val uses: Int, val label: String?)
 
 /** The person's capture rules (ordered) and the payee-to-category choices learned from what they confirm. Not thread-safe: use through the write lock. */
 class CaptureRuleStore(private val db: ExpensesDb) {
@@ -27,6 +38,24 @@ class CaptureRuleStore(private val db: ExpensesDb) {
     }
 
     fun remove(id: String) { q.deleteCaptureRule(id) }
+
+    /** The rule [id] as stored, or null. Read before [remove] so Undo can restore it. */
+    fun snapshotRule(id: String): RuleSnapshot? = q.allCaptureRules().executeAsList().firstOrNull { it.id == id }?.let { RuleSnapshot(it.id, it.position, it.pattern, it.category_id) }
+
+    /**
+     * Puts a removed rule back where it was in the order. Refuses (and changes nothing) when its category is gone or another rule now has the same pattern: the person made that rule since, and
+     * it stays. Ties in position (a rule was moved or added in between) are settled with the restored rule first, and the order is renumbered 1..n.
+     */
+    fun restoreRule(s: RuleSnapshot) {
+        db.transaction {
+            require(q.categoryById(s.categoryId).executeAsOneOrNull()?.deleted == 0L) { "That category no longer exists." }
+            val clash = q.allCaptureRules().executeAsList().firstOrNull { it.id != s.id && it.pattern.lowercase() == s.pattern.lowercase() }
+            require(clash == null) { "You already have a rule for \"${clash!!.pattern}\"." }
+            q.upsertCaptureRule(s.id, s.position, s.pattern, s.categoryId)
+            val all = q.allCaptureRules().executeAsList().sortedWith(compareBy({ it.position }, { if (it.id == s.id) 0 else 1 }, { it.id }))
+            all.forEachIndexed { n, r -> if (r.position != n + 1L) q.upsertCaptureRule(r.id, n + 1L, r.pattern, r.category_id) }
+        }
+    }
 
     /** Moves a rule one place earlier (up) or later in the order. Does nothing at the ends. */
     fun move(id: String, up: Boolean) {
@@ -58,12 +87,13 @@ class CaptureRuleStore(private val db: ExpensesDb) {
      * corrections stick. A choice remembered before that key existed (stored under the payee's letters and digits as read) is carried over and its count kept when it agrees. Payees without a
      * usable key are not remembered.
      */
-    fun learn(payee: String?, categoryId: String, label: String? = null) {
-        val key = PayeeKey.of(payee) ?: return
+    fun learn(payee: String?, categoryId: String, label: String? = null, income: Boolean = false) {
+        val key = (if (income) PayeeKey.incomeOf(payee) else PayeeKey.of(payee)) ?: return
         if (categoryId.isEmpty()) return
         db.transaction {
             (label ?: payee)?.trim()?.takeIf { it.isNotEmpty() && '@' !in it }?.let { l -> if (q.settingValue(LABEL_PREFIX + key).executeAsOneOrNull() != l) q.putSetting(LABEL_PREFIX + key, l) }
-            val old = PayeeKey.legacy(payee)?.takeIf { it != key }?.let { l -> q.allMerchantMap().executeAsList().firstOrNull { it.key == l } }
+            // an income choice has no older key to carry over: it was never stored before income was learned
+            val old = if (income) null else PayeeKey.legacy(payee)?.takeIf { it != key }?.let { l -> q.allMerchantMap().executeAsList().firstOrNull { it.key == l } }
             q.learnMerchant(key, categoryId)
             if (old != null) {
                 if (old.category_id == categoryId) repeat(old.uses.toInt()) { q.learnMerchant(key, categoryId) }
@@ -78,13 +108,32 @@ class CaptureRuleStore(private val db: ExpensesDb) {
         db.transaction { q.forgetMerchant(key); q.learnMerchant(key, categoryId) }
     }
 
-    fun forget(payee: String) {
+    fun forget(payee: String, income: Boolean = false) {
+        if (income) { PayeeKey.incomeOf(payee)?.let { forgetKey(it) }; return }
         PayeeKey.of(payee)?.let { forgetKey(it) }
         PayeeKey.legacy(payee)?.let { forgetKey(it) }
     }
 
     /** Forgets what was learned under [key] (a row of [learnedRows]). */
     fun forgetKey(key: String) { q.forgetMerchant(key); q.removeSetting(LABEL_PREFIX + key) }
+
+    /** The learned choice under [key] exactly as stored, or null. Read before [forgetKey] or [setLearned] so Undo can restore it. */
+    fun snapshotLearned(key: String): LearnedSnapshot? =
+        q.allMerchantMap().executeAsList().firstOrNull { it.key == key }?.let { LearnedSnapshot(it.key, it.category_id, it.uses.toInt(), q.settingValue(LABEL_PREFIX + key).executeAsOneOrNull()) }
+
+    /**
+     * Puts a learned choice back as it was: its category, the count in a row and its label. Whatever is stored under the key now (a choice made since) is replaced, as Undo of what the person just
+     * did. Refuses when its category is gone.
+     */
+    fun restoreLearned(s: LearnedSnapshot) {
+        db.transaction {
+            require(q.categoryById(s.categoryId).executeAsOneOrNull()?.deleted == 0L) { "That category no longer exists." }
+            q.forgetMerchant(s.key)
+            q.learnMerchant(s.key, s.categoryId)
+            if (s.uses != 1) q.setMerchantUses(s.uses.toLong(), s.key)
+            if (s.label != null) q.putSetting(LABEL_PREFIX + s.key, s.label) else q.removeSetting(LABEL_PREFIX + s.key)
+        }
+    }
 
     /** How many past expenses and incomes mention every word of [pattern] in their payee or note: what the rule would have caught. */
     fun matchesInHistory(pattern: String): Long {

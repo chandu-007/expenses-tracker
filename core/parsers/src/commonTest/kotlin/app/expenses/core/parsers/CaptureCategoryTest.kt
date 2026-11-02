@@ -100,4 +100,38 @@ class CaptureCategoryTest {
         for (n in listOf("RAVI KUMAR", "Anita Rao", "Ravi K Sharma")) assertEquals(true, PayeeKinds.looksLikePerson(n), n)
         for (n in listOf("SRI LAKSHMI STORES", "RAMESH TIFFIN CENTER", "Swiggy", "Uber", "ravi@ybl", "FRESHPIK", "NEW BOMBAY MEDICALS", null)) assertEquals(false, PayeeKinds.looksLikePerson(n), n.toString())
     }
+
+    private val incomeNames = StarterCategories.INCOME_FIRST + StarterCategories.INCOME_MORE
+    private val incomeUsable = incomeNames.map { StarterCategories.incomeId(it) }.toSet()
+    private val incomeByName = incomeNames.associate { it.lowercase() to StarterCategories.incomeId(it) }
+    private fun inId(n: String) = StarterCategories.incomeId(n)
+    private fun income(payer: String?, text: String = "credited", taught: CaptureCategory.Taught = CaptureCategory.Taught(), history: HistoryProfile? = null, rules: List<CaptureRule> = emptyList()) =
+        CaptureCategory.adviseIncome(payer, text, rules, taught, incomeUsable, incomeByName, history)
+
+    @Test
+    fun aCreditStartsWithTheWordsOfItsTextAsAGuessToCheckAndNeverAsSure() {
+        val a = income("ACME SOFTWARE PVT LTD", "NEFT Cr-ACME SOFTWARE PVT LTD-SALARY OCT")!!
+        assertEquals(inId("Salary"), a.categoryId); assertEquals(SuggestionSource.CREDIT_WORDS, a.source); assertEquals(Certainty.CHECK, a.certainty); assertEquals("the words of the text", a.note)
+        assertEquals(inId("Interest"), income(null, "Int.Pd:01-07-26 to 30-09-26 credited")!!.categoryId)
+        assertNull(income("RAVI KUMAR", "credited by RAVI KUMAR"), "a person paying you says nothing about why")
+    }
+
+    @Test
+    fun anIncomeChoiceIsTrustedAfterOneChoiceForACompanyAndTwoForAPerson() {
+        val company = CaptureCategory.Taught(mapOf("in:acmesoftware" to inId("Salary")), mapOf("in:acmesoftware" to 1))
+        assertEquals(Certainty.SURE, income("ACME SOFTWARE PVT LTD", taught = company)!!.certainty)
+        val person = CaptureCategory.Taught(mapOf("in:ravikumar" to inId("Rent received")), mapOf("in:ravikumar" to 1))
+        assertEquals(Certainty.CHECK, income("RAVI KUMAR", taught = person)!!.certainty)
+        assertEquals(Certainty.SURE, income("RAVI KUMAR", taught = CaptureCategory.Taught(person.category, mapOf("in:ravikumar" to 2)))!!.certainty)
+        assertNull(income("RAVI KUMAR", taught = CaptureCategory.Taught(mapOf("ravikumar" to inId("Rent received")), mapOf("ravikumar" to 5))), "a choice for the same name as a payee of an expense is not an income choice")
+    }
+
+    @Test
+    fun anIncomeRuleAndEarlierIncomeFromThePayerWorkLikeTheirExpenseCounterparts() {
+        val rule = income("ACME", "salary", rules = listOf(CaptureRule("r", "acme", inId("Freelance and business"))))!!
+        assertEquals(SuggestionSource.RULE, rule.source); assertEquals(Certainty.SURE, rule.certainty)
+        val h = income("ACME SOFTWARE PVT LTD", history = HistoryProfile(inId("Salary"), 2, 0))!!
+        assertEquals(SuggestionSource.HISTORY, h.source); assertEquals(Certainty.SURE, h.certainty)
+        assertEquals(listOf(inId("Interest")), income("ACME SOFTWARE PVT LTD", history = HistoryProfile(inId("Salary"), 3, 1, listOf(inId("Interest"))))!!.alternatives)
+    }
 }

@@ -170,6 +170,9 @@ fun EntryListScreen(
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
     onSnoozeBackupNudge: () -> Unit,
+    /** "Review" on the Home card that says how many expenses have no category, and its "Not now". */
+    onOpenCategorise: () -> Unit = {},
+    onSnoozeCategorise: () -> Unit = {},
     onDismissFirstWeek: () -> Unit = {},
     onPostDue: (DueUi, Money?) -> Unit,
     onSkipDue: (DueUi) -> Unit,
@@ -360,6 +363,7 @@ fun EntryListScreen(
                     if (!state.billPeek.isEmpty) BillsBanner(state.billPeek, onOpenBills)
                     if (state.inboxPending > 0) InboxBanner(state, onOpenInbox)
                     if (!state.waiting.isEmpty) WaitingBanner(state.waiting, onOpenLoans)
+                    if (state.categoriseNudge > 0) CategoriseNudgeCard(state.categoriseNudge, onReview = onOpenCategorise, onNotNow = onSnoozeCategorise)
                     FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
                     state.homeLayout.visible().forEach { section ->
                         when (section) {

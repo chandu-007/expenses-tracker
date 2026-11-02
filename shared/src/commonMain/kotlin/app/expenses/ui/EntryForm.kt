@@ -200,6 +200,8 @@ fun EntryFormScreen(
     lastIncomeCategory: String = "",
     /** Where the entry was read from (a text, notification, email, statement line); null for one typed by hand. */
     origin: app.expenses.OriginUi? = null,
+    /** A category for an income that has none, from what the app knows of the payer (a rule, their own earlier choices, the words of the text); one tap puts it on the entry. */
+    suggestedCategory: app.expenses.SuggestedCategoryUi? = null,
     /** Saves several new expenses at once (the items of a bill, each its own entry) and the photo the bill was read from; null where the form cannot (an edit). */
     onSaveEach: ((drafts: List<EntryDraft>, photoUri: String?) -> Unit)? = null,
 ) {
@@ -366,6 +368,13 @@ fun EntryFormScreen(
 
             if (draft.kind == DraftKind.EXPENSE && !split || draft.kind == DraftKind.INCOME) {
                 Text(if (draft.kind == DraftKind.INCOME) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
+                if (draft.kind == DraftKind.INCOME && draft.category.isEmpty() && suggestedCategory != null && categories.any { it.id == suggestedCategory.categoryId }) {
+                    AssistChip(
+                        onClick = { draft = draft.copy(category = suggestedCategory.categoryId) },
+                        label = { Text("Suggested: ${suggestedCategory.name} (${suggestedCategory.note})" + if (suggestedCategory.sure) "" else ", a guess") },
+                        modifier = Modifier.testTag("income_suggestion"),
+                    )
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Hidden categories are not offered, except one already chosen (an entry being edited keeps its category).
                     val offered = offeredCategories(categories, forIncome, draft.category)

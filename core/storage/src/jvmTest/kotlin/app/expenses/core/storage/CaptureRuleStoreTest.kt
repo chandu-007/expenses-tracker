@@ -103,4 +103,47 @@ class CaptureRuleStoreTest {
         assertEquals(1, store.matchesInHistory("100%"), "a percent sign is text, not a wildcard ('1005 Stores' must not match)"); assertEquals(1, store.matchesInHistory("fresh_mart"))
         assertEquals(0, store.matchesInHistory("fresh-mart"), "and an underscore is not a wildcard")
     }
+
+    @Test
+    fun whatIsLearnedForMoneyInIsKeptApartFromWhatIsLearnedForTheSameNameAsAPayee() {
+        store.learn("RAVI KUMAR", "Food", "Ravi Kumar")
+        store.learn("ravi.kumar@okaxis", "income:salary", "Ravi Kumar", income = true)
+        assertEquals(mapOf("ravikumar" to "Food", "in:ravikumar" to "income:salary"), store.learned(), "two keys for one name: one as a payee, one as a payer")
+        assertEquals(1, store.learnedUses().getValue("in:ravikumar"))
+        store.learn("RAVI KUMAR", "income:salary", income = true); assertEquals(2, store.learnedUses().getValue("in:ravikumar"), "agreeing again counts")
+        store.learn("RAVI KUMAR", "income:interest", income = true); assertEquals(1, store.learnedUses().getValue("in:ravikumar"), "a different choice starts again")
+        assertEquals(2, store.learnedRows().size)
+        assertEquals(listOf(true), store.learnedRows().filter { it.income }.map { it.income }); assertEquals("RAVI KUMAR", store.learnedRows().first { it.income }.label)
+        store.forget("RAVI KUMAR", income = true); assertEquals(setOf("ravikumar"), store.learned().keys, "forgetting the payer leaves the payee")
+        store.learn(null, "income:salary", income = true); store.learn("a", "income:salary", income = true); assertEquals(setOf("ravikumar"), store.learned().keys)
+        store.forget("RAVI KUMAR"); assertEquals(emptyMap(), store.learned(), "and the other way round")
+    }
+
+    @Test
+    fun aRemovedRuleComesBackWhereItWasAndAForgottenOrChangedChoiceComesBackWithItsCountAndLabel() {
+        store.add("a", "uber", "Transport"); store.add("b", "swiggy", "Food"); store.add("c", "netflix", "Fun")
+        val snap = store.snapshotRule("b")!!
+        store.remove("b"); assertEquals(listOf("a", "c"), store.rules().map { it.id })
+        store.restoreRule(snap); assertEquals(listOf("a", "b", "c"), store.rules().map { it.id }, "back in its place")
+        assertEquals(listOf("swiggy" to "Food"), store.rules().filter { it.id == "b" }.map { it.pattern to it.categoryId })
+        // a rule the person made since with the same words stays, and the restore is refused without changing anything
+        store.remove("b"); store.add("n", "Swiggy", "Groceries")
+        assertTrue(assertFailsWith<IllegalArgumentException> { store.restoreRule(snap) }.message!!.contains("already have a rule"))
+        assertEquals(listOf("a", "c", "n"), store.rules().map { it.id })
+        // a rule whose category was removed meanwhile cannot come back
+        store.remove("n"); db.schemaQueries.softDeleteCategory("Food")
+        assertTrue(assertFailsWith<IllegalArgumentException> { store.restoreRule(snap) }.message!!.contains("no longer exists"))
+        assertEquals(null, store.snapshotRule("nope"))
+        // learned choices: forgetting, then changing, each restored exactly (category, count in a row, label)
+        store.learn("Zomato", "Transport", "Zomato"); store.learn("ZOMATO", "Transport"); store.learn("zomato@icici", "Transport")
+        val before = store.snapshotLearned("zomato")!!; assertEquals(3, before.uses); assertEquals("ZOMATO", before.label, "the label is how the payee was last written")
+        store.forgetKey("zomato"); assertEquals(null, store.snapshotLearned("zomato"))
+        store.restoreLearned(before); assertEquals(before, store.snapshotLearned("zomato"), "forget undone: the same category, count and label")
+        store.setLearned("zomato", "Fun"); assertEquals(1, store.snapshotLearned("zomato")!!.uses)
+        store.restoreLearned(before); assertEquals(before, store.snapshotLearned("zomato"), "change undone")
+        store.learn("Zomato", "Fun") // the person chose again since: Undo of the earlier forget replaces it, as the person asked
+        store.forgetKey("zomato"); store.learn("Zomato", "Fun"); store.restoreLearned(before); assertEquals(before, store.snapshotLearned("zomato"))
+        db.schemaQueries.softDeleteCategory("Transport")
+        assertTrue(assertFailsWith<IllegalArgumentException> { store.restoreLearned(before) }.message!!.contains("no longer exists"))
+    }
 }

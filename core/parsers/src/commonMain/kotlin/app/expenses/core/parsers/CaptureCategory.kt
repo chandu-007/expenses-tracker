@@ -39,6 +39,27 @@ object CaptureCategory {
             SuggestionSource.PERSON -> "a payment to a person"
             SuggestionSource.WORDS -> "the words of the text"
             SuggestionSource.KEYWORD -> "a guess from the name"
+            SuggestionSource.CREDIT_WORDS -> "the words of the text"
+        }
+        val alternatives = ((history?.top?.let { listOf(it) }.orEmpty()) + history?.runnersUp.orEmpty()).filter { it != s.categoryId && it in usable }.distinct().take(2)
+        return CategoryAdvice(s.categoryId, s.source, certainty, note, alternatives)
+    }
+
+    /**
+     * The same for a captured CREDIT (money received): the category of the income, with the same trust model. Only the person's own rule and what they chose or filed for this payer can be SURE;
+     * the words of the text ("interest credited", "salary", "dividend", "cashback") are always a guess to check. [usable] are the income categories, [byName] their names; [taught] holds the
+     * income choices under the keys of [PayeeKey.incomeOf]. A choice made for the same name as an expense payee is never used here. Whoever pays you is more likely a person than a shop and is
+     * paid for different things, so what they were chosen for once is looked at again until it has been chosen twice ([PayeeKinds.paysLikeAPerson]); a company is trusted after one choice.
+     */
+    fun adviseIncome(payer: String?, text: String, rules: List<CaptureRule>, taught: Taught, usable: Set<String>, byName: Map<String, String>, history: HistoryProfile?): CategoryAdvice? {
+        val s = CategorySuggest.suggestIncome(payer, text, rules, taught.category, usable, byName, history?.top) ?: return null
+        val uses = PayeeKey.incomeOf(payer)?.let { taught.uses[it] } ?: 0
+        val certainty = SuggestionConfidence.of(s.source, PayeeKey.isMixed(payer), PayeeKinds.paysLikeAPerson(payer), uses, history, s.categoryId)
+        val note = when (s.source) {
+            SuggestionSource.RULE -> "your rule"
+            SuggestionSource.LEARNED -> if (uses >= 2) "you chose it $uses times for this payer" else "what you chose last time"
+            SuggestionSource.HISTORY -> if ((history?.agree ?: 0) >= 2) "${history?.agree} of your earlier income entries" else "your earlier income entries"
+            else -> "the words of the text"
         }
         val alternatives = ((history?.top?.let { listOf(it) }.orEmpty()) + history?.runnersUp.orEmpty()).filter { it != s.categoryId && it in usable }.distinct().take(2)
         return CategoryAdvice(s.categoryId, s.source, certainty, note, alternatives)

@@ -34,6 +34,17 @@ object PayeeKey {
     /** The category learned for [payee]: under the key of today, else under the old one. */
     fun lookup(payee: String?, learned: Map<String, String>): String? = of(payee)?.let { learned[it] } ?: legacy(payee)?.let { learned[it] }
 
+    /** Choices for MONEY IN are kept apart from choices for money out under the same table: the key of an income choice starts with this. A payer is not a payee ("Ravi" paying you is not you paying "Ravi"). */
+    const val INCOME_PREFIX = "in:"
+
+    /** The key a payer's income category is remembered under: [of] with [INCOME_PREFIX]. */
+    fun incomeOf(payer: String?): String? = of(payer)?.let { INCOME_PREFIX + it }
+
+    /** The income category learned for [payer]; never a choice made for the same name as an expense payee. */
+    fun lookupIncome(payer: String?, learned: Map<String, String>): String? = incomeOf(payer)?.let { learned[it] }
+
+    fun isIncomeKey(key: String): Boolean = key.startsWith(INCOME_PREFIX)
+
     /** The payees that sell more than one kind of thing, or stand for many sellers: a marketplace, a wallet, an app store. A category learned for them is a hint, not a rule. */
     private val mixed = setOf(
         "amazon", "amazonpay", "paytm", "paytmwallet", "phonepe", "googlepay", "gpay", "googleplay", "google", "cred", "mobikwik", "freecharge", "bhim", "flipkart", "reliance", "tata", "apple",

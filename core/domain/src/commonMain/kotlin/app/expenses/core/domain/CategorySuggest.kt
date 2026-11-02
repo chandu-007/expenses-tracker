@@ -19,8 +19,11 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
     }
 }
 
-/** [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. */
-enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS, KEYWORD }
+/**
+ * [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. [CREDIT_WORDS] is a guess from the words of a CREDIT text ([IncomeWords]): only ever
+ * something to check.
+ */
+enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS, KEYWORD, CREDIT_WORDS }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -59,6 +62,22 @@ object CategorySuggest {
         // the words of the payee's name ("tea stall", "medicals"), when the starter list does not know it: a guess, shown for the person to check
         payee?.let { PayeeWords.categoryNamesFor(it) }?.firstNotNullOfOrNull { name -> byName[name.lowercase()]?.takeIf { it in usable } }?.let { return CategorySuggestion(it, SuggestionSource.KEYWORD) }
         if (toAPerson) byName["other"]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.PERSON) }
+        return null
+    }
+
+    /**
+     * The income category for a captured CREDIT, by the same trust model as [suggest] and with its own keys: the person's rules first (a rule only counts when its category is one of [usable], the
+     * income categories, so an expense rule never fires on money coming in), then what they chose for this payer ([PayeeKey.lookupIncome]: kept apart from what they chose for the same name as
+     * a payee, so "Ravi" paid is not "Ravi" paying), then their earlier income from the same payer ([history]), then the words of the text ([IncomeWords], a guess). Null when nothing applies.
+     */
+    fun suggestIncome(
+        payee: String?, body: String, rules: List<CaptureRule>, learned: Map<String, String>, usable: Set<String>, byName: Map<String, String> = emptyMap(), history: String? = null,
+    ): CategorySuggestion? {
+        val text = listOfNotNull(payee, body).joinToString(" ")
+        rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
+        PayeeKey.lookupIncome(payee, learned)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
+        IncomeWords.categoryNameFor(body)?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.CREDIT_WORDS) } }
         return null
     }
 }

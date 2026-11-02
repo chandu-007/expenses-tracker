@@ -80,6 +80,18 @@ Use your own real texts. Nothing here is checked against a real bank yet: the nu
 - [ ] Merge one category into another in Categories: the rules and learned choices that named it now name the other one (they used to stop working).
 - [ ] Open Reports: spending with no category is shown as "Uncategorised", so a card added without a category is still counted, never lost.
 
+### Money received, Categorise and Undo for rules (To review, after 0.10.4)
+Use your own real credit texts (salary, interest, a refund, money from a friend). Nothing here is checked against a real bank yet: the numbers in the notes come from invented messages.
+- [ ] To review: a **salary** credit shows "Salary (the words of the text)" and "This is a guess: please check it"; an **interest** credit "Interest"; a **dividend** credit "Dividends"; a cashback "Refunds and cashback". Write down every credit with a **wrong** category (the sender and the wording, not the numbers) and every one whose wording names a purpose but got none (a different bank's way of writing "salary" or "interest" is the likely miss).
+- [ ] Money from a friend by UPI (no purpose in the words): the card shows four income chips (Salary, Interest, Gifts received, Refunds and cashback) and "no category"; one tap on a chip and Add. The next credit from the same friend starts with it, marked as a guess; after you choose it twice in a row it no longer asks you to check.
+- [ ] A guess on a credit is never added by "Add all" or a swipe; a credit with no guess still is (as income with no category).
+- [ ] A refund of something you bought (the amount and shop match an expense from the last 4 months): the card says "Recorded as a refund of ..." and adding it reduces that expense. It does not become income, and no income chips show. A refund with nothing to match is income in "Refunds and cashback".
+- [ ] The same person as a payee and as a payer (you pay your landlord by UPI, and he sometimes pays you back): what you choose for the money you receive never changes the category of what you pay.
+- [ ] Open an income that has no category from Home: a "Suggested: ..." chip appears when the app knows the payer; one tap puts it on, Save.
+- [ ] More, Capture, Category rules: add a rule with **Money in** and an income category ("acme" -> Salary); it fires on a credit that mentions acme and never on a payment that does. Remove a rule: "Removed the rule ..." with **Undo** puts it back in the same place. Forget and Change on "What the app has learned" also have Undo; after Undo the "chosen N times in a row" is what it was.
+- [ ] Home: with 3 or more expenses that have no category, a slim card "N expenses have no category" with **Review** and **Not now**. Not now hides it for a week (it comes back after 7 days). Review: one expense at a time, "N left", a suggestion you can tap, Skip, "All done" at the end and Undo on the last choice. Choosing for one payee makes the next expense of that payee suggest the same. On a tablet it is a full screen like the other pages.
+- [ ] Home opens and saves as fast as before with a large ledger (the count is worked out a moment after the last save, not when Home opens).
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 

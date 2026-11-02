@@ -42,13 +42,16 @@ data class HistoryRevisionUi(val index: Int, val whenText: String, val what: Str
 /** Where an entry was read from, for its "Where this came from" section: [kindLabel] ("Text message from HDFCBK"), the original [text], and when it arrived ([whenText] is empty when not known). */
 data class OriginUi(val kindLabel: String, val text: String, val whenText: String)
 
+/** A category the editor offers for an entry that has none: its name, why ([note]: "you chose it twice for this payer"), and whether it is the person's own choice ([sure]) or a guess. */
+data class SuggestedCategoryUi(val categoryId: String, val name: String, val note: String, val sure: Boolean)
+
 /** What the edit screen may do with an entry. */
 sealed interface Editable {
     /**
      * An entry the form can edit (or, for a refund, create). [refundOf] is the title of the refunded expense; [canRefund] offers a refund from this expense;
      * [canChangeKind] offers the chips that change an expense, income or transfer into one of the others (see [EntryActions.changeKind]).
      */
-    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false, val origin: OriginUi? = null, val canChangeKind: Boolean = false) : Editable
+    data class Form(val draft: EntryDraft, val title: String, val refundOf: String? = null, val canRefund: Boolean = false, val origin: OriginUi? = null, val canChangeKind: Boolean = false, val suggestion: SuggestedCategoryUi? = null) : Editable
 
     /** Shown read-only, with the reason it cannot be edited here yet, so nothing is changed by accident. */
     data class ReadOnly(val id: String, val title: String, val reason: String, val origin: OriginUi? = null) : Editable
@@ -103,6 +106,31 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val e = editableCore(entryId) ?: return null
         val o = originUi(entryId) ?: return e
         return when (e) { is Editable.Form -> e.copy(origin = o); is Editable.ReadOnly -> e.copy(origin = o) }
+    }
+
+    /**
+     * [e] with a category offered when it is an income that has none (a credit added from To review without one): the same advice To review gives for money in (the person's rules, what they chose
+     * or filed for this payer, the words of the text), looked up once when the editor opens. Nothing is changed until they tap it.
+     */
+    fun withSuggestion(e: Editable?): Editable? {
+        val f = e as? Editable.Form ?: return e
+        val d = f.draft
+        if (d.id == null || d.kind != DraftKind.INCOME || d.category.isNotEmpty()) return e
+        val cats = ok.categories.list().filter { !it.hidden && it.kind.forIncome }
+        val originText = ok.origins.get(d.id!!)?.text
+        val label = d.note.trim().ifEmpty { f.title }
+        val payer = originText?.let { PayeeGuess.of(it) } ?: label.takeIf { it.isNotEmpty() }
+        val learned = ok.captureRules.learnedRows()
+        val words = app.expenses.core.domain.SimilarEntries.searchWords(label)
+        val candidates = if (words.isEmpty()) emptyList() else ok.db.schemaQueries.similarCandidates("INCOME", words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
+            .filter { it.id != d.id }.map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at) }
+        val advice = app.expenses.core.parsers.CaptureCategory.adviseIncome(
+            payer, listOfNotNull(label, originText).joinToString(" "), ok.captureRules.rules(),
+            app.expenses.core.parsers.CaptureCategory.Taught(learned.associate { it.key to it.categoryId }, learned.associate { it.key to it.uses }),
+            cats.map { it.id }.toSet(), cats.filter { it.parentId == null }.associate { it.name.lowercase() to it.id }, app.expenses.core.domain.SimilarEntries.profile(label, candidates),
+        ) ?: return e
+        val name = cats.firstOrNull { it.id == advice.categoryId }?.name ?: return e
+        return f.copy(suggestion = SuggestedCategoryUi(advice.categoryId, name, advice.note, advice.certainty == app.expenses.core.domain.Certainty.SURE))
     }
 
     /** The origin of [entryId] as the screen shows it, or null for an entry typed by hand. */
@@ -200,13 +228,15 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val text = if (loan) ok.people.get(draft.personId)?.name else draft.note.trim().ifEmpty { null }
         val typed = draft.note.trim().ifEmpty { null }
         // read before the save replaces it: the category this captured entry was in
-        val categoryBefore = if (existing?.source == "sms") ok.db.schemaQueries.splitsOf(id).executeAsList().singleOrNull()?.category_id else null
+        val categoryBefore = if (existing?.source == "sms") (if (existing.kind == "INCOME") existing.category_id else ok.db.schemaQueries.splitsOf(id).executeAsList().singleOrNull()?.category_id) else null
         ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = if (loan) typed else existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, note = if (loan) typed else null, tags = draft.tags))
         // Correcting a captured entry later (in the editor, or by a bulk change of category), teaches the same lesson as choosing in the inbox: next time that payee starts there. Only a changed
         // category teaches (saving the same entry for another reason does not count as a choice), and the payee is read from the original text so that it is the key To review looks up (the
         // entry's own title may be a name the person gave it).
-        if (teach && existing?.source == "sms" && draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft) && draft.category.isNotEmpty() && draft.category != categoryBefore) {
-            ok.captureRules.learn(ok.origins.get(id)?.text?.let { PayeeGuess.of(it) } ?: text, draft.category, text)
+        // Money in is learned for the payer, under its own key (a payer is not a payee).
+        val teachable = draft.kind == DraftKind.INCOME || draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft)
+        if (teach && existing?.source == "sms" && teachable && draft.category.isNotEmpty() && draft.category != categoryBefore) {
+            ok.captureRules.learn(ok.origins.get(id)?.text?.let { PayeeGuess.of(it) } ?: text, draft.category, text, income = draft.kind == DraftKind.INCOME)
         }
         if (draft.kind == DraftKind.EXPENSE) {
             val category = if (EntryDrafts.isSplit(draft)) "" else draft.category

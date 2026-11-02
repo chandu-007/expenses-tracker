@@ -20,7 +20,7 @@ object SuggestionConfidence {
         return when (source) {
             SuggestionSource.RULE, SuggestionSource.WORDS -> Certainty.SURE
             SuggestionSource.STARTER -> if (mixed) Certainty.CHECK else Certainty.SURE
-            SuggestionSource.KEYWORD, SuggestionSource.PERSON -> Certainty.CHECK
+            SuggestionSource.KEYWORD, SuggestionSource.PERSON, SuggestionSource.CREDIT_WORDS -> Certainty.CHECK
             SuggestionSource.LEARNED -> when {
                 disagrees -> Certainty.CHECK
                 needsTwo && uses < 2 && (history?.agree ?: 0) < 2 -> Certainty.CHECK

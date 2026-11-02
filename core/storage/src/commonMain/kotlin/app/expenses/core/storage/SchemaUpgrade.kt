@@ -41,6 +41,7 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS account_look (account_id TEXT NOT NULL PRIMARY KEY, network TEXT, tier TEXT, last4 TEXT)")
         run(driver, "CREATE INDEX IF NOT EXISTS account_look_last4 ON account_look(last4) WHERE last4 IS NOT NULL")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_tag (entry_id TEXT NOT NULL, tag TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (entry_id, tag)) WITHOUT ROWID")
+        run(driver, "CREATE INDEX IF NOT EXISTS spend_line_uncategorised ON spend_line(currency, occurred_at DESC) WHERE category_id IS NULL AND mine_minor > 0")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_deleted_ids ON entry(id) WHERE deleted = 1")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_tag_tag ON entry_tag(tag, entry_id)")
         run(driver, "CREATE INDEX IF NOT EXISTS entry_loans ON entry(person_id, currency, direction, amount_minor, occurred_at) WHERE kind = 'SETTLEMENT' AND deleted = 0")

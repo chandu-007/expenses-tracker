@@ -214,7 +214,7 @@ private fun InboxCard(
                 // the same as the Add button on this card; when it is refused the card slides back and says why
                 SwipeToDismissBoxValue.StartToEnd -> {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
-                    onConfirm(r.id, account, if (credit) "" else category, "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
+                    onConfirm(r.id, account, category, "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
                     true
                 }
                 SwipeToDismissBoxValue.EndToStart -> { onDismiss(r.id); true }
@@ -290,17 +290,21 @@ private fun InboxCard(
                     val categoryName = categories.firstOrNull { it.id == category }?.name
                     val why = if (picked == null && category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f).testTag("inbox_goes_${r.id}"))
+                        Text("Goes to $accountName · " + (categoryName ?: "no category") + why, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f).testTag("inbox_goes_${r.id}"))
                         TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
                     }
-                    if (!credit && picked == null && r.certainty == "check" && category.isNotEmpty()) Text("This is a guess: please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_check_${r.id}"))
-                    if (!credit && picked == null && r.alternatives.isNotEmpty() && !changing) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (picked == null && r.certainty == "check" && category.isNotEmpty()) Text("This is a guess: please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_check_${r.id}"))
+                    if (picked == null && r.alternatives.isNotEmpty() && !changing) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
+                    }
+                    // money in with nothing to go on: the first income categories as chips right on the card (a person's category is optional, so this stays one line and Add still works without a choice)
+                    if (credit && picked == null && category.isEmpty() && !changing && !paired) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        offeredCategories(categories, income = true).take(CREDIT_QUICK_CHIPS).forEach { c -> AssistChip(onClick = { picked = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_income_${r.id}_${c.id}")) }
                     }
                     if (changing) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { pickedAccount = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
-                        if (!credit) {
-                            val offered = offeredCategories(categories, income = false, keep = category)
+                        run {
+                            val offered = offeredCategories(categories, income = credit, keep = category)
                             // the first few as chips (and the chosen one, wherever it is); every other one is behind "More", in a list with search, as on the Add screen
                             val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -317,7 +321,7 @@ private fun InboxCard(
             // the answer: one big Add (the label says what it will do) and Skip
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, if (credit) "" else category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
+                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
                     enabled = account.isNotEmpty() || (paired && r.treatment != "PAYMENT"), modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
                 ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
                 OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
@@ -491,7 +495,7 @@ fun CaptureRulesScreen(
     Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Text("When a captured payment mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("When a captured payment (or money you receive) mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             itemsIndexed(rules, key = { _, r -> r.id }) { i, r ->
                 Row(Modifier.animateItem().fillMaxWidth().testTag("rule_${r.pattern}"), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -506,8 +510,13 @@ fun CaptureRulesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("New rule", style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(pattern, { pattern = it; tested = null; problem = null }, label = { Text("Payee or text contains") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rule_pattern"))
-                    // a rule only applies to captured payments, which are expenses
-                    val offered = offeredCategories(categories, income = false)
+                    // a rule for money out takes an expense category and one for money in an income category: an expense rule never fires on a credit, nor an income rule on a payment
+                    var moneyIn by rememberSaveable { mutableStateOf(false) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !moneyIn, onClick = { if (moneyIn) { moneyIn = false; category = ""; problem = null } }, label = { Text("Money out") }, modifier = Modifier.testTag("rule_kind_out"))
+                        FilterChip(selected = moneyIn, onClick = { if (!moneyIn) { moneyIn = true; category = ""; problem = null } }, label = { Text("Money in") }, modifier = Modifier.testTag("rule_kind_in"))
+                    }
+                    val offered = offeredCategories(categories, income = moneyIn)
                     val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
                     var pickingCategory by rememberSaveable { mutableStateOf(false) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -530,3 +539,6 @@ fun CaptureRulesScreen(
 
 /** How many categories show as chips on a captured item and in the rule form; the rest are behind "More". */
 private const val CATEGORY_CHIPS = 10
+
+/** How many income categories show right on a money-in card that has no suggestion; Change shows the rest. */
+private const val CREDIT_QUICK_CHIPS = 4
