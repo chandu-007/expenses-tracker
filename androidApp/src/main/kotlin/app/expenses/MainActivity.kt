@@ -20,6 +20,7 @@ import app.expenses.core.domain.LockSettings
 import app.expenses.core.domain.LockTimeout
 import app.expenses.ui.LockAvailability
 import app.expenses.ui.PermissionRow
+import app.expenses.ui.rememberResumeState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -133,10 +134,10 @@ class MainActivity : FragmentActivity() {
 
         @Composable
         override fun rememberSmsPermission(onResult: (Boolean) -> Unit): SmsPermission {
-            var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
-            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> granted = ok; onResult(ok) }
+            val state = rememberResumeState { ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> state.refresh(); onResult(ok) }
             return object : SmsPermission {
-                override val granted get() = granted
+                override val granted get() = state.value
                 override fun request() = launcher.launch(android.Manifest.permission.RECEIVE_SMS)
             }
         }

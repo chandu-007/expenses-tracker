@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -167,6 +168,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val smsPermission = sms.granted
             val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
+            val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
             var budgeting by rememberSaveable { mutableStateOf(false) }
             var loansOpen by rememberSaveable { mutableStateOf(false) }
             var billsOpen by rememberSaveable { mutableStateOf(false) }
@@ -359,9 +361,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BackHandler { healthOpen = false }
                         CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
                     }
+                        // the report depends on the text permission: work it out again when the permission changes while the screen is open (the first load is the tap that opened it)
+                        val firstHealth = remember { booleanArrayOf(true) }
+                        LaunchedEffect(smsPermission) { if (firstHealth[0]) firstHealth[0] = false else viewModel.loadCaptureHealth(smsPermission) }
                     k == 5 -> {
                         BackHandler { privacyOpen = false }
-                        PrivacyScreen(host.privacyRows(), host.canUseInternet, onBack = { privacyOpen = false })
+                        // read again whenever the app returns from the system's settings, so a permission given there shows at once
+                        val privacy = app.expenses.ui.rememberResumeState { host.privacyRows() }
+                        PrivacyScreen(privacy.value, host.canUseInternet, onBack = { privacyOpen = false })
                     }
                     k == 6 -> {
                         BackHandler { rulesOpen = false }
@@ -370,10 +377,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 7 -> {
                         BackHandler { captureOpen = false }
                         CaptureSettingsScreen(
-                            captureSettings, smsPermission, host.notificationAccessGranted(),
+                            captureSettings, smsPermission, notifAccess.value,
                             onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else sms.request() },
-                            onToggleNotif = { on -> viewModel.setNotificationCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
-                            onToggleEmail = { on -> viewModel.setEmailCapture(on); if (on && !host.notificationAccessGranted()) host.openNotificationAccessSettings() },
+                            onToggleNotif = { on -> viewModel.setNotificationCapture(on); if (on && !notifAccess.value) host.openNotificationAccessSettings() },
+                            onToggleEmail = { on -> viewModel.setEmailCapture(on); if (on && !notifAccess.value) host.openNotificationAccessSettings() },
                             onOpenAccessSettings = { host.openNotificationAccessSettings() },
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                             onTestMessage = { text, done -> viewModel.pasteMessage(text) { r -> done(r); viewModel.loadCaptureSettings() } },

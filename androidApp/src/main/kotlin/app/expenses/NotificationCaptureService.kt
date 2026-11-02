@@ -68,7 +68,14 @@ class NotificationCaptureService : NotificationListenerService() {
         const val TEST_PACKAGE_EXTRA = "app.expenses.capture_test_package"
         private const val MEASUREMENT_NAME = "GPAY"
 
-        /** Whether the system has given this app notification access (the person turns that on in the phone's settings, not here). */
-        fun accessGranted(context: android.content.Context): Boolean = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+        /**
+         * Whether the system has given this app notification access (the person turns that on in the phone's settings, not here). Read straight from the setting on each call:
+         * `NotificationManagerCompat.getEnabledListenerPackages` keeps the last answer and never refreshes it when the setting has become null, so a screen that looked again on
+         * returning to the app could still be told "yes".
+         */
+        fun accessGranted(context: android.content.Context): Boolean {
+            val flat = android.provider.Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
+            return flat.split(':').any { android.content.ComponentName.unflattenFromString(it)?.packageName == context.packageName }
+        }
     }
 }

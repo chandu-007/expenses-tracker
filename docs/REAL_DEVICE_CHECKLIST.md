@@ -69,6 +69,14 @@ Settings, Display, Font size and Display size at their largest.
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 
+### Permissions given in system settings show on return (Android)
+- [ ] More, Capture: turn on "Read payment app notifications"; the phone opens Notification access; turn this app on; press Back. The switch is on and the red "Notification access is not given" line is gone **without leaving the screen**. Do the same from "Open notification access settings". On Samsung One UI the access page may ask you to confirm a warning first.
+- [ ] Still on Capture: leave the app (Home), turn the access off in system settings (Settings, Notifications, Advanced, Notification access), open the app again from Recents. The switch is off and the red line is back.
+- [ ] More, Capture: turn on "Read bank texts" (Play build: not present), allow the permission in Android's dialog: the switch stays on at once. Take the permission away in Settings, Apps, Expenses, Permissions, and come back: the red "Android has not allowed" line shows.
+- [ ] More, Notifications (Android 13+): with notifications turned off for the app the red notice shows; press "Allow notifications" or turn them on in system settings and return: the notice is gone at once.
+- [ ] More, Privacy: the Allowed / Not allowed words follow the same changes on return.
+- [ ] iPhone: More, Notifications: with notifications off in Settings, the notice shows; go to Settings, Expenses, Notifications, turn them on, come back: the notice is gone (not verified on a phone).
+
 ## iPhone
 
 ### Install

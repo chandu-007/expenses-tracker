@@ -65,10 +65,10 @@ private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: Stri
 @Composable
 fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((NotificationPrefs) -> NotificationPrefs) -> Unit, onSendTest: () -> Unit, onBack: () -> Unit) {
     val platform = LocalPlatform.current
-    var allowed by remember { mutableStateOf(platform.notificationsAllowed()) }
-    // The user may change this in system settings and come back, so look again every time the screen is resumed.
-    LifecycleResumeEffect(Unit) { allowed = platform.notificationsAllowed(); onPauseOrDispose { } }
-    val askPermission = rememberNotificationPermissionRequest { allowed = platform.notificationsAllowed() }
+    // The user may change this in system settings and come back: read again whenever the app returns to the foreground and right after the permission question closes.
+    val allowedState = rememberResumeState { platform.notificationsAllowed() }
+    val allowed = allowedState.value
+    val askPermission = rememberNotificationPermissionRequest { allowedState.refresh() }
 
     Scaffold(topBar = { AreaTopBar("Notifications", Area.CAPTURE, Icons.Outlined.Notifications, onBack, "notif_back") }) { padding ->
         if (!platform.supportsNotifications) {
