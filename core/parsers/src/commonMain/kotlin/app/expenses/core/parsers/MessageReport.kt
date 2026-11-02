@@ -44,7 +44,8 @@ object MessageRedactor {
     private val otpCode = Regex("""(?i)\b((?:otp|code|pin|cvv|password|passcode)\b[^0-9\n]{0,25})(\d{3,8})\b""")
     private val pan = Regex("""\b[A-Z]{5}\d{4}[A-Z]\b""")
     private val plate = Regex("""\b[A-Z]{2}\d{2}[A-Z]{1,3}\d{4}\b""")
-    private val maskedTail = Regex("""((?:[xX*]{2,}[\s-]*)+)(\d{3,6})\b""")
+    /** Two or more mask characters then the digits, or ONE mask character (`X123`, `x1234`, `*123`: SBI and some others write a single one) that does not belong to a longer word. */
+    private val maskedTail = Regex("""((?:[xX*]{2,}[\s-]*)+|(?<![A-Za-z0-9])[xX*][\s-]*)(\d{3,6})\b""")
     private val accountTail = Regex("""(?i)\b((?:a/?c|acct?|account|card|ending(?:\s+(?:in|with))?)\s*(?:no\.?|number)?\s*[:\-]?\s*)(\d{3,4})\b""")
     private val referenceValue = Regex("""(?i)\b((?:ref(?:erence)?|rrn|utr|txn|trxn|transaction|order|chq|cheque|imps|neft|rtgs|id)\b\.?\s*(?:no\.?|number|id)?\s*[:\-#]?\s*)([A-Za-z0-9]{6,})""")
     private val digitRun = Regex("""\d{5,}""")
@@ -58,7 +59,7 @@ object MessageRedactor {
     /** "to ravi kumar 9876543210" or "from lakshmi narayana xxxx@ybl": plain lower-case words that stand right before a phone number or an address are the person's name. */
     private val lowerNameBeforeContact = Regex("""(?i)\b(?:to|from|by)\s+((?:[a-z][a-z'\-]*\s+){1,4})(?=xxxx@|\+?\d[\d -]{8,})""")
     /** A masked account number, then words in capitals: IMPS and NEFT texts name the account holder there ("to A/c XX5678 RAVI KUMAR on"). */
-    private val afterAccount = Regex("""(?i)[xX*]{2,}\d{3,6}\s+""")
+    private val afterAccount = Regex("""(?i)(?:[xX*]{2,}|(?<![A-Za-z0-9])[xX*])\d{3,6}\s+""")
     /** "due to INSUFFICIENT FUNDS": a reason, not an addressee. */
     private val notAnAddressee = setOf("due", "according", "thanks", "subject", "up", "owing", "prior", "next", "close", "similar", "relating", "equal", "pursuant", "thank")
     private val dear = Regex("""\b(?:Dear|DEAR|Hi|Hello)\s+(?:(?:Mr|Mrs|Ms|Shri|Smt|Dr)\.?\s+)?""")
@@ -202,6 +203,8 @@ object MessageRedactor {
                 if (j == i) break
                 val word = text.substring(i, j).trimEnd('-')
                 val initial = word.length == 1 && word[0].isUpperCase() && j < text.length && text[j] == '.'
+                // a single x or X glued to digits is an account mask (SBI's "X1234"), not a name: it is left for the mask rule
+                if (word.length == 1 && (word[0] == 'x' || word[0] == 'X') && j < text.length && text[j].isDigit()) break
                 if (!(initial || isNameWord(word, capsOnly)) || (j < text.length && (text[j] == '/' || text[j] == '@'))) break
                 words++; end = i + word.length
                 // a full stop ends the sentence, unless it follows an initial ("R.K. SHARMA", "R. Kumar"): then the name goes on

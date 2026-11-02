@@ -9,15 +9,15 @@ import app.expenses.core.parsers.CaptureOutcome
 import app.expenses.core.parsers.IgnoreReason
 import app.expenses.core.parsers.AppSources
 import app.expenses.core.storage.CaptureEventOutcome
+import app.expenses.core.storage.countSkippedSender
 import app.expenses.core.storage.InboxItem
 import app.expenses.core.storage.InboxStatus
 import java.security.MessageDigest
 import java.util.UUID
 
 /**
- * Turns one text or notification into, at most, one pending item in the review inbox. The sender is judged before the body is read; a text that is not a transaction from an
- * allowlisted header leaves **only a count** (no words, no number) in capture health. The one exception to "before the body is read": a text from an ALPHANUMERIC header that is not on the
- * list has its words looked at once, in memory, by [UnlistedCapture] to see whether they are shaped like a payment; then a masked outline (never the words) is kept as well.
+ * Turns one text or notification into, at most, one pending item in the review inbox. The sender is judged before the body is read; a text
+ * that is not a transaction from an allowlisted header leaves **only a count** (no words, no number) in capture health.
  */
 object Capture {
     const val SMS = CaptureKeys.SMS
@@ -88,13 +88,14 @@ object Capture {
                     if (emailNames != null && r.reason == IgnoreReason.NOT_ALLOWLISTED && r.headerRoot == null) return@write CaptureEventOutcome.NOT_ALLOWLISTED
                     val event = when (r.reason) {
                         IgnoreReason.PERSONAL_SENDER -> CaptureEventOutcome.PERSONAL_SENDER
-                        // a text from a header nobody listed: its words are looked at once, in memory, only to see whether it is shaped like a payment (UnlistedCapture); the words are not kept
-                        IgnoreReason.NOT_ALLOWLISTED -> r.headerRoot?.takeIf { emailNames == null && source == SMS }?.let { UnlistedCapture.judge(ok, now, it, body) } ?: CaptureEventOutcome.NOT_ALLOWLISTED
+                        IgnoreReason.NOT_ALLOWLISTED -> CaptureEventOutcome.NOT_ALLOWLISTED
                         IgnoreReason.OTP -> CaptureEventOutcome.OTP
                         IgnoreReason.NOT_A_TRANSACTION -> CaptureEventOutcome.NOT_A_TRANSACTION
                         IgnoreReason.DECLINED -> CaptureEventOutcome.DECLINED
                     }
                     ok.inbox.recordEvent(now, r.headerRoot, event)
+                    // a text from a sender name that is not on the list: only the NAME is counted (see SkippedSenders), for the list in More, Capture; never a word of the text
+                    r.headerRoot?.let { root -> if (event == CaptureEventOutcome.NOT_ALLOWLISTED && emailNames == null && source == SMS) ok.templates.countSkippedSender(root, app.expenses.core.parsers.SenderRules.headerSuffix(sender), now) }
                     return@write event
                 }
                 is CaptureOutcome.Transaction -> {

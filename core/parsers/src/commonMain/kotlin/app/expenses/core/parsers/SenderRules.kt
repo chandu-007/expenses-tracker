@@ -18,6 +18,17 @@ object SenderRules {
         return root?.uppercase()
     }
 
+    /**
+     * The one-letter category suffix of an alphanumeric header, upper case: `S` for `AX-HDFCBK-S`, `T` for `BP-ICICIT-T`. India's registered headers end in a letter that says what kind of
+     * sender it is (T transactional, S service or bank alert, P promotional, G government); null for a phone number, a name with no suffix, or anything that is not a registered header. Only the
+     * sender's name is read, never a word of the message.
+     */
+    fun headerSuffix(sender: String): Char? {
+        val s = sender.trim()
+        if (headerRoot(s) == null) return null
+        return header.matchEntire(s)?.groupValues?.get(3)?.firstOrNull()?.uppercaseChar()
+    }
+
     /** Header root to the name shown to the user, for every entry of [BankRules.ALL]. The data lives there; this is the view the classifier looks roots up in. */
     val BUILT_IN: Map<String, String> = BankRules.ALL.associate { it.root to it.issuer }
 

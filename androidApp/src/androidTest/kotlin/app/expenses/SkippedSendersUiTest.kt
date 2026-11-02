@@ -23,8 +23,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * "Texts we skipped from unknown senders" in More, Capture: a payment-looking text from a name that is not on the list shows as a row with a count, a masked outline and one button
- * that trusts the name; an OTP or an offer from another unlisted name never shows. The texts are invented.
+ * "Senders we skipped" in More, Capture: the NAMES of senders that are not on the list of banks, with how many of their texts were skipped. Only names whose header ends in -T or -S are
+ * shown (a promotional -P, a government -G, a phone number or an email never is; a name with no suffix only after three texts), with one button that trusts the name. The app looks at no
+ * word of those texts, so the texts used here are plain. Every name and text is invented.
  */
 @RunWith(AndroidJUnit4::class)
 class SkippedSendersUiTest {
@@ -38,9 +39,7 @@ class SkippedSendersUiTest {
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetApp() }
 
     private val payment = "Rs.7,418.00 debited from A/c XX5521 on 05-10-26 to PINEAPPLEMART (UPI Ref 628374659283). Not you? Call 18002586161"
-    private val otp = "123456 is the OTP for your transaction of Rs.1,250.00 at AMAZON. Do not share it with anyone."
-    private val offer = "Get Rs 500 off, spend more and save! Use code SAVE500 before it ends."
-    private fun ingest(sender: String, body: String, at: Long) = runBlocking { Capture.ingest(container, Capture.SMS, sender, body, at) }
+    private fun ingest(sender: String, at: Long, body: String = payment) = runBlocking { Capture.ingest(container, Capture.SMS, sender, body, at) }
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
@@ -52,44 +51,45 @@ class SkippedSendersUiTest {
     private fun pendingIssuers() = runBlocking { container.write { it.inbox.list() } }!!.map { it.issuer }
 
     @Test
-    fun aSkippedPaymentShowsItsCountAndMaskedOutlineAndOneTapTrustsTheNameForTheNextText() {
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("VM-MYCOOP-S", payment, 1_000))
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("VM-MYCOOP-S", payment, 2_000))
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", otp, 3_000))
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-PROMOZ-S", offer, 4_000))
+    fun aServiceOrTransactionalNameShowsItsCountAndOneTapTrustsItForTheNextTextWhilePromotionalGovernmentAndPhoneSendersNeverShow() {
+        ingest("VM-MYCOOP-S", 1_000); ingest("VM-MYCOOP-T", 2_000); ingest("AX-ICICIX-T", 2_500)
+        ingest("AX-PROMOZ-P", 3_000); ingest("DL-GOVTIN-G", 3_500); ingest("+919876543210", 4_000); ingest("AX-NOSUFF", 4_500); ingest("AX-NOSUFF", 4_600)
         launch(); openCapture()
         waitFor("skipped_sender_MYCOOP")
-        assertEquals("MYCOOP", textOf("skipped_sender_MYCOOP"))
-        assertEquals("2 texts skipped", textOf("skipped_count_MYCOOP"))
-        assertTrue(textOf("skipped_hint_MYCOOP").contains("money out"), textOf("skipped_hint_MYCOOP"))
-        val shape = textOf("skipped_shape_MYCOOP")
-        assertTrue(shape.contains("debited") && shape.contains("###"), shape)
-        assertTrue(shape.none { it.isDigit() } && !shape.contains("PINEAPPLEMART", ignoreCase = true), "the outline shows no digit and no name: $shape")
-        assertEquals("The skipped texts were not kept, so only new texts from a name you trust will be read.", textOf("skipped_not_kept"))
-        assertTrue(has("skipped_senders") && !has("skipped_sender_SHOPXX") && !has("skipped_sender_PROMOZ"), "an OTP and an offer never get a row")
-        val button = compose.onNodeWithTag("skipped_trust_MYCOOP", useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(has("skipped_senders"))
+        assertEquals("MYCOOP", textOf("skipped_sender_MYCOOP")); assertEquals("2 texts skipped", textOf("skipped_count_MYCOOP")); assertEquals("1 text skipped", textOf("skipped_count_ICICIX"))
+        assertTrue(textOf("skipped_last_MYCOOP").startsWith("Last one: "), textOf("skipped_last_MYCOOP"))
+        assertEquals("Banks send alerts from names like ICICIT. If one of these is your bank, tap Treat as my bank; only new texts from it will be read. We never read the texts of other senders.", textOf("skipped_explain"))
+        assertTrue(!has("skipped_sender_PROMOZ") && !has("skipped_sender_GOVTIN") && !has("skipped_sender_NOSUFF"), "promotional, government and unclassified (two texts) names are hidden")
+        assertTrue(!has("skipped_hint_MYCOOP") && !has("skipped_shape_MYCOOP"), "no outline of any text exists")
         assertEquals("Treat MYCOOP as my bank", compose.onNodeWithTag("skipped_trust_MYCOOP").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }, "the button's own words")
+        val button = compose.onNodeWithTag("skipped_trust_MYCOOP", useUnmergedTree = true).fetchSemanticsNode()
         assertTrue(button.size.height >= with(androidx.compose.ui.unit.Density(context)) { 48.dp.roundToPx() }, "at least 48 dp tall")
         tap("skipped_trust_MYCOOP")
         waitFor("sender_chip_MYCOOP"); gone("skipped_sender_MYCOOP")
-        assertEquals("Added MYCOOP", textOf("skipped_added_notice"))
+        assertEquals("Added MYCOOP", textOf("skipped_added_notice")); assertTrue(has("skipped_sender_ICICIX"), "the other name stays")
         compose.waitUntil(10_000) { stored() == "MYCOOP" }
         assertEquals(emptyList(), pendingIssuers(), "the skipped texts were not kept, so nothing appears for them")
-        assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", payment, 5_000), "the next text from the name is read")
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", 5_000), "the next text from the name is read")
         assertEquals(listOf("MYCOOP"), pendingIssuers())
-        // the outline is gone with the trust, and the name stays trusted after a relaunch
-        assertEquals(emptyList(), runBlocking { container.write { it.templates.settingsWithPrefix("skipped_hint:") } })
+        assertEquals(null, runBlocking { container.write { it.templates.setting("skipped_sender:MYCOOP") } }, "its counter went with the trust")
         launch(); openCapture(); waitFor("sender_chip_MYCOOP")
-        assertTrue(!has("skipped_sender_MYCOOP") && !has("skipped_senders"))
+        assertTrue(!has("skipped_sender_MYCOOP") && has("skipped_sender_ICICIX"))
+    }
+
+    @Test
+    fun aNameWithNoSuffixAppearsOnlyAfterThreeTexts() {
+        ingest("AX-NOSUFF", 1_000); ingest("AX-NOSUFF", 2_000)
+        launch(); openCapture(); assertTrue(!has("skipped_senders"))
+        ingest("AX-NOSUFF", 3_000)
+        launch(); openCapture(); waitFor("skipped_sender_NOSUFF"); assertEquals("3 texts skipped", textOf("skipped_count_NOSUFF"))
     }
 
     @Test
     fun theListIsStillThereAfterARelaunchAndANameTypedByHandTakesItsRowAway() {
-        ingest("VM-MYCOOP-S", payment, 1_000)
+        ingest("VM-MYCOOP-S", 1_000)
+        launch(); openCapture(); waitFor("skipped_sender_MYCOOP"); assertEquals("1 text skipped", textOf("skipped_count_MYCOOP"))
         launch(); openCapture(); waitFor("skipped_sender_MYCOOP")
-        assertEquals("1 text skipped", textOf("skipped_count_MYCOOP"))
-        launch(); openCapture(); waitFor("skipped_sender_MYCOOP")
-        // the editor's own Add trusts the same name: the row goes without the button
         val box = compose.onNodeWithTag("capture_headers", useUnmergedTree = true)
         runCatching { box.performScrollTo() }
         box.performTextInput("mycoop")
@@ -99,10 +99,9 @@ class SkippedSendersUiTest {
     }
 
     @Test
-    fun nothingIsShownWhenNoPaymentLookingTextWasSkipped() {
-        ingest("AX-SHOPXX-S", otp, 1_000); ingest("AX-PROMOZ-S", offer, 2_000); ingest("+919876543210", payment, 3_000)
+    fun nothingIsShownWhenOnlyPromotionalGovernmentOrPhoneSendersWereSkipped() {
+        ingest("AX-PROMOZ-P", 1_000); ingest("DL-GOVTIN-G", 2_000); ingest("+919876543210", 3_000)
         launch(); openCapture()
         assertTrue(!has("skipped_senders"))
-        assertEquals(emptyList(), runBlocking { container.write { it.templates.settingsWithPrefix("skipped_hint:") } })
     }
 }

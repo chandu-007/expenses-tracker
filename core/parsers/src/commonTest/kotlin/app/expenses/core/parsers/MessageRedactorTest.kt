@@ -242,4 +242,28 @@ class MessageRedactorTest {
         assertTrue(MessageReport.verdict("AX-HDFCBK-S", "Your statement is ready").contains("no amount or direction"), MessageReport.verdict("AX-HDFCBK-S", "Your statement is ready"))
         assertTrue(MessageReport.verdict("AX-NEWBNK-S", "x", setOf("NEWBNK")).contains("no amount or direction"), "an added header is a listed sender")
     }
+
+    /** Banks that print ONE mask character (SBI's "A/C X1234", "x123", "*123") or three digits: the digits identify an account tail and must go like those after XX. All invented. */
+    @Test
+    fun aSingleLetterMaskAndThreeDigitMasksAreRedactedLikeTheLongOnes() {
+        val shapes = listOf(
+            "Dear UPI user A/C X1234 debited by 449.0 on date 05Nov26 trf to SAMPLE SHOP Refno 628374659283" to "1234",
+            "Rs 90.00 debited from a/c x123 on 06-Nov-26 to SAMPLE SHOP. Avl Bal Rs 500.00." to "123",
+            "Rs 70.00 debited from A/c *123 on 05-11-26 to VPA cafe@okicici (UPI Ref 628374659285)." to "123",
+            "Rs 90.00 debited on 06-Nov-26 from X4821 to SAMPLE SHOP. Avl Bal Rs 500.00." to "4821",
+            "ICICI Bank Acct XXX123 credited:Rs. 1,000.00 on 02-Nov-26. Info NEFT-SAMPLE." to "123",
+            "ICICI Bank Acct XX123 debited for Rs 500.00 on 01-Nov-26; SAMPLE MERCHANT credited. UPI:123456789012." to "123",
+            "Rs 100.00 debited from a/c ending 123 on 05-11-26 to VPA shop@okicici (UPI Ref 628374659284)." to "123",
+            "Rs 5.00 debited from A/c x 4821 on 05-11-26." to "4821",
+        )
+        for ((body, digits) in shapes) {
+            for (keep in listOf(false, true)) {
+                val r = MessageRedactor.redact(body, keepAmounts = keep)
+                assertFalse(Regex("""(?<!\d)$digits(?!\d)""").containsMatchIn(r), "the digits $digits of the account survived (keepAmounts=$keep): $r")
+            }
+        }
+        // what is not a mask stays readable: a word that merely contains an x, a quantity, a product code
+        val r = MessageRedactor.redact("Rs 90.00 debited for BOX of 2 items, MAX123 offer, ref x 7")
+        assertTrue(r.contains("BOX") && r.contains("items"), r)
+    }
 }

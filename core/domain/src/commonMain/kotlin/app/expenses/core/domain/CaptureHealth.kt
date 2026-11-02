@@ -48,7 +48,7 @@ object CaptureHealth {
             SenderRow(root, names[root], list.filter { it.outcome in FOUND }.sumOf { it.count }, list.filter { it.outcome !in FOUND }.sumOf { it.count }, list.maxOf { it.lastAt })
         }
         val known = rows.filter { it.name != null }.sortedWith(compareByDescending<SenderRow> { it.captured }.thenBy { it.root })
-        val unknown = rows.filter { it.name == null && counts.any { c -> c.root == it.root && (c.outcome == "NOT_ALLOWLISTED" || c.outcome == SkippedSenders.OUTCOME) } }.sortedWith(compareByDescending<SenderRow> { it.ignored }.thenBy { it.root })
+        val unknown = rows.filter { it.name == null && counts.any { c -> c.root == it.root && c.outcome == "NOT_ALLOWLISTED" } }.sortedWith(compareByDescending<SenderRow> { it.ignored }.thenBy { it.root })
         return CaptureHealthReport(
             status, sum("CAPTURED"), sum("DUPLICATE"), sum("OTP"), sum("PERSONAL_SENDER"), sum("NOT_A_TRANSACTION"), sum("DECLINED"),
             counts.filter { it.outcome in FOUND }.maxOfOrNull { it.lastAt }, seen, known, unknown, sum("BILL"),

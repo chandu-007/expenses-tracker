@@ -71,7 +71,7 @@ fun CaptureHealthScreen(report: CaptureHealthReport?, onAddSender: (String) -> U
             if (report.unknownSenders.isNotEmpty()) {
                 HorizontalDivider()
                 Text("Senders not on the list", style = MaterialTheme.typography.labelMedium)
-                Text("Texts from these names were not read as transactions. If one is your bank, add it and its transactions will be found from the next text on. Only the sender name is shown here, never the message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Texts from these names were not read. If one is your bank, add it and its transactions will be found from the next text on. Only the sender name is shown here, never the message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 report.unknownSenders.take(12).forEach { s ->
                     Column(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

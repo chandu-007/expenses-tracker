@@ -34,8 +34,8 @@ import app.expenses.core.domain.StatementTextParser
 import app.expenses.core.domain.parseAmount
 import app.expenses.core.storage.SearchQuery
 import app.expenses.core.storage.searchFiltered
-import app.expenses.core.storage.clearSkippedHint
-import app.expenses.core.storage.skippedHints
+import app.expenses.core.storage.clearSkippedSender
+import app.expenses.core.storage.skippedCounters
 import kotlinx.datetime.plus
 import app.expenses.core.storage.DrillTarget
 import app.expenses.core.storage.ReportGroup
@@ -265,8 +265,8 @@ data class LearnedUi(val key: String, val label: String, val categoryId: String,
  */
 data class CaptureSettingsUi(val smsOn: Boolean, val extraHeaders: String, val notifOn: Boolean = false, val emailOn: Boolean = false, val lastReceivedText: String? = null, val lastReceivedFresh: Boolean = false)
 
-/** One row of "Texts we skipped from unknown senders": the sender's header root, how many payment-looking texts were skipped, whether they looked like money out, and a masked outline of the wording (never a digit or a name). */
-data class SkippedSenderUi(val root: String, val count: Long, val moneyOut: Boolean, val outline: String)
+/** One row of "Senders we skipped": the sender's header root, how many of its texts were skipped and when the last one arrived. The name of the sender only. */
+data class SkippedSenderUi(val root: String, val count: Long, val lastAt: Long)
 
 /**
  * An account as the accounts screen needs it. [openingText] is what the form shows: for a card or loan it is the amount owed, as a
@@ -1699,8 +1699,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun setExtraHeaders(text: String) = withStore { ok ->
         ok.templates.putSetting(CaptureKeys.SETTING_EXTRA_ROOTS, text.trim())
         _captureSettings.value = _captureSettings.value.copy(extraHeaders = text.trim())
-        // a name the person types themselves is trusted from now on, so its skipped-texts row and outline go too
-        for (name in app.expenses.core.parsers.TrustedSenders.parse(text)) ok.templates.clearSkippedHint(name)
+        // a name the person types themselves is trusted from now on, so its row in "Senders we skipped" goes too
+        for (name in app.expenses.core.parsers.TrustedSenders.parse(text)) ok.templates.clearSkippedSender(name)
         _skipped.value = skippedRows(ok, nowMillis())
     }
 
@@ -1712,14 +1712,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun skippedRows(ok: AppContainer.Opened.Ok, now: Long): List<SkippedSenderUi> {
         val counts = ok.db.schemaQueries.captureEventCounts(now - app.expenses.core.domain.SkippedSenders.WINDOW_MS).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }
         val excluded = SenderRules.BUILT_IN.keys + app.expenses.core.parsers.TrustedSenders.parse(ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS))
-        return app.expenses.core.domain.SkippedSenders.rows(counts, ok.templates.skippedHints(), excluded, now).map { SkippedSenderUi(it.root, it.count, it.out, it.outline) }
+        return app.expenses.core.domain.SkippedSenders.rows(ok.templates.skippedCounters(), excluded, now).map { SkippedSenderUi(it.root, it.count, it.lastAt) }
     }
 
     /** "Treat NAME as my bank": adds the name to the trusted senders (as the editor's Add does), forgets its outline, and refreshes the chips and the list. Only new texts are read: the skipped ones were not kept. */
     fun trustSkippedSender(root: String) = withStore { ok ->
         val r = app.expenses.core.parsers.TrustedSenders.add(ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS), root)
         if (r is app.expenses.core.parsers.TrustedSenders.AddResult.Added) ok.templates.putSetting(CaptureKeys.SETTING_EXTRA_ROOTS, r.stored)
-        ok.templates.clearSkippedHint(root)
+        ok.templates.clearSkippedSender(root)
         _captureSettings.value = _captureSettings.value.copy(extraHeaders = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty())
         _skipped.value = skippedRows(ok, nowMillis())
     }
@@ -2520,7 +2520,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val have = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
         if (have.none { it.equals(root, ignoreCase = true) }) ok.templates.putSetting(CaptureKeys.SETTING_EXTRA_ROOTS, (have + root).joinToString("\n"))
         _captureSettings.value = _captureSettings.value.copy(extraHeaders = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty())
-        ok.templates.clearSkippedHint(root) // trusted from here too: its outline and its row in Capture settings go
+        ok.templates.clearSkippedSender(root) // trusted from here too: its row in Capture settings goes
         _skipped.value = skippedRows(ok, nowMillis())
         val now = nowMillis()
         val counts = ok.db.schemaQueries.captureEventCounts(now - 30L * 86_400_000).executeAsList().map { CaptureCount(it.sender_root, it.outcome, it.n, it.last_at ?: 0L) }

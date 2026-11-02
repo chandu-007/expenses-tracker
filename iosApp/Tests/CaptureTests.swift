@@ -74,16 +74,10 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(pasted.pending, before + 2)
     }
 
-    func testUnknownSenderIsNotAddedButAPaymentShapedTextFromItIsCountedAndOfferedByCountAndMaskedOutlineOnly() async throws {
-        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+    func testUnknownSenderIsNotReadButAHeaderTheListMissesIsOfferedByCountOnly() async throws {
         let r = try await IosCapture.shared.captureMessage(host: host, sender: "AX-NOSUCHBK-S", message: bank())
-        XCTAssertEqual(r.code, "UNLISTED_PAYMENT")
+        XCTAssertEqual(r.code, "NOT_ALLOWLISTED")
         XCTAssertFalse(r.kept)
-        let otp = try await IosCapture.shared.captureMessage(host: host, sender: "AX-NOSUCHBK-S", message: "123456 is the OTP for your transaction of Rs.450.00 at SOME SHOP. Do not share it.")
-        XCTAssertEqual(otp.code, "NOT_ALLOWLISTED")
-        XCTAssertFalse(otp.kept)
-        let after = try await IosCapture.shared.pendingCount(host: host).int64Value
-        XCTAssertEqual(after, before)
     }
 
     func testWithoutASenderTheWordsHaveToSayItIsABankMessage() async throws {

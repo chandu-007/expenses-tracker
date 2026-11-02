@@ -25,9 +25,6 @@ import app.expenses.core.parsers.TrustedSenders
 /** "1 text skipped", "3 texts skipped". */
 internal fun skippedCountText(n: Long): String = if (n == 1L) "1 text skipped" else "$n texts skipped"
 
-/** What the hint line says about the direction of the skipped texts. */
-internal fun skippedHintText(moneyOut: Boolean): String = if (moneyOut) "Looks like a bank text about money out. Masked outline of the wording:" else "Looks like a bank text about money in. Masked outline of the wording:"
-
 /**
  * The block under the trusted-senders editor: owns the "Added NAME" notice (the row it came from is gone by then) and hands [rows] to [SkippedSendersList]. [stored] is the saved
  * trusted-senders value, so the notice is worded exactly as the editor's own (`TrustedSenders.add`); [onTrust] saves the name and refreshes the list.
@@ -39,17 +36,18 @@ internal fun SkippedSendersSection(stored: String, rows: List<SkippedSenderUi>, 
 }
 
 /**
- * "Texts we skipped from unknown senders": each sender whose payment-looking texts were skipped because its name is not on the list, with how many, a short masked outline of the
- * wording and one button that trusts the name from then on. Shown only when there is a row or a [notice] to read. State-hoisted: nothing here is saved.
+ * "Senders we skipped": the sender NAMES (headers such as ICICIT) the app skipped because they are not on the list of banks, each with how many of its texts were skipped and when the
+ * last one came, and one button that trusts the name from then on. Only names that may be a bank are shown (see `SkippedSenders`). No word of any text is known here. Shown only when there
+ * is a row or a [notice] to read. State-hoisted: nothing here is saved.
  */
 @Composable
 internal fun SkippedSendersList(rows: List<SkippedSenderUi>, notice: String?, onTrust: (String) -> Unit) {
     if (rows.isEmpty() && notice == null) return
     Column(Modifier.fillMaxWidth().testTag("skipped_senders"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Texts we skipped from unknown senders", style = MaterialTheme.typography.titleMedium)
+        Text("Senders we skipped", style = MaterialTheme.typography.titleMedium)
         Text(
-            "These came from names that are not on the list of banks, so they were not read as transactions. Only senders whose texts look like a payment are shown, and only a masked outline of the wording, never the message.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            "Banks send alerts from names like ICICIT. If one of these is your bank, tap Treat as my bank; only new texts from it will be read. We never read the texts of other senders.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("skipped_explain"),
         )
         notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("skipped_added_notice")) }
         rows.forEach { r ->
@@ -57,15 +55,10 @@ internal fun SkippedSendersList(rows: List<SkippedSenderUi>, notice: String?, on
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(r.root, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("skipped_sender_${r.root}"))
                     Text(skippedCountText(r.count), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("skipped_count_${r.root}"))
-                    Text(skippedHintText(r.moneyOut), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("skipped_hint_${r.root}"))
-                    Text(r.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("skipped_shape_${r.root}"))
+                    Text("Last one: ${dateTimeLabel(r.lastAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("skipped_last_${r.root}"))
                     OutlinedButton(onClick = { onTrust(r.root) }, modifier = Modifier.heightIn(min = 48.dp).testTag("skipped_trust_${r.root}")) { Text("Treat ${r.root} as my bank") }
                 }
             }
         }
-        if (rows.isNotEmpty()) Text(
-            "The skipped texts were not kept, so only new texts from a name you trust will be read.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("skipped_not_kept"),
-        )
     }
 }

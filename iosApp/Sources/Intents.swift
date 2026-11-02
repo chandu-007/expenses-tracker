@@ -4,11 +4,11 @@ import Shared
 /// iOS gives apps no access to text messages. What it does allow is a Shortcuts personal automation ("When I get a message", run immediately) whose action
 /// hands the message to an app. This is that action. It runs in this app's own process, started in the background by Shortcuts with no window, so everything
 /// is done by the Kotlin singleton (`IosCapture`, which opens the database once per process through `IosCore`): the same pipeline as Android's receiver. The
-/// sender (when passed) is judged before the words; a message that is not a bank transaction is counted and its words are thrown away. A message from an alphanumeric sender not on the list is looked at once, in memory, only to see whether it looks like a payment: then a masked outline (no digits, no names) is kept as well, so More > Capture can offer to trust that sender.
+/// sender (when passed) is judged before the words; a message that is not a bank transaction is counted and its words are thrown away.
 struct CaptureBankMessageIntent: AppIntent {
     static var title: LocalizedStringResource = "Capture bank message"
     static var description = IntentDescription(
-        "Hands a bank text message to Expenses. It is read on this phone: a transaction goes to To review, a bill to Bills, anything else is thrown away and only counted (a payment-looking text from a sender name that is not on the list also leaves a masked outline with no digits or names).",
+        "Hands a bank text message to Expenses. It is read on this phone: a transaction goes to To review, a bill to Bills, anything else is thrown away and only counted.",
         categoryName: "Expenses")
     static var openAppWhenRun: Bool = false
 

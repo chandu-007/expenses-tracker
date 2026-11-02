@@ -11,11 +11,8 @@ data class InboxItem(
     val confidence: String, val body: String?, val status: InboxStatus, val entryId: String?,
 )
 
-/**
- * What capture decided about one text, for [InboxStore.recordEvent]. The text itself is never recorded. [UNLISTED_PAYMENT] is a text from an alphanumeric header that is not on the list
- * (counted, like [NOT_ALLOWLISTED]) whose words, looked at once in memory, were shaped like a bank's payment: it is what lets the Capture settings offer "Treat NAME as my bank".
- */
-enum class CaptureEventOutcome { CAPTURED, DUPLICATE, PERSONAL_SENDER, NOT_ALLOWLISTED, UNLISTED_PAYMENT, OTP, NOT_A_TRANSACTION, DECLINED, BILL }
+/** What capture decided about one text, for [InboxStore.recordEvent]. The text itself is never recorded. */
+enum class CaptureEventOutcome { CAPTURED, DUPLICATE, PERSONAL_SENDER, NOT_ALLOWLISTED, OTP, NOT_A_TRANSACTION, DECLINED, BILL }
 
 /**
  * Transactions found in texts and notifications, held until confirmed or dismissed. Nothing here is in the ledger. Capture is idempotent

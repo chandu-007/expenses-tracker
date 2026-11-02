@@ -1,68 +1,97 @@
 package app.expenses.core.domain
 
 /**
- * The one redacted outline kept for a sender whose payment-shaped texts were skipped because the sender is not on the list: when the newest one arrived, whether it looked like money out
- * or in, and a masked outline of its wording (never a digit, never a word that is not generic payment vocabulary: see `UnlistedSenders` in core:parsers). The text itself is kept nowhere.
+ * What is kept about a sender name that is not on the list of banks: its header root (`ICICIT` for `BP-ICICIT-S`), how many texts it sent, when the last one arrived, and which category
+ * suffixes its headers carried (`S`, `T`, `P`, `G`, or `-` for a header with none). That is all: the sender's NAME. No word of any message, no amount, no digit, nothing from the text.
  */
-data class SkippedHint(val root: String, val at: Long, val out: Boolean, val outline: String)
+data class SkippedCounter(val root: String, val count: Long, val lastAt: Long, val suffixes: String)
 
-/** One row of "Texts we skipped from unknown senders". */
-data class SkippedSenderRow(val root: String, val count: Long, val lastAt: Long, val out: Boolean, val outline: String)
+/** One row of "Senders we skipped". */
+data class SkippedSenderRow(val root: String, val count: Long, val lastAt: Long)
 
 /**
- * Pure logic of the skipped-senders list: how a hint is stored in the settings table, which hints to drop to stay within [MAX_HINTS], and which senders to list. The settings keys are
- * device-local (they are not on the backup whitelist, so they never enter a backup).
+ * Pure logic of the "Senders we skipped" list, which helps a person who is missing bank texts to see which sender names the app skipped and to trust one of them. Everything here is about the
+ * header only. The counters live in the settings table (`skipped_sender:<ROOT>`), are device-local (not on the backup whitelist, so no backup carries them) and at most [MAX_ROOTS] are kept.
+ *
+ * Which senders are worth listing is judged by the header's category suffix, which India's registered headers carry: `T` (transactional) and `S` (service or bank alert) may be a bank;
+ * `P` (promotional) and `G` (government) are not and are hidden. A header with no suffix, or a letter that is none of these, cannot be classified: it is listed only once it has sent
+ * [UNCLASSIFIED_MIN_COUNT] texts. A phone number or an email never reaches this list: only alphanumeric headers are counted.
  */
 object SkippedSenders {
-    /** The outcome name capture records for a payment-shaped text from an unlisted alphanumeric header (see `CaptureEventOutcome.UNLISTED_PAYMENT`). */
-    const val OUTCOME = "UNLISTED_PAYMENT"
+    /** Settings key prefix: `skipped_sender:<ROOT>`. */
+    const val KEY_PREFIX = "skipped_sender:"
 
-    /** Settings key prefix: `skipped_hint:<ROOT>`. */
-    const val KEY_PREFIX = "skipped_hint:"
+    /** At most this many sender names are kept; the one that has been quiet longest goes first. */
+    const val MAX_ROOTS = 20
 
-    /** At most this many hints are kept; the oldest go first. */
-    const val MAX_HINTS = 20
-
-    /** Only the last 30 days of skipped texts are listed (what capture health looks back over, too). */
+    /** Only the last 30 days are counted and listed (what capture health looks back over, too). */
     const val WINDOW_MS = 30L * 86_400_000
+
+    /** A header with no usable suffix is listed only after this many texts. */
+    const val UNCLASSIFIED_MIN_COUNT = 3
+
+    /** The suffix recorded for a header that has none. */
+    const val NO_SUFFIX = '-'
 
     fun key(root: String) = KEY_PREFIX + root.trim().uppercase()
 
-    /** `<epochMillis>|<OUT or IN>|<outline>`. */
-    fun encode(h: SkippedHint): String = "${h.at}|${if (h.out) "OUT" else "IN"}|${h.outline}"
+    /** `<count>|<lastAt epoch ms>|<suffixes>`. */
+    fun encode(c: SkippedCounter): String = "${c.count}|${c.lastAt}|${c.suffixes}"
 
-    /** The hint a settings row stands for, or null when the key is not a hint key or the value is not what [encode] writes (a damaged row is ignored, never shown). */
-    fun decode(key: String, value: String): SkippedHint? {
+    /** The counter a settings row stands for, or null when the key is not a counter key or the value is not what [encode] writes (a damaged row is ignored, never shown). */
+    fun decode(key: String, value: String): SkippedCounter? {
         if (!key.startsWith(KEY_PREFIX)) return null
         val root = key.removePrefix(KEY_PREFIX).takeIf { it.isNotEmpty() } ?: return null
-        val parts = value.split('|', limit = 3)
+        val parts = value.split('|')
         if (parts.size != 3) return null
-        val at = parts[0].toLongOrNull() ?: return null
-        val out = when (parts[1]) { "OUT" -> true; "IN" -> false; else -> return null }
-        return SkippedHint(root, at, out, parts[2])
+        val count = parts[0].toLongOrNull()?.takeIf { it > 0 } ?: return null
+        val at = parts[1].toLongOrNull() ?: return null
+        if (parts[2].isEmpty() || !parts[2].all { it == NO_SUFFIX || it in 'A'..'Z' }) return null
+        return SkippedCounter(root, count, at, parts[2])
     }
 
-    /** The hints held in settings rows (key to value), damaged ones left out. */
-    fun decodeAll(rows: List<Pair<String, String>>): List<SkippedHint> = rows.mapNotNull { (k, v) -> decode(k, v) }
+    fun decodeAll(rows: List<Pair<String, String>>): List<SkippedCounter> = rows.mapNotNull { (k, v) -> decode(k, v) }
 
-    /** The roots whose hints to delete so that no more than [cap] stay: the oldest first (ties by name). [keep] is never dropped, so the hint just written survives. */
-    fun toDrop(hints: List<SkippedHint>, keep: String, cap: Int = MAX_HINTS): List<String> {
-        if (hints.size <= cap) return emptyList()
-        return hints.filter { it.root != keep }.sortedWith(compareBy<SkippedHint> { it.at }.thenBy { it.root }).take(hints.size - cap).map { it.root }
+    /**
+     * The counter after one more text from [root] with category suffix [suffix] (null: none) arrived at [now]. [before] is what was kept; a sender quiet for more than [WINDOW_MS] starts again
+     * from one, so the count is always "in the last 30 days" or close to it.
+     */
+    fun counted(before: SkippedCounter?, root: String, suffix: Char?, now: Long): SkippedCounter {
+        val s = suffix?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: NO_SUFFIX
+        val fresh = before == null || before.lastAt < now - WINDOW_MS
+        val kept = if (fresh) "" else before!!.suffixes
+        val suffixes = (kept + s).toSortedSet().joinToString("")
+        return SkippedCounter(root.trim().uppercase(), if (fresh) 1 else before!!.count + 1, now, suffixes)
+    }
+
+    /** The roots whose counters to delete so that no more than [cap] stay: the quietest first (ties by name). [keep] is never dropped, so the sender just counted survives. */
+    fun toDrop(counters: List<SkippedCounter>, keep: String, cap: Int = MAX_ROOTS): List<String> {
+        if (counters.size <= cap) return emptyList()
+        return counters.filter { it.root != keep }.sortedWith(compareBy<SkippedCounter> { it.lastAt }.thenBy { it.root }).take(counters.size - cap).map { it.root }
+    }
+
+    /** What a header's suffixes say: it may be a bank (`T` or `S` seen), is not one (`P` or `G` and no `T` or `S`), or cannot be told. */
+    enum class Kind { MAYBE_BANK, NOT_A_BANK, UNCLASSIFIED }
+
+    fun kindOf(suffixes: String): Kind = when {
+        suffixes.any { it == 'T' || it == 'S' } -> Kind.MAYBE_BANK
+        suffixes.any { it == 'P' || it == 'G' } -> Kind.NOT_A_BANK
+        else -> Kind.UNCLASSIFIED
+    }
+
+    /** Whether [c] is worth listing: a header that may be a bank, or one that cannot be classified but has sent at least [UNCLASSIFIED_MIN_COUNT] texts. */
+    fun listed(c: SkippedCounter): Boolean = when (kindOf(c.suffixes)) {
+        Kind.MAYBE_BANK -> true
+        Kind.NOT_A_BANK -> false
+        Kind.UNCLASSIFIED -> c.count >= UNCLASSIFIED_MIN_COUNT
     }
 
     /**
-     * The rows to list. A sender is listed when it has skipped payment-shaped texts in the last [WINDOW_MS] ([counts] of [OUTCOME]) AND a hint no older than that, and it is not in
-     * [excluded] (the built-in list and the senders the person trusts, upper case). Most skipped texts first, then by name.
+     * The rows to list: counters seen in the last [WINDOW_MS] that are [listed] and not in [excluded] (the built-in list and the senders the person trusts, upper case). Most texts first,
+     * then the most recent, then by name.
      */
-    fun rows(counts: List<CaptureCount>, hints: List<SkippedHint>, excluded: Set<String>, now: Long): List<SkippedSenderRow> {
-        val newest = hints.groupBy { it.root }.mapValues { (_, l) -> l.maxBy { it.at } }
-        return counts.filter { it.outcome == OUTCOME && it.root.isNotEmpty() && it.root !in excluded && it.count > 0 && it.lastAt >= now - WINDOW_MS }
-            .groupBy { it.root }
-            .mapNotNull { (root, list) ->
-                val hint = newest[root]?.takeIf { it.at >= now - WINDOW_MS } ?: return@mapNotNull null
-                SkippedSenderRow(root, list.sumOf { it.count }, list.maxOf { it.lastAt }, hint.out, hint.outline)
-            }
-            .sortedWith(compareByDescending<SkippedSenderRow> { it.count }.thenBy { it.root })
-    }
+    fun rows(counters: List<SkippedCounter>, excluded: Set<String>, now: Long): List<SkippedSenderRow> =
+        counters.filter { it.root !in excluded && it.lastAt >= now - WINDOW_MS && listed(it) }
+            .map { SkippedSenderRow(it.root, it.count, it.lastAt) }
+            .sortedWith(compareByDescending<SkippedSenderRow> { it.count }.thenByDescending { it.lastAt }.thenBy { it.root })
 }

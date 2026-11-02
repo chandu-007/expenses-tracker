@@ -67,13 +67,13 @@ class CaptureTest {
     @Test
     fun personsOtpsNoticesAndUnknownHeadersAddNothingAndLeaveOnlyCounts() {
         assertEquals(CaptureEventOutcome.PERSONAL_SENDER, ingest("+919876543210", debit))
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("AX-SHOPXX-S", debit), "a payment-shaped text from a name that is not on the list")
+        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", debit))
         assertEquals(CaptureEventOutcome.OTP, ingest("AX-HDFCBK-S", "123456 is the OTP for your transaction of Rs.1,250.00 at AMAZON"))
         assertEquals(CaptureEventOutcome.NOT_A_TRANSACTION, ingest("AX-HDFCBK-S", "Update your KYC to continue"))
         assertEquals(CaptureEventOutcome.DECLINED, ingest("AX-HDFCBK-S", "Transaction of Rs.500.00 on card ending 4321 was declined due to insufficient funds."))
         assertEquals(emptyList(), pending())
         val e = events()
-        assertEquals(1L, e[("" to "PERSONAL_SENDER")]); assertEquals(1L, e[("SHOPXX" to "UNLISTED_PAYMENT")]); assertEquals(1L, e[("HDFCBK" to "OTP")])
+        assertEquals(1L, e[("" to "PERSONAL_SENDER")]); assertEquals(1L, e[("SHOPXX" to "NOT_ALLOWLISTED")]); assertEquals(1L, e[("HDFCBK" to "OTP")])
         // nothing in the database, outside the pending item, holds the words or numbers of a text
         val dump = runBlocking { container.write { ok -> ok.db.schemaQueries.captureEventCounts(0).executeAsList().joinToString { it.sender_root + it.outcome } } }!!
         assertTrue(!dump.contains("1250") && !dump.contains("9876"))
@@ -90,7 +90,7 @@ class CaptureTest {
 
     @Test
     fun aHeaderThePersonAddedIsCapturedFromThenOn() {
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("VM-MYCOOP-S", debit))
+        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", debit))
         runBlocking { container.write { it.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, "mycoop, otherco") } }
         assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", debit, 2_000))
         assertEquals("MYCOOP", pending().single().issuer)
@@ -98,65 +98,27 @@ class CaptureTest {
         assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-OTHERCO-S", debit, 3_000), "one header per line works too")
     }
 
-    private fun settings() = runBlocking { container.write { it.templates.settingsWithPrefix("") } }!!
-
-    /** Every place the app keeps anything about a text, searched for the words and the digit runs of one text. */
-    private fun databaseHolds(needles: List<String>): List<String> = runBlocking {
-        container.write { ok ->
-            val q = ok.db.schemaQueries
-            val dump = buildString {
-                q.captureEventCounts(0).executeAsList().forEach { append(it.sender_root).append(' ').append(it.outcome).append('\n') }
-                // the time of a hint is an epoch of 13 digits that could contain any four-digit needle by chance: only what follows it is searched
-                ok.templates.settingsWithPrefix("").forEach { (k, v) -> append(k).append('=').append(if (k.startsWith("skipped_hint:")) v.substringAfter('|') else v).append('\n') }
-                ok.inbox.list(app.expenses.core.storage.InboxStatus.PENDING).forEach { append(it.body).append(it.reference).append(it.issuer).append(it.sender).append('\n') }
-                app.expenses.core.storage.BillStatus.values().flatMap { s -> ok.bills.list(s) }.forEach { append(it.title).append(it.issuer).append(it.reference).append(it.body).append('\n') }
-            }
-            needles.filter { dump.contains(it, ignoreCase = true) }
-        }
-    }!!
+    private fun counters() = runBlocking { container.write { it.templates.settingsWithPrefix("skipped_sender:") } }!!.associate { it.first.removePrefix("skipped_sender:") to it.second.split('|') }
 
     @Test
-    fun aPaymentShapedTextFromAnUnlistedHeaderLeavesACountAndOneMaskedOutlineAndNothingOfItsWords() {
-        val text = "Rs.7,418.00 debited from A/c XX5521 on 05-10-26 to PINEAPPLEMART (UPI Ref 628374659283). Not you? Call 18002586161"
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("AX-MYCOOP-S", text, 7_000))
-        assertEquals(emptyList(), pending(), "never put in To review")
-        assertEquals(1L, events()[("MYCOOP" to "UNLISTED_PAYMENT")])
-        val hint = settings().single { it.first.startsWith("skipped_hint:") }
-        assertEquals("skipped_hint:MYCOOP", hint.first)
-        assertTrue(hint.second.matches(Regex("""\d+\|OUT\|[^0-9]*""")), "epoch|direction|outline with no digit after the time: ${hint.second}")
-        assertTrue(hint.second.contains("debited") && hint.second.contains("A/c XX###"), hint.second)
-        assertEquals(emptyList(), databaseHolds(listOf("PINEAPPLEMART", "7,418", "7418", "5521", "628374659283", "18002586161", "shop@")), "no word or digit run of the body anywhere")
-        // the same sender again replaces the one outline and adds a count
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("AX-MYCOOP-S", text, 8_000))
-        assertEquals(2L, events()[("MYCOOP" to "UNLISTED_PAYMENT")]); assertEquals(1, settings().count { it.first.startsWith("skipped_hint:") })
-    }
-
-    @Test
-    fun anOtpOrAnOfferFromAnotherHeaderIsCountedAsNotOnTheListWithNoOutline() {
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", "123456 is the OTP for your transaction of Rs.1,250.00 at AMAZON. Do not share it."))
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", "Get Rs 500 off, spend more and save! Use code SAVE500"))
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", "Rs 100 cashback credited to your wallet."))
-        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("AX-SHOPXX-S", "Your electricity bill of Rs 1,240.00 is due on 10-Nov-26. Kindly ignore if already paid."))
-        assertEquals(4L, events()[("SHOPXX" to "NOT_ALLOWLISTED")])
-        assertEquals(emptyList(), settings().filter { it.first.startsWith("skipped_hint:") })
-    }
-
-    @Test
-    fun aPersonsNumberIsNeverLookedAtAndLeavesNoOutline() {
-        assertEquals(CaptureEventOutcome.PERSONAL_SENDER, ingest("+919876543210", debit))
-        assertEquals(CaptureEventOutcome.PERSONAL_SENDER, ingest("9876543210", debit))
-        assertEquals(emptyList(), settings().filter { it.first.startsWith("skipped_hint:") })
-        assertEquals(2L, events()[("" to "PERSONAL_SENDER")])
-        assertEquals(emptyList(), databaseHolds(listOf("628374659283", "1,250", "1250")))
-    }
-
-    @Test
-    fun afterTheNameIsTrustedTheNextTextIsCapturedAndTheEarlierOneWasNeverKept() {
-        assertEquals(CaptureEventOutcome.UNLISTED_PAYMENT, ingest("AX-MYCOOP-S", debit, 1_000))
+    fun aTextFromAnUnlistedNameCountsOnlyTheNameItsCountAndItsSuffixNeverAWordOrADigitOfTheText() {
+        val secretBody = "Rs.7,418.00 debited from A/c XX5521 on 05-10-26 to PINEAPPLEMART (UPI Ref 628374659283). Not you? Call 18002586161"
+        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-S", secretBody, 1_000)); assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest("VM-MYCOOP-T", secretBody, 2_000))
+        ingest("AX-PROMOZ-P", "Get Rs 500 off, use code SAVE500", 3_000); ingest("AX-NOSUFF", "hello", 4_000)
+        assertEquals(mapOf("MYCOOP" to listOf("2", "2000", "ST"), "PROMOZ" to listOf("1", "3000", "P"), "NOSUFF" to listOf("1", "4000", "-")), counters())
+        // nothing of any body is anywhere in the settings, the events, the inbox or the bills
+        val dump = runBlocking { container.write { ok -> (ok.db.schemaQueries.captureEventCounts(0).executeAsList().joinToString { "${it.sender_root} ${it.outcome} ${it.n}" } + " " + ok.templates.settingsWithPrefix("skipped_").joinToString { "${it.first}=${it.second}" } + " " + ok.inbox.list().joinToString { it.body.orEmpty() }) } }!!
+        for (secret in listOf("PINEAPPLE", "5521", "7,418", "628374659283", "18002586161", "SAVE500", "hello", "debited")) assertTrue(!dump.contains(secret, ignoreCase = true), "'$secret' is kept somewhere: $dump")
         assertEquals(emptyList(), pending())
+    }
+
+    @Test
+    fun aPhoneNumberAnEmailAndABuiltInOrTrustedHeaderAreNeverCounted() {
+        ingest("+919876543210", debit); ingest("AX-HDFCBK-S", debit); runBlocking { Capture.ingestEmail(container, "GMAIL", listOf("Some Shop"), "Rs 5 debited", 1) }
+        assertEquals(emptyMap(), counters())
+        ingest("VM-MYCOOP-S", debit, 1_000); assertEquals(setOf("MYCOOP"), counters().keys)
         runBlocking { container.write { it.templates.putSetting(Capture.SETTING_EXTRA_ROOTS, "MYCOOP") } }
-        assertEquals(CaptureEventOutcome.CAPTURED, ingest("AX-MYCOOP-S", debit, 2_000))
-        assertEquals(1, pending().size, "only the new text: the skipped one was not kept")
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("VM-MYCOOP-S", debit, 2_000)); assertEquals(listOf("1", "1000", "S"), counters().getValue("MYCOOP"), "a trusted name is read, not counted as skipped")
     }
 
     @Test
