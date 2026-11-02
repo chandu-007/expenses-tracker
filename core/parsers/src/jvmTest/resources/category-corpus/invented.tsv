@@ -1,0 +1,276 @@
+# tag	sender	expected category name(s), '|' = any of these is right, NONE = no category is the right answer	message ('\n' = new line). All names, digits and amounts are invented.
+card_pos_known	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At SWIGGY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At ZOMATO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At BIGBASKET On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At BLINKIT On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At DMART AVENUE SUPERMARTS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At STARBUCKS COFFEE MUMBAI On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At NETFLIX.COM On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At SPOTIFY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Fun	Spent Rs.450 On HDFC Bank Card 4321 At PVR CINEMAS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Fun	Spent Rs.450 On HDFC Bank Card 4321 At BOOKMYSHOW On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Shopping	Spent Rs.450 On HDFC Bank Card 4321 At MYNTRA DESIGNS PVT LTD BANGALORE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Shopping	Spent Rs.450 On HDFC Bank Card 4321 At FLIPKART INTERNET On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Transport|Travel	Spent Rs.450 On HDFC Bank Card 4321 At UBER INDIA SYSTEMS PVT LTD On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Transport|Travel	Spent Rs.450 On HDFC Bank Card 4321 At OLA CABS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Travel	Spent Rs.450 On HDFC Bank Card 4321 At IRCTC On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Fuel	Spent Rs.450 On HDFC Bank Card 4321 At INDIAN OIL FUEL STN 1234 On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Fuel	Spent Rs.450 On HDFC Bank Card 4321 At BPCL PETROL PUMP DELHI On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Health	Spent Rs.450 On HDFC Bank Card 4321 At APOLLO PHARMACY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Investments	Spent Rs.450 On HDFC Bank Card 4321 At ZERODHA BROKING On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Travel	Spent Rs.450 On HDFC Bank Card 4321 At MAKEMYTRIP INDIA PVT LTD On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_known	AX-HDFCBK-S	Shopping|Health|Personal care	Spent Rs.450 On HDFC Bank Card 4321 At LENSKART SOLUTIONS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_marketplace	AX-HDFCBK-S	Shopping|Bills|Groceries	Spent Rs.450 On HDFC Bank Card 4321 At AMAZON PAY INDIA On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_marketplace	AX-HDFCBK-S	Shopping|Groceries	Spent Rs.450 On HDFC Bank Card 4321 At AMAZON On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_marketplace	AX-HDFCBK-S	Shopping|Groceries	Spent Rs.450 On HDFC Bank Card 4321 At AMAZON.IN On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_marketplace	AX-HDFCBK-S	Bills|Shopping|Other	Spent Rs.450 On HDFC Bank Card 4321 At PAYTM On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_marketplace	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At PAYTM*SWIGGY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At RAZ*SWIGGY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At PYU*DOMINOS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At PAYU*BIGBASKET On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Internet and mobile|Bills	Spent Rs.450 On HDFC Bank Card 4321 At BILLDESK*AIRTEL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At SWIGGY*ORDER On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At RAZORPAY*ZOMATO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At CCAV*NETFLIX On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At PAYTM*ZOMATO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Transport|Travel	Spent Rs.450 On HDFC Bank Card 4321 At RZP*UBER On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Utilities|Bills	Spent Rs.450 On HDFC Bank Card 4321 At BILLDESK*BESCOM On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_gateway_prefix	AX-HDFCBK-S	Shopping	Spent Rs.450 On HDFC Bank Card 4321 At PAYU*MYNTRA On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At FRESHPIK BANGALORE IN On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At SRI LAKSHMI STORES On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At RAMESH TIFFIN CENTER On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Health	Spent Rs.450 On HDFC Bank Card 4321 At NEW BOMBAY MEDICALS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At SHARMA DAIRY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At HOTEL ANNAPURNA On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At URBAN BISTRO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At CITY SUPER BAZAAR On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At GREEN LEAF RESTAURANT On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At EAZYDINE0000000 On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Health	Spent Rs.450 On HDFC Bank Card 4321 At SUNRISE HOSPITAL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At BLUE TOKAI COFFEE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At KIRANA MART 2231 On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At CAFE COFFEE DAY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At SAI BABA TEA STALL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At VIJAYA FRUITS AND VEG On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_unknown_local	AX-HDFCBK-S	NONE	Spent Rs.450 On HDFC Bank Card 4321 At PZCREDIT0000000 On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At SWIGGY BANGALORE KA IN On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At ZOMATO GURGAON HR IND On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At BIGBASKET BANGALORE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Transport|Travel	Spent Rs.450 On HDFC Bank Card 4321 At UBER INDIA 0123 MUMBAI On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Shopping|Groceries	Spent Rs.450 On HDFC Bank Card 4321 At AMAZON SELLER SERVICES BLR On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+card_pos_noisy	AX-HDFCBK-S	Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At NETFLIX MUMBAI On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+icici_card	BP-ICICIT-S	Food	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on SWIGGY. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Shopping|Groceries	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on AMAZON.IN. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Transport|Travel	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on UBER INDIA. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Groceries	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on BIGBASKET. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Travel	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on MAKEMYTRIP INDIA PVT LTD. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Fuel	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on SHELL PETROL PUMP 4521. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Food|Fun	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on ONYX BAR. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Shopping|Health|Personal care	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on LENSKART SOLUTIONS. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Groceries	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on FRESHPIK BANGALORE IN. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_card	BP-ICICIT-S	Groceries|Food	INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on GREENCART. Avl Limit: INR 1,00,000.00. If not you, call 18002662 or SMS BLOCK 4417 to 9215676766
+icici_upi_semicolon	AX-ICICIB-S	Food	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Swiggy credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Transport	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Pune Metro credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Groceries	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Reliance Fresh credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Utilities|Bills	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; BESCOM credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Internet and mobile|Bills	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Jio Prepaid credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	NONE|Other	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; RAVI KUMAR credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Health	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Apollo Pharmacy credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Food	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Zomato credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+icici_upi_semicolon	AX-ICICIB-S	Food	ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Annapurna Mess credited. UPI:628374659283. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.
+sbi_upi_trf	VM-SBIUPI-S	Food	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to SWIGGY Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	Groceries	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to BIGBASKET Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	NONE|Other	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to RAVI KUMAR Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	Utilities|Bills	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to BESCOM Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	Transport|Travel	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to UBER INDIA Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	Subscriptions	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to NETFLIX Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	Food	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to RAMESH TEA STALL Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_upi_trf	VM-SBIUPI-S	NONE|Other	Dear UPI user A/C X1234 debited by 250.0 on date 05Oct26 trf to 9876501234@ybl Refno 628374659283. If not u? call 1800111109. -SBI
+sbi_card	AD-SBICRD-S	Food	Rs.1,250.00 spent on your SBI Credit Card ending 1234 at SWIGGY on 05/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute
+sbi_card	AD-SBICRD-S	Food	Rs.1,250.00 spent on your SBI Credit Card ending 1234 at ZOMATO on 05/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute
+sbi_card	AD-SBICRD-S	Shopping|Groceries	Rs.1,250.00 spent on your SBI Credit Card ending 1234 at AMAZON on 05/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute
+sbi_card	AD-SBICRD-S	Groceries	Rs.1,250.00 spent on your SBI Credit Card ending 1234 at FRESHPIK BANGALORE on 05/10/26. Trxn. not done by you? Report at https://sbicard.com/Dispute
+sbi_account_transfer	VM-SBIINB-S	NONE|Other	Your A/C XXXXX123456 Debited Rs.500.00 on 05/10/26 -Transferred to RAMESH K. Ref No 628374659283. If not you, call 1800111109
+axis_upi_path	AX-AXISBK-S	Food	INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/SWIGGY Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+axis_upi_path	AX-AXISBK-S	Groceries	INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/BIGBASKET Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+axis_upi_path	AX-AXISBK-S	NONE|Other	INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/RAVI KUMAR Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+axis_upi_path	AX-AXISBK-S	Subscriptions	INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/NETFLIX Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+axis_upi_path	AX-AXISBK-S	Bills|Shopping|Other	INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/PAYTM Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+axis_card	AX-AXISBK-S	Food	INR 250.00 spent on Axis Bank Card no. XX1234 at ZOMATO on 05-10-26 14:22 IST. Avl Lmt INR 1,00,000. SMS BLOCK 1234 to 9951860002
+axis_card	AX-AXISBK-S	Transport|Travel	INR 250.00 spent on Axis Bank Card no. XX1234 at UBER INDIA on 05-10-26 14:22 IST. Avl Lmt INR 1,00,000. SMS BLOCK 1234 to 9951860002
+axis_card	AX-AXISBK-S	Shopping|Bills|Groceries	INR 250.00 spent on Axis Bank Card no. XX1234 at AMAZON PAY INDIA on 05-10-26 14:22 IST. Avl Lmt INR 1,00,000. SMS BLOCK 1234 to 9951860002
+vpa_known_brand	VK-KOTAKB-S	Food	Sent Rs.250.00 from Kotak Bank AC X1234 to swiggy@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_known_brand	VK-KOTAKB-S	Food	Sent Rs.250.00 from Kotak Bank AC X1234 to zomato@icici on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_known_brand	VK-KOTAKB-S	Groceries	Sent Rs.250.00 from Kotak Bank AC X1234 to bigbasket@hdfcbank on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_known_brand	VK-KOTAKB-S	Subscriptions	Sent Rs.250.00 from Kotak Bank AC X1234 to netflix@axb on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_known_brand	VK-KOTAKB-S	Utilities|Bills	Sent Rs.250.00 from Kotak Bank AC X1234 to bescom@sbi on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_known_brand	VK-KOTAKB-S	Transport|Travel	Sent Rs.250.00 from Kotak Bank AC X1234 to uber@axisbank on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to merchant123@okhdfcbank on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to paytmqr281005050101abcd@paytm on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to bharatpe.90012345@fbpe on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to q123456789@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to shop.rajesh@okaxis on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	NONE	Sent Rs.250.00 from Kotak Bank AC X1234 to gpay-11223344556@okbizaxis on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	Groceries	Sent Rs.250.00 from Kotak Bank AC X1234 to freshpik@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	Food	Sent Rs.250.00 from Kotak Bank AC X1234 to annapurna.mess@okicici on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_unknown_business	VK-KOTAKB-S	Health	Sent Rs.250.00 from Kotak Bank AC X1234 to vijayamedicals@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to 9876501234@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to 9123456780@okaxis on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to ravi.k@oksbi on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to anita.rao@okicici on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to ramesh123@ybl on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+vpa_person	VK-KOTAKB-S	NONE|Other	Sent Rs.500.00 from Kotak Bank AC X1234 to priya0987@paytm on 05-10-26.UPI Ref 628374659283. Not you, https://kotak.com/KBANKT/Fraud
+hdfc_sent_to_name	AX-HDFCBK-S	Food	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo SWIGGY\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	Food	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo ZOMATO\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	NONE|Other	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo RAVI KUMAR\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	Groceries	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo BIGBASKET\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	Groceries	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo FRESHPIK\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	Food	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo SAI BABA TEA STALL\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_sent_to_name	AX-HDFCBK-S	Fuel	Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo INDIAN OIL FUEL STATION\nOn 05/10/26\nRef 628374659283\nNot You?\nCall 18002586161 to report
+hdfc_debited_vpa	AX-HDFCBK-S	Food	Rs.250.00 debited from A/c XX1234 to VPA swiggy@icici (UPI Ref No 628374659283) on 05-10-26. Not you? Call 18002586161
+hdfc_debited_vpa	AX-HDFCBK-S	Food	Rs.250.00 debited from A/c XX1234 to VPA zomato@paytm (UPI Ref No 628374659283) on 05-10-26. Not you? Call 18002586161
+hdfc_debited_vpa	AX-HDFCBK-S	NONE	Rs.250.00 debited from A/c XX1234 to VPA merchant123@okhdfcbank (UPI Ref No 628374659283) on 05-10-26. Not you? Call 18002586161
+hdfc_debited_vpa	AX-HDFCBK-S	NONE	Rs.250.00 debited from A/c XX1234 to VPA paytm.s2x4b6x@pty (UPI Ref No 628374659283) on 05-10-26. Not you? Call 18002586161
+hdfc_debited_vpa	AX-HDFCBK-S	NONE|Other	Rs.250.00 debited from A/c XX1234 to VPA 9876501234@ybl (UPI Ref No 628374659283) on 05-10-26. Not you? Call 18002586161
+narration	AX-HDFCBK-S	Food	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: UPI-SWIGGY-swiggy@icici-628374659283. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	NONE|Other	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: UPI-RAVI KUMAR-ravi@okaxis-628374659283. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Subscriptions	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- NETFLIX-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Insurance	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- LIC OF INDIA-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Loan EMI	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- HDFC LTD-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Investments	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- ZERODHA BROKING-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Insurance	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: SI-HDFC LIFE-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Groceries	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: POS 4512XXXXXXXX1234 BIGBASKET. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Loan EMI	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- BAJAJ FINANCE-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Investments	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: ACH D- SBI MUTUAL FUND SIP-123456. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Groceries	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: UPI-FRESHPIK BANGALORE-freshpik@ybl-628374659283. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Food	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: UPI-ANNAPURNA MESS-annapurna@okicici-628374659283. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	NONE|Other	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: IMPS-628374659283-ANITA RAO. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	NONE	Rs.450.00 debited from A/c XX1234 on 05-10-26. Info: NEFT-ABCDN26123456-SAMPLE TRADERS. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Cash withdrawal	Rs.2,000.00 debited from A/c XX1234 on 05-10-26. Info: ATM-CASH. Avl Bal Rs.10,000.00
+narration	AX-HDFCBK-S	Cash withdrawal	Rs.5,000.00 withdrawn at ATM 12345 on 05-10-26 from A/c XX1234. Avl Bal Rs.10,000.00
+bank_charges	AX-HDFCBK-S	Fees and charges	Annual fee of Rs.500 debited from your A/c XX1234 on 05-10-26. Avl Bal Rs.10,000.00
+bank_charges	AX-HDFCBK-S	Fees and charges	SMS charges Rs.17.70 debited from A/c XX1234 on 05-10-26. Avl Bal Rs.10,000.00
+bank_charges	AX-HDFCBK-S	Fees and charges	Rs.236.00 debited from A/c XX1234 on 05-10-26 towards debit card annual fee. Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Utilities|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards BESCOM via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Internet and mobile|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards AIRTEL via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Internet and mobile|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards JIO via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Utilities|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards TATA POWER via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Utilities|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards MAHANAGAR GAS via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+bill_merchant	AX-HDFCBK-S	Internet and mobile|Bills	Rs.899.00 debited from A/c XX1234 on 05-10-26 towards ACT FIBERNET via UPI (UPI Ref 628374659283). Avl Bal Rs.10,000.00
+idfc_upi_semicolon	VM-IDFCFB-S	Food	Your A/c XX1234 debited by Rs. 250.00 on 05/10/26; SWIGGY credited. RRN 628374659283. Available balance Rs. 10,000.00. Team IDFC FIRST Bank
+idfc_upi_semicolon	VM-IDFCFB-S	NONE|Other	Your A/c XX1234 debited by Rs. 250.00 on 05/10/26; RAVI KUMAR credited. RRN 628374659283. Available balance Rs. 10,000.00. Team IDFC FIRST Bank
+idfc_upi_semicolon	VM-IDFCFB-S	Groceries	Your A/c XX1234 debited by Rs. 250.00 on 05/10/26; M/S A.B. MART credited. RRN 628374659283. Available balance Rs. 10,000.00. Team IDFC FIRST Bank
+idfc_upi_semicolon	VM-IDFCFB-S	Groceries	Your A/c XX1234 debited by Rs. 250.00 on 05/10/26; BIGBASKET credited. RRN 628374659283. Available balance Rs. 10,000.00. Team IDFC FIRST Bank
+idfc_upi_semicolon	VM-IDFCFB-S	Groceries	Your A/c XX1234 debited by Rs. 250.00 on 05/10/26; FRESHPIK credited. RRN 628374659283. Available balance Rs. 10,000.00. Team IDFC FIRST Bank
+yes_upi	VM-YESBNK-S	Food	Rs.250.00 debited from Yes Bank A/c XX1234 on 05-10-26 to VPA zomato@yesbank UPI Ref 628374659283
+pnb_upi	VM-PNBSMS-S	NONE|Other	A/c XX1234 debited INR 500.00 on 05-10-2026 14:02:03 by UPI to RAVI KUMAR Ref 628374659283
+bob_upi	VM-BOBSMS-S	Food	Rs.250.00 Dr. from A/C XXXXXX1234 and Cr. to swiggy@ybl. Ref:628374659283. AvlBal:Rs10000(2026:10:05 14:22:11) -Bank of Baroda
+app_notification	GPAY	Food	Google Pay: Paid ₹250 to Swiggy
+app_notification	PHONEPE	NONE|Other	Ravi Kumar: Paid ₹500 to Ravi Kumar
+tricky	AX-HDFCBK-S	NONE|Other	Spent Rs.450 On HDFC Bank Card 4321 At UBER SINGH On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Other	Spent Rs.450 On HDFC Bank Card 4321 At OLA SHARMA On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Shopping|Transport	Spent Rs.450 On HDFC Bank Card 4321 At APOLLO TYRES On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Internet and mobile|Bills	Spent Rs.450 On HDFC Bank Card 4321 At AIRTEL PAYMENTS BANK On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At JIO MART On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Shopping	Spent Rs.450 On HDFC Bank Card 4321 At RELIANCE TRENDS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At RELIANCE FRESH On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Health	Spent Rs.450 On HDFC Bank Card 4321 At TATA 1MG On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Internet and mobile|Bills|Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At TATA PLAY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Insurance	Spent Rs.450 On HDFC Bank Card 4321 At HDFC ERGO GENERAL INSURANCE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Loan EMI	Spent Rs.450 On HDFC Bank Card 4321 At LIC HOUSING FINANCE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Loan EMI	Spent Rs.450 On HDFC Bank Card 4321 At BAJAJ FINSERV EMI On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Subscriptions|Fun|Shopping	Spent Rs.450 On HDFC Bank Card 4321 At GOOGLE PLAY On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Subscriptions	Spent Rs.450 On HDFC Bank Card 4321 At APPLE.COM/BILL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Bills|Loan EMI	Spent Rs.450 On HDFC Bank Card 4321 At CRED CLUB On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At ZEPTO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Food|Other	Spent Rs.450 On HDFC Bank Card 4321 At SWIGGY GENIE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Groceries	Spent Rs.450 On HDFC Bank Card 4321 At SWIGGY INSTAMART On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Food|Groceries	Spent Rs.450 On HDFC Bank Card 4321 At ZOMATO HYPERPURE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At DOMINOS PIZZA On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Food	Spent Rs.450 On HDFC Bank Card 4321 At MCDONALDS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Groceries|Shopping	Spent Rs.450 On HDFC Bank Card 4321 At BIG BAZAAR On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Food	Spent Rs.450 On HDFC Bank Card 4321 At CAFE SHELL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Fuel	Spent Rs.450 On HDFC Bank Card 4321 At SHELL INDIA MARKETS On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	NONE|Other|Bills	Spent Rs.450 On HDFC Bank Card 4321 At PAYTM WALLET LOAD On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Internet and mobile|Bills	Spent Rs.450 On HDFC Bank Card 4321 At PHONEPE RECHARGE On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Fun	Spent Rs.450 On HDFC Bank Card 4321 At DREAM11 On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Shopping	Spent Rs.450 On HDFC Bank Card 4321 At MEESHO On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Personal care|Shopping	Spent Rs.450 On HDFC Bank Card 4321 At NYKAA E RETAIL On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+tricky	AX-HDFCBK-S	Education	Spent Rs.450 On HDFC Bank Card 4321 At BYJUS THINK AND LEARN On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808
+credit_income	AX-HDFCBK-S	NONE	Rs 85000.00 credited to A/c XX1234 on 01-10-26 by NEFT-ACME CORP-SALARY OCT. Avl Bal Rs.1,00,000.00
+credit_income	AX-HDFCBK-S	NONE	Rs 142.00 credited to A/c XX1234 on 30-09-26 towards interest for the quarter. Avl Bal Rs.10,000.00
+credit_upi	AX-HDFCBK-S	NONE	Credit Alert! Rs.500.00 credited to HDFC Bank A/c XX1234 on 05-10-26 from VPA ravi.k@ybl (UPI 628374659283)
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At DOMINOS PIZZA INDIA On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At MCDONALDS HARDCASTLE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At KFC BANGALORE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	NONE|Food|Groceries	Spent Rs.875 On HDFC Bank Card 8765 At WAREHOUSE DELIGHTS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At BBQ NATION HOSPITALITY On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At MEDPLUS HEALTH SERVICES On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At 1MG HEALTHCARE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At PHARMEASY On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At LAL PATHLABS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Shopping	Spent Rs.875 On HDFC Bank Card 8765 At DECATHLON SPORTS INDIA On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Shopping	Spent Rs.875 On HDFC Bank Card 8765 At CROMA ELECTRONICS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	NONE|Transport|Shopping	Spent Rs.875 On HDFC Bank Card 8765 At OLA ELECTRIC On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Transport|Travel	Spent Rs.875 On HDFC Bank Card 8765 At RAPIDO On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Travel	Spent Rs.875 On HDFC Bank Card 8765 At REDBUS INDIA On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Travel	Spent Rs.875 On HDFC Bank Card 8765 At INDIGO AIRLINES On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Travel	Spent Rs.875 On HDFC Bank Card 8765 At YATRA ONLINE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Fuel	Spent Rs.875 On HDFC Bank Card 8765 At HPCL RETAIL OUTLET On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Internet and mobile|Bills|Subscriptions	Spent Rs.875 On HDFC Bank Card 8765 At TATA PLAY FIBER On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Subscriptions	Spent Rs.875 On HDFC Bank Card 8765 At JIOHOTSTAR On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Subscriptions|Fun	Spent Rs.875 On HDFC Bank Card 8765 At GOOGLE ONE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Subscriptions	Spent Rs.875 On HDFC Bank Card 8765 At YOUTUBE PREMIUM On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Investments	Spent Rs.875 On HDFC Bank Card 8765 At ZERODHA CAPITAL On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Investments	Spent Rs.875 On HDFC Bank Card 8765 At GROWW On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Insurance	Spent Rs.875 On HDFC Bank Card 8765 At TATA AIA LIFE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Insurance	Spent Rs.875 On HDFC Bank Card 8765 At STAR HEALTH INSURANCE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Insurance	Spent Rs.875 On HDFC Bank Card 8765 At LIC OF INDIA On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Education|Subscriptions	Spent Rs.875 On HDFC Bank Card 8765 At UDEMY On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Groceries|Shopping	Spent Rs.875 On HDFC Bank Card 8765 At BIG BAZAAR On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Groceries	Spent Rs.875 On HDFC Bank Card 8765 At RATNADEEP SUPER MARKET On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Groceries	Spent Rs.875 On HDFC Bank Card 8765 At MORE MEGASTORE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Groceries	Spent Rs.875 On HDFC Bank Card 8765 At SPENCERS RETAIL On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At ANNAPURNA TIFFINS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At SRI KRISHNA MEDICALS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Health	Spent Rs.875 On HDFC Bank Card 8765 At CITY HOSPITAL On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Personal care	Spent Rs.875 On HDFC Bank Card 8765 At PRIYA BEAUTY PARLOUR On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Personal care	Spent Rs.875 On HDFC Bank Card 8765 At HAIR AND CO SALON On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	NONE|Shopping|Education	Spent Rs.875 On HDFC Bank Card 8765 At NEW ERA BOOK STORE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	NONE	Spent Rs.875 On HDFC Bank Card 8765 At GANESH TRADERS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At SHREE SWEETS On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_card	AX-HDFCBK-S	Food	Spent Rs.875 On HDFC Bank Card 8765 At LUCKY TEA CORNER On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_icici_upi	AX-ICICIB-S	Food	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Swiggy credited. UPI:628374659078. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Groceries	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Zepto credited. UPI:628374659079. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Groceries	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Blinkit credited. UPI:628374659001. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Groceries	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Reliance Smart credited. UPI:628374659082. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Transport	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Namma Metro credited. UPI:628374659095. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Transport	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; BMTC credited. UPI:628374659026. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Internet and mobile|Bills	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Airtel Prepaid credited. UPI:628374659054. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Health	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Apollo Clinic credited. UPI:628374659017. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	NONE|Other	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Ravi Kumar credited. UPI:628374659072. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_icici_upi	AX-ICICIB-S	Groceries	ICICI Bank Acct XX654 debited for Rs 330.00 on 11-Oct-26; Sai Ram Provision Store credited. UPI:628374659009. Call 18002662 for dispute. SMS BLOCK 654 to 9215676766.
+holdout_sbi_upi	VM-SBIUPI-S	Food	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to ZOMATO Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_sbi_upi	VM-SBIUPI-S	Groceries	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to DMART Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_sbi_upi	VM-SBIUPI-S	Transport|Travel	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to UBER INDIA Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_sbi_upi	VM-SBIUPI-S	Utilities|Bills	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to BESCOM Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_sbi_upi	VM-SBIUPI-S	NONE|Other	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to RAMESH K Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_sbi_upi	VM-SBIUPI-S	NONE	Dear UPI user A/C X6543 debited by 330.0 on date 11Oct26 trf to NEW SHOP Refno 628374659210. If not u? call 1800111109. -SBI
+holdout_vpa	VK-KOTAKB-S	Food	Sent Rs.330.00 from Kotak Bank AC X6543 to dominos@icici on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	Groceries	Sent Rs.330.00 from Kotak Bank AC X6543 to blinkit@paytm on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	Travel	Sent Rs.330.00 from Kotak Bank AC X6543 to redbus@ybl on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	Utilities|Bills	Sent Rs.330.00 from Kotak Bank AC X6543 to tatapower@hdfcbank on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	NONE|Other	Sent Rs.330.00 from Kotak Bank AC X6543 to sunil.agarwal@oksbi on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	NONE|Other	Sent Rs.330.00 from Kotak Bank AC X6543 to 9812345670@paytm on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_vpa	VK-KOTAKB-S	NONE	Sent Rs.330.00 from Kotak Bank AC X6543 to quickmart22@okaxis on 11-10-26.UPI Ref 628374659211. Not you, https://kotak.com/KBANKT/Fraud
+holdout_axis_upi	AX-AXISBK-S	Fuel	INR 330.00 debited A/c no. XX6543 11-10-26, 09:09:09 UPI/P2M/628374659212/INDIAN OIL Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+holdout_axis_upi	AX-AXISBK-S	Fuel	INR 330.00 debited A/c no. XX6543 11-10-26, 09:09:09 UPI/P2M/628374659212/BPCL Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+holdout_axis_upi	AX-AXISBK-S	Food	INR 330.00 debited A/c no. XX6543 11-10-26, 09:09:09 UPI/P2M/628374659212/SWIGGY Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+holdout_axis_upi	AX-AXISBK-S	Health	INR 330.00 debited A/c no. XX6543 11-10-26, 09:09:09 UPI/P2M/628374659212/RAMA MEDICALS Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+holdout_axis_upi	AX-AXISBK-S	NONE|Food	INR 330.00 debited A/c no. XX6543 11-10-26, 09:09:09 UPI/P2M/628374659212/SHREE KRISHNA HOTEL Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank
+holdout_marketplace	AX-HDFCBK-S	Shopping|Bills|Groceries	Spent Rs.875 On HDFC Bank Card 8765 At AMAZON PAY INDIA On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_marketplace	AX-HDFCBK-S	NONE|Bills|Shopping|Other	Spent Rs.875 On HDFC Bank Card 8765 At PAYTM On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_marketplace	AX-HDFCBK-S	NONE|Bills|Other	Spent Rs.875 On HDFC Bank Card 8765 At PHONEPE On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_marketplace	AX-HDFCBK-S	Subscriptions|Fun|Shopping	Spent Rs.875 On HDFC Bank Card 8765 At GOOGLE PLAY On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_marketplace	AX-HDFCBK-S	Shopping	Spent Rs.875 On HDFC Bank Card 8765 At FLIPKART On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808
+holdout_marketplace	AX-HDFCBK-S	NONE|Bills|Loan EMI	Spent Rs.875 On HDFC Bank Card 8765 At CRED On 2026-10-11:12:04:55.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 8765 to 7308080808

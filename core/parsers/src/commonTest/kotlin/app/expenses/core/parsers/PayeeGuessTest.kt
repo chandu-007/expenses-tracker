@@ -58,4 +58,71 @@ class PayeeGuessTest {
         assertNull(PayeeGuess.of("Rs.499.00 paid by your card on 05-10-26"), "\"paid by your card\" is not a person")
         assertNull(PayeeGuess.of("Rs.100 credited. Sent by 9876543210 via UPI"), "a number is not a name")
     }
+
+    private fun card(shop: String) = "Spent Rs.450 On HDFC Bank Card 4321 At $shop On 2026-10-05:19:22:01.Not You? To Block+Reissue Call 18002586161/SMS BLOCK CC 4321 to 7308080808"
+
+    @Test
+    fun aGatewayPrefixOnACardNameIsDroppedAndTheShopIsWhatFollowsIt() {
+        assertEquals("SWIGGY", PayeeGuess.of(card("RAZ*SWIGGY")))
+        assertEquals("DOMINOS", PayeeGuess.of(card("PYU*DOMINOS")))
+        assertEquals("BIGBASKET", PayeeGuess.of(card("PAYU*BIGBASKET")))
+        assertEquals("AIRTEL", PayeeGuess.of(card("BILLDESK*AIRTEL")))
+        assertEquals("ZOMATO", PayeeGuess.of(card("PAYTM*ZOMATO")))
+        assertEquals("SWIGGY ORDER", PayeeGuess.of(card("SWIGGY*ORDER")), "a star inside the name is a space")
+        assertEquals("PAYTM", PayeeGuess.of(card("PAYTM")), "the gateway's own name alone is still a name")
+    }
+
+    @Test
+    fun terminalAndBranchNumbersAreCutOffANameButASmallNumberStays() {
+        assertEquals("KIRANA MART", PayeeGuess.of(card("KIRANA MART 2231")))
+        assertEquals("EAZYDINE", PayeeGuess.of(card("EAZYDINE0000000")))
+        assertEquals("UBER INDIA MUMBAI", PayeeGuess.of(card("UBER INDIA 0123 MUMBAI")))
+        assertEquals("INDIAN OIL FUEL STN", PayeeGuess.of(card("INDIAN OIL FUEL STN 1234")))
+        assertEquals("SECTOR 7 STORES", PayeeGuess.of(card("SECTOR 7 STORES")))
+        assertNull(PayeeGuess.of("Rs.5,000 withdrawn at ATM 12345 on 05-10-26"))
+        assertNull(PayeeGuess.of(card("POS 12345")))
+    }
+
+    @Test
+    fun aLongCompanyNameIsReadWhole() {
+        assertEquals("MYNTRA DESIGNS PVT LTD BANGALORE", PayeeGuess.of(card("MYNTRA DESIGNS PVT LTD BANGALORE")))
+        assertEquals("UBER INDIA SYSTEMS PVT LTD", PayeeGuess.of(card("UBER INDIA SYSTEMS PVT LTD")))
+    }
+
+    @Test
+    fun theNameBeforeCreditedAfterASemicolonIsThePayeeOfAnIciciOrIdfcUpiDebit() {
+        assertEquals("Pune Metro", PayeeGuess.of("ICICI Bank Acct XX123 debited for Rs 14.00 on 09-May-26; Pune Metro credited. UPI:628374659283. Call 18002662 for dispute."))
+        assertEquals("Swiggy", PayeeGuess.of("ICICI Bank Acct XX123 debited for Rs 250.00 on 05-Oct-26; Swiggy credited. UPI:628374659283."))
+        assertEquals("A.B. MART", PayeeGuess.of("Your A/c XX0000 debited by Rs. 750.00 on 09/05/26; M/S A.B. MART credited. RRN 000000000001. Available balance Rs. 10,000.00."))
+        assertEquals("CUSTOMER NAME", PayeeGuess.of("Your A/c XX0000 debited by Rs. 20,000.00 on 09/05/26; CUSTOMER NAME credited. RRN 000000000000."))
+    }
+
+    @Test
+    fun anAxisUpiPathNameStopsBeforeTheWordsThatFollowIt() {
+        assertEquals("SWIGGY", PayeeGuess.of("INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2M/628374659283/SWIGGY Not you? SMS BLOCKUPI Cust ID to 919900000000 Axis Bank"))
+        assertEquals("RAVI KUMAR", PayeeGuess.of("INR 250.00 debited A/c no. XX1234 05-10-26, 14:22:11 UPI/P2A/628374659283/RAVI KUMAR Not you? SMS BLOCKUPI"))
+    }
+
+    @Test
+    fun aPaymentAppsOwnNameIsNeverThePersonButWhatItPaidIs() {
+        assertEquals("Swiggy", PayeeGuess.of("Google Pay: Paid ₹250 to Swiggy"))
+        assertNull(PayeeGuess.of("PhonePe: Payment of ₹250 done"))
+        assertNull(PayeeGuess.of("Paytm: ₹250 debited"))
+    }
+
+    @Test
+    fun theShopAfterTheDateAcceptsATerminalNumberAndStillRefusesWording() {
+        assertEquals("SHELL PETROL PUMP", PayeeGuess.of("INR 450.00 spent using ICICI Bank Card XX4417 on 05-Oct-26 on SHELL PETROL PUMP 4521. Avl Limit: INR 1,00,000.00."))
+    }
+
+    @Test
+    fun aMaskedAccountOrTheBanksOwnSentenceIsNeverTheNameAndWordsThatFollowAreCutOff() {
+        assertEquals("SampleRide", PayeeGuess.of("Sent Rs.9.00 from XX0000 to SampleRide on 08-Sep-26. UPI ref no. 000000000001."))
+        assertEquals("RAHUL SHARMA", PayeeGuess.of("Sent Rs.100.00 from XX1234 to RAHUL SHARMA on 03-Sep-26. UPI ref no. 000000000000."))
+        assertEquals("PZCREDIT", PayeeGuess.of("Spent Rs.3000 From HDFC Bank Card x0000 At PZCREDIT0000000 On 2026-05-02:00:17:56 Bal Rs.142.26"))
+        assertEquals("SampleMerchant Store", PayeeGuess.of("Rs 100.00 spent on HSBC card XX0000 at SampleMerchant Store for INR 100.00 on 01-05-26."))
+        assertEquals("SampleCloud", PayeeGuess.of("Rs 100 was paid to SampleCloud with your BOBCARD ending 0000 on 01-05-26"))
+        assertEquals("RAHUL SHARMA", PayeeGuess.of("Rs.100 debited from A/c XX1234 on 05-10-26 to RAHUL SHARMA.RRN 628374659283"))
+        assertNull(PayeeGuess.of("Rs.2000 debited from A/c XX1234 on 05-10-26 InfoTRF TO FD no..Avl Bal Rs.99.00"), "a deposit is not a payee")
+    }
 }

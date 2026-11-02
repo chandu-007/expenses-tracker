@@ -21,4 +21,20 @@ object PayeeKinds {
             else -> PayeeKind.UNKNOWN
         }
     }
+
+    private val shopWords = setOf(
+        "store", "stores", "mart", "shop", "traders", "trading", "enterprises", "hotel", "restaurant", "cafe", "medical", "medicals", "pharmacy", "hospital", "clinic", "stall", "mess", "tiffin", "centre", "center",
+        "bakery", "sweets", "foods", "food", "super", "market", "bazaar", "bazar", "fresh", "dairy", "agency", "agencies", "services", "service", "company", "co", "pvt", "ltd", "limited", "private", "llp", "inc", "sons",
+        "brothers", "bros", "and", "&", "bhavan", "bhavanam", "palace", "garage", "motors", "tyres", "salon", "studio", "works", "industries", "associates", "solutions", "tech", "online", "retail", "general",
+    )
+
+    /**
+     * Whether a name that is not an address reads like a person's: two or three words of letters, none of them a shop or company word ("RAVI KUMAR", "Anita Rao"). Used only to be careful: a
+     * category learned for such a name is treated as a hint until it has been chosen twice, because a person is paid for different things. A wrong "yes" costs a look, never a wrong category.
+     */
+    fun looksLikePerson(name: String?): Boolean {
+        val n = name?.trim()?.takeIf { it.isNotEmpty() && '@' !in it } ?: return false
+        val words = n.split(' ', '.').filter { it.isNotEmpty() }
+        return words.size in 2..3 && words.all { w -> w.all { it.isLetter() } && w.lowercase() !in shopWords } && n.none { it.isDigit() } && app.expenses.core.domain.DefaultRules.displayNameFor(n) == null
+    }
 }

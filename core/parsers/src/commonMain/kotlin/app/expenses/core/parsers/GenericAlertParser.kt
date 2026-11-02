@@ -47,7 +47,7 @@ sealed interface ParseResult {
 object GenericAlertParser {
     private val otp = Regex("""(?i)\botp\b|one[\s-]?time\s+pass|\bcvv\b|\bpin\b\s+is""")
     private val dueNotice = Regex("""(?i)\bis\s+due\b|\bamount\s+payable\b|\bdue\s+(?:date|on|by)\b|min(?:imum)?\s+(?:amount\s+)?due|total\s+(?:amount\s+)?due|statement\s+(?:is\s+)?(?:generated|ready)|login""")
-    private val amountToken = Regex("""(?i)(rs\.?|inr|₹)[\s:]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)|\b([A-Z]{3})\s*([0-9][0-9,]*\.[0-9]{2})\b|\b(?:debited|credited|spent|paid|received|sent|withdrawn|deducted)\s+(?:by|for|of|with)\s+([0-9][0-9,]*\.[0-9]{2})\b""")
+    private val amountToken = Regex("""(?i)(rs\.?|inr|₹)[\s:]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)|\b([A-Z]{3})\s*([0-9][0-9,]*\.[0-9]{2})\b|\b(?:debited|credited|spent|paid|received|sent|withdrawn|deducted)\s+(?:by|for|of|with)\s+([0-9][0-9,]*\.[0-9]{1,2})\b""")
     private val balanceContext = Regex("""(?i)(?:bal|avl|avail|limit|due|outstanding|minimum)[a-z .:]*$""")
     private val declined = Regex("""(?i)\b(?:declined|unsuccessful|insufficient\s+funds?)\b|\b(?:txn|transaction|payment)\b[^.]{0,40}\bfailed\b|\bfailed\b[^.]{0,20}\b(?:txn|transaction)\b""")
     private val creditWords = Regex("""(?i)\b(?:credited|received|deposited|refund(?:ed)?|reversed|reversal|added|earned)\b|\bCr\b\.?""")
