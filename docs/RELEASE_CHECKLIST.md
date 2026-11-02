@@ -11,12 +11,14 @@ Do these in order. Nothing here replaces the real-device list in `docs/REAL_DEVI
 `tools/release_smoke.sh` (add `--no-build` to reuse the APK just built). First it runs `tools/check_release_keeps.py` on the APK (see below), then it installs the RELEASE build, which is
 minified by R8, on the emulator and drives it with adb: first launch and skip the tour, add an expense of 123, see it in the list, find it in Search, then read the invented receipt
 `tools/fixtures/bill_fixture.png` with Add, Read items from a photo, Choose a photo, and check the dialog lists its three items and the total. On Android 12 and later it then does the
-**widget steps**: it saves a quick entry (Chai, 20), places the "Spending: month and quick add (4 x 2)" widget through the launcher's own widget picker (long press, Widgets, the app's entry,
-drag), taps the eye (the total ₹143.00 appears, the eye offers to hide it, a second tap masks it again), taps the Chai chip ("Added Chai" appears on the widget and Search shows both entries),
-repeats the eye and the chip from a process that `am force-stop` had killed (the log's `process age` shows the tap started the process), turns Hide amounts on (the widget says
-"Amounts hidden", has no eye, a chip still adds and its confirmation has no amount) and off again, and finally requires that the device log has no `GlanceAppWidget` error. It exits non-zero
-and names the failing step (with the matching log lines and a screenshot at `/tmp/release_smoke_failure.png`).
-Known weakness (0.10.3): step 9, dragging the widget out of the Pixel Launcher's picker with `input draganddrop`, is flaky on the emulator (it failed in some runs because the picker stayed open); steps 10 to 14 have not had a green scripted run yet. When step 9 fails, place the widget by hand (long-press the home screen, Widgets, Expenses, drag "Spending: month and quick add") and check the eye, a chip and `adb logcat -s ExpensesWidget GlanceAppWidget:E` yourself, as `docs/PHASE2_PROGRESS.md` (Slice 96) describes. `tools/check_release_keeps.py` has no such weakness and always runs.
+**widget steps**: it saves a quick entry (Chai, 20), places the "Spending: month and quick add (4 x 2)" widget through the launcher's own widget picker (long press, Widgets, the app's entry, then a
+touch-event drag of the preview onto the home screen, retried up to four times: `input draganddrop` was too quick for the launcher), taps the eye (the total ₹143.00 appears, the eye offers to hide it, a second tap
+masks it again), taps the Chai chip ("✓ Chai ₹20 added  Undo" appears on the widget and Search shows both entries), repeats the eye and the chip from a process that `am force-stop` had killed (the log's
+`process age` shows the tap started the process), then, with the process killed again (`am kill`: a force-stop would cancel the scheduled job) and nothing touched, waits for the confirmation line to leave the widget
+by itself (about 10 seconds after the tap, drawn again by the one-time WorkManager job: the log must say `undo line: the time is up`), turns Hide amounts on (the widget says "Spent this month · Amounts hidden",
+has no eye, a chip still adds and its confirmation has no amount) and off again, and finally requires that the device log has no `GlanceAppWidget` error. It exits non-zero and names the failing step (with the
+matching log lines and a screenshot at `/tmp/release_smoke_failure.png`). With 0.10.3 it passed 14 of 14 steps on the API34 AVD in each of the last runs before release (three in a row on the final commit; the
+emulator itself sometimes needs a cold boot after many runs: "Expenses isn't responding" and a 60 s install are the sign).
 
 **The widget steps need the API34 AVD** (Android 14 with Google APIs, the Pixel Launcher); on the API26 emulator they are listed as `SKIP`, and the rest runs as before. Create it once:
 `sdkmanager --install "system-images;android-34;google_apis;arm64-v8a"`, `avdmanager create avd -n API34 -k "system-images;android-34;google_apis;arm64-v8a" -d pixel_6`, then in
