@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -78,7 +79,8 @@ fun InboxScreen(
     // those that need no decision: not a repeat, not a related entry, an account the person has used for this bank card before (or the only account there is),
     // and an ordinary payment (a transfer or refund asks to be looked at)
     // (and not one that might be half of a transfer: that is looked at, not added in bulk)
-    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() }
+    // (and a category that is only a guess from a name, a payment to a person, or a marketplace is looked at: it is never added in bulk or by a swipe; no category at all is fine, it stays Uncategorised)
+    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() && it.certainty != "check" }
     val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     val easyIds = easy.map { it.id }.toSet()
     // items from the same payee (or, with no payee, the same bank): "Add all from <payee>" on their cards adds the ones among them that need no decision
@@ -89,7 +91,14 @@ fun InboxScreen(
     fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit || (credit && it.pairedItemId.isNotEmpty()) }.sumOf { it.amountMinor }, cur).formatted()
     if (confirmingAll) AlertDialog(
         onDismissRequest = { confirmingAll = false }, title = { Text("Add ${easy.size} items?") },
-        text = { Text("Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, or whose account is not yet known, are left for you to check.") },
+        text = {
+            val bare = easy.count { it.direction != "CREDIT" && it.categoryId.isEmpty() }
+            Text(
+                "Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, whose account is not yet known, or whose category is only a guess, are left for you to check." +
+                    if (bare > 0) " $bare of these have no category yet: they are added as Uncategorised, and you can file them from Reports later." else "",
+                modifier = Modifier.testTag("inbox_add_all_text"),
+            )
+        },
         confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
@@ -161,7 +170,9 @@ private fun InboxCard(
     var toAcct by rememberSaveable(r.id) { mutableStateOf(r.toAccountId) }
     val paired = r.treatment != "PAYMENT" && !asPayment
     var account by rememberSaveable(r.id) { mutableStateOf(r.accountId) }
-    var category by rememberSaveable(r.id) { mutableStateOf(r.categoryId) }
+    // what the person picked on this card, if anything; until they do, the card follows the app's suggestion, so a rule added or a choice made on another card shows here at once
+    var picked by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    val category by rememberUpdatedState(picked ?: r.categoryId)
     var pickingCategory by rememberSaveable(r.id) { mutableStateOf(false) }
     var changing by rememberSaveable(r.id) { mutableStateOf(false) }
     var naming by rememberSaveable(r.id) { mutableStateOf(false) }
@@ -246,10 +257,14 @@ private fun InboxCard(
                 } else {
                     val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
                     val categoryName = categories.firstOrNull { it.id == category }?.name
-                    val why = if (category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
+                    val why = if (picked == null && category == r.categoryId && r.categoryNote.isNotEmpty()) " (${r.categoryNote})" else ""
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text("Goes to $accountName" + (if (!credit) " · " + (categoryName ?: "no category") + why else ""), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f).testTag("inbox_goes_${r.id}"))
                         TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
+                    }
+                    if (!credit && picked == null && r.certainty == "check" && category.isNotEmpty()) Text("This is a guess: please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_check_${r.id}"))
+                    if (!credit && picked == null && r.alternatives.isNotEmpty() && !changing) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
                     }
                     if (changing) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
@@ -258,10 +273,10 @@ private fun InboxCard(
                             // the first few as chips (and the chosen one, wherever it is); every other one is behind "More", in a list with search, as on the Add screen
                             val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                chips.forEach { c -> FilterChip(selected = c.id == category, onClick = { category = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
+                                chips.forEach { c -> FilterChip(selected = c.id == category, onClick = { picked = c.id }, label = { Text(c.name) }, modifier = Modifier.testTag("inbox_category_${r.id}_${c.id}")) }
                                 if (offered.size > CATEGORY_CHIPS) AssistChip(onClick = { pickingCategory = true }, label = { Text("More (${offered.size - chips.size})") }, modifier = Modifier.testTag("inbox_more_categories_${r.id}"))
                             }
-                            if (pickingCategory) CategoryPickerDialog(offered, category, onPick = { id -> category = id; pickingCategory = false }, onClose = { pickingCategory = false })
+                            if (pickingCategory) CategoryPickerDialog(offered, category, onPick = { id -> picked = id; pickingCategory = false }, onClose = { pickingCategory = false })
                         }
                     }
                 }
@@ -430,12 +445,16 @@ fun CaptureRulesScreen(
     rules: List<app.expenses.CaptureRuleUi>, categories: List<CategoryUi>,
     onAdd: (pattern: String, categoryId: String, done: (String?) -> Unit) -> Unit, onRemove: (String) -> Unit, onMove: (String, Boolean) -> Unit,
     onTest: (String, (Long) -> Unit) -> Unit, onBack: () -> Unit,
+    /** What the app learned from the person's own choices (see [learnedSection]); empty by default so a caller without it shows the screen as it was. */
+    learned: List<app.expenses.LearnedUi>? = null, onForgetLearned: (String) -> Unit = {}, onChangeLearned: (String, String, (String?) -> Unit) -> Unit = { _, _, _ -> }, onFileLearned: (String) -> Unit = {},
+    learnedUndo: app.expenses.ScreenUndo? = null, onUndoLearned: (String) -> Unit = {}, onUndoLearnedGone: (String) -> Unit = {},
 ) {
+    val undoHost = rememberUndoSnackbar(learnedUndo, onUndoLearned, onUndoLearnedGone)
     var pattern by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("") }
     var tested by remember { mutableStateOf<Long?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
-    Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }) { pad ->
+    Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 Text("When a captured payment mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -470,6 +489,7 @@ fun CaptureRulesScreen(
                     }
                 }
             }
+            if (learned != null) learnedSection(learned, categories, onForgetLearned, onChangeLearned, onFileLearned)
         }
     }
 }

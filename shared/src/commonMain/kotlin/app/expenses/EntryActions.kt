@@ -1,5 +1,6 @@
 package app.expenses
 
+import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.domain.AmountMask
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Currency
@@ -187,7 +188,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * already stored with the entry are kept, so editing an expense captured from an SMS does not lose where it came from.
      * Throws [IllegalArgumentException] with a reason the user can read.
      */
-    fun save(draft: EntryDraft): String {
+    fun save(draft: EntryDraft, teach: Boolean = true): String {
         val existing = draft.id?.let { ok.db.schemaQueries.entryById(it).executeAsOneOrNull()?.takeIf { r -> r.deleted == 0L } ?: throw IllegalArgumentException("This entry no longer exists") }
         val id = draft.id ?: Uuid.random().toString()
         val entry = when (val r = EntryDrafts.build(draft, EntryId(id), BaseCurrency.current)) {
@@ -198,9 +199,15 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val loan = draft.kind == DraftKind.LOAN
         val text = if (loan) ok.people.get(draft.personId)?.name else draft.note.trim().ifEmpty { null }
         val typed = draft.note.trim().ifEmpty { null }
+        // read before the save replaces it: the category this captured entry was in
+        val categoryBefore = if (existing?.source == "sms") ok.db.schemaQueries.splitsOf(id).executeAsList().singleOrNull()?.category_id else null
         ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = if (loan) typed else existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, note = if (loan) typed else null, tags = draft.tags))
-        // Correcting a captured entry later, in the ordinary editor, teaches the same lesson as choosing in the inbox: next time that payee starts there.
-        if (existing?.source == "sms" && draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft) && draft.category.isNotEmpty()) ok.captureRules.learn(text, draft.category)
+        // Correcting a captured entry later (in the editor, or by a bulk change of category), teaches the same lesson as choosing in the inbox: next time that payee starts there. Only a changed
+        // category teaches (saving the same entry for another reason does not count as a choice), and the payee is read from the original text so that it is the key To review looks up (the
+        // entry's own title may be a name the person gave it).
+        if (teach && existing?.source == "sms" && draft.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(draft) && draft.category.isNotEmpty() && draft.category != categoryBefore) {
+            ok.captureRules.learn(ok.origins.get(id)?.text?.let { PayeeGuess.of(it) } ?: text, draft.category, text)
+        }
         if (draft.kind == DraftKind.EXPENSE) {
             val category = if (EntryDrafts.isSplit(draft)) "" else draft.category
             if (category.isNotEmpty()) {

@@ -29,6 +29,8 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | Delete a category | Categories | Only an unused one can be deleted (the store refuses otherwise): nothing is lost but its name and colour | |
 | Delete an account | Accounts | Only one with no entries and no saved items can be deleted: nothing is lost but its name and settings | |
 | Remove a person | Lent and borrowed | Only one with no entries | |
+| **File earlier uncategorised expenses under a learned choice** | Category rules, "What the app has learned" | **Undo bar (new)**: each changed entry goes back to the draft it had (no category); undoing teaches nothing | LearnedChoicesUiTest |
+| **Forget / change what the app learned for a payee** | Category rules, "What the app has learned" | None. Left: one tap on the next To review card recreates it, and the starter list is what is used meanwhile | LearnedChoicesUiTest |
 | Remove a capture rule | Category rules | None. Left: a rule is a phrase and a category, two taps to make again | |
 | Clear a budget limit | Budget | None. Left: one number, shown in the dialog that clears it | |
 | Remove billing dates from a card | Accounts | None. Left: three numbers, the dialog that removes them shows them | |

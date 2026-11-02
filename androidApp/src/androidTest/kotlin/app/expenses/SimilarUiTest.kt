@@ -123,7 +123,7 @@ class SimilarUiTest {
         launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_back")
         val id = runBlocking { container.write { it.inbox.list().first().id } }!!
         waitFor("inbox_goes_$id")
-        assertTrue(textOf("inbox_goes_$id").contains("Bills (your earlier entries)"), textOf("inbox_goes_$id"))
+        assertTrue(textOf("inbox_goes_$id").contains("Bills (2 of your earlier entries)"), textOf("inbox_goes_$id"))
     }
 
     @Test

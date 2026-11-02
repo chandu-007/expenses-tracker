@@ -66,6 +66,17 @@ Settings, Display, Font size and Display size at their largest.
 - [ ] VoiceOver or TalkBack: each row reads as one tick box ("ATM cash, 3 Mar, Main bank to Cash, ₹3,000.00, checked"); the buttons are reachable; the amounts hide with Hide amounts.
 - [ ] A tablet or an unfolded foldable: the page is one centred column, the same as Subscriptions.
 
+### Categories from bank messages (To review, after 0.10.3)
+Use your own real texts. Nothing here is checked against a real bank yet: the numbers in the notes come from invented messages.
+- [ ] To review: for each of your recent real bank texts note the payee shown on the card (title) and the category it starts with. Write down every card that has a **wrong** category (with the sender and the wording, not the numbers) and every one that shows the bank's name or "no category" although the text names a shop. Wrong ones matter most.
+- [ ] Pick a category for one shop you have not used before (say a local grocery) and Add. Wait for the next text of that shop (a card text and a UPI text of the same shop is the best test): it starts with what you chose, and says "what you chose last time".
+- [ ] Two waiting cards of one shop, written differently (the card name and the UPI address): choose a category on the first and Add; the second card's category changes to it without leaving the screen. A category you picked yourself on a card is not changed by that.
+- [ ] A card marked "This is a guess: please check it" (a name like "tea stall", a payment to a person, Amazon or Paytm) is never added by "Add all" or by swiping; the "Add all" box says how many have no category. Check that "Add all" adds nothing under a category you would call wrong.
+- [ ] Pay a friend by name or number twice with different reasons; the app does not settle on the first reason (it asks you to check until you chose the same twice).
+- [ ] More, Capture, Category rules, scroll to "What the app has learned": your choices are listed with how many times; Change moves one; Forget removes one; "File N earlier expenses with no category" files them under that category and the Undo bar puts them back (Home totals before and after).
+- [ ] Merge one category into another in Categories: the rules and learned choices that named it now name the other one (they used to stop working).
+- [ ] Open Reports: spending with no category is shown as "Uncategorised", so a card added without a category is still counted, never lost.
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 

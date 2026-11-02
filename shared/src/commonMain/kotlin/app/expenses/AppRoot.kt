@@ -162,13 +162,15 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var privacyOpen by rememberSaveable { mutableStateOf(false) }
             val health by viewModel.captureHealth.collectAsStateWithLifecycle(context = MAIN)
             val captureRules by viewModel.captureRules.collectAsStateWithLifecycle(context = MAIN)
+            val learnedPayees by viewModel.learnedPayees.collectAsStateWithLifecycle(context = MAIN)
+            val learnedUndo by viewModel.learnedUndo.collectAsStateWithLifecycle(context = MAIN)
             val inboxRows by viewModel.inbox.collectAsStateWithLifecycle(context = MAIN)
             val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle(context = MAIN)
             val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted) }
             val smsPermission = sms.granted
+            val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
             val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
-            val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
             var budgeting by rememberSaveable { mutableStateOf(false) }
             var loansOpen by rememberSaveable { mutableStateOf(false) }
             var billsOpen by rememberSaveable { mutableStateOf(false) }
@@ -372,7 +374,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 6 -> {
                         BackHandler { rulesOpen = false }
-                        CaptureRulesScreen(captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false })
+                        CaptureRulesScreen(
+                            captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false },
+                            learned = learnedPayees, onForgetLearned = viewModel::forgetLearned, onChangeLearned = { key, cat, done -> viewModel.changeLearned(key, cat, done) }, onFileLearned = viewModel::fileEarlierLike,
+                            learnedUndo = learnedUndo, onUndoLearned = viewModel::undoLearnedFiling, onUndoLearnedGone = viewModel::learnedUndoGone,
+                        )
                     }
                     k == 7 -> {
                         BackHandler { captureOpen = false }

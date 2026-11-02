@@ -65,7 +65,7 @@ import app.expenses.core.domain.TransferPair
 import app.expenses.core.domain.TransferPairs
 import app.expenses.core.domain.PendingKey
 import app.expenses.core.domain.CategorySuggest
-import app.expenses.core.domain.CategorySuggestion
+import app.expenses.core.domain.Certainty
 import app.expenses.core.domain.SimilarCandidate
 import app.expenses.core.domain.SimilarEntries
 import app.expenses.core.domain.SuggestionSource
@@ -103,6 +103,8 @@ import app.expenses.core.domain.AccountLooks
 import app.expenses.core.domain.AccountLook
 import app.expenses.core.parsers.PayeeGuess
 import app.expenses.core.parsers.PayeeKind
+import app.expenses.core.parsers.CaptureCategory
+import app.expenses.core.parsers.CategoryAdvice
 import app.expenses.core.parsers.PayeeKinds
 import app.expenses.core.parsers.KindRules
 import app.expenses.core.parsers.MessageKind
@@ -160,6 +162,12 @@ data class InboxRowUi(
     val accountId: String, val categoryId: String, val rememberedAccount: Boolean, val confidence: String,
     /** Where the suggested category came from: "your rule", "what you chose last time", or empty. */
     val categoryNote: String = "",
+    /** Whether the suggested category is one to add without a look ("sure") or one the person should check first ("check"; never added by "Add all" or a swipe); empty with no suggestion. */
+    val certainty: String = "",
+    /** Which kind of source the suggestion came from ([SuggestionSource] name), so an unchanged suggestion is not taken for something the person chose. */
+    val categorySource: String = "",
+    /** Other categories this payee has been filed under before (ids, most used first, at most two): one tap to use one of them instead. */
+    val alternatives: List<String> = emptyList(),
     /** Set when this looks like something already in the ledger (or the same payment as another text): what to tell the person. */
     val duplicateNote: String? = null,
     val duplicateOfEntry: String? = null,
@@ -237,6 +245,9 @@ data class BillPeekRow(val id: String, val title: String, val amountText: String
 data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = emptyList(), val more: Int = 0, /** Tracked bills due within a week, overdue ones included. */ val dueThisWeek: Int = 0, /** What they add up to (those with a known amount, in the ledger's currency), or empty. */ val weekTotal: String = "") { val isEmpty get() = rows.isEmpty() && dueThisWeek == 0 }
 
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
+
+/** One thing the app learned from the person's choices: a payee ([label]) goes to [categoryName]; [uses] times in a row; [waiting] earlier expenses of the same payee have no category yet. */
+data class LearnedUi(val key: String, val label: String, val categoryId: String, val categoryName: String, val uses: Int, val waiting: Int)
 
 /**
  * [lastReceivedText] is when the last text (or email) reached capture, in words ("3 days ago"), or null when none ever did; [lastReceivedFresh] says it was in the last 7 days.
@@ -851,7 +862,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun undo(u: UndoUi) = withStore { ok ->
         if (u.kindChanges.isNotEmpty()) ok.store.atomically { u.kindChanges.asReversed().forEach { EntryActions(ok).undoKindChange(it) } }
         else if (u.bulkCreated.isNotEmpty()) ok.store.atomically { u.bulkCreated.forEach { EntryActions(ok).undo(it) } }
-        else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it) } }
+        else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it, teach = false) } }
         else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
@@ -1987,7 +1998,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val accounts = ok.db.schemaQueries.allAccounts().executeAsList().filter { it.archived == 0L }
         val usable = ok.categories.list().filter { !it.hidden && it.kind.forExpense }.map { it.id }.toSet() // suggestions are for debits, which are expenses
         val rules = ok.captureRules.rules()
-        val learned = ok.captureRules.learned()
+        val learnedRows = ok.captureRules.learnedRows()
+        val taught = CaptureCategory.Taught(learnedRows.associate { it.key to it.categoryId }, learnedRows.associate { it.key to it.uses })
         val zone = systemZone()
         val fmt = DatePattern("d MMM")
         val items = ok.inbox.list()
@@ -2052,11 +2064,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val byName = ok.categories.list().filter { !it.hidden && it.kind.forExpense && it.parentId == null }.associate { it.name.lowercase() to it.id }
             // entries filed from a captured text carry the clean merchant name (cleanPayee), older ones the raw address: look under both
             val history = if (i.direction == "DEBIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
-                SimilarEntries.topCategory(clean, (similarCandidates(ok, clean, "EXPENSE") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "EXPENSE") else emptyList()).distinctBy { it.id })
+                SimilarEntries.profile(clean, (similarCandidates(ok, clean, "EXPENSE") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "EXPENSE") else emptyList()).distinctBy { it.id })
             } else null
-            val suggestion = if (i.direction == "DEBIT") CategorySuggest.suggest(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, learned, usable, byName, toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON, history = history)
+            val toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON
+            val suggestion = if (i.direction == "DEBIT") CaptureCategory.advise(
+                rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, taught, usable, byName, history, toAPerson = toAPerson,
+                personLike = toAPerson || PayeeKinds.looksLikePerson(rawPayee) || PayeeKinds.looksLikePerson(named),
+            )
                 // cash taken out at an ATM that is not moved to a cash account (the person has none): "Cash withdrawal", when they have that category
-                ?: byName["cash withdrawal"]?.takeIf { it in usable && kind == MessageKind.ATM_WITHDRAWAL && treatment == "PAYMENT" }?.let { CategorySuggestion(it, SuggestionSource.WORDS) }
+                ?: byName["cash withdrawal"]?.takeIf { it in usable && kind == MessageKind.ATM_WITHDRAWAL && treatment == "PAYMENT" }?.let { CategoryAdvice(it, SuggestionSource.WORDS, Certainty.SURE, "the words of the text", emptyList()) }
             else null
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(i.receivedAt),
@@ -2066,7 +2082,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 nameable = rawPayee != null,
                 payeeKind = when (PayeeKinds.of(rawPayee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
-                categoryNote = when (suggestion?.source) { SuggestionSource.RULE -> "your rule"; SuggestionSource.LEARNED -> "what you chose last time"; SuggestionSource.HISTORY -> "your earlier entries"; SuggestionSource.STARTER -> "a common merchant"; SuggestionSource.PERSON -> "a payment to a person"; SuggestionSource.WORDS -> "the words of the text"; null -> "" },
+                categoryNote = suggestion?.note.orEmpty(), certainty = when (suggestion?.certainty) { Certainty.SURE -> "sure"; Certainty.CHECK -> "check"; null -> "" },
+                categorySource = suggestion?.source?.name.orEmpty(), alternatives = suggestion?.alternatives.orEmpty(),
             )
         }
         return withTransfers(ok, items, base, accounts)
@@ -2261,7 +2278,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     settleBillFor(ok, i, entry.id.value)?.let { title -> _state.update { st -> (st as? UiState.Ready)?.copy(message = "Marked $title as paid") ?: st } }
                     // the account on the text's own side of a transfer is the one this bank and last four digits stand for
                     if (treatment == "TRANSFER" && i.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), if (i.direction == "CREDIT") toId else fromId)
-                    if (treatment == "PAYMENT" && kind == DraftKind.EXPENSE) ok.captureRules.learn(PayeeGuess.of(i.body.orEmpty()), categoryId)
+                    if (treatment == "PAYMENT" && kind == DraftKind.EXPENSE && categoryId.isNotEmpty()) {
+                        // The person's choice teaches; the app's own guess, accepted as it stood, does not (it would only be the guess repeating itself as "what you chose"): a different
+                        // category than the one shown, a first choice, or the same as an earlier choice of theirs (which counts) is learned.
+                        val shown = _inbox.value.firstOrNull { it.id == id }
+                        if (shown == null || categoryId != shown.categoryId || shown.categorySource == SuggestionSource.LEARNED.name) ok.captureRules.learn(rawPayee, categoryId, payee)
+                    }
                     _inbox.value = inboxRows(ok)
                     refresh(ok)
                     null
@@ -2279,7 +2301,69 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return ok.captureRules.rules().map { CaptureRuleUi(it.id, it.pattern, it.categoryId, names[it.categoryId] ?: "a category that was removed") }
     }
 
-    fun loadCaptureRules() = withStore { ok -> _rules.value = ruleRows(ok) }
+    fun loadCaptureRules() = withStore { ok -> _rules.value = ruleRows(ok); _learned.value = learnedRows(ok) }
+
+    // ---- what the app has learned: look, change, forget, and file earlier entries ----
+
+    private val _learned = MutableStateFlow<List<LearnedUi>>(emptyList())
+    /** What the app learned from the person's own choices, most used first. */
+    val learnedPayees: StateFlow<List<LearnedUi>> get() = _learned
+    private val _learnedUndo = MutableStateFlow<ScreenUndo?>(null)
+    val learnedUndo: StateFlow<ScreenUndo?> get() = _learnedUndo
+    private var learnedUndoDrafts: List<EntryDraft> = emptyList()
+
+    private fun learnedRows(ok: AppContainer.Opened.Ok): List<LearnedUi> {
+        val names = ok.categories.list().associate { it.id to it.name }
+        val waiting = uncategorisedByKey(ok)
+        return ok.captureRules.learnedRows().sortedWith(compareByDescending<app.expenses.core.storage.Learned> { it.uses }.thenBy { it.label.lowercase() })
+            .map { LearnedUi(it.key, it.label, it.categoryId, names[it.categoryId] ?: "a category that was removed", it.uses, if (it.categoryId in names) waiting[it.key]?.size ?: 0 else 0) }
+    }
+
+    /** The ids of expenses with no category, by the key of their title: what a learned choice could still be applied to. One pass over those entries; read only on the learned list. */
+    private fun uncategorisedByKey(ok: AppContainer.Opened.Ok): Map<String, List<String>> {
+        val out = HashMap<String, MutableList<String>>()
+        for (row in ok.db.schemaQueries.uncategorisedExpenses(app.expenses.core.storage.CaptureRuleStore.HISTORY_SCAN).executeAsList()) {
+            val key = app.expenses.core.domain.PayeeKey.of(row.label) ?: continue
+            out.getOrPut(key) { ArrayList(2) } += row.id
+        }
+        return out
+    }
+
+    /** Forgets what was learned for a payee: the next one starts from the starter list again. The waiting items in To review are suggested again. */
+    fun forgetLearned(key: String) = withStore { ok -> ok.captureRules.forgetKey(key); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok) }
+
+    /** The person's change of mind about a learned payee: it stands as their choice from now on. */
+    fun changeLearned(key: String, categoryId: String, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try { container.write { ok -> ok.captureRules.setLearned(key, categoryId); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok); null } } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** Files the earlier expenses of this payee that have no category under what was learned, as one change that [undoLearnedFiling] takes back. */
+    fun fileEarlierLike(key: String) = withStore { ok ->
+        val category = ok.captureRules.learned()[key] ?: return@withStore
+        val ids = uncategorisedByKey(ok)[key].orEmpty()
+        if (ids.isEmpty()) return@withStore
+        val r = EntryActions(ok).bulkSetCategory(ids, category)
+        learnedUndoDrafts = r.undoDrafts
+        _learnedUndo.value = if (r.undoDrafts.isNotEmpty()) ScreenUndo("learned:$key", r.text("Filed")) else null
+        refresh(ok)
+        _learned.value = learnedRows(ok)
+    }
+
+    fun undoLearnedFiling(id: String) {
+        // taken before anything runs: the bar reports itself gone right after Undo, which lets go of what was kept
+        val drafts = learnedUndoDrafts
+        learnedUndoDrafts = emptyList(); _learnedUndo.value = null
+        withStore { ok ->
+            if (drafts.isNotEmpty()) ok.store.atomically { drafts.forEach { EntryActions(ok).save(it, teach = false) } }
+            refresh(ok)
+            _learned.value = learnedRows(ok)
+        }
+    }
+
+    fun learnedUndoGone(id: String) { if (_learnedUndo.value?.id == id) { _learnedUndo.value = null; learnedUndoDrafts = emptyList() } }
 
     fun addCaptureRule(pattern: String, categoryId: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
