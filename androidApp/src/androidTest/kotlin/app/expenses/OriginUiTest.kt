@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -46,7 +47,7 @@ class OriginUiTest {
     private fun accept(at: Long) {
         val id = runBlocking { container.write { ok -> ok.inbox.list().first { it.receivedAt == at }.id } }!!
         compose.openMore(); tap("open_inbox"); waitFor("inbox_back")
-        waitFor("inbox_$id"); tap("inbox_add_$id")
+        waitFor("inbox_list"); runCatching { compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$id")) }; waitFor("inbox_$id"); tap("inbox_add_$id")
         compose.waitUntil(10_000) { runBlocking { container.write { it.inbox.get(id)!!.entryId } } != null }
         tap("inbox_back")
     }

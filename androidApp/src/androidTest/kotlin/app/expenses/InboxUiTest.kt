@@ -200,7 +200,7 @@ class InboxUiTest {
         ingest(debit, 5_000); ingest(credit, 6_000); launch(); openInbox()
         val items = runBlocking { container.write { it.inbox.list() } }!!
         val debitId = items.first { it.direction == "DEBIT" }.id; val creditId = items.first { it.direction == "CREDIT" }.id
-        waitFor("inbox_$debitId"); compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$creditId")); tap("inbox_skip_$creditId")
+        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$debitId")); waitFor("inbox_$debitId"); compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_$creditId")); tap("inbox_skip_$creditId")
         compose.waitUntil(10_000) { !has("inbox_$creditId") }
         assertEquals(emptyList(), entries())
         // the same bank reference arriving again as a different text is refused, not added twice
