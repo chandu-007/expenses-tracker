@@ -314,9 +314,9 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * So is an entry the category is not for: an expense category is not applied to income, nor an income category to an expense (a category made for
      * both takes either). All or nothing.
      */
-    fun bulkSetCategory(ids: List<String>, category: String): BulkResult {
+    fun bulkSetCategory(ids: List<String>, category: String, teach: Boolean = true): BulkResult {
         val kind = ok.categories.list().firstOrNull { it.id == category }?.kind
-        return bulkEdit(ids, "split, shared, transfers and refunds keep their own categories") { d ->
+        return bulkEdit(ids, "split, shared, transfers and refunds keep their own categories", teach) { d ->
             val income = d.kind == DraftKind.INCOME
             when {
                 !(income || d.kind == DraftKind.EXPENSE && !EntryDrafts.isSplit(d)) -> Skip
@@ -424,7 +424,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     /** Skipped for its own reason, named in the result next to the general one. */
     private class SkipFor(val reason: String)
 
-    private fun bulkEdit(ids: List<String>, why: String, change: (EntryDraft) -> Any?): BulkResult {
+    private fun bulkEdit(ids: List<String>, why: String, teach: Boolean = true, change: (EntryDraft) -> Any?): BulkResult {
         val old = ArrayList<EntryDraft>(); val new = ArrayList<EntryDraft>(); var skipped = 0
         val reasons = LinkedHashSet<String>(); var general = false
         for (id in ids.distinct()) {
@@ -437,7 +437,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
                 else -> { skipped++; general = true }
             }
         }
-        ok.store.atomically { new.forEach { save(it) } }
+        ok.store.atomically { new.forEach { save(it, teach) } }
         if (general) reasons += why
         return BulkResult(new.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoDrafts = old)
     }

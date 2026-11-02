@@ -2345,7 +2345,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val category = ok.captureRules.learned()[key] ?: return@withStore
         val ids = uncategorisedByKey(ok)[key].orEmpty()
         if (ids.isEmpty()) return@withStore
-        val r = EntryActions(ok).bulkSetCategory(ids, category)
+        // applying what was learned is not a new choice: it must not count as the person choosing it again, which would raise the app's confidence on its own
+        val r = EntryActions(ok).bulkSetCategory(ids, category, teach = false)
         learnedUndoDrafts = r.undoDrafts
         _learnedUndo.value = if (r.undoDrafts.isNotEmpty()) ScreenUndo("learned:$key", r.text("Filed")) else null
         refresh(ok)
