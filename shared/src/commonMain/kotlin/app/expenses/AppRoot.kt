@@ -359,11 +359,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
-                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
-                    }
                         // the report depends on the text permission: work it out again when the permission changes while the screen is open (the first load is the tap that opened it)
                         val firstHealth = remember { booleanArrayOf(true) }
                         LaunchedEffect(smsPermission) { if (firstHealth[0]) firstHealth[0] = false else viewModel.loadCaptureHealth(smsPermission) }
+                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
+                    }
                     k == 5 -> {
                         BackHandler { privacyOpen = false }
                         // read again whenever the app returns from the system's settings, so a permission given there shows at once
