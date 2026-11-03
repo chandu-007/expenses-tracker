@@ -136,6 +136,7 @@ private fun AccountDialog(
     onShowEntries: ((String) -> Unit)? = null,
 ) {
     var cardOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.type ?: "BANK") }
     var opening by rememberSaveable(existing?.id) { mutableStateOf(existing?.openingText ?: "") }
@@ -146,6 +147,14 @@ private fun AccountDialog(
     val liability = type == "CREDIT_CARD" || type == "LOAN"
     val onlyActive = existing != null && !existing.archived && all.count { !it.archived } == 1
     if (cardOpen && existing != null) CardTermsDialog(existing, onSaveCard, onClearCard, onSetCreditLimit) { cardOpen = false }
+    // deleting cannot be taken back (an account with no entries has nothing to restore it from), so it is asked about once more
+    if (confirmDelete && existing != null) AlertDialog(
+        onDismissRequest = { confirmDelete = false },
+        title = { Text("Delete ${existing.name}?") },
+        text = { Text("It has no entries, so no history is lost, but the account is gone for good. You can make a new one any time.") },
+        confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(existing.id); onClose() }, modifier = Modifier.testTag("account_delete_confirm")) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }, modifier = Modifier.testTag("account_delete_cancel")) { Text("Keep it") } },
+    )
     AlertDialog(
         modifier = Modifier.padding(bottom = dialogKeyboardRoom()),
         onDismissRequest = onClose,
@@ -204,7 +213,7 @@ private fun AccountDialog(
                     if (existing.archived) TextButton(onClick = { onArchive(existing.id, false); onClose() }, modifier = Modifier.testTag("account_unarchive")) { Text("Restore to the pickers") }
                     else TextButton(onClick = { onArchive(existing.id, true); onClose() }, enabled = !onlyActive && existing.savedItems == 0L, modifier = Modifier.testTag("account_archive")) { Text(if (onlyActive) "Archive (keep one active account)" else "Archive: hide it, keep its history") }
                     if (!existing.archived && existing.savedItems > 0L) Text("${existing.savedItems} repeating items or quick entries post to it. Change them first, then archive it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account_saved_note"))
-                    if (existing.usage == 0L) TextButton(onClick = { onDelete(existing.id); onClose() }, enabled = !onlyActive, modifier = Modifier.testTag("account_delete")) { Text("Delete") }
+                    if (existing.usage == 0L) TextButton(onClick = { confirmDelete = true }, enabled = !onlyActive, modifier = Modifier.testTag("account_delete")) { Text("Delete") }
                     else Text("It has ${existing.usage} entries or saved items, so it can be archived but not deleted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

@@ -356,8 +356,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 // given the room, so the bar covers nothing and takes no touch)
                 app.expenses.ui.MessageBarHost(
                     s.message, homeShowing = screenKey == app.expenses.ui.ScreenKeys.HOME, hideAmounts = s.hideAmounts, onShown = viewModel::dismissMessage,
-                    // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own
-                    undo = s.undo?.takeIf { screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
+                    // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own; so is Accounts (11), where Archive offers one
+                    undo = s.undo?.takeIf { screenKey == 11 || screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
                 ) {
                 app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen) { when {
                     k == 0 -> {

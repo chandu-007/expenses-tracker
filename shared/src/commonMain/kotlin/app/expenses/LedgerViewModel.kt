@@ -431,6 +431,8 @@ data class UndoUi(
     val reveal: Boolean = false,
     /** For entries whose type was changed: what to put back, each in turn, last first (for one entry [entryId] is the new entry, which Undo removes). */
     val kindChanges: List<app.expenses.core.storage.KindChanges.Changed> = emptyList(),
+    /** For an archived account: its id; Undo brings it back into the pickers. */
+    val unarchiveAccountId: String? = null,
 )
 
 /** One transaction found in a statement, as shown in the preview. A [transfer] is money moving between the person's own accounts. */
@@ -903,6 +905,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it, teach = false) } }
         else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
+        else if (u.unarchiveAccountId != null) ok.db.schemaQueries.accountById(u.unarchiveAccountId).executeAsOneOrNull()?.let { row -> ok.store.saveAccount(Account(AccountId(row.id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, false)) }
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
         refresh(ok)
         _search.update { it.copy(notice = null, undo = null) }
@@ -1500,8 +1503,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         require(!archived || ok.db.schemaQueries.accountSavedItemUsage(id).executeAsOne() == 0L) { "Repeating items or quick entries still use this account. Change them first, then archive it." }
         require(!archived || ok.db.schemaQueries.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id } > 0) { "Keep at least one active account." }
         ok.store.saveAccount(Account(AccountId(id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, archived))
-        refresh(ok)
-        say(if (archived) "Archived ${row.name}. Its entries stay. Restore it from the Archived list on the Accounts page." else "${row.name} is back in the pickers.")
+        if (archived) refresh(ok, undo = UndoUi(id, "Archived ${row.name}. Its entries stay.", unarchiveAccountId = id)) // Undo here, or Restore from the Archived list later
+        else { refresh(ok); say("${row.name} is back in the pickers.") }
     }
 
     fun deleteAccount(id: String) = withStore { ok ->

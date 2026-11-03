@@ -122,6 +122,19 @@ class AccountsUiTest {
     }
 
     @Test
+    fun archivingAnAccountOffersUndoOnTheSameScreenAndUndoBringsItBack() {
+        launch(); openAccounts()
+        create("Spare", "CASH"); waitFor("account_Spare")
+        tap("account_Spare"); tap("account_archive"); waitGone("account_archive")
+        waitFor("message_action") // "Archived Spare. Its entries stay.  Undo", on the Accounts page itself
+        val archived = { runBlocking { container.write { ok -> ok.db.schemaQueries.accountById(idOf("Spare")).executeAsOne().archived } } }
+        assertEquals(1L, archived())
+        tap("message_action")
+        compose.waitUntil(10_000) { archived() == 0L }
+        assertEquals(0L, archived(), "Undo puts it back in the pickers")
+    }
+
+    @Test
     fun anAccountThatARepeatingItemOrQuickEntryPostsToCannotBeArchivedAndSaysWhy() {
         launch()
         runBlocking { container.write { ok -> ok.templates.save(app.expenses.core.domain.Template("t", "Chai", Money(2_000, Currency.INR), app.expenses.core.domain.ledger.CategoryId("Food"), AccountId("cash"), null)) } }
@@ -137,7 +150,11 @@ class AccountsUiTest {
     fun anUnusedAccountCanBeDeletedButTheLastActiveOneCannotBeArchivedOrDeleted() {
         launch(); openAccounts()
         create("Spare", "CASH"); waitFor("account_Spare")
-        tap("account_Spare"); tap("account_delete"); waitGone("account_Spare")
+        tap("account_Spare"); tap("account_delete"); waitFor("account_delete_confirm")
+        // deleting is asked about once more: "Keep it" leaves the account (and the dialog) as it was
+        tap("account_delete_cancel"); waitGone("account_delete_confirm")
+        assertTrue(runBlocking { container.write { ok -> ok.db.schemaQueries.selectAccounts().executeAsList().any { it.name == "Spare" } } } == true, "keeping it leaves the account")
+        tap("account_delete"); tap("account_delete_confirm"); waitGone("account_Spare")
         // the app starts with Bank and Cash; archive one, then the other must refuse to go
         tap("account_Cash"); tap("account_archive"); waitGone("account_archive")
         tap("account_Bank"); waitFor("account_archive")

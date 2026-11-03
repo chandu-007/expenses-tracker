@@ -37,6 +37,7 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 class CategoriesTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val shot = FailureShot()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val container get() = (context.applicationContext as ExpensesApp).container
     private val inr = Currency.INR
@@ -65,9 +66,9 @@ class CategoriesTest {
         waitFor("add")
     }
 
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
-    private fun waitGone(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isEmpty() }
-    private fun waitForText(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitFor(tag: String) = FailureShot.around("waitFor_$tag") { compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() } }
+    private fun waitGone(tag: String) = FailureShot.around("waitGone_$tag") { compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isEmpty() } }
+    private fun waitForText(text: String) = FailureShot.around("waitForText_$text") { compose.waitUntil(10_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() } }
 
     private fun seed(id: String, amount: Long, category: String, note: String) = runBlocking {
         container.write { ok ->
