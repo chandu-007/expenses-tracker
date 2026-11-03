@@ -149,6 +149,8 @@ internal object IosQuickAdds {
 object IosQuickAddsDebug {
     suspend fun saveTemplate(host: IosHostServices, id: String, name: String, rupees: Long) {
         IosCore.get(host).container.write { ok ->
+            // the simulator keeps the test app's data between runs and the widget shows only the first 6 buttons: the entries earlier runs left behind would push this one out of the list
+            ok.templates.list().filter { it.id.startsWith("quick-") && it.id != id }.forEach { ok.templates.delete(it.id) }
             ok.templates.save(app.expenses.core.domain.Template(id, name, Money(rupees * 100, BaseCurrency.current), app.expenses.core.domain.ledger.CategoryId("Food"), app.expenses.core.domain.ledger.AccountId("cash"), null))
         }
     }
