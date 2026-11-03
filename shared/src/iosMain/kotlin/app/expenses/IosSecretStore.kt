@@ -10,7 +10,7 @@ import app.expenses.core.storage.SecretStore
 internal class IosSecretStore(private val host: IosHostServices) : SecretStore {
     override fun put(name: String, secret: ByteArray) {
         val status = host.secretPut(name, secret.toNSData())
-        check(status == 0) { "The Keychain would not keep it (error $status)" }
+        check(status == 0) { "The phone's secure storage would not keep it." }
     }
 
     /** The Keychain's own answer: errSecItemNotFound (-25300) is [SecretRead.NotFound]; anything else that is not the item (errSecInteractionNotAllowed -25308 before the first unlock, or another error) is [SecretRead.Unavailable]. */

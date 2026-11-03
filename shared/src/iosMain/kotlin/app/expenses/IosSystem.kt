@@ -116,7 +116,7 @@ internal object IosAuthentication {
         LAContext().evaluatePolicy(LAPolicyDeviceOwnerAuthentication, localizedReason = reason) { success, error ->
             val code = error?.code
             val cancelled = code == LAErrorUserCancel || code == LAErrorSystemCancel || code == LAErrorAppCancel
-            val message = if (success) null else error?.localizedDescription ?: "That did not work."
+            val message = if (success) null else "That did not work."
             onMain { onResult(success, message, cancelled) }
         }
     }

@@ -632,7 +632,7 @@ fun CaptureRulesScreen(
                     if (pickingCategory) CategoryPickerDialog(offered, category, onPick = { id -> category = id; problem = null; pickingCategory = false }, onClose = { pickingCategory = false })
                     tested?.let { Text(if (it == 0L) "No past entry mentions this." else "It would have matched $it of your past entries.", modifier = Modifier.testTag("rule_tested")) }
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("rule_problem")) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { // wraps at a large font: a Row squeezed "Add rule" to a letter-wide sliver
                         OutlinedButton(onClick = { onTest(pattern) { tested = it } }, enabled = pattern.isNotBlank(), modifier = Modifier.testTag("rule_test")) { Text("Test on my history") }
                         Button(onClick = { onAdd(pattern, category) { p -> if (p == null) { pattern = ""; tested = null } else problem = p } }, enabled = pattern.isNotBlank() && category.isNotEmpty(), modifier = Modifier.testTag("rule_add")) { Text("Add rule") }
                     }

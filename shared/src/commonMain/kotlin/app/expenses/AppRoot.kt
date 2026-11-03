@@ -352,6 +352,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
                     }
                 }
+                // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
+                // given the room, so the bar covers nothing and takes no touch)
+                app.expenses.ui.MessageBarHost(
+                    s.message, homeShowing = screenKey == app.expenses.ui.ScreenKeys.HOME, hideAmounts = s.hideAmounts, onShown = viewModel::dismissMessage,
+                    // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own
+                    undo = s.undo?.takeIf { screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
+                ) {
                 app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen) { when {
                     k == 0 -> {
                         val h = history ?: heldHistory.value!!
@@ -369,7 +376,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         // the report depends on the text permission: work it out again when the permission changes while the screen is open (the first load is the tap that opened it)
                         val firstHealth = remember { booleanArrayOf(true) }
                         LaunchedEffect(smsPermission) { if (firstHealth[0]) firstHealth[0] = false else viewModel.loadCaptureHealth(smsPermission) }
-                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission); viewModel.say("Added $it. Its next texts will be read.") }, onBack = { healthOpen = false })
+                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
                     }
                     k == 5 -> {
                         BackHandler { privacyOpen = false }
@@ -674,12 +681,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     )
                 } }
                 }
-                // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: it is said here instead
-                app.expenses.ui.MessageOnOtherScreens(
-                    s.message, homeShowing = screenKey == app.expenses.ui.ScreenKeys.HOME, hideAmounts = s.hideAmounts, onShown = viewModel::dismissMessage,
-                    // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own
-                    undo = s.undo?.takeIf { screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
-                )
+                }
                 }
             }
             }

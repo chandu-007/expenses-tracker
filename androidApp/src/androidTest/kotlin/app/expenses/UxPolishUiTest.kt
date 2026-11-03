@@ -193,4 +193,23 @@ class UxPolishUiTest {
         launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_empty"); waitFor("inbox_empty_setup")
         tap("inbox_empty_setup"); waitFor("capture_back")
     }
+
+    /** The "Rule added" bar sits under the screen: it covers nothing, so the next tap lands (drawn over the screen it swallowed the tap on the next category chip, and the second rule got the first one's category). */
+    @Test
+    fun theBarThatSaysARuleWasAddedIsUnderTheScreenAndDoesNotCatchTheNextTap() {
+        launch(); compose.openMore(); tap("open_capture"); tap("open_rules"); waitFor("rules_list")
+        fun reveal(tag: String) { compose.onNodeWithTag("rules_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)); waitFor(tag) }
+        fun add(word: String, category: String) {
+            reveal("rule_pattern"); compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput(word)
+            reveal("rule_category_$category"); compose.onNodeWithTag("rule_category_$category", useUnmergedTree = true).performClick()
+            reveal("rule_add"); compose.onNodeWithTag("rule_add", useUnmergedTree = true).performClick()
+        }
+        add("uber", "Transport"); waitFor("message_text")
+        compose.onNodeWithTag("message_text", useUnmergedTree = true).assertTextContains("Rule added", substring = true)
+        val list = compose.onNodeWithTag("rules_list", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag("message_host", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(list.bottom <= bar.top + 1f, "the list ($list) ends where the bar ($bar) begins: nothing is under it")
+        add("eats", "Food") // while the bar is still up
+        compose.waitUntil(10_000) { runBlocking { container.write { it.captureRules.rules().map { r -> r.pattern to r.categoryId } } } == listOf("uber" to "Transport", "eats" to "Food") }
+    }
 }

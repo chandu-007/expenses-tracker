@@ -36,7 +36,7 @@ internal class FileHandleSource(private val handle: NSFileHandle, override val l
         if (len == 0) return 0
         return memScoped {
             val error = alloc<ObjCObjectVar<NSError?>>()
-            val data = handle.readDataUpToLength(len.convert(), error.ptr) ?: throw IllegalStateException(error.value?.localizedDescription ?: "The file could not be read.")
+            val data = handle.readDataUpToLength(len.convert(), error.ptr) ?: throw IllegalStateException("The file could not be read.")
             val n = data.length.toInt()
             if (n == 0) -1 else {
                 buf.usePinned { memcpy(it.addressOf(off), data.bytes, data.length) }
@@ -62,7 +62,7 @@ internal class FileHandleSink(private val handle: NSFileHandle, private val onCl
             val error = alloc<ObjCObjectVar<NSError?>>()
             if (!handle.writeData(data, error.ptr)) {
                 // POSIX error 28 is "no space left on device": said in words the backup code recognises and turns into a plain sentence
-                throw IllegalStateException(if (error.value?.code == 28L) "No space left on device" else error.value?.localizedDescription ?: "The file could not be written.")
+                throw IllegalStateException(if (error.value?.code == 28L) "There is not enough space on this phone." else "The file could not be written.")
             }
         }
     }

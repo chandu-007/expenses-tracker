@@ -875,7 +875,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     refreshQuickly(ok, undo = UndoUi(ids.first(), "Added ${ids.size} expenses, ${total.formatted()}", bulkCreated = ids, reveal = true))
                 }
             } catch (e: IllegalArgumentException) {
-                _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
+                _state.update { (it as? UiState.Ready)?.copy(message = plainMessage(e)) ?: it }
             }
         }
     }
@@ -2596,7 +2596,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun addCaptureRule(pattern: String, categoryId: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
-                container.write { ok -> ok.captureRules.add(Uuid.random().toString(), pattern, categoryId); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok); null }
+                container.write { ok -> ok.captureRules.add(Uuid.random().toString(), pattern, categoryId); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok); say("Rule added. New payments with \"${pattern.trim()}\" in them get this category."); null }
             } catch (e: IllegalArgumentException) { e.message }
             withContext(Dispatchers.Main) { onDone(problem) }
         }
@@ -2644,6 +2644,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
         val handedOver = platform.supportsShortcutsCapture
         _health.value = CaptureHealth.report(counts, now, handedOver || ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", handedOver || permissionGranted, SenderRules.BUILT_IN + extra)
+        say("Added $root. Its next texts will be read.") // said when it is done, not when it was asked for
     }
 
     /** Gives the payee in this text a name of your own ("Chandu" for a phone-number address); every later text for the same address shows it. A blank name takes it off. */
@@ -3837,6 +3838,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** Says one line on whichever screen is open (Home's bar, or the message bar of any other screen): what an action that shows nothing by itself just did. */
     fun say(text: String) = _state.update { (it as? UiState.Ready)?.copy(message = text) ?: it }
 
+    /**
+     * The words of a refused change, from a message the app wrote itself; the default text of a library or of a `require` with no message ("Failed requirement.", a class name, SQL) is
+     * never shown to the person, only "That did not work".
+     */
+    private fun plainMessage(e: Throwable): String {
+        val m = e.message?.trim().orEmpty()
+        val technical = m.isEmpty() || listOf("Failed requirement", "Exception", "java.", "kotlin.", "SQL", "constraint", "null", "Check failed").any { m.contains(it, ignoreCase = false) }
+        return if (technical) "That did not work. Nothing was changed. Try again." else m
+    }
+
     // ---- budgets ----
 
     /** Sets a limit for a category, or for everything when [categoryId] is null. */
@@ -3912,7 +3923,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             try {
                 container.write(block)
             } catch (e: IllegalArgumentException) {
-                _state.update { (it as? UiState.Ready)?.copy(message = e.message) ?: it }
+                _state.update { (it as? UiState.Ready)?.copy(message = plainMessage(e)) ?: it }
             }
         }
     }

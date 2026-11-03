@@ -39,7 +39,7 @@ internal object IosOcr {
         request.usesLanguageCorrection = false // amounts and codes, not prose: a "correction" would change digits
         val error = alloc<ObjCObjectVar<NSError?>>()
         if (!handler.performRequests(listOf(request), error.ptr)) {
-            throw IllegalArgumentException("The text in that picture could not be read on this phone (${error.value?.localizedDescription ?: "unknown error"}).")
+            throw IllegalArgumentException("The text in that picture could not be read on this phone. Try a clearer photo, or download the statement as CSV or Excel.")
         }
         val pieces = request.results.orEmpty().filterIsInstance<VNRecognizedTextObservation>().mapNotNull { o ->
             val text = (o.topCandidates(1u).firstOrNull() as? platform.Vision.VNRecognizedText)?.string ?: return@mapNotNull null

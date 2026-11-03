@@ -37,7 +37,7 @@ internal object IosXlsx {
         try {
             return readSheet(bytes)
         } catch (e: NotAWorkbook) {
-            throw IllegalArgumentException(e.message)
+            throw IllegalArgumentException("That Excel file could not be read.")
         }
     }
 
