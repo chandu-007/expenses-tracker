@@ -50,11 +50,22 @@ class SavedSearchUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun waitText(s: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(s, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-    // typing with the keyboard up moves the results up under the box, so the filters above them may be scrolled out of the lazy list: scroll back to one that is not there
+    // Typing with the keyboard up moves the results up under the box a moment after they arrive, so a filter above them can leave the lazy list between finding it and pressing it:
+    // scroll back to a chip that is not there, and press again if the page moved in that moment.
     private fun tap(tag: String) {
-        if (!has(tag) && has("search_results")) runCatching { compose.onNodeWithTag("search_results", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+        repeat(3) {
+            // (a menu item is given a moment to appear first: scrolling the list away from its chip would close the menu)
+            val there = runCatching { compose.waitUntil(1_500) { has(tag) } }.isSuccess
+            if (!there && has("search_results")) runCatching { compose.onNodeWithTag("search_results", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+            waitFor(tag)
+            val done = runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).also { n -> runCatching { n.performScrollTo() } }.performClick() }
+            if (done.isSuccess) return
+            compose.waitForIdle()
+        }
         waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick()
     }
+    /** The saved search's chip is among the filters, which the page has moved up past while the results were typed for: scroll to it. */
+    private fun show(tag: String) { if (!has(tag)) runCatching { compose.onNodeWithTag("search_results", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }; waitFor(tag) }
     private fun hold(tag: String) { waitFor(tag); compose.onNodeWithTag(tag).performTouchInput { longClick() } }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
@@ -69,7 +80,7 @@ class SavedSearchUiTest {
         openSearch()
         type("search_text", "uber"); tap("search_kind_expense"); tap("search_category"); tap("search_cat_Food"); tap("search_tag"); tap("search_tag_Work")
         waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c") && !has("result_d"))
-        tap("save_search"); type("saved_name", "Uber food"); tap("saved_ok"); waitFor("saved_Uber food")
+        tap("save_search"); type("saved_name", "Uber food"); tap("saved_ok"); show("saved_Uber food")
         launch(); tap("open_search"); waitFor("saved_Uber food")
         tap("saved_Uber food")
         waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c") && !has("result_d"), "the same conditions (text, kind, category and tag) apply again")
