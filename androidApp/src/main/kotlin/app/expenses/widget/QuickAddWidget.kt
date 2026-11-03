@@ -48,7 +48,9 @@ import androidx.glance.layout.Spacer
 import androidx.glance.layout.width
 import androidx.compose.ui.unit.DpSize
 import app.expenses.R
+import app.expenses.core.domain.Accent
 import app.expenses.core.domain.AmountMask
+import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.RecentInput
 import app.expenses.core.domain.WidgetInsights
 import app.expenses.core.domain.WidgetSummary
@@ -110,10 +112,14 @@ data class WidgetModel(
     val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false,
     /** Set exactly when [canToggle] is false because of a setting of the app: the widget then says which one. */
     val hiddenBy: HiddenBy? = null,
+    /** The accent chosen in the app (More, Appearance), for "+ Add" and the bars. */
+    val accent: Accent = Appearances.ACCENTS.first(),
+    /** The 2 x 1 widget asked "Show?" a moment ago and waits for the second tap (see [ArmRevealAction]); false everywhere else. */
+    val armed: Boolean = false,
 )
 
 /** What the widget reads from the database. */
-data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean, val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false, val hiddenBy: HiddenBy? = null)
+data class WidgetData(val buttons: List<WidgetButton>, val monthSpend: String, val revealed: Boolean, val canToggle: Boolean, val insights: WidgetInsights = WidgetInsights.NONE, val nothingYet: Boolean = false, val hiddenBy: HiddenBy? = null, val accent: Accent = Appearances.ACCENTS.first())
 
 /**
  * One tag for everything the widgets log, so that a widget that does nothing on a phone can be diagnosed from `adb logcat -s ExpensesWidget`. It never logs an amount, a name or any text from the ledger:
@@ -130,6 +136,15 @@ internal object WidgetLog {
 }
 
 internal fun hiddenBy(hide: Boolean, locked: Boolean): HiddenBy? = if (locked) HiddenBy.APP_LOCK else if (hide) HiddenBy.HIDE_AMOUNTS else null
+
+/** The app's appearance setting (the key `LedgerViewModel` writes: mode;accent;density); the widget reads only the accent from it. */
+internal const val SETTING_APPEARANCE = "appearance"
+
+/** When the 2 x 1 widget asked "Show?" (see [ArmRevealAction]); the question is open for [ARM_WINDOW_MILLIS]. */
+internal val ARMED_AT = longPreferencesKey("reveal_armed_at")
+
+/** How long the 2 x 1 widget waits for the second tap that shows the amount. Long enough to read "Show?" and tap again, short enough that a stray tap is forgotten before the next one. */
+const val ARM_WINDOW_MILLIS = 5_000L
 
 /** The widget's own switch for showing the month's total. Off unless the person turns it on from the widget: not everyone wants spending on the home screen. */
 internal const val SETTING_WIDGET_SHOW_TOTAL = "widget_show_total"
@@ -181,7 +196,7 @@ class QuickAddWidget : GlanceAppWidget() {
         provideContent {
             val prefs = currentState<Preferences>()
             val loaded = reloadedOnRefresh(first, stamp) { load(context) }
-            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false, loaded?.insights ?: WidgetInsights.NONE, loaded?.nothingYet ?: false, loaded?.hiddenBy))
+            WidgetContent(model(loaded?.buttons, prefs, System.currentTimeMillis(), loaded?.monthSpend, loaded?.revealed ?: false, loaded?.canToggle ?: false, loaded?.insights ?: WidgetInsights.NONE, loaded?.nothingYet ?: false, loaded?.hiddenBy, loaded?.accent ?: Appearances.ACCENTS.first()))
         }
     }
 
@@ -208,7 +223,7 @@ class QuickAddWidget : GlanceAppWidget() {
                 val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
                 // the rest of what the bigger sizes show is read only when it may be shown at all: a hidden widget costs what it always did
                 val insights = if (revealed) insights(ok, today, zone, currency, spent, byCategory) else WidgetInsights.NONE
-                WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty(), hiddenBy = hiddenBy(hide, locked))
+                WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty(), hiddenBy = hiddenBy(hide, locked), accent = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)).accent)
             }
         } catch (e: CancellationException) {
             throw e
@@ -246,11 +261,13 @@ class QuickAddWidget : GlanceAppWidget() {
         fun monthFigure(spent: String, hide: Boolean, locked: Boolean, revealed: Boolean = true): String = if (hide || locked || !revealed) AmountMask.mask(spent) else spent
 
         /** Builds what to draw. The undo line is shown only while it is still allowed to work. */
-        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false, insights: WidgetInsights = WidgetInsights.NONE, nothingYet: Boolean = false, hiddenBy: HiddenBy? = null): WidgetModel {
+        fun model(buttons: List<WidgetButton>?, prefs: Preferences, now: Long, monthSpend: String? = null, revealed: Boolean = false, canToggle: Boolean = false, insights: WidgetInsights = WidgetInsights.NONE, nothingYet: Boolean = false, hiddenBy: HiddenBy? = null, accent: Accent = Appearances.ACCENTS.first()): WidgetModel {
             val id = prefs[LAST_ID]
             val at = prefs[LAST_AT]
             val undo = if (id != null && at != null && now - at in 0..UNDO_WINDOW_MILLIS) WidgetUndo(id, prefs[LAST_TEXT] ?: "Added") else null
-            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle, insights = insights, nothingYet = nothingYet, hiddenBy = hiddenBy)
+            val armedAt = prefs[ARMED_AT]
+            val armed = !revealed && armedAt != null && now - armedAt in 0..ARM_WINDOW_MILLIS
+            return WidgetModel(buttons.orEmpty(), undo, needsApp = buttons == null, monthSpend = monthSpend, revealed = revealed, canToggle = canToggle, insights = insights, nothingYet = nothingYet, hiddenBy = hiddenBy, accent = accent, armed = armed)
         }
     }
 }
@@ -315,20 +332,25 @@ class QuickAddAction : ActionCallback {
 }
 
 private const val UNDO_EXPIRY_WORK = "widget-undo-expiry"
+private const val ARM_EXPIRY_WORK = "widget-arm-expiry"
 
 /**
  * Redraws the widgets just after the Undo line has run out, without the app having to run. Two ways, either is enough: while the app's process still lives (it usually does for a while after a tap)
  * a coroutine waits the exact time; and a one-time WorkManager job with that delay (no new permission: the system runs it when it can, normally within seconds) covers the process being gone by then.
  * A second tap replaces the job. Redraws are idempotent, so both running does no harm.
  */
-private fun scheduleUndoExpiry(context: Context) {
+private fun scheduleUndoExpiry(context: Context) = scheduleRedraw(context, UNDO_EXPIRY_WORK, UNDO_WINDOW_MILLIS + 500L)
+
+/** The same for the "Show?" question of the 2 x 1 widget: the caption goes back to "This month" by itself when nobody confirms. */
+private fun scheduleArmExpiry(context: Context) = scheduleRedraw(context, ARM_EXPIRY_WORK, ARM_WINDOW_MILLIS + 500L)
+
+private fun scheduleRedraw(context: Context, workName: String, after: Long) {
     val app = context.applicationContext as ExpensesApp
-    val after = UNDO_WINDOW_MILLIS + 500L
     app.appScope.launch { delay(after); runCatching { refreshWidgets(app) } }
-    WorkManager.getInstance(app).enqueueUniqueWork(UNDO_EXPIRY_WORK, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<WidgetUndoExpiryWorker>().setInitialDelay(after + 500L, TimeUnit.MILLISECONDS).build())
+    WorkManager.getInstance(app).enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<WidgetUndoExpiryWorker>().setInitialDelay(after + 500L, TimeUnit.MILLISECONDS).build())
 }
 
-/** The one-time job behind [scheduleUndoExpiry]: draws the widgets again. */
+/** The one-time job behind [scheduleUndoExpiry] and [scheduleArmExpiry]: draws the widgets again (it logs "undo line: the time is up" for both: tools/release_smoke.py looks for that text). */
 class WidgetUndoExpiryWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         WidgetLog.i("undo line: the time is up, redrawing (process age ${WidgetLog.processAgeMs()} ms)")
@@ -375,8 +397,23 @@ class ToggleTotalAction : ActionCallback {
                 show
             }
         }
+        guarded("eye: forgetting the question", step = true) { updateAppWidgetState(context, glanceId) { prefs -> prefs.remove(ARMED_AT) } }
         if (nowShown == null) { WidgetLog.w("eye: the setting could not be changed (the database could not be opened)"); toast(context, "Could not read your data. Open the app.") }
         else WidgetLog.i("eye: the total is now ${if (nowShown) "shown" else "hidden"}")
+        refreshWidgets(context)
+    }
+}
+
+/**
+ * First tap on the masked figure of the 2 x 1 widget, which has no room for an eye: it only asks. The widget remembers when (in its own state, so only this copy asks) and draws "Show?" for
+ * [ARM_WINDOW_MILLIS]; a second tap inside that time is [ToggleTotalAction] and shows the amount, a late one asks again. Nothing about the ledger changes here.
+ */
+class ArmRevealAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        guarded("figure: asking to show") {
+            updateAppWidgetState(context, glanceId) { prefs -> prefs[ARMED_AT] = System.currentTimeMillis(); prefs[REFRESHED] = (prefs[REFRESHED] ?: 0L) + 1 }
+            scheduleArmExpiry(context)
+        }
         refreshWidgets(context)
     }
 }

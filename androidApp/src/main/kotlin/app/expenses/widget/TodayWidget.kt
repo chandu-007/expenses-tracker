@@ -39,13 +39,15 @@ import app.expenses.BuildConfig
 import app.expenses.ExpensesApp
 import app.expenses.MainActivity
 import app.expenses.R
+import app.expenses.core.domain.Accent
 import app.expenses.core.domain.AmountMask
+import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.formatted
 
 /** What the Today widget draws: today's spending and what is left to spend each day, masked under the same rules as the other widget. */
-data class TodayData(val spentToday: String, val perDayLine: String?, val revealed: Boolean, val canToggle: Boolean, val hiddenBy: HiddenBy? = null)
+data class TodayData(val spentToday: String, val perDayLine: String?, val revealed: Boolean, val canToggle: Boolean, val hiddenBy: HiddenBy? = null, val accent: Accent = Appearances.ACCENTS.first())
 
 /**
  * A small home-screen widget: what has been spent today, and what the budget leaves for each remaining day. Both figures follow the same privacy rules as
@@ -77,7 +79,7 @@ class TodayWidget : GlanceAppWidget() {
                 val spent = ok.store.spendByCategory(currency, from = startOfDay).values.fold(Money.zero(currency)) { a, m -> a + m }
                 val perDay = ok.budgets.status(kotlinx.datetime.LocalDate(date.year, date.monthValue, date.dayOfMonth), kotlinx.datetime.TimeZone.currentSystemDefault(), currency).safeToSpend?.takeIf { it.perDay.minorUnits > 0 }?.perDay
                 fun figure(t: String) = QuickAddWidget.monthFigure(t, hide, locked, revealed)
-                TodayData(figure(spent.formatted()), perDay?.let { figure(it.formatted()) + " a day left" }, revealed, canToggle, hiddenBy(hide, locked))
+                TodayData(figure(spent.formatted()), perDay?.let { figure(it.formatted()) + " a day left" }, revealed, canToggle, hiddenBy(hide, locked), Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)).accent)
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -94,20 +96,21 @@ class TodayReceiver : GlanceAppWidgetReceiver() { override val glanceAppWidget: 
 
 @Composable
 private fun TodayContent(data: TodayData?, widthDp: Int, heightDp: Int) {
-    val open = actionStartActivity(openIntent())
-    Column(GlanceModifier.fillMaxSize().appWidgetBackground().background(ImageProvider(R.drawable.widget_bg)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-        Text("Spent today", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.clickable(open))
-        val text = data?.spentToday ?: "Open the app"
-        Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, 100f, 22f, 14f).sp, fontWeight = FontWeight.Bold), maxLines = 1, modifier = GlanceModifier.clickable(open))
-        data?.hiddenBy?.let { Text(it.caption, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.padding(top = 2.dp).clickable(open)) }
-        if (heightDp >= 128) data?.perDayLine?.let { Text(it, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 2, modifier = GlanceModifier.padding(top = 2.dp).clickable(open)) }
+    // Two 48 dp targets (the eye and Add) side by side take 96 of the 110 dp this widget is at the least, so the bottom row has the full width and the texts keep their own 14 dp margin;
+    // the whole card (anything that is not a control) opens the app.
+    Column(GlanceModifier.fillMaxSize().appWidgetBackground().background(ImageProvider(R.drawable.widget_bg)).clickable(actionStartActivity(openIntent())).padding(vertical = 2.dp)) {
+        Column(GlanceModifier.padding(horizontal = 14.dp)) {
+            Text("Spent today", style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
+            val text = data?.spentToday ?: "Open the app"
+            Text(text, style = TextStyle(color = WidgetColors.text, fontSize = amountSp(text, widthDp - 28f, 22f, 14f).sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            data?.hiddenBy?.let { Text(it.caption, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.padding(top = 2.dp)) }
+            if (heightDp >= 128) data?.perDayLine?.let { Text(it, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 2, modifier = GlanceModifier.padding(top = 2.dp)) }
+        }
         Spacer(GlanceModifier.defaultWeight())
-        // the eye and Add share the bottom row: at two cells wide there is not room for them beside the caption
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val t = if (widthDp < 120) 40.dp else 44.dp
-            if (data != null && data.canToggle) Eye(data.revealed, t)
+        Row(GlanceModifier.fillMaxWidth().padding(horizontal = ((widthDp - 2 * TARGET) / 2).coerceIn(0, 8).dp), verticalAlignment = Alignment.CenterVertically) {
+            if (data != null && data.canToggle) Eye(data.revealed)
             Spacer(GlanceModifier.defaultWeight())
-            AddButton(wide = false, target = t)
+            AddButton(wide = false, accent = data?.accent ?: Appearances.ACCENTS.first())
         }
     }
 }

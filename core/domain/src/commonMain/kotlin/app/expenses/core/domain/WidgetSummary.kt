@@ -134,7 +134,10 @@ object WidgetSummary {
 
     /** Vertical room, in dp, that each part of the card takes (see the widget's drawing code, which uses the same numbers). */
     object Room {
-        const val PAD = 10; const val HEADER = 48; const val UNDO = 40; const val CHIPS = 41; const val HINT = 22; const val BUDGET = 30
+        /** Every control is at least this many dp high and wide; the header and the rows of controls are exactly this high. */
+        const val TARGET = 48
+        /** The card's top and bottom inset: small, because the 48 dp controls carry their own margin around the 40 dp shapes you see. */
+        const val PAD = 4; const val HEADER = TARGET; const val UNDO = TARGET + 6; const val CHIPS = TARGET + 6; const val HINT = 22; const val BUDGET = 30
         const val SECTION_TITLE = 20; const val CATEGORY_ROW = 22; const val RECENT_ROW = 24
         const val MIN_ROWS = 2; const val MAX_CATEGORIES = 4; const val MAX_RECENT = 4
         /** Narrower than this and the Add pill is only a round "+", so the figure has room. */

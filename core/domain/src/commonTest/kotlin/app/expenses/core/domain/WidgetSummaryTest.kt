@@ -148,6 +148,20 @@ class WidgetSummaryTest {
     }
 
     @Test
+    fun everyRowOfControlsIsRoomForA48DpTarget() {
+        val room = WidgetSummary.Room
+        assertEquals(48, room.TARGET)
+        assertTrue(room.HEADER >= room.TARGET, "the header row holds the eye and Add")
+        assertTrue(room.CHIPS >= room.TARGET, "a chip row is a 48 dp target plus the gap above it")
+        assertTrue(room.UNDO >= room.TARGET, "the Undo line is a 48 dp target plus the gap above it")
+        // the smallest card the widgets declare (56 dp high) holds one row of controls with the card's inset: that is what the 2 x 1 and the 4 x 1 are
+        assertTrue(56 >= room.TARGET + 2 * room.PAD, "56 dp = a 48 dp row plus the inset above and below")
+        // and the 4 x 2 at its smallest (110 dp) still keeps its chips under the header, and one undo line or one chip row is possible at 110
+        assertEquals(3, WidgetSummary.plan(320, 110, have()).chips)
+        assertEquals(true, WidgetSummary.plan(320, 110, have(undo = true, chips = 0)).showUndo)
+    }
+
+    @Test
     fun anOddOrTinySizeStillGivesAPlan() {
         for (w in listOf(0, 40, 109, 179, 180, 299, 300, 500)) for (h in listOf(0, 30, 99, 100, 109, 500)) {
             val p = WidgetSummary.plan(w, h, have())

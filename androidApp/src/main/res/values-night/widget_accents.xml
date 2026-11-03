@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The accent colours of the widgets, one per accent of the app (More, Appearance), as the app's own theme makes them: the accent itself in light mode, lightened in dark mode until it reads on the dark surface (Appearances.primaryFor). WidgetDesignTest checks every value here against that function, and the text on it for 4.5:1. -->
+<resources>
+    <color name="widget_accent_violet">#FF8977B7</color>
+    <color name="widget_accent_blue">#FF4987CD</color>
+    <color name="widget_accent_teal">#FF39978B</color>
+    <color name="widget_accent_green">#FF478C4A</color>
+    <color name="widget_accent_orange">#FFC6641E</color>
+    <color name="widget_accent_red">#FFCB6A65</color>
+</resources>

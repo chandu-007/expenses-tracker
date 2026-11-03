@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Standard: 4 cells wide, 2 high. This month, the comparison with last month and the quick entries; it adapts to whatever size it is resized to (see QuickAddWidget and WidgetSummary.plan). -->
+<!-- The least height is 56 dp, not 40: every control on the widget is a 48 dp touch target, and one row of them must fit (see WidgetUi). Launchers count cells as (size + 30) / 70, so 56 dp is still one cell and no cell count changes. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"
     android:previewImage="@drawable/widget_preview_standard"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="110dp"
-    android:minHeight="40dp"
+    android:minHeight="56dp"
     android:minResizeWidth="110dp"
-    android:minResizeHeight="40dp"
+    android:minResizeHeight="56dp"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="4"
     android:targetCellHeight="2"

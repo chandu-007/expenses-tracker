@@ -3,10 +3,6 @@
     <color name="widget_surface">#FF1C1B1F</color>
     <color name="widget_container">#FF2B2930</color>
     <color name="widget_chip">#FF2B2930</color>
-    <color name="widget_accent_container">#FF4F378B</color>
-    <color name="widget_on_accent_container">#FFEADDFF</color>
-    <color name="widget_accent">#FFD0BCFF</color>
-    <color name="widget_on_accent">#FF381E72</color>
     <color name="widget_text">#FFE6E1E5</color>
     <color name="widget_muted">#FFCAC4D0</color>
     <color name="widget_track">#FF49454F</color>

@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Small: 2 x 1. This month and a round Add button; resizable like the others. -->
+<!-- The least height is 56 dp, not 40: every control on the widget is a 48 dp touch target, and one row of them must fit (see WidgetUi). Launchers count cells as (size + 30) / 70, so 56 dp is still one cell and no cell count changes. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description_small"
     android:previewImage="@drawable/widget_preview_small"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="110dp"
-    android:minHeight="40dp"
+    android:minHeight="56dp"
     android:minResizeWidth="110dp"
-    android:minResizeHeight="40dp"
+    android:minResizeHeight="56dp"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="2"
     android:targetCellHeight="1"

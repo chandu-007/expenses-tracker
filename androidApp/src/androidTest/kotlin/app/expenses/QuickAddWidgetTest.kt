@@ -195,6 +195,19 @@ class QuickAddWidgetTest {
         assertTrue(runBlocking { QuickAddWidget().load(context) }!!.monthSpend.none { it.isDigit() }, "a second tap hides it again")
     }
 
+    @Test
+    fun theFirstTapOnTheSmallestWidgetsFigureOnlyAsksAndTheSecondShowsAndClearsTheQuestion() {
+        saveChai()
+        runBlocking { container.write { ok -> ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("now"), System.currentTimeMillis(), AccountId("cash"), Money(50_000, inr), emptyList())) } }
+        fun armedAt() = runBlocking { androidx.glance.appwidget.state.getAppWidgetState(context, androidx.glance.state.PreferencesGlanceStateDefinition, glanceId)[app.expenses.widget.ARMED_AT] }
+        runBlocking { app.expenses.widget.ArmRevealAction().onAction(context, glanceId, actionParametersOf()) }
+        assertNotNull(armedAt(), "the widget remembers that it asked")
+        assertTrue(runBlocking { QuickAddWidget().load(context) }!!.monthSpend.none { it.isDigit() }, "asking shows nothing: the ledger setting is untouched")
+        runBlocking { app.expenses.widget.ToggleTotalAction().onAction(context, glanceId, actionParametersOf()) }
+        assertEquals("₹500.00", runBlocking { QuickAddWidget().load(context) }!!.monthSpend, "the second tap shows it")
+        assertNull(armedAt(), "and the question is forgotten")
+    }
+
     private fun eyeCase(model: WidgetModel, present: String, absent: String? = null) = runGlanceAppWidgetUnitTest {
         setAppWidgetSize(DpSize(250.dp, 110.dp))
         provideComposable { WidgetContent(model) }

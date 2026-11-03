@@ -161,6 +161,55 @@ class WidgetEyeTapTest {
     }
 
     @Test
+    fun theSmallestWidgetHasNoEyeSoItsFigureAsksShowOnTheFirstTapAndShowsOnTheSecondAndHidesOnTheThird() {
+        place(QuickAddReceiver::class.java, widthDp = 110, heightDp = 60)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("the 2 x 1 widget, masked") { t, d -> "This month" in t && "Show the amount" in d && "Add an expense" in d && t.none { it.startsWith("₹5") } }
+        tap("Show the amount")
+        waitFor("the question 'Show?'") { t, d -> "Show?" in t && "Confirm" in t && "Tap again to show the amount" in d && t.none { it.startsWith("₹5") } }
+        tap("Tap again to show the amount")
+        waitFor("the figure shown (no .00 at this size)") { t, d -> "₹500" in t && "Hide the amount" in d && "Show?" !in t }
+        tap("Hide the amount")
+        waitFor("the figure masked again with one tap") { t, d -> "Show the amount" in d && t.none { it.startsWith("₹5") } && "Show?" !in t }
+    }
+
+    /** How many pixels of the placed widget are exactly [rgb]: the host view is laid out at [wDp] x [hDp] (nothing lays it out in a test) and drawn into a bitmap. */
+    private fun pixelsOf(view: View, rgb: Int, wDp: Int, hDp: Int): Int {
+        val d = context.resources.displayMetrics.density
+        val w = (wDp * d).toInt(); val h = (hDp * d).toInt()
+        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        inst.runOnMainSync {
+            view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+            view.layout(0, 0, w, h)
+            view.draw(android.graphics.Canvas(bmp))
+        }
+        val px = IntArray(w * h); bmp.getPixels(px, 0, w, 0, 0, w, h)
+        return px.count { (it and 0xFFFFFF) == rgb }
+    }
+
+    @Test
+    fun anAccentChosenInTheAppReachesAPlacedWidgetAtOnceWithoutLeavingTheApp() {
+        place(QuickAddReceiver::class.java, widthDp = 320, heightDp = 146)
+        runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
+        waitFor("the widget, in the app's default violet") { t, _ -> "+ Add" in t }
+        fun waitForAccent(key: String) {
+            val rgb = app.expenses.core.domain.Appearances.ACCENTS.first { it.key == key }.let { app.expenses.core.domain.Appearances.primaryFor(it, dark = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES) }
+            val deadline = System.currentTimeMillis() + 25_000
+            while (System.currentTimeMillis() < deadline) { if (pixelsOf(hostView!!, rgb, 320, 146) > 500) return; Thread.sleep(300) }
+            throw AssertionError("the widget never drew the $key accent ${"%06X".format(rgb)}")
+        }
+        waitForAccent("violet")
+        scenario = androidx.test.core.app.ActivityScenario.launch(MainActivity::class.java)
+        for (key in listOf("teal", "orange", "violet")) {
+            scenario!!.onActivity { a ->
+                val model = androidx.lifecycle.ViewModelProvider(a)[LedgerViewModel::class.java]
+                model.setAppearance(app.expenses.core.domain.Appearance(accent = app.expenses.core.domain.Appearances.ACCENTS.first { it.key == key }))
+            }
+            waitForAccent(key)
+        }
+    }
+
+    @Test
     fun theEyeOnTheTodayWidgetShowsTheAmountToo() {
         place(TodayReceiver::class.java)
         runBlocking { TodayWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
@@ -275,7 +324,8 @@ class WidgetEyeTapTest {
     fun aShownTotalStaysShownAcrossRedrawsTheHourlyCheckAnAddedEntryAndTheScreenGoingOff() {
         place(QuickAddReceiver::class.java)
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
-        waitFor("masked at first") { t, d -> "Show the amount" in d && !total(t) }
+        // the widget is first drawn at the provider's minimum (a 2 x 1, whose figure now carries "Show the amount" too), then at 250 x 250: wait for the 250 x 250 one, or the tap lands on the 2 x 1 figure
+        waitFor("masked at first") { t, d -> "Spent this month" in t && "Show the amount" in d && !total(t) }
         tap("Show the amount")
         waitFor("shown") { t, d -> total(t) && "Hide the amount" in d }
         // a redraw, the hourly background check (which redraws the widgets), and an entry added from the widget's own path

@@ -23,6 +23,12 @@ import app.expenses.ui.PermissionRow
 import app.expenses.ui.rememberResumeState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -61,6 +67,12 @@ class MainActivity : FragmentActivity() {
 
         val host = ActivityRootHost()
         setContent { ExpensesRoot(viewModel, host) }
+        // the widgets draw the accent chosen here (More, Appearance): when it changes they are drawn again at once, not when the person next leaves the app
+        val appContext = applicationContext
+        lifecycleScope.launch {
+            viewModel.state.map { (it as? app.expenses.UiState.Ready)?.appearance?.accent?.key }.filterNotNull().distinctUntilChanged().drop(1)
+                .collect { withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.expenses.widget.refreshWidgets(appContext) } } }
+        }
     }
 
     override fun onDestroy() {

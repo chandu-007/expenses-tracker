@@ -171,10 +171,44 @@ class WidgetDesignTest {
     }
 
     @Test
-    fun theTinyWidgetHasNoEyeButKeepsTheFigureAndAdd() = runGlanceAppWidgetUnitTest {
+    fun theTinyWidgetHasNoEyeButItsFigureIsTheRevealAndItKeepsAdd() = runGlanceAppWidgetUnitTest {
         setAppWidgetSize(DpSize(110.dp, 60.dp))
         provideComposable { WidgetContent(hidden()) }
-        onNode(hasText("This month")).assertExists(); onNode(hasContentDescription("Show the amount")).assertDoesNotExist(); onNode(hasContentDescription("Add an expense")).assertExists()
+        onNode(hasText("This month")).assertExists(); onNode(hasContentDescription("Add an expense")).assertExists()
+        // a 48 dp eye does not fit beside a figure and Add at 110 dp, so the masked figure itself offers "Show the amount" (one description, on the figure's own target, no second eye)
+        onNode(hasContentDescription("Show the amount")).assertExists(); onNode(hasText("₹••••")).assertExists()
+    }
+
+    @Test
+    fun theTinyWidgetAsksShowAfterTheFirstTapAndHidesAShownFigureAtOnce() {
+        runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(110.dp, 60.dp))
+            provideComposable { WidgetContent(hidden().copy(armed = true)) }
+            onNode(hasText("Show?")).assertExists(); onNode(hasText("Confirm")).assertExists(); onNode(hasContentDescription("Tap again to show the amount")).assertExists()
+            onNode(hasText("₹••••")).assertDoesNotExist()
+        }
+        runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(110.dp, 60.dp))
+            provideComposable { WidgetContent(shown(canToggle = true).copy(armed = true)) }
+            onNode(hasContentDescription("Hide the amount")).assertExists(); onNode(hasText("Show?")).assertDoesNotExist()
+        }
+        runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(110.dp, 60.dp))
+            provideComposable { WidgetContent(hidden(canToggle = false).copy(armed = true, hiddenBy = HiddenBy.APP_LOCK)) }
+            onNode(hasContentDescription("Show the amount")).assertDoesNotExist(); onNode(hasContentDescription("Tap again to show the amount")).assertDoesNotExist(); onNode(hasText("Show?")).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun theQuestionIsOpenOnlyForItsWindowAndNeverOnAShownTotal() {
+        val buttons = listOf(chai)
+        val prefs = androidx.datastore.preferences.core.mutablePreferencesOf(app.expenses.widget.ARMED_AT to 1_000_000L)
+        assertTrue(QuickAddWidget.model(buttons, prefs, 1_000_000L, canToggle = true).armed)
+        assertTrue(QuickAddWidget.model(buttons, prefs, 1_000_000L + app.expenses.widget.ARM_WINDOW_MILLIS, canToggle = true).armed)
+        assertTrue(!QuickAddWidget.model(buttons, prefs, 1_000_000L + app.expenses.widget.ARM_WINDOW_MILLIS + 1, canToggle = true).armed, "a late second tap asks again")
+        assertTrue(!QuickAddWidget.model(buttons, prefs, 999_999L, canToggle = true).armed, "a clock that went backwards")
+        assertTrue(!QuickAddWidget.model(buttons, prefs, 1_000_000L, revealed = true, canToggle = true).armed, "a shown total is not asked about")
+        assertTrue(!QuickAddWidget.model(buttons, androidx.datastore.preferences.core.mutablePreferencesOf(), 1_000_000L, canToggle = true).armed)
     }
 
     @Test
@@ -238,6 +272,33 @@ class WidgetDesignTest {
         assertTrue(d.nothingYet); assertEquals("₹0.00", d.monthSpend); assertEquals(null, d.insights.delta); assertEquals(emptyList(), d.insights.categories)
     }
 
+    // ---- the accent ----
+
+    private fun setAccent(key: String?) = runBlocking { container.write { it.templates.putSetting("appearance", if (key == null) "" else app.expenses.core.domain.Appearance(accent = Appearances.ACCENTS.first { a -> a.key == key }).encode()) } }
+
+    @Test
+    fun theWidgetsReadTheAccentChosenInTheAppAndFallBackToVioletForNoneOrAnUnknownOne() {
+        assertEquals("violet", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "nothing chosen yet")
+        for (a in Appearances.ACCENTS) {
+            setAccent(a.key)
+            assertEquals(a.key, runBlocking { QuickAddWidget().load(context) }!!.accent.key)
+            assertEquals(a.key, runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.accent.key)
+        }
+        runBlocking { container.write { it.templates.putSetting("appearance", "SYSTEM;chartreuse;COMPACT") } }
+        assertEquals("violet", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "an accent the app does not know is violet, as in the app")
+        assertEquals("violet", runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.accent.key)
+    }
+
+    @Test
+    fun theWidgetDrawsEveryAccentWithoutChangingWhatItSays() {
+        for (a in Appearances.ACCENTS) for ((w, h) in listOf(110 to 60, 110 to 110, 320 to 146, 320 to 294)) runGlanceAppWidgetUnitTest {
+            setAppWidgetSize(DpSize(w.dp, h.dp))
+            provideComposable { WidgetContent(shown().copy(accent = a)) }
+            onNode(hasContentDescription("Hide the amount")).assertExists()
+            if (w >= 300) onNode(hasText("+ Add")).assertExists() else onNode(hasContentDescription("Add an expense")).assertExists()
+        }
+    }
+
     // ---- colours ----
 
     @Test
@@ -248,15 +309,34 @@ class WidgetDesignTest {
             val c = context.createConfigurationContext(conf)
             return { name -> c.getColor(c.resources.getIdentifier(name, "color", context.packageName)) and 0xFFFFFF }
         }
-        // on Android 12+ these resources are the phone's Material You colours, which are designed to pair; the brand palette is what is checked here, wherever it is in use
+        // the widget uses these resources on every Android version (it does not follow Material You), so what is checked here is what is drawn
         for (night in listOf(false, true)) {
             val c = colors(night)
             val pairs = listOf(
                 "widget_text" to "widget_surface", "widget_muted" to "widget_surface", "widget_text" to "widget_container", "widget_muted" to "widget_container",
-                "widget_on_accent" to "widget_accent", "widget_on_accent_container" to "widget_accent_container", "widget_positive" to "widget_container", "widget_negative" to "widget_container",
+                "widget_positive" to "widget_container", "widget_negative" to "widget_container",
                 "widget_positive" to "widget_surface", "widget_negative" to "widget_surface", "widget_text" to "widget_undo",
             )
             for ((fg, bg) in pairs) assertTrue(Appearances.contrast(c(fg), c(bg)) >= 4.5, "${if (night) "dark" else "light"}: $fg on $bg is ${Appearances.contrast(c(fg), c(bg))}")
+        }
+    }
+
+    @Test
+    fun everyAccentColourIsTheOneTheAppsThemeMakesAndTheTextOnItAndTheShapeItselfAreReadable() {
+        for (night in listOf(false, true)) {
+            val conf = Configuration(context.resources.configuration)
+            conf.uiMode = (conf.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or (if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+            val c = context.createConfigurationContext(conf)
+            fun res(name: String) = c.getColor(c.resources.getIdentifier(name, "color", context.packageName)) and 0xFFFFFF
+            val surface = res("widget_surface")
+            for (a in Appearances.ACCENTS) {
+                val mode = "${if (night) "dark" else "light"} ${a.key}"
+                val accent = res("widget_accent_${a.key}")
+                assertEquals(Appearances.primaryFor(a, night), accent, "$mode: the resource must equal Appearances.primaryFor, which the app's theme uses")
+                val on = Appearances.onColor(accent)
+                assertTrue(Appearances.contrast(on, accent) >= 4.5, "$mode: text on the Add button is ${Appearances.contrast(on, accent)}")
+                assertTrue(Appearances.contrast(accent, surface) >= 3.0, "$mode: the button against the card is ${Appearances.contrast(accent, surface)}, under the 3:1 of a graphic")
+            }
         }
     }
 }
