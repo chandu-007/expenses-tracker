@@ -20,8 +20,11 @@ class NotificationCaptureService : NotificationListenerService() {
      * While access is still given, ask for the binding back (Android's documented remedy); when the person has turned access off this does nothing.
      */
     override fun onListenerDisconnected() {
+        connected = false
         if (accessGranted(applicationContext)) requestRebind(android.content.ComponentName(this, NotificationCaptureService::class.java))
     }
+
+    override fun onListenerConnected() { connected = true }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         // never this app's own notifications (bill and card reminders, the weekly recap carry amounts): they must not feed back into capture
@@ -71,6 +74,9 @@ class NotificationCaptureService : NotificationListenerService() {
          * Test and measurement builds read a notification this app posts **only if it carries this marker**, so a test can exercise the service end to end
          * (a process cannot post as another package). The app's real notifications never carry it. Not read at all in a release build.
          */
+        /** Whether the system has bound this listener right now (it is told of notifications only while it is). Written by the service; read by the tests, which must not post before it is true. */
+        @Volatile var connected: Boolean = false
+
         const val TEST_EXTRA = "app.expenses.capture_test"
 
         /** With [TEST_EXTRA]: the package name a test post stands in for (an email app's, to exercise email capture), as a string extra. Absent: a payment app, as before. */

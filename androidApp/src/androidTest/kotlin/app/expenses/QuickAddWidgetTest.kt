@@ -226,7 +226,15 @@ class QuickAddWidgetTest {
                 allBound = allBound && bound
             }
             assumeTrue("binding was not allowed on this device", allBound)
-            val found = runBlocking { GlanceAppWidgetManager(context).getGlanceIds(QuickAddWidget::class.java) }.map { (it as AppWidgetId).appWidgetId }
+            // Glance learns which receivers belong to a widget class when each receiver has been sent its first update, which the system delivers a moment after the bind (on Android 14 a few
+            // seconds later when other widgets were placed and removed just before). A single look right after the bind raced with that, so look again until all of them are known.
+            var found = emptyList<Int>()
+            val deadline = System.currentTimeMillis() + 30_000
+            while (System.currentTimeMillis() < deadline) {
+                found = runBlocking { GlanceAppWidgetManager(context).getGlanceIds(QuickAddWidget::class.java) }.map { (it as AppWidgetId).appWidgetId }
+                if (found.containsAll(ids)) break
+                Thread.sleep(500)
+            }
             assertTrue(found.containsAll(ids), "an update of the widget must reach every copy, whichever picker entry it came from: placed $ids, found $found")
         } finally { ids.forEach { host.deleteAppWidgetId(it) } }
     }

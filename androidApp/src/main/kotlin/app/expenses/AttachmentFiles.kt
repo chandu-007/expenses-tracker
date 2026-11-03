@@ -28,6 +28,8 @@ class AttachmentFiles(private val context: Context) {
         val target = file(id)
         try {
             var total = 0L
+            // the hash is taken as the bytes pass: reading the whole file back in to hash it held a second copy (and the file's size again for the hex) in memory, which a 14 MB attachment could not afford on a phone with a small heap
+            val digest = Sha256.Digest()
             input.use { i -> target.outputStream().use { o ->
                 val buf = ByteArray(32 * 1024)
                 while (true) {
@@ -35,10 +37,11 @@ class AttachmentFiles(private val context: Context) {
                     total += n
                     if (total > AttachmentRules.MAX_BYTES) throw IllegalArgumentException(AttachmentRules.checkAdd(0, total)!!)
                     o.write(buf, 0, n)
+                    digest.update(buf, 0, n)
                 }
             } }
             AttachmentRules.checkAdd(0, total)?.let { throw IllegalArgumentException(it) }
-            return Copied(total, Sha256.hex(target.readBytes()))
+            return Copied(total, digest.finishHex())
         } catch (e: Exception) {
             target.delete()
             throw if (e is IllegalArgumentException) e else IllegalArgumentException("That file could not be read: ${e.message ?: e::class.java.simpleName}")

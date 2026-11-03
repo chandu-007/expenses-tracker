@@ -39,10 +39,13 @@ class NotificationCaptureTest {
         shell("cmd notification allow_listener ${context.packageName}/${NotificationCaptureService::class.java.name}")
         manager.createNotificationChannel(NotificationChannel("t", "test", NotificationManager.IMPORTANCE_DEFAULT))
         compose(10_000) { NotificationCaptureService.accessGranted(context) }
+        // the setting being written is not the listener being bound (the system binds it a moment later, longer on a busy emulator): post nothing before it is
+        compose(30_000) { NotificationCaptureService.connected }
     }
 
     @After fun tearDown() {
         shell("cmd notification disallow_listener ${context.packageName}/${NotificationCaptureService::class.java.name}")
+        compose(10_000) { !NotificationCaptureService.connected }
         if (before == null) shell("settings delete secure enabled_notification_listeners") else shell("settings put secure enabled_notification_listeners $before")
         manager.cancelAll(); resetApp()
     }

@@ -246,7 +246,7 @@ class BackupFilesTest {
         val small = runBlocking { transfer.backupForSharing(null) }
         assertEquals(2, small.second.files.included); assertEquals(2, BackupFile.decode(small.first).first.version)
         resetApp()
-        seed(listOf(14_000_000, 14_000_000)) // 28 MB together: over the 25 MB the share sheet path takes
+        seedBig(2, 14_000_000) // 28 MB together: over the 25 MB the share sheet path takes (written in blocks: two 14 MB arrays held by the test would not fit an emulator's small heap)
         val big = runBlocking { transfer.backupForSharing(null) }
         assertEquals(0, big.second.files.included); assertEquals(2, big.second.files.onPhone)
         assertTrue(big.second.files.note!!.contains("over the 25.0 MB limit"), big.second.files.note)
@@ -262,6 +262,7 @@ class BackupFilesTest {
     private fun waitFor(tag: String) = compose.waitUntil(15_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(15_000) { !has(tag) }
     private fun waitText(tag: String, text: String) = compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag(tag) and hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitUntilBusy() = compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("restore_confirm") and androidx.compose.ui.test.isNotEnabled(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun viewModel(): LedgerViewModel { var vm: LedgerViewModel? = null; scenario!!.onActivity { vm = ViewModelProvider(it)[LedgerViewModel::class.java] }; return vm!! }
     private fun launchData() {
@@ -342,9 +343,17 @@ class BackupFilesTest {
         launchData()
         viewModel().openBackup(uri.toString())
         waitFor("restore_confirm")
-        tap("restore_confirm")
-        compose.onNodeWithTag("restore_confirm", useUnmergedTree = true).assertIsNotEnabled() // busy: the dialog stays up for the whole restore, with the button off
-        viewModel().confirmRestore(); viewModel().confirmRestore() // taps that get through anyway are ignored
+        // The restore's first step needs the database's write lock. The test holds it, so the restore is certainly still running when the button is looked at (a fast phone finished the whole restore
+        // before the first look, and the dialog was gone: the test measured the phone's speed, not the rule that the button is off while it runs).
+        val held = java.util.concurrent.CountDownLatch(1); val release = java.util.concurrent.CountDownLatch(1)
+        val holder = Thread { runBlocking { container.write { held.countDown(); release.await() } } }.also { it.start() }
+        assertTrue(held.await(15, java.util.concurrent.TimeUnit.SECONDS), "the test could not take the write lock")
+        try {
+            tap("restore_confirm")
+            waitUntilBusy()
+            compose.onNodeWithTag("restore_confirm", useUnmergedTree = true).assertIsNotEnabled() // busy: the dialog stays up for the whole restore, with the button off
+            viewModel().confirmRestore(); viewModel().confirmRestore() // taps that get through anyway are ignored
+        } finally { release.countDown(); holder.join() }
         waitText("data_status", "3 photos and files were put back")
         assertEquals(files.keys, attachmentDir.list().orEmpty().toSet())
         for ((id, sha) in files) assertEquals(sha, shaOfStored(id), "$id is still there, whole")

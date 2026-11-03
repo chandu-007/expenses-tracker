@@ -148,7 +148,9 @@ class CategoriesTest {
         waitFor("new_category_chip")
         compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().let { assertTrue(it.isEmpty(), "a hidden category must not be offered") }
         compose.onNodeWithTag("cancel").performClick()
-        waitFor("add")
+        // the Add form slides away over Home, and both are on screen while it does: a tap on the row in that moment lands on the leaving form (seen on Android 14, where the list was reached first).
+        // Wait for the form to be gone and the screen to settle before touching the row.
+        waitGone("new_category_chip"); waitFor("add"); compose.waitForIdle()
         compose.onNodeWithTag("row_Movie").performClick()
         waitFor("category_chip_Fun")
         compose.onNodeWithTag("category_chip_Fun").assertIsSelected()
