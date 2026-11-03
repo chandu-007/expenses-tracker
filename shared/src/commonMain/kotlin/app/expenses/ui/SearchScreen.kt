@@ -307,6 +307,9 @@ fun SearchScreen(
             LaunchedEffect(keyboardOpen, showResults, text) {
                 if (keyboardOpen && showResults && text.isNotBlank() && listState.firstVisibleItemIndex == 0) listState.animateScrollToItem(1)
             }
+            // what a bulk change just did, and its Undo, are the first thing under the filters: with the page moved up for the keyboard (and then the room under it taken back) they
+            // were left above the screen
+            LaunchedEffect(state.notice) { if (state.notice != null && showResults) listState.animateScrollToItem(1) }
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
             // with the keyboard up the list gets a foot as tall as the room left, so a short list of results can still be moved up under the box
             LazyColumn(Modifier.fillMaxSize().nestedScroll(hideOnScroll).testTag("search_results"), state = listState, contentPadding = PaddingValues(bottom = if (keyboardOpen) maxHeight else 24.dp)) {
