@@ -354,5 +354,48 @@ class BackupStoreTest {
         assertEquals("83.20", b.db.schemaQueries.settingValue("rate_USD").executeAsOneOrNull())
         assertEquals("g\tTrip\t5000000\t0\t\t", b.db.schemaQueries.settingValue("goals").executeAsOneOrNull())
     }
+
+    // ---- backups of earlier releases, and of this one ----
+
+    private fun payloadOf(data: BackupData) = BackupFile.decode(BackupFile.encode(data, 1L)).second
+
+    /** What 0.9.0 wrote: no account digits, no learned choices, no capture rules, no settings. */
+    private fun nineZero() = BackupData(
+        currencies = listOf(BackupCurrency("INR", 2)),
+        accounts = listOf(BackupAccount("bank", "Bank", "BANK", "INR"), BackupAccount("cash", "Cash", "CASH", "INR")),
+        entries = listOf(BackupEntry("e1", "EXPENSE", 1_000, accountId = "cash", amountMinor = 12_000, currency = "INR", categoryId = "Food", merchant = "Cafe", splits = listOf(BackupSplit("Food", 12_000)))),
+    )
+
+    @Test
+    fun aBackupOfTheNineZeroEraAndOneOfPointTenFourBothRestoreAndKeepWhatTheyCarry() {
+        val fromNineZero = Device("n"); fromNineZero.backup.restore(payloadOf(nineZero()))
+        assertEquals(1L, fromNineZero.entries()); assertEquals(0, fromNineZero.db.schemaQueries.allAccountLooks().executeAsList().size)
+        // 0.10.4: four-digit account digits, a learned choice under the payee key with its count, a capture rule, a trusted sender
+        val tenFour = nineZero().copy(
+            accountLooks = listOf(BackupAccountLook("bank", last4 = "4821")),
+            merchantMap = listOf(BackupMerchant("swiggy", "Food", uses = 3)),
+            settings = mapOf("capture_extra_roots" to "MYBANK"),
+        )
+        val d = Device("t"); d.backup.restore(payloadOf(tenFour))
+        assertEquals("4821", d.db.schemaQueries.accountLookOf("bank").executeAsOne().last4)
+        assertEquals(3L, d.db.schemaQueries.allMerchantMap().executeAsList().single { it.key == "swiggy" }.uses)
+        assertEquals("MYBANK", d.db.schemaQueries.settingValue("capture_extra_roots").executeAsOneOrNull())
+    }
+
+    @Test
+    fun aBackupOfThisReleaseWithThreeDigitAccountsAndIncomeChoicesRestoresAndAnAccountWithJunkDigitsStillComesBackWithoutThem() {
+        val data = nineZero().copy(
+            accountLooks = listOf(BackupAccountLook("bank", last4 = "123"), BackupAccountLook("cash", last4 = "12")),
+            merchantMap = listOf(BackupMerchant("in:acmecorp", "Other", uses = 2), BackupMerchant("swiggy", "Food", uses = 1)),
+        )
+        val d = Device("t"); d.backup.restore(payloadOf(data))
+        assertEquals("123", d.db.schemaQueries.accountLookOf("bank").executeAsOne().last4, "a three-digit mask is kept as it is")
+        assertEquals(null, d.db.schemaQueries.accountLookOf("cash").executeAsOneOrNull(), "two digits are no digits: the account is restored, the digits are not")
+        assertEquals(2L, d.db.schemaQueries.allMerchantMap().executeAsList().single { it.key == "in:acmecorp" }.uses)
+        assertEquals(1L, d.entries())
+        // the skipped-sender counters are device-local: never exported
+        d.db.schemaQueries.putSetting("skipped_sender:ACMEBK", "4|1000|S")
+        assertTrue(d.backup.export().settings.keys.none { it.startsWith("skipped_sender:") })
+    }
 }
 

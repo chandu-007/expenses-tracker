@@ -2288,9 +2288,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val held = accountChoice?.takeIf { it.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
         accountChoice = null
         withStore { ok ->
-            if (held.before == null) ok.templates.removeSetting(held.key) else ok.templates.putSetting(held.key, held.before)
-            held.createdAccountId?.let { created ->
-                try { ok.looks.save(AccountLook(created)); ok.store.deleteAccount(AccountId(created)) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            // an account the choice created is removed again only while it has no entries (the text may have been added to it since); then everything stays as it is, and the person is told
+            val created = held.createdAccountId
+            if (created != null && ok.store.accountUsage(AccountId(created)) > 0) {
+                _state.update { st -> (st as? UiState.Ready)?.copy(message = "That account already has entries, so it stays. You can archive it from More, Accounts.") ?: st }
+            } else {
+                if (held.before == null) ok.templates.removeSetting(held.key) else ok.templates.putSetting(held.key, held.before)
+                created?.let { id ->
+                    try { ok.looks.save(AccountLook(id)); ok.store.deleteAccount(AccountId(id)) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+                }
             }
             _inbox.value = inboxRows(ok); refresh(ok)
         }
@@ -3409,7 +3415,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return { e ->
             val counter = e.originText?.let { t -> (app.expenses.core.parsers.GenericAlertParser.parse(t) as? app.expenses.core.parsers.ParseResult.Parsed)?.alert?.counterLast4 }
             // the one account these digits (three or four, as the text printed them) point at; several that fit name none
-            (AccountMatch.resolve(counter, null, withDigits) as? AccountMatch.Result.Found)?.accountId?.takeIf { it != e.accountId }
+            (AccountMatch.resolve(counter, null, withDigits) as? AccountMatch.Result.Found)?.takeIf { it.basis != AccountMatch.Basis.ENDS_WITH }?.accountId?.takeIf { it != e.accountId }
         }
     }
 

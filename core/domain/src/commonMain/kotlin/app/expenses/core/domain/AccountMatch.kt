@@ -10,6 +10,9 @@ import app.expenses.core.domain.ledger.AccountType
 class BankNames(private val banks: Collection<String>) {
     private val known: List<Set<String>> = banks.map { wordsOf(it) }.filter { it.isNotEmpty() }.distinct()
 
+    /** Whether [issuer] is a bank or card issuer on the list (a payment app, a biller or a name the person added is not). */
+    fun isBank(issuer: String?): Boolean = issuer != null && issuer in banks && wordsOf(issuer).isNotEmpty()
+
     /**
      * Whether the account called [accountName] belongs to the bank [issuer]: true when the name has a distinctive word of that bank, false when it has one of another known
      * bank (and none of this one's), null when the name names no bank, or [issuer] is no bank on the list (a payment app, a biller, a name the person added).
@@ -39,11 +42,15 @@ class BankNames(private val banks: Collection<String>) {
  *
  * An account FITS when the digits it carries are the same as the text's or one ends the other ("123" and "4123": [AccountDigits.compatible]) and its name does not plainly belong to a different
  * bank than the text's ([banks]; an account whose name names no bank fits, the person did not say). Then, in order:
- *  1. **Exactly the same digits, and nothing else fits.** That account (a card, when [preferCard] says the text is about a card and exactly one card carries them). This is every four-digit match,
- *     which is all there was before three-digit digits existed.
+ *  1. **Exactly the same four digits, and nothing else fits.** That account (a card, when [preferCard] says the text is about a card and exactly one card carries them). This is every four-digit
+ *     match, which is all there was before three-digit digits existed.
  *  2. **What the person chose before** for this bank and these digits ([remembered]): they said so, and it settles digits two accounts share and digits that merely end the same.
  *  3. **Exactly one account fits** (digits that only end the same, "123" for an account saved as "4123", included).
  *  4. Otherwise nothing is guessed: [Result.Several] names the accounts that fit, so the person is asked; [Result.None] when none does.
+ *
+ * Three digits are weak evidence (a thousand accounts share them), so steps 1 (for a three-digit text or account) and 3 are only taken on their own when the bank is known from the sender and
+ * the account's NAME says it is that bank's ("ICICI Savings"). An account whose name says nothing about a bank ("Salary") that ends in the same three digits is ASKED about, once; the answer
+ * is remembered for this bank and these digits ([remembered]) and settles it from then on. Four equal digits keep the old rule: they match on their own.
  */
 object AccountMatch {
     /** An account as the matcher needs it: [digits] is what the person entered (three or four digits), null when none. */
@@ -71,17 +78,19 @@ object AccountMatch {
         if (!AccountDigits.isValid(digits)) return remembered?.let { Result.Found(it, Basis.REMEMBERED) } ?: Result.None
         val fits = accounts.filter { AccountDigits.compatible(it.digits, digits) && banks?.sameBank(issuer, it.name) != false }
         val same = fits.filter { it.digits == digits }
-        if (fits.size == same.size) pick(same, preferCard)?.let { return Result.Found(it, Basis.DIGITS) }
+        // an account may be taken without asking when its digits are four equal ones (as before), or when the sender is no known bank (nothing to compare), or its name says it is the sender's bank
+        fun sure(c: Candidate) = (c.digits == digits && digits!!.length == AccountDigits.LONGEST) || banks == null || !banks.isBank(issuer) || banks.sameBank(issuer, c.name) == true
+        if (fits.size == same.size) pick(same, preferCard)?.takeIf(::sure)?.let { return Result.Found(it.id, Basis.DIGITS) }
         if (remembered != null) return Result.Found(remembered, Basis.REMEMBERED)
         if (fits.isEmpty()) return Result.None
-        pick(fits, preferCard)?.let { id -> return Result.Found(id, if (same.any { it.id == id }) Basis.DIGITS else Basis.ENDS_WITH) }
+        pick(fits, preferCard)?.takeIf(::sure)?.let { c -> return Result.Found(c.id, if (same.any { it.id == c.id }) Basis.DIGITS else Basis.ENDS_WITH) }
         return Result.Several(fits.map { it.id })
     }
 
     /** One candidate is the answer. With several, a card (when [preferCard]) if exactly one is a card; anything else is ambiguous and gives null. */
-    private fun pick(candidates: List<Candidate>, preferCard: Boolean): String? {
-        if (candidates.size == 1) return candidates.single().id
-        if (preferCard) candidates.filter { it.type == AccountType.CREDIT_CARD }.takeIf { it.size == 1 }?.let { return it.single().id }
+    private fun pick(candidates: List<Candidate>, preferCard: Boolean): Candidate? {
+        if (candidates.size == 1) return candidates.single()
+        if (preferCard) candidates.filter { it.type == AccountType.CREDIT_CARD }.takeIf { it.size == 1 }?.let { return it.single() }
         return null
     }
 }

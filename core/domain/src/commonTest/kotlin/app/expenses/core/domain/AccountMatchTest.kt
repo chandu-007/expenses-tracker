@@ -78,9 +78,21 @@ class AccountMatchTest {
     }
 
     @Test
-    fun anAccountWhoseNameNamesNoBankStillCountsBecausePersonDidNotSayOtherwise() {
-        assertEquals(Result.Found("s", Basis.ENDS_WITH), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "4123")), banks))
+    fun anAccountWhoseNameNamesNoBankIsAskedAboutOnThreeDigitsAndMatchedOnFourEqualDigitsAsBefore() {
+        // three digits are weak evidence and the name does not say whose account it is: asked, never taken (the bank is known from the sender)
+        assertEquals(Result.Several(listOf("s")), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "4123")), banks), "ends the same, name says nothing")
+        assertEquals(Result.Several(listOf("s")), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "123")), banks), "three equal digits, name says nothing")
+        assertEquals(Result.Several(listOf("s")), AccountMatch.resolve("4123", "ICICI Bank", listOf(acct("s", "Salary", "123")), banks), "the text has four, the account three")
+        // what the person said settles it, now and for the next texts
+        assertEquals(Result.Found("s", Basis.REMEMBERED), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "4123")), banks, remembered = "s"))
+        // an account whose name does say the bank is taken at once, and one of another bank is never offered
+        assertEquals(Result.Found("i", Basis.ENDS_WITH), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "9123"), acct("i", "ICICI Savings", "4123")).filter { it.id == "i" }, banks))
+        assertEquals(Result.Several(listOf("s", "i")), AccountMatch.resolve("123", "ICICI Bank", listOf(acct("s", "Salary", "9123"), acct("i", "ICICI Savings", "4123")), banks), "both fit: asked, never guessed between")
+        // four equal digits keep the rule they always had: they match on their own, whatever the name says
+        assertEquals(Result.Found("s", Basis.DIGITS), AccountMatch.resolve("1234", "HDFC Bank", listOf(acct("s", "Salary", "1234")), banks))
+        // a sender that is no bank (a payment app) has nothing to compare: nothing is ruled out, nothing needs asking
         assertEquals(Result.Found("s", Basis.DIGITS), AccountMatch.resolve("1234", "Google Pay", listOf(acct("s", "HDFC Salary", "1234")), banks), "a payment app is no bank: nothing is ruled out by its name")
+        assertEquals(Result.Found("s", Basis.ENDS_WITH), AccountMatch.resolve("123", "Google Pay", listOf(acct("s", "Salary", "4123")), banks))
     }
 
     @Test

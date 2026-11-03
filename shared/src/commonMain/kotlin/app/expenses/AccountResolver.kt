@@ -26,8 +26,8 @@ internal class AccountResolver(private val ok: AppContainer.Opened.Ok, private v
     }
 
     /** The one account the text points at, or null when none or more than one could be meant. */
-    fun accountFor(issuer: String, digits: String?, preferCard: Boolean = false, bankKnown: Boolean = true): String? =
-        (resolve(issuer, digits, preferCard, bankKnown) as? AccountMatch.Result.Found)?.accountId
+    fun accountFor(issuer: String, digits: String?, preferCard: Boolean = false, bankKnown: Boolean = true, allowEndsWith: Boolean = true): String? =
+        (resolve(issuer, digits, preferCard, bankKnown) as? AccountMatch.Result.Found)?.takeIf { allowEndsWith || it.basis != AccountMatch.Basis.ENDS_WITH }?.accountId
 
     private companion object {
         /** What the account names say about banks: the display names of the banks and card issuers the app reads (not the payment apps and bill senders, which are no bank). */
@@ -47,8 +47,9 @@ internal object AccountAsk {
             is AccountMatch.Result.Found -> null
             is AccountMatch.Result.Several -> {
                 val shown = match.accountIds.mapNotNull { names[it] }
-                val list = if (shown.size <= 1) shown.joinToString() else shown.dropLast(1).joinToString(", ") + " and " + shown.last()
-                Ask("$list all end in $digits, so I cannot tell which this is.", match.accountIds.filter { it in names })
+                val choices = match.accountIds.filter { it in names }
+                if (shown.size <= 1) Ask("${shown.firstOrNull() ?: "An account"} carries $digits, but nothing says it is $issuer's, and other banks' accounts can end the same. Is it this one?", choices)
+                else Ask(shown.dropLast(1).joinToString(", ") + " and " + shown.last() + " all end in $digits, so I cannot tell which this is.", choices)
             }
             AccountMatch.Result.None ->
                 if (digits != null) Ask("I have not seen $issuer ending $digits before.", emptyList()) else Ask("$issuer texts do not say which account they are about.", emptyList())

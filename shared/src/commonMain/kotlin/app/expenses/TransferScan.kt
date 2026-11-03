@@ -52,12 +52,12 @@ class TransferScan private constructor(
             val cache = HashMap<String, String?>()
             /**
              * The movable account these digits (as one bank prints them, three or four) stand for, only when exactly one could be meant ([AccountMatch]: the account carrying them, else the one remembered for this
-             * bank and digits, else one whose longer digits end the same). [ownBank]: the text is from [issuer] about its own account, so another bank's account is ruled out; false for the digits of the OTHER end,
+             * bank and digits; digits that only END the same are never enough to pair two texts). [ownBank]: the text is from [issuer] about its own account, so another bank's account is ruled out; false for the digits of the OTHER end,
              * whose bank the text does not say. Several accounts that fit give null: a pair is never made on a guess.
              */
             fun accountFor(issuer: String, digits: String?, ownBank: Boolean = true): String? {
                 if (digits == null) return null
-                return cache.getOrPut("$issuer|$digits|$ownBank") { resolver.accountFor(issuer, digits, bankKnown = ownBank)?.takeIf { it in names } }
+                return cache.getOrPut("$issuer|$digits|$ownBank") { resolver.accountFor(issuer, digits, bankKnown = ownBank, allowEndsWith = false)?.takeIf { it in names } }
             }
             val byId = items.associateBy { it.id }
             val sides = LinkedHashMap<String, TransferSide>()
