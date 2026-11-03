@@ -170,7 +170,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val inboxRows by viewModel.inbox.collectAsStateWithLifecycle(context = MAIN)
             val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle(context = MAIN)
             val skippedSenders by viewModel.skippedSenders.collectAsStateWithLifecycle(context = MAIN)
-            val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted) }
+            val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted); if (!granted) viewModel.say("Android did not allow it, so bank texts are not being read.") }
             val smsPermission = sms.granted
             val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
             val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle(context = MAIN)
@@ -362,14 +362,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 2 -> editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
-                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount)
+                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() })
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
                         // the report depends on the text permission: work it out again when the permission changes while the screen is open (the first load is the tap that opened it)
                         val firstHealth = remember { booleanArrayOf(true) }
                         LaunchedEffect(smsPermission) { if (firstHealth[0]) firstHealth[0] = false else viewModel.loadCaptureHealth(smsPermission) }
-                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
+                        CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission); viewModel.say("Added $it. Its next texts will be read.") }, onBack = { healthOpen = false })
                     }
                     k == 5 -> {
                         BackHandler { privacyOpen = false }
@@ -596,6 +596,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
                             onPostRepeat = viewModel::postDue, onSkipRepeat = viewModel::skipDue,
                             undo = billUndo, onUndo = viewModel::undoDismissBill, onUndoGone = viewModel::billUndoGone,
+                            onSetUpCapture = { billsOpen = false; viewModel.watchBills(false); captureOpen = true; viewModel.loadCaptureSettings() },
                         )
                     }
                     k == 22 -> {
@@ -654,6 +655,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
                         onOpenCategorise = { categorising = true; viewModel.openCategorise() },
                         onSnoozeCategorise = viewModel::snoozeCategoriseNudge,
+                        onSnoozeNudge = viewModel::snoozeNudge,
                         onDismissFirstWeek = viewModel::dismissFirstWeek,
                         onPostDue = { d, amount -> viewModel.postDue(d.itemId, d.epochDay, amount) },
                         onSkipDue = { d -> viewModel.skipDue(d.itemId, d.epochDay) },
@@ -671,7 +673,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenPrivacy = { privacyOpen = true },
                     )
                 } }
-                } }
+                }
+                // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: it is said here instead
+                app.expenses.ui.MessageOnOtherScreens(
+                    s.message, homeShowing = screenKey == app.expenses.ui.ScreenKeys.HOME, hideAmounts = s.hideAmounts, onShown = viewModel::dismissMessage,
+                    // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own
+                    undo = s.undo?.takeIf { screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
+                )
+                }
             }
             }
             }

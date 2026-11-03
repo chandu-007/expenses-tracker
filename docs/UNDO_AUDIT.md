@@ -26,7 +26,7 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | Restore from a backup | Your data | Confirm ("Restore this backup?"); a restore only merges what the backup holds, it deletes nothing | DataTest |
 | Start fresh after the key is lost | Key-lost screen | Two-step confirm; the data was unreadable already | |
 | Statement import (CSV, Excel, PDF, photo) | Import | Not undoable (see below). The preview with the counts is shown first, and the import adds entries only | |
-| Merge a category into another | Categories | Confirm-style choice: the dialog says "This can't be undone" and nothing happens until a target is tapped | |
+| Merge a category into another | Categories | Two steps: pick the target, then "Merge into X?" (Merge / Choose another); the dialog says "This can't be undone"; afterwards a bar says "Merged A into B" | CategoriesTest |
 | Delete a category | Categories | Only an unused one can be deleted (the store refuses otherwise): nothing is lost but its name and colour | |
 | Delete an account | Accounts | Only one with no entries and no saved items can be deleted: nothing is lost but its name and settings | |
 | Remove a person | Lent and borrowed | Only one with no entries | |

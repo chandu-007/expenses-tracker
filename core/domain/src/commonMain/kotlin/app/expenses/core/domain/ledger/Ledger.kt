@@ -165,7 +165,7 @@ class Ledger private constructor(
     private fun requireSumEquals(total: Money, parts: List<Money>, what: String) {
         require(parts.all { it.currency == total.currency }) { "$what must use ${total.currency.code}" }
         val sum = parts.fold(Money.zero(total.currency)) { acc, m -> acc + m }
-        require(sum == total) { "$what must add up to the total (got ${sum.minorUnits}, expected ${total.minorUnits})" }
+        require(sum == total) { "The parts of $what must add up to its total." }
     }
 
     private fun validate(e: Entry, byId: Map<EntryId, Entry>, refunded: MutableMap<EntryId, Long>) {
@@ -192,7 +192,7 @@ class Ledger private constructor(
                 val already = refunded[original.id] ?: 0L
                 val total = already + e.amount.minorUnits
                 require(total <= original.amount.minorUnits) {
-                    "Refunds (${total}) would exceed the original expense (${original.amount.minorUnits})"
+                    "Refunds cannot be more than the amount that was paid."
                 }
                 refunded[original.id] = total
             }

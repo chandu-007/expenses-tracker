@@ -117,7 +117,7 @@ object AutoCopyProtection {
         try {
             store.put(SECRET, blob)
         } catch (e: Exception) {
-            throw BackupException("The key could not be kept in this phone's secure storage (${e.message ?: e::class.simpleName}). Nothing was changed.")
+            throw BackupException("The key could not be kept in this phone's secure storage. Nothing was changed.")
         }
         val back = (store.read(SECRET) as? SecretRead.Found)?.bytes
         if (back == null || !back.contentEquals(blob)) throw BackupException("The key could not be kept in this phone's secure storage: it did not read back.")

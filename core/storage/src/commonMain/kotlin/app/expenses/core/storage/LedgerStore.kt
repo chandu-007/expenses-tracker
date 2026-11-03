@@ -49,7 +49,7 @@ class LedgerStore(
             require(account.id.value.isNotEmpty()) { "Account id must not be empty" }
             ensureCurrency(account.currency)
             val before = q.accountById(account.id.value).executeAsOneOrNull()
-            require(before == null || before.currency == account.currency.code) { "An account's currency cannot change" }
+            require(before == null || before.currency == account.currency.code) { "The currency of an account cannot be changed." }
             q.insertAccount(account.id.value, account.name, account.type.name, account.currency.code, account.openingMinor, if (account.archived) 1L else 0L)
             val beforeFields = before?.let { mapOf("name" to it.name, "type" to it.type, "currency" to it.currency, "opening_minor" to it.opening_minor.toString(), "archived" to it.archived.toString()) }
             logChanges("account", account.id.value, beforeFields, mapOf(
@@ -106,8 +106,8 @@ class LedgerStore(
             EntryMapping.currencies(entry).forEach(::ensureCurrency)
             val cols = EntryMapping.columns(entry)
             val before = q.entryById(cols.id).executeAsOneOrNull()
-            require(before == null || before.deleted == 0L) { "Entry ${cols.id} is deleted; restore it before editing" }
-            require(before == null || before.kind == cols.kind) { "An entry's kind cannot change" }
+            require(before == null || before.deleted == 0L) { "This entry was deleted. Restore it before editing it." }
+            require(before == null || before.kind == cols.kind) { "The type of an entry cannot be changed here." }
             validate(entry)
             val beforeFields = before?.let { EntryMapping.fields(it, splitsOf(it), sharesOf(it)) }
 
@@ -143,7 +143,7 @@ class LedgerStore(
      */
     fun setSourceRef(id: EntryId, sourceRef: String?) {
         db.transaction {
-            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("Unknown entry: ${id.value}")
+            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("That entry is no longer there.")
             if (row.source_ref == sourceRef) return@transaction
             q.setSourceRef(sourceRef, id.value)
             q.insertOp(clock.now(nowMillis()).encode(), "entry", id.value, "source_ref", sourceRef)
@@ -153,10 +153,10 @@ class LedgerStore(
     /** Soft-deletes an entry. An expense that still has refunds cannot be deleted; delete its refunds first. */
     fun delete(id: EntryId) {
         db.transaction {
-            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("Unknown entry: ${id.value}")
+            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("That entry is no longer there.")
             if (row.deleted == 1L) return@transaction
             require(row.kind != "EXPENSE" || !q.hasLiveRefunds(id.value).executeAsOne()) {
-                "Entry ${id.value} has refunds; delete them first"
+                "This expense has refunds. Delete them first."
             }
             q.softDeleteEntry(id.value)
             q.deleteSpendLines(id.value)
@@ -168,7 +168,7 @@ class LedgerStore(
     /** Brings back a deleted entry, if it still obeys the ledger rules (for a refund: the expense is live and has room). */
     fun restore(id: EntryId) {
         db.transaction {
-            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("Unknown entry: ${id.value}")
+            val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("That entry is no longer there.")
             if (row.deleted == 0L) return@transaction
             val entry = domain(row)
             validate(entry)

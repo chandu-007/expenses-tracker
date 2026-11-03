@@ -155,7 +155,7 @@ object AutoExportRunner {
                 val oldExcel = if (sealWith == null) 0 else AutoExportRules.countOurs(names, AutoExportKeys.XLSX_PREFIX, "xlsx")
                 record(container, now, AutoExportResult(true, true, if (sealWith == null) "Saved $day: a backup$about and an Excel file." else "Saved $day: a protected backup$about. No Excel file is made while copies are protected." + earlierExcel(oldExcel)), true, oldExcel)
             } catch (e: Exception) {
-                record(container, now, AutoExportResult(true, false, "Could not save: ${e.asWriteProblem().let { it.message ?: it::class.simpleName }}"), false)
+                record(container, now, AutoExportResult(true, false, "Could not save: ${e.asWriteProblem().let { it.message ?: "the folder could not be written to" }}"), false)
             }
         } finally {
             _running.value = false
@@ -269,7 +269,7 @@ object AutoExportRunner {
                 val left = old.size - gone
                 AutoExportResult(true, left == 0, (if (gone == 1) "Deleted 1 Excel file from before protection." else "Deleted $gone Excel files from before protection.") + if (left > 0) " $left could not be deleted." else "")
             } catch (e: Exception) {
-                AutoExportResult(true, false, "Could not delete the Excel files: ${e.asWriteProblem().let { it.message ?: it::class.simpleName }}")
+                AutoExportResult(true, false, "Could not delete the Excel files: ${e.asWriteProblem().let { it.message ?: "the folder could not be written to" }}")
             }
             val left = try { AutoExportRules.countOurs(folder.names(), AutoExportKeys.XLSX_PREFIX, "xlsx") } catch (e: Exception) { 0 }
             container.write { ok ->

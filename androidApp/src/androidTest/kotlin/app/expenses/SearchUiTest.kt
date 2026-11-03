@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -135,9 +136,11 @@ class SearchUiTest {
         open()
         type("search_text", "cafe")
         waitFor("result_new"); waitFor("result_old")
-        compose.onNodeWithTag("search_range_LAST_30_DAYS").performClick()
+        // typing with the keyboard up moved the page up to the results: the chips are above them, one scroll back
+        fun chip() = compose.onNodeWithTag("search_range_LAST_30_DAYS").also { compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("search_range_LAST_30_DAYS")) }
+        chip().performClick()
         waitFor("result_new"); waitGone("result_old")
-        compose.onNodeWithTag("search_range_LAST_30_DAYS").performClick() // choosing it again clears it
+        chip().performClick() // choosing it again clears it
         waitFor("result_old")
     }
 

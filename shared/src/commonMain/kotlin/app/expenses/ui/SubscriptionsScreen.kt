@@ -31,8 +31,8 @@ fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (
             item {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (state.rows.isEmpty()) {
-                        Text("Nothing found yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("subscriptions_empty"))
-                        Text("A charge shows up here once the same merchant has charged about the same amount three times, a month or so apart (or twice, a year apart). Add the merchant name to your entries and it will be found.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No subscriptions found yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("subscriptions_empty"))
+                        Text("When the same shop charges you the same amount again and again, it shows up here. Write the shop's name when you add an expense, so it can be found.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Text("About ${state.monthlyText} a month", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("subscriptions_monthly"))
                         Text("${state.yearlyText} a year, from ${state.rows.size} ${if (state.rows.size == 1) "charge" else "charges"} that keep coming", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("subscriptions_yearly"))

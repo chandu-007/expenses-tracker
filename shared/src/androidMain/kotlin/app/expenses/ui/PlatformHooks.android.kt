@@ -53,8 +53,9 @@ actual fun systemAnimationsOff(): Boolean {
 actual val supportsBlur: Boolean = Build.VERSION.SDK_INT >= 31
 
 /**
- * The window is resized for the keyboard rather than padded, so the insets API reports nothing on every phone and emulator this app supports;
- * the visible part of the window shrinking by more than a sixth of its height is the reliable sign.
+ * Two signs, either one is enough: the visible part of the window shrinking by more than a sixth of its height (the window is resized for the keyboard, which is what the API 26
+ * emulator did and the insets API reported nothing for), or the keyboard's own inset being visible (the API 34 emulator: a screenshot showed the tab bar floating above the keyboard
+ * over nothing, the first sign never having fired there).
  */
 @Composable
 actual fun rememberKeyboardOpen(): Boolean {
@@ -65,9 +66,11 @@ actual fun rememberKeyboardOpen(): Boolean {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
             view.getWindowVisibleDisplayFrame(rect)
             val full = view.rootView.height
-            open = full > 0 && (full - rect.bottom) > full / 6
+            open = (full > 0 && (full - rect.bottom) > full / 6) ||
+                androidx.core.view.ViewCompat.getRootWindowInsets(view)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
         }
         view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        listener.onGlobalLayout() // a keyboard that is already up when the screen appears (the layout may not change again) counts at once
         onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
     }
     return open

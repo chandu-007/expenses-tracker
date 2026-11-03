@@ -36,7 +36,7 @@ class OcrStatementReader : AutoCloseable {
         val result = try {
             Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)), TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            throw IllegalArgumentException("The text in that picture could not be read on this phone (${e.cause?.message ?: e.message ?: e::class.simpleName}).")
+            throw IllegalArgumentException("The text in that picture could not be read on this phone. Try a clearer photo, or download the statement as CSV or Excel.")
         }
         return rows(result)
     }

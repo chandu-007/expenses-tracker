@@ -55,7 +55,6 @@ internal fun AccountQuestion(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Which account is this?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("inbox_account_title_${r.id}"))
-        Text(r.accountAsk, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_account_why_${r.id}"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             offered.forEach { a -> FilterChip(selected = false, onClick = { onChoose(a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_pick_${r.id}_${a.id}")) }
             AssistChip(
@@ -63,7 +62,7 @@ internal fun AccountQuestion(
                 label = { Text(r.last4?.let { "New account ending $it" } ?: "New account") }, modifier = Modifier.testTag("inbox_new_account_${r.id}"),
             )
         }
-        Text("I will remember this for ${r.issuer}${r.last4?.let { " ending $it" } ?: ""}, so the next texts need no question.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // why it is asked and what is remembered: under the card's "More options" ([AccountQuestionDetail])
         if (creating) {
             OutlinedTextField(name, { name = it; problem = null }, label = { Text("Name of the new account") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("inbox_new_name_${r.id}"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -76,5 +75,14 @@ internal fun AccountQuestion(
                 TextButton(onClick = { creating = false; problem = null }, modifier = Modifier.testTag("inbox_new_cancel_${r.id}")) { Text("Cancel") }
             }
         }
+    }
+}
+
+/** Why the account is asked and what is remembered: the detail of [AccountQuestion], shown under the card's "More options" so the question itself stays short. */
+@Composable
+internal fun AccountQuestionDetail(r: InboxRowUi, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(r.accountAsk, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_account_why_${r.id}"))
+        Text("I will remember this for ${r.issuer}${r.last4?.let { " ending $it" } ?: ""}, so the next texts need no question.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

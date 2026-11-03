@@ -227,7 +227,7 @@ object BackupFile {
             payloadOut.write(buf, 0, n)
             got += n
         }
-        if (got < header.payloadBytes) throw BackupException("This backup file is incomplete or damaged (it should hold ${header.payloadBytes} bytes of data but holds $got).")
+        if (got < header.payloadBytes) throw BackupException("This backup file is incomplete or damaged (part of it is missing).")
         if (header.version == 1) {
             // blank space after the data (a trailing newline added on the way) is not part of it; anything else means the length is wrong
             var extra = 0L
@@ -238,14 +238,14 @@ object BackupFile {
                 extra += n
                 for (i in 0 until n) if (buf[i] != '\n'.code.toByte() && buf[i] != '\r'.code.toByte() && buf[i] != ' '.code.toByte()) onlyBlank = false
             }
-            if (!onlyBlank) throw BackupException("This backup file is incomplete or damaged (it should hold ${header.payloadBytes} bytes of data but holds ${got + extra}).")
+            if (!onlyBlank) throw BackupException("This backup file is incomplete or damaged (it has more in it than it should).")
         }
         val payload = payloadOut.toByteArray()
         if (Sha256.hex(payload) != header.sha256) throw BackupException("This backup file is damaged: its contents do not match its checksum. Nothing was changed.")
         val data = try {
             json.decodeFromString(BackupData.serializer(), payload.decodeToString())
         } catch (e: Exception) {
-            throw BackupException("This backup file could not be read (${e.message?.lineSequence()?.firstOrNull() ?: "unknown error"}).")
+            throw BackupException("This backup file could not be read. It may be damaged or from a different app.")
         }
         // version 1 has no file bytes after the payload, so whatever its list says there is nothing to read
         return if (header.version >= 2) BackupReader(header, data, input) else BackupReader(header, data.copy(attachments = emptyList()), EmptySource.also { input.close() })

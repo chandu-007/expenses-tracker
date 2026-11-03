@@ -188,6 +188,8 @@ class EmailCaptureUiTest {
         runCatching { compose.onNodeWithTag("email_capture_switch", useUnmergedTree = true).performScrollTo() }
         fun state() = compose.onNodeWithTag("email_capture_switch", useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.ToggleableState]
         assertEquals(ToggleableState.Off, state(), "off by default")
+        tap("capture_details_email") // the long explanation is folded under "Details" until asked for
+        waitFor("email_capture_note")
         val note = compose.onNodeWithTag("email_capture_note", useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
         assertTrue(note.contains("Nothing is sent anywhere") && note.contains("notification"), note)
         tap("email_capture_switch")

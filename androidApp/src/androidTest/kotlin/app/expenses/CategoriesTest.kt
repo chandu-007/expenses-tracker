@@ -165,6 +165,8 @@ class CategoriesTest {
         compose.onNodeWithTag("cat_row_Groceries").performClick()
         compose.onNodeWithTag("cat_merge").performScrollTo().performClick()
         compose.onNodeWithTag("merge_into_Food").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("merge_confirm"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } // the pick is asked about once more: nothing has moved yet
+        compose.onNodeWithTag("merge_confirm").performClick()
         waitGone("cat_row_Groceries")
         waitForText("2 items")
         val totals = runBlocking { container.write { it.store.spendByCategory(inr).entries.associate { e -> e.key!!.value to e.value.minorUnits } } }

@@ -92,6 +92,15 @@ Use your own real credit texts (salary, interest, a refund, money from a friend)
 - [ ] Home: with 3 or more expenses that have no category, a slim card "N expenses have no category" with **Review** and **Not now**. Not now hides it for a week (it comes back after 7 days). Review: one expense at a time, "N left", a suggestion you can tap, Skip, "All done" at the end and Undo on the last choice. Choosing for one payee makes the next expense of that payee suggest the same. On a tablet it is a full screen like the other pages.
 - [ ] Home opens and saves as fast as before with a large ledger (the count is worked out a moment after the last save, not when Home opens).
 
+### Quieter Home, To review and Capture (after 0.10.5)
+- [ ] Home shows one card at a time (with texts waiting and expenses with no category, only To review; the "Also waiting" line opens More). The close button on a card hides it for today, and a new text brings it back.
+- [ ] Search opened from an account (Home, tap an account, Search): the list is readable with no keyboard; all the account chips are in sight; tapping the box and typing keeps the results above the keyboard; dragging the list puts the keyboard away.
+- [ ] Select an entry (long press): the bar shows Set category, Make transfer, Delete, More, none cut off at the right, with the largest font too; Tag and Account are under More.
+- [ ] To review: each card says "1 of N"; the account question and the other categories are under "More options"; "This is a guess: please check it" is never hidden.
+- [ ] More, Capture: Set up, Rules and Health each have a heading and a line; the long explanations are under "Details"; the bank sender names fold.
+- [ ] An action on Bills, Accounts (archive, delete), Subscriptions (Not one, Remind me) or Notifications (Send a test) says what it did in a bar at the bottom; Your data goes back to the top to show the result of a backup.
+- [ ] Category merge asks "Merge into X?" once more before anything moves.
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 

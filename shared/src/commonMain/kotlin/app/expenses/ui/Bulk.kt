@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -59,10 +61,12 @@ fun bulkSelectionOf(rows: List<RowUi>, selected: List<String>): BulkSelection {
 }
 
 /**
- * What can be done to the entries selected by long-pressing a row (or from search, "Select all"): set a category, move to an account, tag, delete.
+ * What can be done to the entries selected by long-pressing a row (or from search, "Select all"): set a category, move to an account, tag, delete. The three most used are on the bar
+ * (Set category, Make transfer or Account, Delete); the others are under More.
  * Anything that cannot take the change (a split expense for a category, income for an expense category, say) is skipped and the result says how
  * many; one Undo takes the whole change back. [selection] says what kind of entries are selected, so the category list can show which ones fit.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BulkBar(
     count: Int,
@@ -89,45 +93,58 @@ fun BulkBar(
             dismissButton = { TextButton(onClick = { newTag = false }) { Text("Cancel") } },
         )
     }
+    // null, or the menu that is open: "more" (the actions that are not on the bar), then the one a choice from it opens ("account", "tag", "transfer")
     var menu by remember { mutableStateOf<String?>(null) }
     var pickingCategory by rememberSaveable { mutableStateOf(false) }
     if (pickingCategory) BulkCategoryDialog(categories, selection, onPick = { pickingCategory = false; onCategory(it) }, onClose = { pickingCategory = false })
+    // Make transfer is offered for expenses, where the screen can do it; where it is not, the account change takes its place on the bar
+    val transferOnBar = onMakeTransfer != null && selection != BulkSelection.INCOME
+    val accountMenu: @Composable () -> Unit = {
+        DropdownMenu(expanded = menu == "account", onDismissRequest = { menu = null }) {
+            accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onAccount(a.id) }, modifier = Modifier.testTag("bulk_acc_${a.name}")) }
+        }
+    }
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth().testTag("bulk_bar")) {
-        // two lines: the count with Cancel always in reach on the first, the actions on the second (one line ran past the edge on a narrow screen and hid Cancel)
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 2.dp)) {
+        // two lines: the count with Cancel always in reach on the first, the actions on the second. The three most used (Set category, Make transfer or Account, Delete) are on the bar and
+        // the rest are behind More, so nothing needs sideways scrolling on a narrow phone; at a large font size the buttons wrap onto a second line instead of running off the edge.
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("$count selected", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).padding(start = 4.dp).testTag("bulk_count"))
+            Text("$count selected", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).padding(start = 8.dp).testTag("bulk_count"))
             TextButton(onClick = onCancel, modifier = Modifier.testTag("bulk_cancel")) { Text("Cancel") }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = { pickingCategory = true }, modifier = Modifier.testTag("bulk_category")) { Text("Set category") }
-            Box {
-                TextButton(onClick = { menu = "account" }, modifier = Modifier.testTag("bulk_account")) { Text("Account") }
-                DropdownMenu(expanded = menu == "account", onDismissRequest = { menu = null }) {
-                    accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onAccount(a.id) }, modifier = Modifier.testTag("bulk_acc_${a.name}")) }
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            FilledTonalButton(onClick = { pickingCategory = true }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_category")) { Text("Set category") }
+            if (transferOnBar) Box {
+                TextButton(onClick = { menu = "transfer" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_transfer")) { Text("Make transfer") }
+                DropdownMenu(expanded = menu == "transfer", onDismissRequest = { menu = null }) {
+                    Text("To", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onMakeTransfer!!(a.id) }, modifier = Modifier.testTag("bulk_transfer_to_${a.name}")) }
                 }
+            } else Box {
+                TextButton(onClick = { menu = "account" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_account")) { Text("Account") }
+                accountMenu()
             }
+            TextButton(onClick = onDelete, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             Box {
-                TextButton(onClick = { menu = "tag" }, modifier = Modifier.testTag("bulk_tag")) { Text("Tag") }
+                TextButton(onClick = { menu = "more" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_more")) { Text("More") }
+                DropdownMenu(expanded = menu == "more", onDismissRequest = { menu = null }) {
+                    if (transferOnBar) DropdownMenuItem(text = { Text("Account…") }, onClick = { menu = "account" }, modifier = Modifier.testTag("bulk_account"))
+                    DropdownMenuItem(text = { Text("Tag…") }, onClick = { menu = "tag" }, modifier = Modifier.testTag("bulk_tag"))
+                }
+                if (transferOnBar) accountMenu()
                 DropdownMenu(expanded = menu == "tag", onDismissRequest = { menu = null }) {
                     DropdownMenuItem(text = { Text("New tag…") }, onClick = { menu = null; newTag = true }, modifier = Modifier.testTag("bulk_tag_new"))
                     tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Add $t") }, onClick = { menu = null; onAddTag(t) }, modifier = Modifier.testTag("bulk_tag_add_$t")) }
                     tags.take(10).forEach { t -> DropdownMenuItem(text = { Text("Remove $t") }, onClick = { menu = null; onRemoveTag(t) }, modifier = Modifier.testTag("bulk_tag_remove_$t")) }
                 }
             }
-            // Delete comes before the rarer "Make transfer": the row scrolls sideways, and what runs past a ~360dp phone's edge must be the action used least, never Delete
-            TextButton(onClick = onDelete, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            if (onMakeTransfer != null && selection != BulkSelection.INCOME) Box {
-                TextButton(onClick = { menu = "transfer" }, modifier = Modifier.testTag("bulk_transfer")) { Text("Make transfer") }
-                DropdownMenu(expanded = menu == "transfer", onDismissRequest = { menu = null }) {
-                    Text("To", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                    accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onMakeTransfer(a.id) }, modifier = Modifier.testTag("bulk_transfer_to_${a.name}")) }
-                }
-            }
         }
         }
     }
 }
+
+/** Less side padding than a button's usual 12 to 24 dp: the four actions of the bar fit one line of a 360 dp phone. */
+private val BAR_BUTTON_PADDING = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
 
 /** One line of the category list: [level] 1 is a subcategory, shown indented; [pickable] is false for a hidden parent that is shown only as a heading for its subcategories. */
 private class PickRow(val category: CategoryUi, val level: Int, val label: String, val pickable: Boolean)

@@ -1,6 +1,14 @@
 package app.expenses.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -77,6 +85,8 @@ fun InboxScreen(
     onChooseAccount: (itemId: String, accountId: String) -> Unit = { _, _ -> },
     /** "New account ending 123": makes an account (name, type) with the digits the text prints and uses it (item, name, type, answer: null or why not). */
     onCreateAccount: (itemId: String, name: String, type: String, done: (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
+    /** The empty list's one first step: the Capture screen, where reading texts is turned on. Null where there is none. */
+    onSetUpCapture: (() -> Unit)? = null,
 ) {
     var confirmingAll by rememberSaveable { mutableStateOf(false) }
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
@@ -122,7 +132,8 @@ fun InboxScreen(
                     Column {
                         EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
                         Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
-                        Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself. Set this up in More > Capture from texts, or paste a message below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Payments found in your bank texts wait here for you to add or skip. Nothing is added until you say so. You can also paste a message below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 8.dp).testTag("inbox_empty_setup")) { Text("Set up reading texts") }
                     }
                 }
                 item(key = "paste") { PasteBox(onPaste, paste!!) }
@@ -131,7 +142,8 @@ fun InboxScreen(
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
-                Text("Bank texts that look like transactions will appear here for you to add or skip. Nothing is added to your ledger by itself.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Payments found in your bank texts wait here for you to add or skip. Nothing is added until you say so.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 8.dp).testTag("inbox_empty_setup")) { Text("Set up reading texts") }
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             if (onPaste != null) item(key = "paste") { PasteBox(onPaste, paste!!, Modifier.animateItem()) }
@@ -151,14 +163,15 @@ fun InboxScreen(
                     }
                 }
             }
-            items(rows, key = { it.id }) { r ->
+            itemsIndexed(rows, key = { _, it -> it.id }) { index, r ->
                 val same = byPayee[inboxGroupKey(r)].orEmpty()
-                if (r.pairedItemId.isNotEmpty()) TransferPairCard(r, accounts, onConfirmPair, onApart, Modifier.animateItem())
+                val progress = inboxProgress(rows, index)
+                if (r.pairedItemId.isNotEmpty()) TransferPairCard(r, accounts, onConfirmPair, onApart, Modifier.animateItem(), progress)
                 else InboxCard(
                     r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem(),
                     swipeable = r.id in easyIds,
                     payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
-                    onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, askHere = r.id in askLeaders,
+                    onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, askHere = r.id in askLeaders, progress = progress,
                 )
             }
         }
@@ -167,6 +180,15 @@ fun InboxScreen(
 
 /** What items are grouped by for "Add all from <payee>": the payee, or the bank when the text named none. */
 private fun inboxGroupKey(r: InboxRowUi): String = (r.payee?.takeIf { it.isNotBlank() } ?: r.issuer).trim().lowercase()
+/**
+ * "3 of 12": where the card at [index] is among the waiting items (the count at the top of the screen counts the two texts of a transfer card as two, so a transfer card says "5 and 6 of 14").
+ */
+internal fun inboxProgress(rows: List<InboxRowUi>, index: Int): String {
+    val before = rows.take(index).sumOf { if (it.pairedItemId.isNotEmpty()) 2 else 1 }
+    val total = rows.sumOf { if (it.pairedItemId.isNotEmpty()) 2 else 1 }
+    return if (rows[index].pairedItemId.isNotEmpty()) "${before + 1} and ${before + 2} of $total" else "${before + 1} of $total"
+}
+
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -183,7 +205,10 @@ private fun InboxCard(
     onCreateAccount: (String, String, String, (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
     /** Whether this card carries the "Which account is this?" question: only the first waiting card of a bank card (issuer and digits) does; the others say they follow it. */
     askHere: Boolean = true,
+    /** Where this card is in the list, "3 of 12". */
+    progress: String = "",
 ) {
+    var moreOptions by rememberSaveable(r.id) { mutableStateOf(false) }
     var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
     var reporting by remember(r.id) { mutableStateOf(false) }
     if (reporting) ReportMessageDialog(
@@ -243,6 +268,8 @@ private fun InboxCard(
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // where this card is in the list: "3 of 12"
+            Text(progress, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_progress_${r.id}"))
             // who, how much
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 CategoryAvatar(r.payee ?: r.issuer, r.payee ?: r.issuer, Modifier.padding(end = 12.dp))
@@ -268,10 +295,18 @@ private fun InboxCard(
             if (r.transferHint.isNotEmpty()) Callout(r.transferHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_transfer_hint_${r.id}"))
             if (r.setupHint.isNotEmpty()) Callout(r.setupHint, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_setup_digits_${r.id}"))
             // the account is not known (the digits fit none or several, or none are printed): ask once, remember the answer for this bank and these digits (the other waiting cards of it follow)
-            if (r.accountAsk.isNotEmpty() && pickedAccount == null && !paired) {
+            // The one question that matters most comes first: which account (when it is not known, Add waits for it), else the category (when it is only a guess). What explains or varies
+            // them is under "More options" below Add, so most cards are a line of facts, one answer and Add.
+            val asksAccount = r.accountAsk.isNotEmpty() && pickedAccount == null && !paired
+            if (asksAccount) {
                 if (askHere) AccountQuestion(r, accounts, onChoose = { id -> onChooseAccount(r.id, id) }, onCreate = { name, type, done -> onCreateAccount(r.id, name, type, done) })
                 else Text("Which account is this? Answer on the first ${r.issuer}${r.last4?.let { " ending $it" } ?: ""} card above: this one follows.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_account_follow_${r.id}"))
             }
+            // the other categories this payee has been in: shown at once only while the category is the open question (a guess to check, no account question first)
+            val alternativesNow = picked == null && r.alternatives.isNotEmpty() && !changing && !paired
+            val alternativesInline = alternativesNow && r.certainty == "check" && !asksAccount
+            val accountDetail = asksAccount && askHere
+            val hasMore = (alternativesNow && !alternativesInline) || accountDetail
             // where it will go: the decision, with its own Change next to it
             Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (paired && r.treatment == "TRANSFER") {
@@ -294,7 +329,7 @@ private fun InboxCard(
                         TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
                     }
                     if (picked == null && r.certainty == "check" && category.isNotEmpty()) Text("This is a guess: please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_check_${r.id}"))
-                    if (picked == null && r.alternatives.isNotEmpty() && !changing) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (alternativesInline) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
                     }
                     // money in with nothing to go on: the first income categories as chips right on the card (a person's category is optional, so this stays one line and Add still works without a choice)
@@ -325,6 +360,16 @@ private fun InboxCard(
                     enabled = account.isNotEmpty() || (paired && r.treatment != "PAYMENT"), modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
                 ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
                 OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
+            }
+            // what is not needed to answer: the other categories, and why the account is asked. One toggle, the same place on every card that has any of it (right under Add and Skip).
+            if (hasMore) {
+                TextButton(onClick = { moreOptions = !moreOptions }, modifier = Modifier.testTag("inbox_more_options_${r.id}")) { Text(if (moreOptions) "Fewer options" else "More options") }
+                if (moreOptions) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (accountDetail) AccountQuestionDetail(r)
+                    if (alternativesNow && !alternativesInline) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
+                    }
+                }
             }
             // everything less usual, in small buttons that wrap on a narrow screen
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -360,7 +405,7 @@ private fun InboxCard(
  * that says it arrived in another. Add records ONE transfer (neither text is also an expense or income); "These are separate" keeps them as two items. Both original texts are one tap away.
  */
 @Composable
-private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirmPair: (String, String, String, String, (String?) -> Unit) -> Unit, onApart: (String, String) -> Unit, modifier: Modifier = Modifier) {
+private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirmPair: (String, String, String, String, (String?) -> Unit) -> Unit, onApart: (String, String) -> Unit, modifier: Modifier = Modifier, progress: String = "") {
     val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "your account" }
     var showText by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
@@ -370,6 +415,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(progress, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_progress_${r.id}"))
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 CategoryAvatar(r.payee ?: "Transfer", r.payee ?: "Transfer", Modifier.padding(end = 12.dp))
                 Column(Modifier.weight(1f)) {
@@ -438,41 +484,96 @@ fun CaptureSettingsScreen(
     )
     Scaffold(topBar = { AreaTopBar(if (readsTexts) "Capture from texts" else "Capture from payment apps", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (readsTexts) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Read bank texts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = settings.smsOn && permissionGranted, onCheckedChange = { on -> if (on && !permissionGranted) disclosing = true else onToggle(on) }, modifier = Modifier.testTag("capture_sms_switch"))
+            Text("Capture finds payments in the alerts your phone gets and lists them in To review. Nothing is added until you approve it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_intro"))
+            CaptureSection("Set up", "What this app may read. Each one is off until you turn it on.", "setup") {
+                if (readsTexts) {
+                    CaptureSource("Read bank texts", "Finds payments, credits and bills in texts from your bank, card or biller. Read on this phone, never sent anywhere.", settings.smsOn && permissionGranted, { on -> if (on && !permissionGranted) disclosing = true else onToggle(on) }, "capture_sms_switch", "sms", notes = {
+                        if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
+                    }) {
+                        Text("What this does", style = MaterialTheme.typography.labelMedium)
+                        Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. If it says a bill is due (a card statement, electricity, water, gas, mobile, broadband, an EMI, an insurance premium), it is shown on the Bills page and you are told. You decide whether to add either.", style = MaterialTheme.typography.bodyMedium)
+                        Text("What it does not do", style = MaterialTheme.typography.labelMedium)
+                        Text("Texts from people, one-time passwords and anything from a sender that is not on the list below are ignored without being read; the sender is checked first. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                CaptureSource("Read payment app notifications", "Finds payments in Google Pay, PhonePe, Paytm and BHIM alerts. Needs the phone's Notification access.", settings.notifOn && notifAccess, onToggleNotif, "capture_notif_switch", "notif", notes = {
+                    if (settings.notifOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_notif_access_missing"))
+                    OutlinedButton(onClick = onOpenAccessSettings, modifier = Modifier.testTag("capture_notif_settings")) { Text("Open notification access settings") }
+                }) {
+                    Text("Reads the notification a payment app shows after a payment (Google Pay, PhonePe, Paytm, BHIM) and puts it in To review. Notifications from every other app are never read. This needs the phone's Notification access, which you turn on in its settings.", style = MaterialTheme.typography.bodyMedium)
+                }
+                CaptureSource("Read bank alert emails", "Off by default. Finds bank alert emails from the notification Gmail or Outlook shows. Uses the same Notification access.", settings.emailOn && notifAccess, onToggleEmail, "email_capture_switch", "email", notes = {
+                    if (settings.emailOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("email_capture_access_missing"))
+                }) {
+                    Text("Off by default. When a bank sends you an email, Gmail, Outlook or Yahoo Mail shows a notification, and this reads that notification (the sender's name, the subject and the start of the message the email app shows) on this phone. Only a notification from a bank or card issuer on the built-in list (or a name you add below) whose words read like a payment, a credit or a bill is kept, and it goes to To review for you to add or skip. Every other email, one-time passwords and mail from people are ignored. Nothing is sent anywhere. The email app's own notification has to show the text: Gmail shows the subject and the start of the message, so an alert whose amount comes later in the email, or a phone set to hide notification contents, is missed. This uses the same Notification access as above.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("email_capture_note"))
+                }
+                Collapsible("Bank sender names", "senders", startOpen = true) {
+                    Text("Only senders on the built-in list of banks and billers are read. If your bank's texts are missing, add its name here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TrustedSendersEditor(settings.extraHeaders, onHeaders)
+                    Text("Add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SkippedSendersSection(settings.extraHeaders, skipped, onTrustSkipped)
+                }
             }
-            Text("What this does", style = MaterialTheme.typography.labelMedium)
-            Text("When a text arrives from a bank or card sender, this app reads it on your phone and, if it is a payment or a credit, puts it in your To review list. If it says a bill is due (a card statement, electricity, water, gas, mobile, broadband, an EMI, an insurance premium), it is shown on the Bills page and you are told. You decide whether to add either.", style = MaterialTheme.typography.bodyMedium)
-            Text("What it does not do", style = MaterialTheme.typography.labelMedium)
-            Text("Texts from people, one-time passwords and anything from a sender that is not on the list below are ignored without being read; the sender is checked first. The list is banks, cards and a few billers (for example BESCOM, Airtel, Jio, LIC); a bill's text is kept only until you add or skip it. Nothing is sent anywhere: the reading happens on this phone. A text is kept only until you add or skip it; after that only the amount, date and reference stay.", style = MaterialTheme.typography.bodyMedium)
-            if (settings.smsOn && !permissionGranted) Text("Android has not allowed this app to receive texts. Turn the switch on again to be asked.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_permission_missing"))
-            HorizontalDivider()
+            CaptureSection("Rules", "Your own words for putting a payment in a category, and what the app learned from your choices.", "rules") {
+                OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Read payment app notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = settings.notifOn && notifAccess, onCheckedChange = onToggleNotif, modifier = Modifier.testTag("capture_notif_switch"))
+            CaptureSection("Health", "Whether texts and alerts are reaching the app, and what was skipped and why.", "health") {
+                OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }
             }
-            Text("Reads the notification a payment app shows after a payment (Google Pay, PhonePe, Paytm, BHIM) and puts it in To review. Notifications from every other app are never read. This needs the phone's Notification access, which you turn on in its settings.", style = MaterialTheme.typography.bodyMedium)
-            if (settings.notifOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("capture_notif_access_missing"))
-            OutlinedButton(onClick = onOpenAccessSettings, modifier = Modifier.testTag("capture_notif_settings")) { Text("Open notification access settings") }
-            HorizontalDivider()
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Read bank alert emails from Gmail and Outlook notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = settings.emailOn && notifAccess, onCheckedChange = onToggleEmail, modifier = Modifier.testTag("email_capture_switch"))
-            }
-            Text("Off by default. When a bank sends you an email, Gmail, Outlook or Yahoo Mail shows a notification, and this reads that notification (the sender's name, the subject and the start of the message the email app shows) on this phone. Only a notification from a bank or card issuer on the built-in list (or a name you add below) whose words read like a payment, a credit or a bill is kept, and it goes to To review for you to add or skip. Every other email, one-time passwords and mail from people are ignored. Nothing is sent anywhere. The email app's own notification has to show the text: Gmail shows the subject and the start of the message, so an alert whose amount comes later in the email, or a phone set to hide notification contents, is missed. This uses the same Notification access as above.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("email_capture_note"))
-            if (settings.emailOn && !notifAccess) Text("Notification access is not given to this app yet.", color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("email_capture_access_missing"))
-            HorizontalDivider()
-            Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
-            TrustedSendersEditor(settings.extraHeaders, onHeaders)
-            Text("Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SkippedSendersSection(settings.extraHeaders, skipped, onTrustSkipped)
-            HorizontalDivider()
-            OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
-            OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }
         }
+    }
+}
+
+/** One part of the capture screens: a heading, a line saying what it is, then its controls. */
+@Composable
+internal fun CaptureSection(title: String, what: String, tag: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag("capture_section_$tag"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHead(title, what, tag)
+        content()
+    }
+}
+
+/** The heading of a part of a screen, and one line saying what the part is. */
+@Composable
+internal fun SectionHead(title: String, what: String, tag: String) {
+    Column(Modifier.fillMaxWidth().testTag("section_$tag"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title.uppercase(), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { heading() })
+        Text(what, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** More learned choices than this start folded. */
+internal const val LEARNED_OPEN_MAX = 8
+
+/** A group that folds: its [title] with an arrow, and [content] while open. [startOpen] is only where it starts; what the person chose is kept while the screen lives. */
+@Composable
+internal fun Collapsible(title: String, tag: String, startOpen: Boolean = false, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    var open by rememberSaveable(tag) { mutableStateOf(startOpen) }
+    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 14.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().clickable { open = !open }.heightIn(min = 48.dp).semantics(mergeDescendants = true) { stateDescription = if (open) "Open" else "Folded" }.testTag("capture_group_$tag"), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, contentDescription = null)
+        }
+        if (open) Column(Modifier.padding(bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+    }
+}
+
+/** One thing capture can read: its title with the switch, one line saying what it is, what must be said at once ([notes]) and the long explanation folded under "Details". */
+@Composable
+private fun CaptureSource(
+    title: String, summary: String, on: Boolean, onChange: (Boolean) -> Unit, switchTag: String, key: String,
+    notes: @Composable () -> Unit, details: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag(switchTag))
+        }
+        Text(summary, style = MaterialTheme.typography.bodyMedium)
+        notes()
+        var open by rememberSaveable(key) { mutableStateOf(false) }
+        TextButton(onClick = { open = !open }, modifier = Modifier.testTag("capture_details_$key")) { Text(if (open) "Hide details" else "Details: what it reads and what it does not") }
+        if (open) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { details() }
     }
 }
 
@@ -490,12 +591,17 @@ fun CaptureRulesScreen(
     val undoHost = rememberUndoSnackbar(learnedUndo, onUndoLearned, onUndoLearnedGone)
     var pattern by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("") }
+    // null: a short list is open and a long one folded, until the person opens or folds it
+    var learnedOpen by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var tested by remember { mutableStateOf<Long?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
     Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Text("When a captured payment (or money you receive) mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHead("Your rules", "When a captured payment (or money you receive) mentions these words, it gets this category. Rules are tried from the top; the first match wins, and a rule beats what the app learned from your earlier choices.", "rules_mine")
+                    if (rules.isEmpty()) Text("No rules yet. Add the first one below, for example the word Swiggy and the category Food.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("rules_empty"))
+                }
             }
             itemsIndexed(rules, key = { _, r -> r.id }) { i, r ->
                 Row(Modifier.animateItem().fillMaxWidth().testTag("rule_${r.pattern}"), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -508,7 +614,7 @@ fun CaptureRulesScreen(
             item { HorizontalDivider() }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("New rule", style = MaterialTheme.typography.titleSmall)
+                    SectionHead("New rule", "A word from the payee or the text, and the category it should get. Test it on your past entries before you add it.", "rules_new")
                     OutlinedTextField(pattern, { pattern = it; tested = null; problem = null }, label = { Text("Payee or text contains") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rule_pattern"))
                     // a rule for money out takes an expense category and one for money in an income category: an expense rule never fires on a credit, nor an income rule on a payment
                     var moneyIn by rememberSaveable { mutableStateOf(false) }
@@ -532,7 +638,7 @@ fun CaptureRulesScreen(
                     }
                 }
             }
-            if (learned != null) learnedSection(learned, categories, onForgetLearned, onChangeLearned, onFileLearned)
+            if (learned != null) learnedSection(learned, categories, learnedOpen ?: (learned.size <= LEARNED_OPEN_MAX), { learnedOpen = !(learnedOpen ?: (learned.size <= LEARNED_OPEN_MAX)) }, onForgetLearned, onChangeLearned, onFileLearned)
         }
     }
 }

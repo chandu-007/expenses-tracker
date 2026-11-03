@@ -38,6 +38,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -170,11 +173,14 @@ fun DataScreen(
     }
 
     Scaffold(topBar = { AreaTopBar("Your data", Area.PRIVACY, Icons.Outlined.Backup, onBack, "data_back") }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // what a button far down the page did is told at the top: the page goes back up to say it (a result below the fold was never seen)
+        val dataScroll = rememberScrollState()
+        androidx.compose.runtime.LaunchedEffect(state.status) { if (state.status != null) dataScroll.animateScrollTo(0) }
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(dataScroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SigningNotice()
             if (state.busy) CircularProgressIndicator(Modifier.testTag("data_busy"))
             state.status?.let {
-                Text(it, color = if (state.statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("data_status"))
+                Text(it, color = if (state.statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("data_status"))
             }
 
             Text("Spreadsheet", style = MaterialTheme.typography.titleMedium)

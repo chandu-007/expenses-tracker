@@ -173,6 +173,6 @@ class AppContainer(private val platform: Platform) {
         val billStore = BillStore(db)
         Opened.Ok(driver, db, store, templates, CategoryStore(db, clock, ::nowMillis), budgets, recurring, NotificationService(db, recurring, budgets, cardStore, ReportStore(db, store), billStore), BackupStore(db, clock, ::nowMillis, store, templates, recurring), CsvExport(db), ReportStore(db, store), StatementImporter(db, store), SavedSearchStore(db, clock, ::nowMillis), AttachmentStore(db, clock, ::nowMillis), currency, cardStore, InboxStore(db), CaptureRuleStore(db), PeopleStore(db), billStore, AccountLookStore(db, clock, ::nowMillis), OriginStore(db))
     } catch (e: DatabaseKeyUnavailableException) {
-        Opened.KeyLost(e.message ?: "The database key is unavailable")
+        Opened.KeyLost("Your data could not be opened on this phone.")
     }
 }

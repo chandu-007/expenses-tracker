@@ -111,7 +111,8 @@ Maturity key (from the docs and the test folders; nothing here was run by me):
 |---|---|---|---|---|
 | Text, amount range, category, tag, kind (expense/income), quick range, custom dates, account | Combined filters over full-text search (FTS) | Both | `SearchScreen.kt`, `Search.kt`, `SearchDates.kt`, `FtsTuning.kt` | Emu, Sim |
 | Saved searches | Name and re-run | Both | `SavedSearchStore.kt`, `saved_search` | Emu |
-| Bulk edit | Select many (Home and Search): delete, category, account, add/remove tag, with Undo | Both | `Bulk.kt` | Emu |
+| Bulk edit | Select many (Home and Search): delete, category, account, add/remove tag, with Undo. The bar shows Set category, Make transfer (or Account), Delete and More (Account/Tag), wrapping at large font: nothing scrolls sideways | Both | `Bulk.kt` | Emu |
+| Search from an account | Opens with the account's list readable (no keyboard until the box is tapped); the filter chips wrap, so every account chip shows; the day/amount chips fade at the edge; typing brings the results up under the box and a drag puts the keyboard away | Both | `SearchScreen.kt`, `PlatformHooks.android.kt` | Emu API 34 | |
 | More-menu search | Search settings and tools | Both | `MoreMenu.kt` | Emu |
 
 ## 8. Capture
@@ -197,10 +198,12 @@ Maturity key (from the docs and the test folders; nothing here was run by me):
 | Wide screens | Two-pane layout at 840 dp | Both | `ui/WidePane.kt` | Emu (resized) | Code comment: "no tablet was available" |
 | Accessibility checks | ATF scan over 9 screens, 4 touch-target errors fixed | Android | `AccessibilityUiTest.kt`, `docs/ACCESSIBILITY_FINDINGS.md` | Emu API 26 only | Dark, large text, other languages, TalkBack hardware NOT checked; iOS VoiceOver not checked |
 | Motion follows "remove animations" | Both | `Motion.kt` | Emu | |
+| One Home card at a time | Bills due > To review > new bills > money to get back > no category > Getting started; the rest as an "Also waiting" line and on More; "Not now" puts one off for a day (back at once when more arrives); one More notice at a time (signing warning before the backup reminder). Order in `docs/HOME_NUDGES.md` | Both | `HomeNudges.kt`, `Screens.kt`, `MoreMenu.kt` | Emu API 34, host tests | Real-phone feel not checked |
 | Onboarding | Opening/first-run, "first week" checklist card, tour spots, empty states | Both | `FirstRun.kt`, `FirstWeekCard.kt`, `TourSpots.kt`, `EmptyStates.kt` | Emu, Sim | |
 | In-app guide/help | Searchable guide | Both | `Guide.kt`, `GuideScreen.kt` | Emu | |
 | Feedback | Opens mail app with prefilled message (nothing sent by the app) | Both | `Feedback.kt`, `FeedbackMail.kt` | Emu | |
 | Undo | Undo bar for deletes/bulk/skips; audit in `docs/UNDO_AUDIT.md` | Both | `UndoBar.kt`, `EntryActions.kt` | Emu | Import, category merge, capture-rule removal not undoable |
+| A line for every action on every screen | A one-line bar (`MessageHost.kt`) says what an action did on screens that had nowhere to (Bills, Accounts, Capture, Notifications, Subscriptions...), and the Undo of Post/Skip on Bills and Repeating expenses; the Your data page scrolls up to its result; category merge asks once more | Both | `MessageHost.kt`, `DataScreen.kt`, `CategoriesScreen.kt` | Emu API 34 | |
 | Free-signing expiry notice | Shows days left on the iPhone build | iPhone | `SigningExpiry.kt`, `SigningNotice.kt` | Not seen against a real new profile | |
 | Performance work | WAL mode, FTS tuning, single-flight loads, bulk load, perf script | Both | `EncryptedDriver.kt`, `FtsTuning.kt`, `BulkLoad.kt`, `SingleFlight.kt`, `tools/measure_perf.py` | Emu API 26 numbers in docs | No real-device numbers |
 

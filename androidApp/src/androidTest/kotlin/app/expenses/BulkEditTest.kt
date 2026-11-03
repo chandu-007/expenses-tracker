@@ -166,7 +166,7 @@ class BulkEditTest {
         waitGone("search_notice")
     }
 
-    /** The bulk bar's actions scroll sideways; Delete must never be among the ones past the edge of a phone (it was, once "Make transfer" came before it): shown, whole, with no scrolling. */
+    /** The bulk bar no longer scrolls sideways: the three most used actions and More are on it, whole, and Delete is one of them (it was once pushed past the edge by "Make transfer"). */
     private fun assertInReach(tag: String) {
         val node = compose.onNodeWithTag(tag, useUnmergedTree = true)
         node.assertIsDisplayed()
@@ -178,11 +178,11 @@ class BulkEditTest {
     fun deleteIsWithinReachWithoutScrollingTheBarOnHomeAndOnSearchWhenExpensesAreSelected() {
         expense("a", "Alpha Cafe"); expense("b", "Beta Cafe")
         launch(); hold("row_Alpha Cafe"); waitFor("bulk_transfer") // an expense is selected: the bar also offers Make transfer, the button that once pushed Delete out of sight
-        assertInReach("bulk_delete"); assertInReach("bulk_cancel")
+        assertInReach("bulk_delete"); assertInReach("bulk_cancel"); assertInReach("bulk_category"); assertInReach("bulk_transfer"); assertInReach("bulk_more")
         tap("bulk_cancel"); waitGone("bulk_bar")
         tap("open_search"); waitFor("search_text")
         compose.onNodeWithTag("search_text").performTextInput("Cafe")
         waitFor("result_a"); hold("result_a"); waitFor("bulk_transfer")
-        assertInReach("bulk_delete")
+        assertInReach("bulk_delete"); assertInReach("bulk_more")
     }
 }

@@ -44,7 +44,7 @@ class AttachmentFiles(private val context: Context) {
             return Copied(total, digest.finishHex())
         } catch (e: Exception) {
             target.delete()
-            throw if (e is IllegalArgumentException) e else IllegalArgumentException("That file could not be read: ${e.message ?: e::class.java.simpleName}")
+            throw if (e is IllegalArgumentException) e else IllegalArgumentException("That file could not be read. Try another one.")
         }
     }
 

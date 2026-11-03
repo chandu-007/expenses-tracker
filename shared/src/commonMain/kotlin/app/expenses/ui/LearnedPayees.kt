@@ -1,6 +1,13 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -27,21 +34,24 @@ import app.expenses.LearnedUi
  * the category, forget it, or file the earlier expenses of that payee that have no category yet (one change, with Undo). Nothing here is read from anyone but the person's own choices.
  */
 internal fun LazyListScope.learnedSection(
-    learned: List<LearnedUi>, categories: List<CategoryUi>,
+    learned: List<LearnedUi>, categories: List<CategoryUi>, open: Boolean, onToggle: () -> Unit,
     onForget: (String) -> Unit, onChange: (key: String, categoryId: String, done: (String?) -> Unit) -> Unit, onFile: (String) -> Unit,
 ) {
     item(key = "learned_head") {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             HorizontalDivider()
-            Text("What the app has learned", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("learned_title"))
+            Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).heightIn(min = 48.dp).testTag("learned_toggle"), verticalAlignment = Alignment.CenterVertically) {
+                Text("What the app has learned" + if (learned.isEmpty()) "" else " (${learned.size})", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).testTag("learned_title"))
+                if (learned.isNotEmpty()) Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, contentDescription = if (open) "Fold the list" else "Open the list")
+            }
             Text(
                 "When you choose a category for a payee (or, for money you receive, a payer) in To review, or change one later, the app starts with it next time. Your rules above still come first. Forget one to start again from the starter list.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (learned.isEmpty()) Text("Nothing yet. It fills in as you add things from To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("learned_empty"))
+            if (learned.isEmpty()) Text("Nothing yet. When you choose a category for a shop in To review, the app remembers it here.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("learned_empty"))
         }
     }
-    items(learned, key = { "learned_" + it.key }) { l -> LearnedRow(l, categories, onForget, onChange, onFile) }
+    if (open) items(learned, key = { "learned_" + it.key }) { l -> LearnedRow(l, categories, onForget, onChange, onFile) }
 }
 
 @Composable

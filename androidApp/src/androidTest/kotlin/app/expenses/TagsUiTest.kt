@@ -93,13 +93,13 @@ class TagsUiTest {
     fun bulkTaggingAddsANewTagToAllSelectedAndRemovingTakesItOffAndUndoRestores() {
         expense("a", "Alpha", listOf("Trip")); expense("b", "Bravo")
         launch(); hold("row_Alpha"); tap("row_Bravo")
-        tap("bulk_tag"); tap("bulk_tag_new"); type("bulk_tag_input", "Tax"); tap("bulk_tag_ok")
+        tap("bulk_more"); tap("bulk_tag"); tap("bulk_tag_new"); type("bulk_tag_input", "Tax"); tap("bulk_tag_ok")
         waitText("Tagged 2 entries")
         assertEquals(listOf("Tax", "Trip"), tagsOf("a")); assertEquals(listOf("Tax"), tagsOf("b"))
         compose.onAllNodes(hasText("Undo"), useUnmergedTree = true)[0].performClick()
         compose.waitUntil(10_000) { tagsOf("b").isEmpty() }
         assertEquals(listOf("Trip"), tagsOf("a"))
-        hold("row_Alpha"); tap("bulk_tag"); tap("bulk_tag_remove_Trip")
+        hold("row_Alpha"); tap("bulk_more"); tap("bulk_tag"); tap("bulk_tag_remove_Trip")
         compose.waitUntil(10_000) { tagsOf("a").isEmpty() }
     }
 

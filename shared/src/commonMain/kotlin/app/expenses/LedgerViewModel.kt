@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
+import app.expenses.core.domain.HomeNudge
+import app.expenses.core.domain.HomeNudges
+import app.expenses.core.domain.NudgeSnooze
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
@@ -662,6 +665,8 @@ sealed interface UiState {
         val waiting: WaitingUi = WaitingUi(),
         /** How many expenses have no category, when the Home card should say so (see [UncategorisedNudge]); 0 hides the card. Capped at [UncategorisedNudge.CAP]. */
         val categoriseNudge: Int = 0,
+        /** The cards of Home that were put off with "Not now", and when and about how many (see [HomeNudges]); the card shown is the first that is not put off. */
+        val nudgeSnoozes: Map<HomeNudge, NudgeSnooze> = emptyMap(),
         /** The person turned on putting yearly bills aside month by month (it is taken off safe to spend). */
         val sinkingFunds: Boolean = false,
         val message: String? = null,
@@ -711,6 +716,8 @@ private const val SETTING_SIMILAR_OFF = "similar_off:"
 private const val SIMILAR_DELAY_MS = 1_200L
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val SETTING_CATEGORISE_SNOOZED_AT = "categorise_nudge_snoozed_at"
+/** The Home cards that "Not now" puts off for a day (see [HomeNudges]); the categorise card keeps its own week and the first-week card its Hide. */
+private val PUT_OFF_NUDGES = listOf(HomeNudge.BILLS_DUE, HomeNudge.INBOX, HomeNudge.BILLS_NEW, HomeNudge.WAITING)
 /** The first-week checklist: "pending" while the ledger has had no entry yet (a new install), then when the first one was noticed; "0" on a ledger that already had entries before the checklist existed. */
 private const val SETTING_FIRST_WEEK_STARTED = "first_week_started"
 private const val SETTING_FIRST_WEEK_DISMISSED = "first_week_dismissed"
@@ -944,7 +951,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 }
             } catch (e: Exception) { // any failure: the copy is removed and the reason shown, never an app crash from a background coroutine
                 attachmentFiles.delete(id)
-                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file: ${e.message ?: e::class.simpleName}"
+                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file. Try another one."
             }
         }
     }
@@ -976,7 +983,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 publishStaged()
             } catch (e: Exception) {
                 attachmentFiles.delete(id)
-                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file: ${e.message ?: e::class.simpleName}"
+                _attachmentProblem.value = if (e is IllegalArgumentException) e.message else "Could not attach that file. Try another one."
             }
         }
     }
@@ -1257,8 +1264,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun mergeCategory(fromId: String, intoId: String) = withStore { ok ->
+        val names = ok.categories.list().associate { it.id.toString() to it.name }
         ok.categories.merge(fromId, intoId)
         refresh(ok)
+        say("Merged \"${names[fromId] ?: "the category"}\" into \"${names[intoId] ?: "the other one"}\".")
     }
 
     fun deleteCategory(id: String) = withStore { ok ->
@@ -1453,7 +1462,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
     }
 
-    fun clearCardTerms(accountId: String) = withStore { ok -> ok.cards.clear(accountId); ok.cards.setCreditLimit(accountId, null); refresh(ok) }
+    fun clearCardTerms(accountId: String) = withStore { ok ->
+        val name = ok.db.schemaQueries.accountById(accountId).executeAsOneOrNull()?.name
+        ok.cards.clear(accountId); ok.cards.setCreditLimit(accountId, null); refresh(ok)
+        say("Removed the billing dates, the reminders and the credit limit" + (name?.let { " of $it" } ?: "") + ".")
+    }
 
     /** Sets (or, with empty text, removes) a card's credit limit, for the "near the limit" notice. Text that is not a positive amount removes it. */
     fun setCreditLimit(accountId: String, limit: String) = withStore { ok ->
@@ -1488,11 +1501,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         require(!archived || ok.db.schemaQueries.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id } > 0) { "Keep at least one active account." }
         ok.store.saveAccount(Account(AccountId(id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, archived))
         refresh(ok)
+        say(if (archived) "Archived ${row.name}. Its entries stay. Restore it from the Archived list on the Accounts page." else "${row.name} is back in the pickers.")
     }
 
     fun deleteAccount(id: String) = withStore { ok ->
+        val name = ok.db.schemaQueries.accountById(id).executeAsOneOrNull()?.name
         ok.store.deleteAccount(AccountId(id))
         refresh(ok)
+        say("Deleted ${name ?: "the account"}.")
     }
 
     // ---- saved searches ----
@@ -1558,8 +1574,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun setAutoExportFolder(uri: String) = withStore { ok ->
         ok.templates.putSetting(AutoExportKeys.FOLDER, uri)
-        if (ok.templates.setting(AutoExportKeys.FREQ) == null || ok.templates.setting(AutoExportKeys.FREQ) == AutoExportFrequency.OFF.name) ok.templates.putSetting(AutoExportKeys.FREQ, AutoExportFrequency.WEEKLY.name)
+        val wasOff = ok.templates.setting(AutoExportKeys.FREQ) == null || ok.templates.setting(AutoExportKeys.FREQ) == AutoExportFrequency.OFF.name
+        if (wasOff) ok.templates.putSetting(AutoExportKeys.FREQ, AutoExportFrequency.WEEKLY.name)
         refresh(ok)
+        say(if (wasOff) "Folder chosen. A copy will be saved there every week. You can change that below." else "Folder changed. The next copy goes there.")
     }
 
     fun setAutoExportFrequency(f: AutoExportFrequency) = withStore { ok -> ok.templates.putSetting(AutoExportKeys.FREQ, f.name); refresh(ok) }
@@ -1597,8 +1615,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun removePerson(id: String) = withStore { ok ->
+        val name = ok.people.list().firstOrNull { it.id == id }?.name
         ok.people.remove(id); selectedPerson = null
         refresh(ok)
+        say("Removed ${name ?: "the person"} from the list.")
     }
 
     private fun loadLoans(ok: AppContainer.Opened.Ok) {
@@ -2030,7 +2050,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     billsChanged(ok, if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
                     null
                 }
-            } catch (e: Exception) { e.message ?: "That could not be saved." }
+            } catch (e: Exception) { if (e is IllegalArgumentException) e.message ?: "That could not be saved." else "That could not be saved. Try again." }
             withContext(Dispatchers.Main) { onDone(problem) }
         }
     }
@@ -2734,6 +2754,17 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         _state.update { st -> (st as? UiState.Ready)?.copy(categoriseNudge = 0) ?: st }
     }
 
+    /** What was put off with "Not now": one small setting read for each of the cards that can be (never a query over entries), so it is cheap on every rebuild. */
+    private fun nudgeSnoozes(ok: AppContainer.Opened.Ok): Map<HomeNudge, NudgeSnooze> =
+        PUT_OFF_NUDGES.mapNotNull { n -> NudgeSnooze.decode(ok.templates.setting(HomeNudges.settingKey(n)))?.let { n to it } }.toMap()
+
+    /** "Not now" on a Home card: it stays away for [HomeNudges.SNOOZE_HOURS] hours, or until more is waiting than [count] (what it was about now). */
+    fun snoozeNudge(nudge: HomeNudge, count: Int) = withStore { ok ->
+        val snooze = NudgeSnooze(nowMillis(), count)
+        ok.templates.putSetting(HomeNudges.settingKey(nudge), snooze.encode())
+        _state.update { st -> (st as? UiState.Ready)?.copy(nudgeSnoozes = st.nudgeSnoozes + (nudge to snooze)) ?: st }
+    }
+
     private val _categorise = MutableStateFlow<CategoriseUi?>(null)
     /** The review of expenses with no category while it is open; null otherwise. */
     val categorise: StateFlow<CategoriseUi?> get() = _categorise
@@ -2930,7 +2961,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             } catch (e: app.expenses.core.domain.XlsReader.Unreadable) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
-                _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.simpleName}")
+                _import.value = ImportUi(active = true, error = "That file could not be read. Check that it is a bank statement (CSV, Excel or PDF).")
             }
         }
     }
@@ -2961,7 +2992,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             } catch (e: IllegalArgumentException) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
-                _import.value = ImportUi(active = true, error = "That file could not be read: ${e.message ?: e::class.simpleName}")
+                _import.value = ImportUi(active = true, error = "That file could not be read. Check that it is a bank statement (CSV, Excel or PDF).")
             }
         }
     }
@@ -3148,7 +3179,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting, r.transfers, Money(r.transferMinor, inr).formatted())) }
                 }
             } catch (e: Exception) {
-                _import.update { it.copy(busy = false, error = "Nothing was imported: ${e.message ?: e::class.simpleName}") }
+                _import.update { it.copy(busy = false, error = "Nothing was imported. Nothing in your entries changed. Try again.") }
             }
         }
     }
@@ -3293,18 +3324,19 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
-        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt()).firstOrNull { it.key == key } ?: return@withStore
-        if (ok.recurring.list().any { it.name.trim().lowercase() == sub.name.trim().lowercase() }) return@withStore
+        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt()).firstOrNull { it.key == key } ?: return@withStore say("That one is not a subscription any more.")
+        if (ok.recurring.list().any { it.name.trim().lowercase() == sub.name.trim().lowercase() }) return@withStore say("${sub.name} is already in Repeating expenses.")
         // the latest charge is looked up by the merchant as it was written on it (the finder's key may be a clean name for several spellings)
-        val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, sub.lastName.trim().lowercase()).executeAsOneOrNull() ?: return@withStore
+        val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, sub.lastName.trim().lowercase()).executeAsOneOrNull() ?: return@withStore say("Could not set up ${sub.name}. Add it under Repeating expenses by hand.")
         val category = ok.db.schemaQueries.splitsOf(latest.id).executeAsList().firstOrNull()?.category_id
         val (unit, every) = when (sub.cadenceDays) { 28 -> RepeatUnit.WEEK to 4; 30 -> RepeatUnit.MONTH to 1; 84 -> RepeatUnit.WEEK to 12; 91 -> RepeatUnit.MONTH to 3; 182 -> RepeatUnit.MONTH to 6; else -> RepeatUnit.YEAR to 1 }
         // the next date on the gap that is not in the past
         var start = localDateOfEpochDay(sub.nextDay.toLong())
         while (start < today) start = when (unit) { RepeatUnit.YEAR -> start.plus(1, kotlinx.datetime.DateTimeUnit.YEAR); RepeatUnit.WEEK -> start.plus(every * 7, kotlinx.datetime.DateTimeUnit.DAY); else -> start.plus(every, kotlinx.datetime.DateTimeUnit.MONTH) }
-        ok.recurring.save(RecurringItem(Uuid.random().toString(), sub.name, Money(sub.amountMinor, inr), category?.let(::CategoryId), AccountId(latest.account_id ?: return@withStore), sub.name, Schedule(unit, every, start)))
+        ok.recurring.save(RecurringItem(Uuid.random().toString(), sub.name, Money(sub.amountMinor, inr), category?.let(::CategoryId), AccountId(latest.account_id ?: return@withStore say("Could not set up ${sub.name}. Add it under Repeating expenses by hand.")), sub.name, Schedule(unit, every, start)))
         _subscriptions.value = subscriptionsUi(ok)
         refresh(ok)
+        say("Added ${sub.name} to Repeating expenses. You will be reminded when it is due.")
     }
 
     // ---- the rates chosen last for each foreign currency ----
@@ -3396,6 +3428,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun ignoreSubscription(key: String) = withStore { ok ->
         val now = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }
         ok.templates.putSetting(SETTING_SUBS_IGNORED, (now + key).distinct().joinToString("\n")); _subscriptions.value = subscriptionsUi(ok)
+        say("Hidden from this list. The button at the bottom of this page shows it again.")
     }
 
     fun showIgnoredSubscriptions() = withStore { ok -> ok.templates.putSetting(SETTING_SUBS_IGNORED, ""); _subscriptions.value = subscriptionsUi(ok) }
@@ -3468,7 +3501,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         if (rows.isEmpty()) return@withStore
         val moves = rows.map { r -> if (group == "own") EntryActions.TransferMove(r.id, r.toId, r.partnerId) else EntryActions.TransferMove(r.id, toAccount) }
         val r = try { EntryActions(ok).makeCandidateTransfers(moves) } catch (e: IllegalArgumentException) {
-            _transferCandidates.value = transferCandidatesUi(ok, "Nothing was changed: ${e.message ?: "the transfers could not be made"}")
+            _transferCandidates.value = transferCandidatesUi(ok, "Nothing was changed. The transfers could not be made.")
             return@withStore
         }
         val made = if (r.changed == 0) "Made no transfers" else "Made ${r.changed} ${if (r.changed == 1) "transfer" else "transfers"}"
@@ -3650,7 +3683,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             } catch (e: BackupException) {
                 _data.update { it.copy(busy = false, status = e.message, statusIsError = true) }
             } catch (e: Exception) {
-                _data.update { it.copy(busy = false, status = "That did not work: ${e.message ?: e::class.simpleName}", statusIsError = true) }
+                _data.update { it.copy(busy = false, status = "That did not work. Nothing was changed. Try again.", statusIsError = true) }
             }
         }
     }
@@ -3798,8 +3831,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** Shows one notice immediately, so the user can see that permission and channels work. Not recorded; it is not an event. */
     fun sendTestNotification() {
         val shown = platform.showNotices(listOf(Notice("test:${nowMillis()}", NoticeKind.BILL_DUE, "Test notification", "If you can read this, reminders and alerts will reach you.")))
-        if (shown.isEmpty()) _state.update { (it as? UiState.Ready)?.copy(message = "Notifications are blocked for this app") ?: it }
+        say(if (shown.isEmpty()) "Notifications are blocked for this app. Allow them in your phone's settings." else "Test sent. Pull down from the top of the screen to see it.")
     }
+
+    /** Says one line on whichever screen is open (Home's bar, or the message bar of any other screen): what an action that shows nothing by itself just did. */
+    fun say(text: String) = _state.update { (it as? UiState.Ready)?.copy(message = text) ?: it }
 
     // ---- budgets ----
 
@@ -4010,6 +4046,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             safeToSpend = safeCache,
             waiting = waitingSummary(ok, inr),
             categoriseNudge = categoriseCache,
+            nudgeSnoozes = nudgeSnoozes(ok),
             sinkingFunds = ok.templates.setting(SETTING_SINKING_FUNDS) == "1",
             undo = undo,
         )

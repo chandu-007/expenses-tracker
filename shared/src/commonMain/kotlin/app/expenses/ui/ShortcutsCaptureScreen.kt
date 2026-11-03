@@ -90,6 +90,7 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             }
             var copiedName by remember { mutableStateOf(false) }
             var copied by remember { mutableStateOf<String?>(null) }
+            SectionHead("Set up", "Three short steps in the Shortcuts app. Then each bank text is handed to this app by itself.", "shortcuts_setup")
             Column(Modifier.testTag("shortcuts_steps"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SetupStep(1, "Add the shortcut", "shortcuts_stage_1") {
                     SHORTCUTS_STEPS.take(SHORTCUT_STEPS_IN_STAGE_1).forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_step_${i + 1}")) }
@@ -141,12 +142,14 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             Text("What iPhone does not allow", style = MaterialTheme.typography.labelMedium)
             Text("This depends on iOS, not on this app: it may show a banner when the automation runs, even with Run Immediately. It works only for messages in the Messages app (SMS, iMessage, RCS), not for WhatsApp or other apps. Messages from unknown senders, or ones iOS files under Unknown Senders or Junk, may not start the automation at all, and a bank's alphabetic sender is often treated that way. It cannot run before you have unlocked the phone once after a restart. If a transaction is missing, copy its text and use Paste a bank message in To review.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("shortcuts_limits"))
             HorizontalDivider()
-            Text("Your bank's sender name", style = MaterialTheme.typography.labelMedium)
+            SectionHead("Senders", "Which banks' texts are read. Add yours here if its texts are skipped.", "shortcuts_senders")
             TrustedSendersEditor(settings.extraHeaders, onHeaders)
             Text("Used when the automation passes Sender. Only senders on the built-in list of banks and billers are read. If yours is missing, add the name that appears after the first dash, for example HDFCBK from AX-HDFCBK-S.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SkippedSendersSection(settings.extraHeaders, skipped, onTrustSkipped)
             HorizontalDivider()
+            SectionHead("Rules", "Your own words for putting a payment in a category, and what the app learned from your choices.", "shortcuts_rules")
             OutlinedButton(onClick = onOpenRules, modifier = Modifier.testTag("open_rules")) { Text("Category rules") }
+            SectionHead("Health", "Whether texts are reaching the app, and what was skipped and why.", "shortcuts_health")
             OutlinedButton(onClick = onOpenHealth, modifier = Modifier.testTag("open_health")) { Text("How capture is doing") }
         }
     }

@@ -71,6 +71,8 @@ class AccountAskUiTest {
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return node(tag).fetchSemanticsNode().config.let { c -> if (c.contains(SemanticsProperties.Text)) c[SemanticsProperties.Text].joinToString { it.text } else "" } }
+    /** Why the account is asked is folded under the card's "More options" until opened (the question and its answers are not). */
+    private fun whyOf(id: String): String { if (!has("inbox_account_why_$id")) tap("inbox_more_options_$id"); return textOf("inbox_account_why_$id") }
     private fun typed(tag: String) = node(tag).fetchSemanticsNode().config[SemanticsProperties.EditableText].text
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun idAt(t: Long) = runBlocking { container.write { it.inbox.list().first { i -> i.receivedAt == t }.id } }!!
@@ -111,7 +113,8 @@ class AccountAskUiTest {
         ingest(icici("500.00", "XQZ KLM", "628374659283"), now)
         launch(); openInbox(); val id = idAt(now)
         waitFor("inbox_account_ask_$id")
-        assertEquals("I have not seen ICICI Bank ending 123 before.", textOf("inbox_account_why_$id"))
+        assertTrue(has("inbox_account_title_$id") && has("inbox_progress_$id") && !has("inbox_account_why_$id"), "the question and the progress are shown, the explanation is folded")
+        assertEquals("I have not seen ICICI Bank ending 123 before.", whyOf(id))
         assertTrue(!goes(id).contains("HDFC Salary"), goes(id))
     }
 
@@ -123,7 +126,7 @@ class AccountAskUiTest {
         ingest(icici("500.00", "XQZ KLM", "628374659284"), now); ingest(icici("700.00", "XQZ KLM", "628374659285"), now + 60_000)
         launch(); openInbox(); val a = idAt(now + 60_000); val b = idAt(now) // the newest text is the first card: it carries the question, the other follows it
         reveal(a); waitFor("inbox_account_ask_$a") // the newest text is the first card: the other one is below the screen until it is scrolled to
-        val why = textOf("inbox_account_why_$a"); assertTrue(why.contains("ICICI Savings") && why.contains("ICICI Joint") && why.contains("end in 123") && why.contains("cannot tell"), why)
+        val why = whyOf(a); assertTrue(why.contains("ICICI Savings") && why.contains("ICICI Joint") && why.contains("end in 123") && why.contains("cannot tell"), why)
         assertTrue(has("inbox_pick_${a}_icici1") && has("inbox_pick_${a}_icici2"), "the two that fit are offered")
         assertTrue(!has("inbox_pick_${a}_cash") && !has("inbox_pick_${a}_bank"), "no other account is offered")
         node("inbox_add_$a").performScrollTo().assertIsNotEnabled() // no account, no guess: Add waits for the answer
@@ -241,9 +244,9 @@ class AccountAskUiTest {
         account("sav", "ICICI Savings", "123"); account("joint", "ICICI Joint", "7123"); account("sal", "ICICI Salary", "456")
         ingest(out, now); ingest(into, now + 40_000)
         launch(); openInbox(); val o = idAt(now); val i = idAt(now + 40_000)
-        waitFor("inbox_$o"); waitFor("inbox_$i")
+        reveal(o); waitFor("inbox_$o"); reveal(i); waitFor("inbox_$i") // a lazy list: a card below the screen is not there until scrolled to
         assertTrue(!has("inbox_transfer_$o"), "no combined card: the first account could be either")
-        waitFor("inbox_account_ask_$o"); assertTrue(textOf("inbox_account_why_$o").contains("end in 123"), textOf("inbox_account_why_$o"))
+        waitFor("inbox_account_ask_$o"); assertTrue(whyOf(o).contains("end in 123"), whyOf(o))
         // the person answers: the pair is found at once
         tap("inbox_pick_${o}_sav")
         compose.waitUntil(10_000) { has("inbox_transfer_$o") }

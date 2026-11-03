@@ -83,8 +83,8 @@ fun TransferCandidatesScreen(
                     state.notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp).testTag("transfer_candidates_notice")) }
                     if (state.loading) Text("Looking through your entries…", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).testTag("transfer_candidates_loading"))
                     else if (state.groups.isEmpty()) {
-                        Text("Nothing found.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).testTag("transfer_candidates_empty"))
-                        Text("No cash withdrawals, moves between your own accounts or transfers to yourself were found in your entries. This page looks again every time you open it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Nothing to fix.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).testTag("transfer_candidates_empty"))
+                        Text("No cash withdrawals or moves between your own accounts are being counted as spending. This page looks again every time you open it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 HorizontalDivider()

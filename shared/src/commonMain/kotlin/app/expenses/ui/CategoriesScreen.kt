@@ -276,12 +276,23 @@ private fun CategoryEditorScreen(
     var hidden by rememberSaveable(category.id) { mutableStateOf(category.hidden) }
     var parentId by rememberSaveable(category.id) { mutableStateOf(category.parentId) }
     var merging by rememberSaveable(category.id) { mutableStateOf(false) }
+    // the category picked in the merge list, asked about once more before anything moves (a wrong tap in a list of names cannot be taken back)
+    var mergeTarget by rememberSaveable(category.id) { mutableStateOf<String?>(null) }
     val nameError = CategoryRules.checkName(domain, name, parentId, excludeId = category.id)
     val parentError = if (parentId != category.parentId) CategoryRules.checkParent(domain, category.id, parentId) else null
     val deleteError = CategoryRules.checkDelete(domain, category.id, category.usage)
     val hasChildren = categories.any { it.parentId == category.id }
 
-    if (merging) {
+    val confirming = mergeTarget?.let { id -> categories.firstOrNull { it.id == id } }
+    if (merging && confirming != null) {
+        AlertDialog(
+            onDismissRequest = { mergeTarget = null },
+            title = { Text("Merge into \"${displayName(categories, confirming)}\"?") },
+            text = { Text("Everything in \"${category.name}\" moves to \"${displayName(categories, confirming)}\", and \"${category.name}\" is removed. This can't be undone.", modifier = Modifier.testTag("merge_confirm_text")) },
+            confirmButton = { TextButton(onClick = { onMerge(confirming.id) }, modifier = Modifier.testTag("merge_confirm")) { Text("Merge") } },
+            dismissButton = { TextButton(onClick = { mergeTarget = null }, modifier = Modifier.testTag("merge_back")) { Text("Choose another") } },
+        )
+    } else if (merging) {
         AlertDialog(
             onDismissRequest = { merging = false },
             title = { Text("Merge \"${category.name}\" into…") },
@@ -289,7 +300,7 @@ private fun CategoryEditorScreen(
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Everything in \"${category.name}\" moves to the category you choose, and \"${category.name}\" is removed. This can't be undone.")
                     categories.filter { CategoryRules.checkMerge(domain, category.id, it.id) == null }.forEach { target ->
-                        TextButton(onClick = { onMerge(target.id) }, modifier = Modifier.fillMaxWidth().testTag("merge_into_${target.id}")) { Text(displayName(categories, target)) }
+                        TextButton(onClick = { mergeTarget = target.id }, modifier = Modifier.fillMaxWidth().testTag("merge_into_${target.id}")) { Text(displayName(categories, target)) }
                     }
                 }
             },

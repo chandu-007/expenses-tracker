@@ -143,7 +143,7 @@ fun ReportsScreen(
                 if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { EmptyArt(EmptyKind.REPORTS) }
-                    Text("Nothing spent in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
+                    Text("Nothing spent in this period. Pick another period above, or add an expense.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
                 }
             }
             if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { i, row ->

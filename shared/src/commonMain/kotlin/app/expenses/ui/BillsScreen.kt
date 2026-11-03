@@ -76,6 +76,8 @@ fun BillsScreen(
     onPostRepeat: (itemId: String, epochDay: Long, amount: Money?) -> Unit, onSkipRepeat: (itemId: String, epochDay: Long) -> Unit,
     /** "Skipped X · Undo" after a bill is skipped or removed: what to offer, taking it back, and the bar going away. */
     undo: app.expenses.ScreenUndo? = null, onUndo: (String) -> Unit = {}, onUndoGone: (String) -> Unit = {},
+    /** The empty page's one first step: the Capture screen, where reading texts is turned on. Null where there is none. */
+    onSetUpCapture: (() -> Unit)? = null,
 ) {
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     var askingFor by remember { mutableStateOf<BillRowUi?>(null) }
@@ -103,10 +105,10 @@ fun BillsScreen(
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("No bills yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("bills_empty"))
                 Text(
-                    "When a text, a payment app's notification or a bank alert email (if you turned that on) says a bill is due (a credit card statement, electricity, water, gas, mobile, broadband, an EMI or an insurance premium), it appears here and you are told. " +
-                        "Turn on Capture from texts in More if you have not.",
+                    "When a bank text or alert says a bill is due (a card statement, electricity, mobile, an EMI, an insurance premium), it shows up here and we remind you.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 12.dp).testTag("bills_empty_setup")) { Text("Set up reading texts") }
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("bills_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui.found.isNotEmpty()) {

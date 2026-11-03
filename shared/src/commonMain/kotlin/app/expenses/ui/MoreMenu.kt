@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import app.expenses.core.domain.HomeNudges
 
 /** One place in the More page. [switchOn] non-null makes the row a switch (Hide amounts) instead of a way in. [tag] is the tag the plain tile had. */
 class MoreRow(val tag: String, val icon: ImageVector, val title: String, val subtitle: String, val switchOn: Boolean? = null, val onClick: () -> Unit)
@@ -62,7 +63,8 @@ class MoreNudge(val tag: String, val icon: ImageVector, val title: String, val l
 fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (@Composable () -> Unit)?, sections: List<MoreSection>) {
     var query by rememberSaveable { mutableStateOf("") }
     val q = query.trim()
-    val nudgeTags = nudges.map { it.tag }.toSet()
+    // only the cards that are drawn (two fit in a row) take their row's place; a third nudge keeps its row below
+    val nudgeTags = nudges.take(2).map { it.tag }.toSet()
     val shown = if (q.isEmpty()) sections.mapNotNull { s -> s.rows.filter { it.tag !in nudgeTags }.takeIf { it.isNotEmpty() }?.let { r -> MoreSection(s.heading, s.top, s.bottom, r) } }
     else sections.mapNotNull { s ->
         s.rows.filter { r -> r.title.contains(q, ignoreCase = true) || r.subtitle.contains(q, ignoreCase = true) || s.heading.contains(q, ignoreCase = true) }
@@ -86,13 +88,15 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
                     modifier = Modifier.fillMaxWidth().testTag("more_search"),
                 )
-                if (q.isEmpty()) SigningNotice(Modifier.padding(top = 14.dp))
+                // one notice at a time (HomeNudges.moreNotice): the iPhone build's expiry warning first, else the backup reminder; the other is still in Your data
+                val notice = HomeNudges.moreNotice(signingShowing = signingNoticeText() != null, backupDue = reminder != null)
+                if (q.isEmpty() && notice == HomeNudges.MoreNotice.SIGNING) SigningNotice(Modifier.padding(top = 14.dp))
                 if (q.isEmpty()) {
                     if (nudges.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         nudges.take(2).forEach { n -> NudgeCard(n, Modifier.weight(1f)) }
                         if (nudges.size == 1) Box(Modifier.weight(1f))
                     }
-                    if (reminder != null) Box(Modifier.padding(top = 4.dp)) { reminder() }
+                    if (reminder != null && notice == HomeNudges.MoreNotice.BACKUP) Box(Modifier.padding(top = 4.dp)) { reminder() }
                 }
                 if (shown.isEmpty()) Text("Nothing matches \"$q\".", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp).testTag("more_nothing"))
                 shown.forEach { s ->
