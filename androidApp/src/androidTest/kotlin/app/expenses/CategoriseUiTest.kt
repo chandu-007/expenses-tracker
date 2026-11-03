@@ -85,7 +85,7 @@ class CategoriseUiTest {
     }
 
     @Test
-    fun reviewShowsOneAtATimeFilesWhatIsChosenLearnsItSuggestsItForThePayeesOthersThenTheEndSaysWhatWasFiled() {
+    fun reviewShowsOneAtATimeFilesWhatIsChosenLearnsItSuggestsItForThePayeesOthersAndUndoTakesTheLastChoiceBack() {
         freshpikAndZorbo()
         launch(); tap("categorise_nudge_review"); waitFor("categorise_screen")
         waitFor("categorise_item_u2")
@@ -109,7 +109,14 @@ class CategoriseUiTest {
         tap("categorise_chip_Fun")
         waitFor("categorise_done"); assertTrue(textOf("categorise_done_text").contains("Filed 4 expenses"), textOf("categorise_done_text"))
         assertEquals("Fun", categoryOf("u3")); assertEquals(mapOf("freshpik" to "Groceries", "zorbo" to "Fun"), learned())
-        // (Undo of the last choice: see the note in docs/PHASE2_PROGRESS.md, Slice 100: its device test did not pass and is not claimed)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Undo").performClick()
+        waitFor("categorise_item_u3"); assertEquals("1 left", textOf("categorise_left"))
+        compose.waitUntil(10_000) { categoryOf("u3") == null }
+        assertEquals(mapOf("freshpik" to "Groceries"), learned(), "undoing the last choice also unlearns it")
+        // the review goes on from there: the same expense is the current one again and can be filed again
+        tap("categorise_chip_Fun"); waitFor("categorise_done")
+        assertEquals("Fun", categoryOf("u3"))
         tap("categorise_finish")
         waitFor("add")
     }
@@ -134,8 +141,9 @@ class CategoriseUiTest {
         db { ok ->
             ok.store.save(Expense(EntryId("s1"), 1_000, AccountId("bank"), Money(20_000, Currency.INR)), EntryDetails(merchant = "swiggy@icici", source = "sms", sourceRef = "100000000011"))
             ok.origins.put("s1", app.expenses.core.storage.OriginKind.SMS, "AX-HDFCBK-S", "Rs.200.00 debited from A/c XX1234 on 05-10-26 to VPA swiggy@icici (UPI Ref 100000000011).", 900)
-            bare("x", 1_001, "Xylo One"); bare("y", 1_002, "Yarn Two")
         }
+        // (not inside the block above: a write inside a write waits for itself)
+        bare("x", 1_001, "Xylo One"); bare("y", 1_002, "Yarn Two")
         launch(); tap("categorise_nudge_review"); waitFor("categorise_screen")
         waitFor("categorise_item_y"); tap("categorise_skip"); waitFor("categorise_item_x"); tap("categorise_skip")
         waitFor("categorise_item_s1")

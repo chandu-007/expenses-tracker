@@ -1,0 +1,81 @@
+package app.expenses
+
+import android.content.Intent
+import android.util.Log
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.ViewModelProvider
+import app.expenses.core.domain.DraftKind
+import app.expenses.core.domain.EntryDraft
+import app.expenses.core.storage.bulkLoad
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import kotlin.test.assertTrue
+
+/**
+ * The save budget as the user feels it, in the app's own database with 100,000 entries and 508 categories: from the write through the view
+ * model until the NEW ROW AND THE PERIOD TOTAL are on screen (budget: 50 ms on a phone). Everything else on the home screen (budget bars, bills
+ * due, balances, tags, categories) is rebuilt in a second pass right behind it; that pass is timed separately and held to 200 ms on a phone.
+ * Part of the timing gate (run on its own, like PerformanceBudgetTest).
+ *
+ * This copy has 20,000 of the 100,000 expenses with NO category, so Home shows the "N expenses have no category" card (the count is read with the slow figures, never on the save path): the same two budgets
+ * must hold with the card on screen, and the card must really be there (otherwise the run would prove nothing).
+ */
+@RunWith(AndroidJUnit4::class)
+class RefreshBudgetUncategorisedTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val container get() = (context.applicationContext as ExpensesApp).container
+    private var scenario: ActivityScenario<MainActivity>? = null
+
+    @Before fun fresh() { runBlocking { container.startFresh() } }
+    @After fun cleanUp() { scenario?.close(); runBlocking { container.startFresh() } }
+
+    @Test
+    fun withTwentyThousandExpensesUncategorisedAndTheCardShownSavingStillMeetsBothBudgets() {
+        runBlocking {
+            container.write { ok ->
+                repeat(500) { i -> ok.categories.create("Category $i") }
+                ok.db.bulkLoad(ok.driver) {
+                    for (i in 0 until 100_000) {
+                        val at = 1_300_000_000_000L + i * 3_000_000L
+                        ok.db.schemaQueries.insertEntry("e$i", "EXPENSE", at, "bank", null, 100L + i % 900, "INR", if (i % 5 == 0) null else "Category ${i % 500}", "Shop ${i % 300}", "UPI Ref ${100_000_000L + i * 7919L} txn", "manual", null)
+                        ok.db.schemaQueries.insertSpendLine("e$i", 0, at, "INR", if (i % 5 == 0) null else "Category ${i % 500}", 100L + i % 900, 100L + i % 900)
+                        if (i % 3 == 0) ok.db.schemaQueries.insertTag("e$i", "tag${i % 500}") // a third of the ledger tagged: its tag suggestions once cost 700 ms per refresh
+                    }
+                }
+            }
+        }
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        var vm: LedgerViewModel? = null
+        scenario!!.onActivity { vm = ViewModelProvider(it)[LedgerViewModel::class.java] }
+        val model = vm!!
+        Thread.sleep(4_000) // let the first load and the background figures settle, as they have before a person adds anything
+        val shown = (model.state.value as? UiState.Ready)?.categoriseNudge ?: 0 // CARD-CHECK
+        Log.w("PERF", "the uncategorised card at 100k with 20,000 uncategorised: count shown $shown") // CARD-CHECK
+        assertTrue(shown == 500, "the card is on screen with the count capped at 500, not $shown") // CARD-CHECK
+        val settle = ArrayList<Double>()
+        fun one(i: Int): Double {
+            model.lastSaveMillis = 0.0; model.lastSettleMillis = 0.0
+            model.saveEntry(EntryDraft(null, DraftKind.EXPENSE, "5${i % 90}", "Category 1", emptyList(), "bank", "", "gate $i", System.currentTimeMillis()), false)
+            val deadline = System.currentTimeMillis() + 10_000
+            while (model.lastSaveMillis == 0.0 && System.currentTimeMillis() < deadline) Thread.sleep(5)
+            while (model.lastSettleMillis == 0.0 && System.currentTimeMillis() < deadline) Thread.sleep(5) // the follow-up rebuild
+            settle += model.lastSettleMillis
+            return model.lastSaveMillis
+        }
+        repeat(10) { one(it) } // warm-up: the second expense of a session, not the first
+        settle.clear()
+        val times = DoubleArray(60) { one(100 + it) }.sorted()
+        val p95 = times[(times.size * 0.95).toInt()]
+        Log.w("PERF", "UNCAT save to new row and total visible at 100k: p50 ${"%.1f".format(times[times.size / 2])} ms, p95 ${"%.1f".format(p95)} ms, max ${"%.1f".format(times.last())} ms")
+        assertTrue(times.first() > 0.0, "every save finished")
+        val settled = settle.sorted(); val settleP95 = settled[(settled.size * 0.95).toInt()]
+        Log.w("PERF", "UNCAT rebuild after the row is shown: p50 ${"%.1f".format(settled[settled.size / 2])} ms, p95 ${"%.1f".format(settleP95)} ms")
+        assertTrue(settleP95 <= 200.0 / 4.0, "the rest of the screen took p95 ${"%.1f".format(settleP95)} ms to settle after the new row, over 50 ms (200 ms phone)")
+        assertTrue(p95 <= 50.0 / 4.0, "the new row and total took p95 ${"%.1f".format(p95)} ms to appear, over 12.5 ms (50 ms phone budget at the assumed 4x slowdown)")
+    }
+}
