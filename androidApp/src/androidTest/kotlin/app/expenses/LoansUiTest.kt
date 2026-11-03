@@ -36,6 +36,17 @@ class LoansUiTest {
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
+    // "+ New" under the people: the form opens with the amount focused and the keyboard rises a moment later, and when it does it shrinks the form and moves this chip. A tap that
+    // lands while that happens hits nothing (reproduced on API 26 with the device's CPUs kept busy: the screenshot showed the form with the numeric keyboard up, no dialog), so
+    // the tap is made again, scrolled to the chip where it now is, when the name dialog has not appeared.
+    private fun newPerson() {
+        repeat(4) {
+            tap("new_person_chip")
+            runCatching { compose.waitUntil(4_000) { has("new_person_name") } }
+            if (has("new_person_name")) return
+        }
+        waitFor("new_person_name")
+    }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
     // the three summary boxes hold their text in children, so they are read merged
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = tag !in setOf("loans_owed", "loans_owe", "loan_balance"))
@@ -49,7 +60,7 @@ class LoansUiTest {
         launch()
         // lend 5,000 to a new person, through the add form
         tap("add"); tap("kind_LOAN"); type("amount", "5000")
-        tap("new_person_chip"); type("new_person_name", "Chandu"); tap("new_person_ok")
+        newPerson(); type("new_person_name", "Chandu"); tap("new_person_ok")
         waitFor("person_chip_Chandu"); tap("account_chip_Bank"); tap("save")
         waitFor("add")
         openLoans()
@@ -80,12 +91,12 @@ class LoansUiTest {
     @Test
     fun borrowingShowsWhatIsOwedTheOtherWayAndAnUnusedPersonCanBeRemoved() {
         launch()
-        tap("add"); tap("kind_LOAN"); tap("loan_got"); type("amount", "800"); tap("new_person_chip"); type("new_person_name", "Asha"); tap("new_person_ok")
+        tap("add"); tap("kind_LOAN"); tap("loan_got"); type("amount", "800"); newPerson(); type("new_person_name", "Asha"); tap("new_person_ok")
         waitFor("person_chip_Asha"); tap("account_chip_Cash"); tap("save"); waitFor("add")
         openLoans()
         node("loan_state_Asha").assertTextEquals("you owe"); node("loans_owe").assertTextContains("₹800.00", substring = true)
         // a person made in the form but never used can be taken off the list
-        tap("loan_give"); waitFor("amount"); compose.waitForIdle(); tap("new_person_chip"); type("new_person_name", "Typo Name"); tap("new_person_ok"); waitFor("person_chip_Typo Name"); tap("cancel")
+        tap("loan_give"); waitFor("amount"); compose.waitForIdle(); newPerson(); type("new_person_name", "Typo Name"); tap("new_person_ok"); waitFor("person_chip_Typo Name"); tap("cancel")
         waitFor("loans_list"); waitFor("loan_row_Typo Name")
         tap("loan_row_Typo Name"); tap("loan_remove")
         compose.waitUntil(10_000) { !has("loan_row_Typo Name") && has("loan_row_Asha") }
@@ -94,7 +105,7 @@ class LoansUiTest {
     @Test
     fun aLentEntryCanBeEditedFromThePersonsHistory() {
         launch()
-        tap("add"); tap("kind_LOAN"); type("amount", "1000"); tap("new_person_chip"); type("new_person_name", "Ravi"); tap("new_person_ok")
+        tap("add"); tap("kind_LOAN"); type("amount", "1000"); newPerson(); type("new_person_name", "Ravi"); tap("new_person_ok")
         waitFor("person_chip_Ravi"); tap("account_chip_Bank"); tap("save"); waitFor("add")
         openLoans(); tap("loan_row_Ravi"); waitFor("loan_balance")
         val id = entries().single().id
