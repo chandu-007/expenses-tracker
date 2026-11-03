@@ -28,7 +28,8 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | Statement import (CSV, Excel, PDF, photo) | Import | Not undoable (see below). The preview with the counts is shown first, and the import adds entries only | |
 | Merge a category into another | Categories | Two steps: pick the target, then "Merge into X?" (Merge / Choose another); the dialog says "This can't be undone"; afterwards a bar says "Merged A into B" | CategoriesTest |
 | Delete a category | Categories | Only an unused one can be deleted (the store refuses otherwise): nothing is lost but its name and colour | |
-| Delete an account | Accounts | Only one with no entries and no saved items can be deleted: nothing is lost but its name and settings | |
+| Delete an account | Accounts | Only one with no entries and no saved items can be deleted: nothing is lost but its name and settings. **Asks first (0.10.6)**: "Delete X?" (Delete / Keep it), because nothing can bring it back | AccountsUiTest |
+| **Archive an account** | Accounts | **Undo bar (new, 0.10.6)** on the Accounts page itself ("Archived X. Its entries stay."), and Restore from the Archived list later; the entries and the balance were never touched | AccountsUiTest |
 | Remove a person | Lent and borrowed | Only one with no entries | |
 | **File earlier uncategorised expenses under a learned choice** | Category rules, "What the app has learned" | **Undo bar (new)**: each changed entry goes back to the draft it had (no category); undoing teaches nothing | LearnedChoicesUiTest |
 | **File an expense under a category in the Categorise review** | Home card "N expenses have no category", Review | **Undo bar (new, after 0.10.4)** for the last choice: the expense has no category again and what the app learned from that choice goes back to what it was (or is forgotten when there was nothing). Only the last choice, while the bar is shown; Skip changes nothing. | CategoriseUiTest |

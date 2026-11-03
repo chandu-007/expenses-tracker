@@ -84,24 +84,57 @@ class CategoriesTest {
         waitFor("new_category")
     }
 
+    /**
+     * Opens the Add form. A tap on "Add" that comes while the screen is still settling (a slow emulator, the keyboard of the page before) is lost, and the form never opens: tap again until
+     * the form is there. Seen as a failure only on an emulator kept busy: the screen was the Home list with no form.
+     */
+    private fun openAddForm() {
+        compose.waitUntil(30_000) {
+            if (compose.onAllNodes(hasTestTag("new_category_chip")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("add").performClick() }
+            compose.onAllNodes(hasTestTag("new_category_chip")).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /**
+     * Opens the "new category" dialog of the Add form. The form opens with the amount field focused and the numeric keyboard rises a moment later; it shrinks the form, so "+ New" (at the end
+     * of the categories, which is below the first screenful) moves, and a tap placed before the form settles hits nothing (reproduced, with a screenshot, on an emulator whose CPUs were kept busy:
+     * the form with the keyboard up and the category chips, no dialog). Tap again, scrolled to the chip where it now is, until the dialog is there.
+     */
+    private fun openNewCategoryDialog() {
+        FailureShot.around("openNewCategoryDialog") {
+            compose.waitUntil(30_000) {
+                if (compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("new_category_chip").performScrollTo().performClick() }
+                compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+    }
+
+    /**
+     * Taps Save and waits for the form to go. The keyboard's suggestion bar appears as the note is typed and moves Save, so a tap placed just before it settles can hit nothing (reproduced, with a
+     * screenshot, on a busy emulator: the form still open with the note typed): tap again when the form has not gone after a few seconds.
+     */
+    private fun saveTheForm() {
+        repeat(3) {
+            runCatching { compose.onNodeWithTag("save").performClick() }
+            runCatching { compose.waitUntil(8_000) { compose.onAllNodes(hasTestTag("save")).fetchSemanticsNodes().isEmpty() } }
+            if (compose.onAllNodes(hasTestTag("save")).fetchSemanticsNodes().isEmpty()) return
+        }
+        FailureShot.capture("saveTheForm")
+    }
+
     private fun names(): List<String> = runBlocking { container.write { it.categories.list().map { c -> c.name } } }!!
 
     @Test
     fun aCategoryCreatedInTheAddFormIsSelectedAndShowsOnTheSavedRow() {
         launch()
-        compose.onNodeWithTag("add").performClick()
-        waitFor("new_category_chip")
-        // The form moves as the keyboard opens, so a tap placed before it settles can miss the chip: tap again until the dialog is there.
-        compose.waitUntil(15_000) {
-            if (compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("new_category_chip").performScrollTo().performClick() }
-            compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isNotEmpty()
-        }
+        openAddForm()
+        openNewCategoryDialog()
         compose.onNodeWithTag("cat_name").performTextInput("Pets")
         compose.onNodeWithTag("cat_confirm").assertIsEnabled().performClick()
         waitForText("Pets")
         compose.onNodeWithTag("amount").performTextInput("450")
         compose.onNodeWithTag("note").performTextInput("Dog food")
-        compose.onNodeWithTag("save").performClick()
+        saveTheForm()
         waitForText("· Pets")
         assertTrue("Pets" in names())
     }
@@ -109,10 +142,8 @@ class CategoriesTest {
     @Test
     fun aDuplicateNameIsRefusedWhileTypingAndSaveStaysDisabled() {
         launch()
-        compose.onNodeWithTag("add").performClick()
-        waitFor("new_category_chip")
-        compose.onNodeWithTag("new_category_chip").performScrollTo().performClick()
-        waitFor("cat_name") // the dialog opens a moment after the tap
+        openAddForm()
+        openNewCategoryDialog()
         compose.onNodeWithTag("cat_name").performTextInput("food")
         waitForText("There is already a category called")
         compose.onNodeWithTag("cat_confirm").assertIsNotEnabled()
@@ -145,8 +176,7 @@ class CategoriesTest {
         waitForText("hidden")
         compose.onNodeWithTag("categories_back").performClick(); compose.closeMore()
         waitFor("add")
-        compose.onNodeWithTag("add").performClick()
-        waitFor("new_category_chip")
+        openAddForm()
         compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().let { assertTrue(it.isEmpty(), "a hidden category must not be offered") }
         compose.onNodeWithTag("cancel").performClick()
         // the Add form slides away over Home, and both are on screen while it does: a tap on the row in that moment lands on the leaving form (seen on Android 14, where the list was reached first).
