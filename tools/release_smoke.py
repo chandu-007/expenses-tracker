@@ -262,16 +262,24 @@ def step_install(apk):
 def step_first_launch():
     sh("am", "force-stop", PACKAGE)
     sh("am", "start", "-n", f"{PACKAGE}/.MainActivity")  # not `monkey`: on Android 14 it sometimes exits with an error without starting anything
-    # the tour is shown on a fresh install; it can be skipped. A slow first start can swallow a tap or show the tour late, so keep looking until the welcome card is there
+    # the tour is shown on a fresh install; it can be skipped. A slow first start can swallow a tap or show the tour late (even after the welcome card behind it has been drawn:
+    # seen once under a busy host, the card was found and the tour then covered it), so the card counts only when it has been on screen alone for 4 seconds
     end = time.time() + 120
+    alone_since = None
     while True:
         screen.refresh()
-        if screen.find(text="Add my first expense"):
-            break
         if screen.find(text="Skip the tour"):
+            alone_since = None
             tap_xy(*screen.find(text="Skip the tour").centre)
             time.sleep(2.5)
             continue
+        if screen.find(text="Add my first expense"):
+            if alone_since is None:
+                alone_since = time.time()
+            elif time.time() - alone_since >= 4:
+                break
+        else:
+            alone_since = None
         if time.time() > end:
             raise StepFailed(f"the tour or the welcome card never appeared. Visible: {screen.texts()[:40]}")
         time.sleep(1)
