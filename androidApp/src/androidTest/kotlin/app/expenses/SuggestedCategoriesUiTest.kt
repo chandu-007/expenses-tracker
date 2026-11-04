@@ -31,7 +31,7 @@ class SuggestedCategoriesUiTest {
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
+    private fun waitFor(tag: String) = FailureShot.around("SuggestedCategories_waitFor_$tag") { compose.waitUntil(10_000) { has(tag) } }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun cats() = runBlocking { container.write { it.categories.list() } }!!
 
@@ -90,7 +90,15 @@ class SuggestedCategoriesUiTest {
             repeat(30) { ok.categories.create("Extra $it") }
         } }
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
-        tap("add"); tap("more_categories"); waitFor("category_list")
+        // each tap is repeated until its result is there: a tap placed while the screen is still settling (the Add form rising, then the category chips moving under the keyboard) is lost, and this
+        // was the one failure of the class in a full run on an emulator that had been busy for a while (the class passes alone 2 of 2)
+        FailureShot.around("SuggestedCategories_openAllCategories") {
+            compose.waitUntil(30_000) {
+                if (!has("more_categories") && !has("category_list")) runCatching { compose.onNodeWithTag("add", useUnmergedTree = true).performClick() }
+                else if (!has("category_list")) runCatching { compose.onNodeWithTag("more_categories", useUnmergedTree = true).performScrollTo().performClick() }
+                has("category_list")
+            }
+        }
         val restaurants = cats().first { it.name == "Restaurants" }
         val food = cats().first { it.name == "Food" }
         // grouped: the child is listed by its own name, straight after its parent

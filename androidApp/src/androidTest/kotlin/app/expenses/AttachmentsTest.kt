@@ -113,7 +113,9 @@ class AttachmentsTest {
     @Test
     fun anUnreadableSourceFailsCleanlyAndLeavesNoFile() {
         val broken = object : java.io.InputStream() { override fun read() = throw java.io.IOException("disk gone") }
-        assertTrue(assertFailsWith<IllegalArgumentException> { files.copyStream("broken", broken) }.message!!.contains("disk gone"))
+        // the person is told in plain words, never the library's or the system's text ("disk gone" is the exception's own and stays in the log, not on the screen)
+        val said = assertFailsWith<IllegalArgumentException> { files.copyStream("broken", broken) }.message!!
+        assertTrue(said.contains("could not be read") && !said.contains("disk gone") && !said.contains("IOException"), said)
         assertEquals(false, files.file("broken").exists())
     }
 
