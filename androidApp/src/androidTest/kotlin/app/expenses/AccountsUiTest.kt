@@ -127,7 +127,8 @@ class AccountsUiTest {
         create("Spare", "CASH"); waitFor("account_Spare")
         tap("account_Spare"); tap("account_archive"); waitGone("account_archive")
         waitFor("message_action") // "Archived Spare. Its entries stay.  Undo", on the Accounts page itself
-        val archived = { runBlocking { container.write { ok -> ok.db.schemaQueries.accountById(idOf("Spare")).executeAsOne().archived } } }
+        val spareId = idOf("Spare") // read before, never inside a write: the write lock is not re-entrant
+        val archived = { runBlocking { container.write { ok -> ok.db.schemaQueries.accountById(spareId).executeAsOne().archived } } }
         assertEquals(1L, archived())
         tap("message_action")
         compose.waitUntil(10_000) { archived() == 0L }
