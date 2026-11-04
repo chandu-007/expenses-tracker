@@ -182,8 +182,14 @@ class CategoriesTest {
         // the Add form slides away over Home, and both are on screen while it does: a tap on the row in that moment lands on the leaving form (seen on Android 14, where the list was reached first).
         // Wait for the form to be gone and the screen to settle before touching the row.
         waitGone("new_category_chip"); waitFor("add"); compose.waitForIdle()
-        compose.onNodeWithTag("row_Movie").performClick()
-        waitFor("category_chip_Fun")
+        // the row's tap is repeated until the editor is there: on a slow emulator Home is still settling after the form closed and the tap is lost (seen again in a long API 34 batch, with a screenshot of
+        // Home with the Movie row and no editor)
+        FailureShot.around("openMovieRow") {
+            compose.waitUntil(30_000) {
+                if (compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("row_Movie").performClick() }
+                compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
         compose.onNodeWithTag("category_chip_Fun").assertIsSelected()
     }
 

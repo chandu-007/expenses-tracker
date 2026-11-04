@@ -53,10 +53,23 @@ class CaptureRulesUiTest {
         runBlocking { container.write { ok -> repeat(3) { ok.store.save(Expense(EntryId("h$it"), 1_000L + it, AccountId("bank"), Money(100, Currency.INR)), EntryDetails(merchant = "Shop number $it")) } } }
         ingest(text("shop@okhdfc", "111111111111"), 5_000)
         launch(); openRules()
-        compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput("shop"); tap("rule_test")
-        compose.waitUntil(10_000) { has("rule_tested") }
+        compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput("shop")
+        // "Test" is tapped again until its answer is there: the keyboard rises as the word is typed and moves the button, and a tap placed before that settles is lost (reproduced 6 times in 40 runs on an
+        // API 34 emulator kept busy, with a screenshot: the Category rules page with the word typed, the keyboard up, no answer)
+        FailureShot.around("CaptureRules_rule_tested") {
+            compose.waitUntil(30_000) {
+                if (!has("rule_tested")) runCatching { compose.onNodeWithTag("rule_test", useUnmergedTree = true).performScrollTo().performClick() }
+                has("rule_tested")
+            }
+        }
         assertTrue(textOf("rule_tested").contains("matched 3 of your past entries"), textOf("rule_tested"))
-        tap("rule_category_Food"); tap("rule_add"); compose.waitUntil(10_000) { has("rule_shop") }
+        tap("rule_category_Food")
+        FailureShot.around("CaptureRules_rule_shop") {
+            compose.waitUntil(30_000) {
+                if (!has("rule_shop")) runCatching { compose.onNodeWithTag("rule_add", useUnmergedTree = true).performScrollTo().performClick() } // an identical second rule is refused, so a repeated tap adds nothing
+                has("rule_shop")
+            }
+        }
         tap("rules_back"); tap("capture_back"); openInbox()
         val id = pendingId(); waitFor("inbox_goes_$id")
         assertTrue(textOf("inbox_goes_$id").contains("Food (your rule)"), textOf("inbox_goes_$id"))
