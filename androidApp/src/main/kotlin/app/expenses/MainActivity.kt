@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -66,12 +67,31 @@ class MainActivity : FragmentActivity() {
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
 
         val host = ActivityRootHost()
-        setContent { ExpensesRoot(viewModel, host) }
+        setContent { androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHinge provides hinge) { ExpensesRoot(viewModel, host) } }
+        watchFold()
         // the widgets draw the accent chosen here (More, Appearance): when it changes they are drawn again at once, not when the person next leaves the app
         val appContext = applicationContext
         lifecycleScope.launch {
             viewModel.state.map { (it as? app.expenses.UiState.Ready)?.appearance?.accent?.key }.filterNotNull().distinctUntilChanged().drop(1)
                 .collect { withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.expenses.widget.refreshWidgets(appContext) } } }
+        }
+    }
+
+    /** The fold that separates the window while a foldable is half open (null otherwise); read by the layout (WidePane.kt). */
+    private var hinge by mutableStateOf<app.expenses.ui.Hinge?>(null)
+
+    private fun watchFold() {
+        val activity = this
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                androidx.window.layout.WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(activity).collect { info ->
+                    val d = resources.displayMetrics.density
+                    hinge = info.displayFeatures.filterIsInstance<androidx.window.layout.FoldingFeature>().firstOrNull { it.isSeparating }?.let { f ->
+                        val b = f.bounds
+                        app.expenses.ui.Hinge(b.left / d, b.top / d, b.right / d, b.bottom / d, vertical = f.orientation == androidx.window.layout.FoldingFeature.Orientation.VERTICAL)
+                    }
+                }
+            }
         }
     }
 

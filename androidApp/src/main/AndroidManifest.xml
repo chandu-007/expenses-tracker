@@ -31,10 +31,15 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- A window that changes size (a foldable folded or unfolded, a rotation, split screen, a free-form or DeX window, a display-size change, a keyboard attached) is
+             NOT a reason to rebuild the screen: the activity is told and Compose lays out again at once (the layout rule reads the window's size, see WindowLayout), so the open
+             entry, the typed text and the scroll positions stay as they were. Not listed, on purpose: locale, layoutDirection, fontScale (still rebuilt, as before). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden|navigation|density|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

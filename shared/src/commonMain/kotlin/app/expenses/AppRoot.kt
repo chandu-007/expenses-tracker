@@ -38,6 +38,7 @@ import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.Density
 import app.expenses.core.domain.DraftKind
 import app.expenses.core.domain.EntryDraft
+import app.expenses.ui.aboveHinge
 import app.expenses.ui.AccountsScreen
 import app.expenses.ui.CalendarScreen
 import app.expenses.ui.AppearanceScreen
@@ -129,6 +130,15 @@ internal val MAIN: CoroutineDispatcher = Dispatchers.Main.immediate
 /** The last non-null value of something a screen needs while it is still being drawn on its way out. */
 private class Held<T : Any>(var value: T?)
 
+/** The draft last typed in the open entry, with the identity of the entry it belongs to. Not state: nothing observes it, it is only read when an editor is created. */
+private class TypedDraft {
+    private var identity: List<Any?>? = null
+    private var draft: EntryDraft? = null
+    fun of(identity: List<Any?>): EntryDraft? = if (this.identity == identity) draft else null
+    fun keep(identity: List<Any?>, draft: EntryDraft) { this.identity = identity; this.draft = draft }
+    fun forget() { identity = null; draft = null }
+}
+
 @Composable
 fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val platform = host.platform
@@ -139,11 +149,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
-            // on a wide screen (a tablet, an unfolded foldable, a phone on its side) the app keeps a comfortable width in the middle instead of stretching every line across it
-            // from app.expenses.ui.WIDE_BREAKPOINT_DP (840 dp) wide: Home and the open entry side by side (see WidePane.kt); below it nothing differs from a phone
+            // on a wide window (a tablet, an unfolded foldable) the app keeps a comfortable width in the middle instead of stretching every line across it
+            // from WindowLayout.TWO_PANE (window at least 600 dp wide and 480 dp high): Home and the open entry side by side (see WidePane.kt); below it nothing differs from a phone
             val wide = app.expenses.ui.rememberIsWide()
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
-            Surface(Modifier.widthIn(max = if (wide) app.expenses.ui.WIDE_PANES_MAX_WIDTH else app.expenses.ui.MAX_CONTENT_WIDTH).fillMaxHeight().imePadding()) {
+            Surface(Modifier.widthIn(max = if (wide) app.expenses.ui.WIDE_PANES_MAX_WIDTH else app.expenses.ui.MAX_CONTENT_WIDTH).aboveHinge().imePadding()) {
             val state by viewModel.state.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(Unit) { platform.trace("first composition") }
             var adding by rememberSaveable { mutableStateOf(false) }
@@ -292,12 +302,18 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 androidx.compose.runtime.LaunchedEffect(managingCategories) { if (managingCategories) viewModel.loadStoppedSimilar() }
                 similarOffer?.let { offer -> if (editing == null && !adding) app.expenses.ui.SimilarDialog(offer, onApply = viewModel::applySimilar, onDismiss = { stop -> viewModel.dismissSimilar(stop) }) }
                 // the entry editor: a full-screen overlay on a phone (keys 1 and 2), the right-hand pane beside Home on a wide window
+                // What is typed in the open entry is kept here as it changes, so when the window turns wide or narrow under an open entry (a foldable unfolded or folded), the editor that appears in
+                // its new place (the pane beside Home, or the full screen) starts from it instead of from the saved entry. Forgotten when the editor closes.
+                val typedDraft = androidx.compose.runtime.remember { TypedDraft() }
+                androidx.compose.runtime.LaunchedEffect(editing == null) { if (editing == null) typedDraft.forget() }
                 val editorScreen: @androidx.compose.runtime.Composable (Editable) -> Unit = { e -> when (e) {
                     is Editable.Form -> {
                         BackHandler { viewModel.closeEditor() }
                         // Keyed, so opening a refund from an expense's editor starts a new form instead of reusing the expense's typed state.
                         androidx.compose.runtime.key(e.draft.id, e.draft.kind, e.draft.refundsEntry) {
+                        val identity = listOf(e.draft.id, e.draft.kind, e.draft.refundsEntry)
                         EntryFormScreen(
+                            restored = typedDraft.of(identity), onDraft = { d -> typedDraft.keep(identity, d) },
                             title = e.title,
                             start = e.draft.let { d -> d.copy(accountId = d.accountId.ifEmpty { s.lastAccountId }) },
                             kinds = if (e.canChangeKind) listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER) else listOf(e.draft.kind),
@@ -326,10 +342,20 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor, e.origin)
                     }
                 } }
-                val screenKey = listOf(
-                    history != null, !wide && editing is Editable.Form, !wide && editing is Editable.ReadOnly, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
+                // the screens keep their place in this list as their key (-1 is home); places 1 and 2 are the editor, decided below
+                val screens = listOf(
+                    history != null, false, false, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                     customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
-                ).indexOf(true) // -1 is home; the screens keep their place in this list as their key
+                )
+                // The entry editor is the pane beside Home on a wide window, but only while Home is what is showing: opened from Search, the calendar or another screen it is a full screen over that
+                // screen on a wide window too (there is no Home beside it to put it next to), and Back returns to that screen.
+                val editorFull = !wide || screens.any { it }
+                val screenKey = when {
+                    history != null -> 0
+                    editing is Editable.Form && editorFull -> 1
+                    editing is Editable.ReadOnly && editorFull -> 2
+                    else -> screens.indexOf(true)
+                }
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
                 val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
@@ -365,8 +391,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BackHandler { viewModel.closeHistory() }
                         HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
                     }
-                    k == 1 -> editorScreen((editing as? Editable.Form) ?: (heldEditing.value as Editable.Form))
-                    k == 2 -> editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
+                    // k 1 and 2 are drawn only while the editor is a full screen: a one still leaving when the window turns wide draws nothing, the pane beside Home has the editor then
+                    k == 1 -> if (editorFull) editorScreen((editing as? Editable.Form) ?: (heldEditing.value as Editable.Form))
+                    k == 2 -> if (editorFull) editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
                         InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() })

@@ -68,6 +68,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -204,8 +205,14 @@ fun EntryFormScreen(
     suggestedCategory: app.expenses.SuggestedCategoryUi? = null,
     /** Saves several new expenses at once (the items of a bill, each its own entry) and the photo the bill was read from; null where the form cannot (an edit). */
     onSaveEach: ((drafts: List<EntryDraft>, photoUri: String?) -> Unit)? = null,
+    /** What was typed so far, when this form replaces another instance of the same entry (the window turned wide or narrow): it starts from this instead of [start]. */
+    restored: EntryDraft? = null,
+    /** Told of every change of the draft, so [restored] can be given to the next instance. */
+    onDraft: ((EntryDraft) -> Unit)? = null,
 ) {
-    var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(start) }
+    var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(restored ?: start) }
+    // a SideEffect, not a LaunchedEffect: it runs in the frame that drew the change, before anything that follows it (a fold) can take this form out of the composition
+    if (onDraft != null) SideEffect { onDraft(draft) }
     var saveAsTemplate by rememberSaveable { mutableStateOf(false) }
     // editing: the only Cash account was chosen for a cash withdrawal by the type change itself, not by the person (said in the note under the chips)
     var cashPicked by rememberSaveable { mutableStateOf(false) }
@@ -213,7 +220,7 @@ fun EntryFormScreen(
     var creatingCategory by rememberSaveable { mutableStateOf(false) }
     var pickingCategory by rememberSaveable { mutableStateOf(false) }
     var creatingPerson by rememberSaveable { mutableStateOf(false) }
-    var splitMode by rememberSaveable { mutableStateOf(if (start.paidBy.isNotEmpty()) 2 else if (start.splitAmounts.isNotEmpty()) 1 else 0) } // 0 equally, 1 by typed amounts, 2 a friend paid
+    var splitMode by rememberSaveable { mutableStateOf((restored ?: start).let { if (it.paidBy.isNotEmpty()) 2 else if (it.splitAmounts.isNotEmpty()) 1 else 0 }) } // 0 equally, 1 by typed amounts, 2 a friend paid
     val currency = BaseCurrency.current
     val built = EntryDrafts.build(draft, EntryId("preview"), currency)
     val amount = app.expenses.core.domain.parseAmount(draft.amountText, currency)
