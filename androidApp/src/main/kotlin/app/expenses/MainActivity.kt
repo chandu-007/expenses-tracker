@@ -54,6 +54,7 @@ class MainActivity : FragmentActivity() {
     private val addRequests = MutableStateFlow(0)
     private val billsRequests = MutableStateFlow(0)
     private val payCardRequests = MutableStateFlow<PayCardRequest?>(null)
+    private val shortcutRequests = MutableStateFlow<ShortcutRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("onCreate: begin")
@@ -125,6 +126,7 @@ class MainActivity : FragmentActivity() {
         override val addRequests get() = this@MainActivity.addRequests
         override val billsRequests get() = this@MainActivity.billsRequests
         override val payCardRequests get() = this@MainActivity.payCardRequests
+        override val shortcutRequests get() = this@MainActivity.shortcutRequests
         // read on each use: tests replace ExpensesApp.lock
         private var port: ActivityLockPort? = null
         override val lock: AppLockPort get() = port?.takeIf { it.lock === app.lock } ?: ActivityLockPort(app.lock, this@MainActivity).also { port = it }
@@ -178,6 +180,22 @@ class MainActivity : FragmentActivity() {
         override fun openNotificationAccessSettings() = startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         override fun privacyRows(): List<PermissionRow> = PermissionNotes.rows(this@MainActivity)
         override val canUseInternet get() = PermissionNotes.canUseInternet(this@MainActivity)
+    }
+
+    /** Ctrl+N adds an expense and Ctrl+F searches, from a hardware keyboard (a tablet or foldable with one, DeX). Tried after the view has had the key, so a text field keeps its own Ctrl keys. */
+    override fun onKeyShortcut(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        val which = when (keyCode) { android.view.KeyEvent.KEYCODE_N -> Shortcut.ADD; android.view.KeyEvent.KEYCODE_F -> Shortcut.SEARCH; else -> null }
+        if (which == null || !(event.isCtrlPressed || event.isMetaPressed)) return super.onKeyShortcut(keyCode, event)
+        shortcutRequests.value = ShortcutRequest((shortcutRequests.value?.n ?: 0) + 1, which)
+        return true
+    }
+
+    /** The shortcuts, in the system's keyboard shortcuts list (Meta + /). */
+    override fun onProvideKeyboardShortcuts(data: MutableList<android.view.KeyboardShortcutGroup>, menu: android.view.Menu?, deviceId: Int) {
+        data.add(android.view.KeyboardShortcutGroup("Expenses", listOf(
+            android.view.KeyboardShortcutInfo("Add an expense", android.view.KeyEvent.KEYCODE_N, android.view.KeyEvent.META_CTRL_ON),
+            android.view.KeyboardShortcutInfo("Search", android.view.KeyEvent.KEYCODE_F, android.view.KeyEvent.META_CTRL_ON),
+        )))
     }
 
     /** The activity is `singleTop`, so a shortcut or tile tap while the app is open arrives here. */

@@ -20,12 +20,25 @@ Settings, Display, Font size and Display size at their largest.
 - [ ] Home, Search and the account bar (This month, Last month, All, Search, Edit account, Show all) still reach every control by scrolling.
 - [ ] Nothing important is cut off on the To review cards.
 
-### Two panes (tablet or an unfolded foldable, 840 dp wide or more)
-- [ ] Home sits on the left, 400 to 480 dp wide. "Select an entry" shows on the right until you tap a row.
+### Two panes (tablet or an unfolded foldable: a window at least 600 dp wide and 480 dp high)
+- [ ] Home sits on the left, 300 to 480 dp wide. "Select an entry" shows on the right until you tap a row.
 - [ ] Tapping a row opens the editor on the right; Save and Cancel clear it; Back works.
-- [ ] More, Reports, Search and the other screens are centred, about 960 dp wide.
-- [ ] Rotate while an entry is open. Nothing typed is lost, or you are told.
-- [ ] On a phone nothing looks different from before.
+- [ ] More, Reports, Search and the other screens are centred, about 960 dp wide at most. An entry opened from Search or the calendar covers that screen (there is no Home beside it) and Back returns to it.
+- [ ] Rotate while an entry is open. Nothing typed is lost (the app is not rebuilt by a rotation, a fold or a window resize).
+- [ ] On a phone nothing looks different from before. A phone on its side (about 800 x 360 dp) is still the phone layout.
+
+### Samsung Galaxy Z Fold (Fold 3 to 7), by hand: only an emulator at the same sizes was used
+- [ ] Folded (cover screen, about 344 to 411 dp wide): the phone layout, as on any phone.
+- [ ] Unfold with the app open on Home: the two panes appear at once, no restart, the list keeps its scroll position. Fold again: the phone layout returns, still on the same screen.
+- [ ] Open an entry on the cover screen, type a new amount without saving, unfold: the entry opens in the right-hand pane with the typed amount. Fold again: it is the full screen with the same amount.
+- [ ] Unfolded, both ways up (upright and on its side): two panes, nothing clipped; Search, Reports, To review and More are one centred page.
+- [ ] Keyboard up in the right-hand pane (amount, note): still two panes, the Save button above the keyboard.
+- [ ] Half open like a book (fold running top to bottom): Home on one side of the crease, the entry on the other, nothing under the crease.
+- [ ] Table-top (half open, crease running across): the app fills the half above the crease, nothing below it.
+- [ ] Split screen (app next to another app): the half is a phone layout unless it is still 600 dp wide; pop-up view and DeX windows follow their size while you drag the edge.
+- [ ] With a keyboard (a Fold with a keyboard case, DeX, a tablet): Ctrl+N opens the add screen and Ctrl+F opens Search from Home, Search or Reports (nothing happens on other pages or during the tour); Meta + / lists both.
+- [ ] Settings, Display, Screen zoom at the smallest and the largest: two panes while the window is 600 dp wide or more; at the largest zoom an upright Fold inner screen can fall below 600 dp and shows the phone layout (expected).
+- [ ] Settings, Apps screen ratio / "Fit to app screen" does not letterbox the app on the inner screen.
 
 ### Texts and bank alerts (Play build with the text permission)
 - [ ] Allow text reading from More, Capture. The disclosure shows first, then Android's own permission.
@@ -138,7 +151,7 @@ Settings, Accessibility, VoiceOver. Swipe right through each screen.
 
 ### Larger text and iPad (if you have one)
 - [ ] Dynamic Type at the largest size: Home and the Shortcuts screen stay usable.
-- [ ] iPad: the two-pane layout above. The width check uses the same API as the guide screen but has not been run on an iPad.
+- [ ] iPad: the two-pane layout above, now in both ways up (an iPad mini upright is 744 pt wide). The size comes from the same window API as the guide screen but has not been run on an iPad. iPhones, in both ways up, stay one pane.
 
 ## What to send back
 For anything that fails: the screen, what you tapped, what you expected, and the version from More. The Send feedback button writes that down for you.

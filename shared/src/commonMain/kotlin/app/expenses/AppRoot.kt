@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.expenses.ui.PermissionRow
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import app.expenses.ui.BackHandler
 import app.expenses.ui.BudgetScreen
@@ -83,6 +84,9 @@ interface RootHost {
     /** The latest "Pay now" tap on a card notice (a new [PayCardRequest.n] each time), or null. A host without notification buttons keeps the default. */
     val payCardRequests: StateFlow<PayCardRequest?> get() = NoPayCardRequests
 
+    /** The latest key shortcut from a hardware keyboard (a new [ShortcutRequest.n] each time), or null. A host without hardware shortcuts keeps the default. */
+    val shortcutRequests: StateFlow<ShortcutRequest?> get() = NoShortcutRequests
+
     /** True where a file can be handed to another app through the system share sheet (Android). */
     val canShareFiles: Boolean get() = false
 
@@ -128,6 +132,13 @@ interface SmsPermission {
 internal val MAIN: CoroutineDispatcher = Dispatchers.Main.immediate
 
 /** The last non-null value of something a screen needs while it is still being drawn on its way out. */
+/** What a hardware-keyboard shortcut asks for: Ctrl+N adds an expense, Ctrl+F opens Search. */
+enum class Shortcut { ADD, SEARCH }
+
+class ShortcutRequest(val n: Int, val shortcut: Shortcut)
+
+private val NoShortcutRequests = MutableStateFlow<ShortcutRequest?>(null)
+
 private class Held<T : Any>(var value: T?)
 
 /** The draft last typed in the open entry, with the identity of the entry it belongs to. Not state: nothing observes it, it is only read when an editor is created. */
@@ -370,6 +381,19 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         t == "Search" && !searching -> { searchAccount = null; searching = true }
                         t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
                         t == "More" -> wantMore = true
+                    }
+                }
+                // a shortcut from a hardware keyboard acts only where the bar along the bottom is (Home, Search, Reports), with no tour and no add screen up: elsewhere it would open a screen that stays hidden behind the one showing
+                val shortcut by host.shortcutRequests.collectAsState()
+                var handledShortcut by rememberSaveable { mutableIntStateOf(0) }
+                androidx.compose.runtime.LaunchedEffect(shortcut) {
+                    val r = shortcut ?: return@LaunchedEffect
+                    if (r.n <= handledShortcut) return@LaunchedEffect
+                    handledShortcut = r.n
+                    if (guide != null || adding || screenKey !in listOf(app.expenses.ui.ScreenKeys.HOME, 14, 16)) return@LaunchedEffect
+                    when (r.shortcut) {
+                        Shortcut.ADD -> { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
+                        Shortcut.SEARCH -> goTab("Search")
                     }
                 }
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
