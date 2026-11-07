@@ -51,7 +51,11 @@ class WidePaneUiTest {
 
     private val ua = InstrumentationRegistry.getInstrumentation().uiAutomation
     /** Runs a shell command as the shell user and waits for it to finish (`wm size`, `wm density`). */
-    private fun shell(cmd: String) { android.os.ParcelFileDescriptor.AutoCloseInputStream(ua.executeShellCommand(cmd)).use { it.readBytes() } }
+    private fun shell(cmd: String) {
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(ua.executeShellCommand(cmd)).use { it.readBytes() }
+        // a display change takes a moment to reach every window (slowest on Android 8): launching or measuring in the middle of it is a race of the test, not of the app
+        if (cmd.startsWith("wm ")) Thread.sleep(1_500)
+    }
     private fun resetDisplay() { shell("wm size reset"); shell("wm density reset") }
     private fun windowDp(): Pair<Int, Int> { var r = 0 to 0; scenario!!.onActivity { val m = it.resources.displayMetrics; r = (m.widthPixels / m.density).toInt() to (m.heightPixels / m.density).toInt() }; return r }
 

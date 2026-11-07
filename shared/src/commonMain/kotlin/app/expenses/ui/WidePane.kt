@@ -88,16 +88,25 @@ fun Modifier.aboveHinge(): Modifier {
     return if (hinge != null && !hinge.vertical && hinge.top > 0f) height(hinge.top.dp) else fillMaxHeight()
 }
 
+/**
+ * The window's size in dp as the platform's own configuration reports it, or null where [LocalWindowInfo] is to be used (iOS). Android: `screenWidthDp` / `screenHeightDp`, which follow the
+ * window on every Android version: on Android 8 `LocalWindowInfo.containerSize` stayed at the size the window had when it opened after a live resize (a foldable unfolding, a DeX window being dragged),
+ * so the layout never changed (seen on the API 26 emulator).
+ */
+@Composable
+internal expect fun platformWindowSizeDp(): androidx.compose.ui.unit.DpSize?
+
 /** True while the window is big enough for two panes ([WindowLayout.of]). Only a change of the answer recomposes the caller, not every pixel of a window resize. */
 @Composable
 fun rememberIsWide(): Boolean {
     val info = LocalWindowInfo.current
     val density = LocalDensity.current
     val hinge = currentHinge()
-    val wide by remember(info, density, hinge) {
+    val platformSize = platformWindowSizeDp()
+    val wide by remember(info, density, hinge, platformSize) {
         derivedStateOf {
-            val width = WideLayoutTestHook.widthDp?.toFloat() ?: (info.containerSize.width / density.density)
-            val height = WideLayoutTestHook.heightDp?.toFloat() ?: (info.containerSize.height / density.density)
+            val width = WideLayoutTestHook.widthDp?.toFloat() ?: platformSize?.width?.value ?: (info.containerSize.width / density.density)
+            val height = WideLayoutTestHook.heightDp?.toFloat() ?: platformSize?.height?.value ?: (info.containerSize.height / density.density)
             WindowLayout.of(width, WindowLayout.usableHeightDp(height, hinge?.takeIf { !it.vertical }?.top)) == WindowLayout.TWO_PANE
         }
     }
