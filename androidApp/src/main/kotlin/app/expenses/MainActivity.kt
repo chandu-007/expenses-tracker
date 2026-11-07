@@ -82,6 +82,8 @@ class MainActivity : FragmentActivity() {
     private var hinge by mutableStateOf<app.expenses.ui.Hinge?>(null)
 
     private fun watchFold() {
+        // only a phone with a hinge angle sensor can be folded: nothing is started (nor its classes loaded) on any other
+        if (!packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle")) return
         val activity = this
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
