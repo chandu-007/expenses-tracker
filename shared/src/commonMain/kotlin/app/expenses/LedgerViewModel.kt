@@ -294,7 +294,7 @@ const val BILL_KIND_REPEATING = "REPEATING"
 
 
 /** The bills page: found in messages, being tracked (soonest first), and recently paid. */
-data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<BillRowUi> = emptyList(), val paid: List<BillRowUi> = emptyList(), val loaded: Boolean = false)
+data class BillsUi(val found: List<BillRowUi> = emptyList(), val coming: List<BillRowUi> = emptyList(), val paid: List<BillRowUi> = emptyList(), val loaded: Boolean = false, /** How many bills an earlier version made from the confirmation of a payment: "Move to To review" is offered for them. */ val repairable: Int = 0)
 
 /** One line of the home banner for bills. */
 data class BillPeekRow(val id: String, val title: String, val amountText: String, val dueIn: String, val isNew: Boolean, val overdue: Boolean)
@@ -1931,7 +1931,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val today = todayLocal()
         fun rows(status: app.expenses.core.storage.BillStatus, limit: Long) = ok.bills.list(status, limit).map { billRow(ok, it, accounts, today) }
         val coming = (rows(app.expenses.core.storage.BillStatus.TRACKED, 100) + cardDueRows(ok, accounts, today) + repeatingRows(ok, today)).sortedBy { it.dueEpochDay ?: Long.MAX_VALUE }
-        return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), coming, rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true)
+        return BillsUi(rows(app.expenses.core.storage.BillStatus.FOUND, 50), coming, rows(app.expenses.core.storage.BillStatus.PAID, 5).sortedByDescending { it.id }, loaded = true, repairable = MessageIngest.repairableBills(ok).size)
     }
 
     /** Prefix of the id of a credit card's statement shown among the bills although no message brought it (an imported statement, or entries typed in). */
@@ -2047,14 +2047,41 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
     }
 
-    /** Puts back the bill whose skip was just offered for Undo, in the state it was skipped from. */
+    /** Puts back the bill whose skip was just offered for Undo, in the state it was skipped from; or, for [BILL_REPAIR_UNDO], what "Move to To review" did. */
     fun undoDismissBill(id: String) {
+        if (id == BILL_REPAIR_UNDO) {
+            val moved = heldRepair ?: return
+            heldRepair = null
+            withStore { ok -> moved.asReversed().forEach { ok.billRepairs.undo(it) }; MessageIngest.changes.value += 1; _inbox.value = inboxRows(ok); billsChanged(ok) }
+            return
+        }
         val held = skippedBill?.takeIf { it.id == id } ?: return // taken now: see [undoDismissCapture]
         withStore { ok -> if (ok.bills.undismiss(id, held.status, held.body)) billsChanged(ok) }
     }
 
     fun billUndoGone(id: String) {
-        if (_billUndo.value?.id == id) { _billUndo.value = null; skippedBill = null }
+        if (_billUndo.value?.id == id) { _billUndo.value = null; skippedBill = null; heldRepair = null }
+    }
+
+    /** What "Move to To review" moved, held for the few seconds its Undo is offered. */
+    private var heldRepair: List<app.expenses.core.storage.BillRepairs.Moved>? = null
+
+    /**
+     * "Move to To review" on the Bills page: the bills an earlier version made from the confirmation of a payment ([MessageIngest.repairableBills]: still found, from a text, unedited, the words read as a payment and
+     * not as a request for money) leave Bills and wait in To review as bill payments, each in one all-or-nothing step that keeps its original words ([app.expenses.core.storage.BillRepairs]). Only the person's tap
+     * runs this; a bill they acted on meanwhile is left as it is. "Moved N to To review · Undo" puts everything back.
+     */
+    fun repairBillPaymentTexts() = withStore { ok ->
+        val moved = ArrayList<app.expenses.core.storage.BillRepairs.Moved>()
+        for ((bill, item, fingerprint) in MessageIngest.repairableBills(ok)) {
+            try { moved += ok.billRepairs.move(bill, item, fingerprint) } catch (e: IllegalArgumentException) { /* the person acted on it since: it stays */ }
+        }
+        if (moved.isEmpty()) { billsChanged(ok); return@withStore }
+        heldRepair = moved
+        MessageIngest.changes.value += 1
+        _inbox.value = inboxRows(ok)
+        billsChanged(ok)
+        _billUndo.value = ScreenUndo(BILL_REPAIR_UNDO, "Moved ${moved.size} ${if (moved.size == 1) "bill" else "bills"} to To review")
     }
 
     fun setBillDue(id: String, epochDay: Long) = withStore { ok -> ok.bills.setDueDate(id, localDateOfEpochDay(epochDay).toString()); billsChanged(ok) }
@@ -2515,6 +2542,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
         /** The id of the Undo bar of an add that did more than save an entry (a transfer the person chose, Mark paid on a bill payment, a text joined to the entry that holds its other leg): this and the item's id. */
         const val ADDED_UNDO = "added:"
+
+        /** The id of the Undo bar of "Move to To review" on the Bills page. */
+        const val BILL_REPAIR_UNDO = "bill-repair"
     }
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)

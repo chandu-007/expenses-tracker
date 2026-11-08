@@ -70,8 +70,9 @@ class BillPaymentUiTest {
     private fun bill(
         id: String, status: BillStatus = BillStatus.TRACKED, kind: String = "CREDIT_CARD", issuer: String = "Axis Bank", title: String = "Axis Bank credit card 4321", amountMinor: Long = amount,
         minDue: Long? = 61_728, last4: String? = "4321", sender: String = axisSender, body: String? = "Your Axis Bank credit card statement of Rs 12,345.67 is generated. Total amount due Rs 12,345.67.",
+        due: String? = LocalDate.now().plusDays(8).toString(),
     ): Bill {
-        val b = Bill(id, Capture.SMS, sender, issuer, kind, title, amountMinor, minDue, "INR", LocalDate.now().plusDays(8).toString(), last4, null, false, now - 86_400_000, body, BillStatus.FOUND, null, null, "key-$id")
+        val b = Bill(id, Capture.SMS, sender, issuer, kind, title, amountMinor, minDue, "INR", due, last4, null, false, now - 86_400_000, body, BillStatus.FOUND, null, null, "key-$id")
         runBlocking { container.write { ok -> ok.bills.add(b); if (status == BillStatus.TRACKED) ok.bills.track(id) } }
         return b
     }
@@ -307,38 +308,43 @@ class BillPaymentUiTest {
         assertEquals(1, entries().size)
     }
 
-    // ---- (7) the old bug: the confirmation was filed as a bill ----
+    // ---- (7) the old bug: the confirmation was filed as a bill; moving it is the person's tap (Bills, "Move to To review"), never automatic ----
 
-    private fun wrongBill(status: BillStatus) = bill("wrong", status, issuer = "Kotak Mahindra Bank", title = "Kotak Mahindra Bank credit card", sender = kotak, last4 = null, minDue = null, body = owner)
+    private fun wrongBill(status: BillStatus, due: String? = null) = bill("wrong", status, issuer = "Kotak Mahindra Bank", title = "Kotak Mahindra Bank credit card", sender = kotak, last4 = null, minDue = null, body = owner, due = due)
 
     @Test
-    fun aFoundBillThatWasReallyAPaymentConfirmationLeavesBillsAndWaitsInToReviewAsABillPayment() {
+    fun aFoundBillThatWasReallyAPaymentConfirmationIsMovedToToReviewOnlyByTheTapAndUndoPutsItBack() {
         accounts(); wrongBill(BillStatus.FOUND)
-        launch(); vm().loadInbox()
-        compose.waitUntil(10_000) { billOf("wrong").status == BillStatus.DISMISSED }
-        assertEquals(emptyList(), bills(BillStatus.FOUND))
+        launch(); vm().loadInbox(); compose.waitForIdle()
+        assertEquals(BillStatus.FOUND, billOf("wrong").status, "opening the app or To review changes no bill by itself")
+        openBills(); waitFor("bills_repair_card")
+        assertTrue(textOf("bills_repair_text").startsWith("1 bill below is really the confirmation of a payment"), textOf("bills_repair_text"))
+        tapUntil("bills_repair_move") { billOf("wrong").status == BillStatus.DISMISSED }
+        assertEquals(emptyList(), bills(BillStatus.FOUND)); gone("bills_repair_card")
         val item = runBlocking { container.write { it.inbox.list().single() } }!!
-        assertTrue(item.body!!.contains("bill payment of Rs. 12,345.67")); assertEquals(amount, item.amountMinor)
-        openInbox(); waitFor("inbox_billpay_label_${item.id}")
-        assertEquals("Mark the Axis card bill as paid?", textOf("inbox_billpay_question_${item.id}"))
+        assertTrue(item.body!!.contains("bill payment of Rs. 12,345.67"), "the original words wait in To review"); assertEquals(amount, item.amountMinor); assertEquals(InboxStatus.PENDING, item.status)
+        assertEquals(amount, billOf("wrong").amountMinor, "the bill row is skipped, not deleted")
+        tapUndo(); compose.waitUntil(10_000) { billOf("wrong").status == BillStatus.FOUND }
+        assertEquals(owner, billOf("wrong").body); assertEquals(null, status(item.id), "the untouched item the move made is taken away again"); assertEquals(0, runBlocking { container.write { it.inbox.pendingCount() } }!!.toInt())
+        waitFor("bills_repair_card")
+        tapUntil("bills_repair_move") { billOf("wrong").status == BillStatus.DISMISSED }
+        compose.waitUntil(10_000) { runBlocking { container.write { it.inbox.list().size } } == 1 }
+        val again = runBlocking { container.write { it.inbox.list().single() } }!!
+        tap("bills_back"); openInbox(); waitFor("inbox_billpay_label_${again.id}")
+        assertEquals("Mark the Axis card bill as paid?", textOf("inbox_billpay_question_${again.id}"))
     }
 
     @Test
-    fun aTrackedWrongBillIsRepairedTheSameWay() {
+    fun aBillThePersonAddedPaidEditedOrThatIsARealBillIsNeverOfferedOrMoved() {
         accounts(); wrongBill(BillStatus.TRACKED)
-        launch(); vm().loadInbox()
-        compose.waitUntil(10_000) { billOf("wrong").status == BillStatus.DISMISSED }
-        assertEquals(emptyList(), bills(BillStatus.TRACKED))
-        assertEquals(1, runBlocking { container.write { it.inbox.list().size } })
-    }
-
-    @Test
-    fun aPaidBillIsNeverTouchedByTheRepair() {
-        accounts(); wrongBill(BillStatus.TRACKED)
-        runBlocking { container.write { it.bills.markPaid("wrong", null, now) } }
-        launch(); vm().loadInbox()
-        compose.waitUntil(10_000) { vm().inbox.value.isEmpty() }
-        assertEquals(BillStatus.PAID, billOf("wrong").status); assertEquals(emptyList(), runBlocking { container.write { it.inbox.list() } })
+        bill("paid", BillStatus.TRACKED, issuer = "Kotak Mahindra Bank", sender = kotak, last4 = null, minDue = null, body = owner, due = null).also { runBlocking { container.write { ok -> ok.bills.markPaid("paid", null, now) } } }
+        bill("edited", BillStatus.FOUND, issuer = "Kotak Mahindra Bank", sender = kotak, last4 = null, minDue = null, body = owner, due = LocalDate.now().plusDays(20).toString())
+        bill("real", BillStatus.FOUND)
+        openBills(); waitFor("bills_list")
+        compose.waitForIdle(); assertTrue(!has("bills_repair_card"), "none of them is a bill the earlier version made and nobody touched")
+        launch(); vm().loadInbox(); compose.waitForIdle()
+        assertEquals(BillStatus.TRACKED, billOf("wrong").status); assertEquals(BillStatus.PAID, billOf("paid").status); assertEquals(BillStatus.FOUND, billOf("edited").status); assertEquals(BillStatus.FOUND, billOf("real").status)
+        assertEquals(emptyList(), runBlocking { container.write { it.inbox.list() } })
     }
 
     // ---- (8) a utility ----
@@ -377,5 +383,22 @@ class BillPaymentUiTest {
         openBills(); revealBill("bill_${b.id}")
         assertTrue(textOf("bill_amount_${b.id}").contains("₹12,345.67"))
         launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_empty")
+    }
+
+    // ---- the sender: a header the list does not know captures nothing, is offered under Capture, and trusting it captures the next text ----
+
+    @Test
+    fun aKotak811HeaderThatIsNotOnTheListCapturesNothingIsOfferedUnderCaptureAndTrustingItCapturesTheNextPaymentText() {
+        accounts()
+        val sender = "AX-KOTAK811-S"
+        assertEquals(CaptureEventOutcome.NOT_ALLOWLISTED, ingest(owner, now, sender), "nothing of the text is read: the header is not on the list")
+        assertEquals(emptyList(), runBlocking { container.write { it.inbox.list() } }); assertEquals(0, billsCount())
+        launch(); compose.openMore(); tap("open_capture"); waitFor("skipped_sender_KOTAK811")
+        assertEquals("KOTAK811", textOf("skipped_sender_KOTAK811")); assertEquals("1 text skipped", textOf("skipped_count_KOTAK811"))
+        tapUntil("skipped_trust_KOTAK811") { has("sender_chip_KOTAK811") }
+        assertEquals(CaptureEventOutcome.CAPTURED, ingest("$owner ", now + 60_000, sender), "from now on its payment text is read: a payment, never a bill")
+        assertEquals(0, billsCount())
+        showInbox(); val id = idAt(now + 60_000); waitFor("inbox_billpay_question_$id")
+        assertEquals("Mark the Axis card bill as paid?", textOf("inbox_billpay_question_$id"))
     }
 }

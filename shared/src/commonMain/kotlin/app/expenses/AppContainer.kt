@@ -65,6 +65,9 @@ class AppContainer(private val platform: Platform) {
             /** What an add from To review does besides saving the entry: joining a text to an entry that already holds the other leg, and taking an add back exactly. */
             val captureAdds: app.expenses.core.storage.CaptureAdds = app.expenses.core.storage.CaptureAdds(db, store, inbox, origins, bills)
 
+            /** "Move to To review" on the Bills page: a bill an earlier version made from a payment's confirmation goes to To review, in one step that keeps its words, with an exact Undo. */
+            val billRepairs: app.expenses.core.storage.BillRepairs = app.expenses.core.storage.BillRepairs(db, inbox, bills)
+
             /** "Change the type" of an expense, income or transfer: the entry is replaced by one of the new type, with an exact Undo. */
             val kindChanges: app.expenses.core.storage.KindChanges = app.expenses.core.storage.KindChanges(db, store, origins, expects, attachments)
 

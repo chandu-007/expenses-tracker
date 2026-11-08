@@ -149,6 +149,12 @@ object BillParser {
         return failedPayment.containsMatchIn(text) && !deadline.containsMatchIn(text) && !otp.containsMatchIn(text)
     }
 
+    /** Whether the words ask for money or name something still owed: a due date or "pay by", a total or minimum due, an amount outstanding. Used to leave a text that also confirms a payment alone when a bill is repaired. */
+    internal fun asksForMoney(body: String): Boolean {
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
+        return deadline.containsMatchIn(text) || minDue.containsMatchIn(text) || totalDue.containsMatchIn(text)
+    }
+
     /** What the words are a bill for. [allowCard] false skips the credit card test: a payment text that merely names the card it was paid with is not a card bill. */
     internal fun kindOf(text: String, allowCard: Boolean = true): BillKind = when {
         allowCard && kindCard.containsMatchIn(text) && !kindElectric.containsMatchIn(text) -> BillKind.CREDIT_CARD

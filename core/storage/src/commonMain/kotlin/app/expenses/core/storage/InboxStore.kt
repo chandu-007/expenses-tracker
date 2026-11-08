@@ -53,6 +53,13 @@ class InboxStore(private val db: ExpensesDb) {
         before != null && before.status == InboxStatus.DISMISSED.name
     }
 
+    /** Takes away a pending item that something made itself and nobody has acted on ([BillRepairs.undo]); False when it is not pending (it is then left exactly as the person made it). */
+    fun removeIfPending(id: String): Boolean = db.transactionWithResult {
+        val before = q.inboxById(id).executeAsOneOrNull()
+        q.deletePendingInbox(id)
+        before != null && before.status == InboxStatus.PENDING.name
+    }
+
     /** Takes back a [confirm] whose entry is being undone: the item is pending again with [body] (the text it had, which adding it forgot). False when it was not confirmed. */
     fun unconfirm(id: String, body: String?): Boolean = db.transactionWithResult {
         val before = q.inboxById(id).executeAsOneOrNull()

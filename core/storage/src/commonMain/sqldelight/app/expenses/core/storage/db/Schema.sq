@@ -966,6 +966,10 @@ UPDATE inbox SET status = 'PENDING', entry_id = NULL, body = :body WHERE id = :i
 reopenConfirmedInbox:
 UPDATE inbox SET status = 'PENDING', entry_id = NULL, body = :body WHERE id = :id AND status = 'CONFIRMED';
 
+-- Undo of "Move to To review" (Bills): the pending item that move made is taken away again, only while nobody has acted on it, so the same text can be moved again (its fingerprint goes with it).
+deletePendingInbox:
+DELETE FROM inbox WHERE id = :id AND status = 'PENDING';
+
 insertCaptureEvent:
 INSERT INTO capture_event(at, sender_root, outcome) VALUES (?, ?, ?);
 

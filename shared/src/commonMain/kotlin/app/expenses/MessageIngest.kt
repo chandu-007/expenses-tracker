@@ -7,6 +7,7 @@ import app.expenses.core.parsers.BillKind
 import app.expenses.core.parsers.BankRules
 import app.expenses.core.parsers.BillNotice
 import app.expenses.core.parsers.BillPayments
+import app.expenses.core.parsers.BillPaymentRepair
 import app.expenses.core.parsers.CaptureClassifier
 import app.expenses.core.parsers.CaptureOutcome
 import app.expenses.core.parsers.Direction
@@ -169,15 +170,12 @@ object MessageIngest {
     }
 
     /**
-     * Texts that an earlier version filed wrongly, judged again by today's rules, in both directions:
-     *  - a still-PENDING text item (SMS or Shortcuts source, never an email or a payment-app notification, never one the person already confirmed or skipped) that the rules now read as a bill (0.7.1: "Your bill
-     *    ... is due ... Total amount payable ... Kindly ignore, if already paid" was filed as a debit) becomes a [Bill] (the same dedupe key as a new one, so a bill already on the Bills page is not doubled) and the
-     *    item is skipped, which keeps its fingerprint so the same text is not captured twice;
-     *  - a FOUND or TRACKED bill from a text that is really the confirmation of a bill that was PAID ("Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful!" was filed as a new bill) is skipped, and
-     *    its text waits in To review as a bill payment ([BillPayments]), where the card asks to mark the matching bill paid. A bill the person already paid or skipped is left alone.
-     * Idempotent: a skipped item or bill is no longer waiting, and one that is still what it was is not touched. Returns how many were moved. Call inside the write lock.
+     * Texts that an earlier version filed as a debit or credit in To review but that the rules now read as a bill (0.7.1: "Your bill ... is due ... Total amount payable ... Kindly ignore, if already paid" was
+     * filed as a debit). Each still-PENDING text item (SMS or Shortcuts source, never an email or a payment-app notification, and never one the person already confirmed or skipped) is judged again from its
+     * stored sender and words by the same rules as a new message; one that is now a bill becomes a [Bill] (the same dedupe key as a new one, so a bill already on the Bills page is not doubled) and the item is
+     * skipped, which keeps its fingerprint so the same text is not captured twice. Idempotent: a skipped item is no longer pending, and an item that is still a transaction is not touched. Returns how many
+     * items became bills. Call inside the write lock. (Bills made WRONGLY from a payment's confirmation are not moved here: that rewrites bills the person may have seen, so it is their tap, see [repairableBills].)
      */
-    @OptIn(ExperimentalUuidApi::class)
     fun reclassifyWaiting(ok: AppContainer.Opened.Ok): Int {
         val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         var converted = 0
@@ -188,20 +186,31 @@ object MessageIngest {
             ok.bills.add(billOf(verdict, item.source, item.sender, item.receivedAt, text))
             if (ok.inbox.dismiss(item.id)) converted++
         }
-        for (b in ok.bills.list(BillStatus.FOUND, 500) + ok.bills.list(BillStatus.TRACKED, 500)) {
-            val text = b.body?.takeIf { b.source == CaptureKeys.SMS && BillPayments.read(it) != null } ?: continue
-            val verdict = classifyText(b.sender.trim(), text, extra, dateOfMillis(b.receivedAt)) as? CaptureOutcome.Transaction ?: continue
+        if (converted > 0) changes.value += 1
+        return converted
+    }
+
+    /**
+     * The FOUND bills that an earlier version made from the confirmation of a payment ("Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful!"), as the pending item each would become in To review
+     * (with the fingerprint of its text). Narrow by [BillPaymentRepair]: a bill the person added, paid, skipped or edited, or whose words also ask for money, is not listed. Reads the FOUND bills only (at most
+     * 200), never the ledger. Nothing is changed; the person's tap on "Move to To review" does it ([BillRepairs.move]).
+     */
+    @OptIn(ExperimentalUuidApi::class)
+    fun repairableBills(ok: AppContainer.Opened.Ok): List<Triple<Bill, InboxItem, String>> {
+        val found = ok.bills.list(BillStatus.FOUND, 200)
+        if (found.isEmpty()) return emptyList()
+        val extra by lazy { ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet() }
+        return found.mapNotNull { b ->
+            BillPaymentRepair.notice(b.source, b.status.name, b.body, b.amountMinor, b.dueDate, b.entryId, b.paidAt) ?: return@mapNotNull null
+            val text = b.body ?: return@mapNotNull null
+            val verdict = classifyText(b.sender.trim(), text, extra, dateOfMillis(b.receivedAt)) as? CaptureOutcome.Transaction ?: return@mapNotNull null
             val a = verdict.alert
             val item = InboxItem(
                 Uuid.random().toString(), b.source, b.sender, verdict.issuer, b.receivedAt, a.direction.name, a.amountMinor, a.currency, a.date?.toString(), a.reference,
                 a.accountLast4, a.viaUpi, a.confidence.name, normalised(text).take(BODY_CAP), InboxStatus.PENDING, null,
             )
-            // a text already in To review (or added before) is not put there twice; the wrong bill goes either way
-            ok.inbox.add(item, fingerprint(b.source, b.receivedAt, text))
-            if (ok.bills.dismiss(b.id)) converted++
+            Triple(b, item, fingerprint(b.source, b.receivedAt, text))
         }
-        if (converted > 0) changes.value += 1
-        return converted
     }
 
     /** The sentence for each outcome: what a Shortcuts dialog says and what the paste box shows. */

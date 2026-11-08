@@ -61,7 +61,8 @@ class IncomeCaptureUiTest {
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back"); waitFor("inbox_list") }
     private fun idAt(at: Long) = runBlocking { container.write { ok -> ok.inbox.list().first { it.receivedAt == at }.id } }!!
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
-    private fun goes(id: String): String { compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_goes_$id")); return textOf("inbox_goes_$id") }
+    // the card may not be composed yet right after the screen opens (a slow emulator): scroll to it again until it is there
+    private fun goes(id: String): String { compose.waitUntil(10_000) { has("inbox_goes_$id") || run { runCatching { compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_goes_$id")) }; has("inbox_goes_$id") } }; return textOf("inbox_goes_$id") }
     private fun learned() = runBlocking { container.write { it.captureRules.learned() } }!!
     private fun entries() = runBlocking { container.write { ok -> ok.db.schemaQueries.recentEntries(50).executeAsList() } }!!
 

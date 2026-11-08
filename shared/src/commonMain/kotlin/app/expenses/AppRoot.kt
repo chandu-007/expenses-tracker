@@ -653,7 +653,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
                             onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
                             onPostRepeat = viewModel::postDue, onSkipRepeat = viewModel::skipDue,
-                            undo = billUndo, onUndo = viewModel::undoDismissBill, onUndoGone = viewModel::billUndoGone,
+                            undo = billUndo, onUndo = viewModel::undoDismissBill, onUndoGone = viewModel::billUndoGone, onRepair = viewModel::repairBillPaymentTexts,
                             onSetUpCapture = { billsOpen = false; viewModel.watchBills(false); captureOpen = true; viewModel.loadCaptureSettings() },
                         )
                     }

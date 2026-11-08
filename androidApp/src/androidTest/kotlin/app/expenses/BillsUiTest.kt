@@ -159,14 +159,24 @@ class BillsUiTest {
         assertEquals(CaptureEventOutcome.BILL, ingest(electricity.replace("1,842.50", "1,900.00"), at = System.currentTimeMillis() + 6_000), "a revised amount is a new bill")
     }
 
+    // Since Slice 104 a payment confirmation ("Payment of Rs X received towards your ... Credit Card") is a Bill payment card in To review, not a plain Add: when an open bill matches (the same card, the total, the minimum
+    // or anything between, in the window around the due date, in the same currency) the card offers Mark paid and settles it; when none matches it only offers to record the payment and no bill changes.
+    private fun settleFromReview(payment: String): Unit {
+        ingest(payment, at = System.currentTimeMillis() + 1_000)
+        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
+        val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
+        compose.waitUntil(10_000) { has("inbox_billpay_add_$inboxId") || has("inbox_billpay_record_$inboxId") || has("inbox_add_$inboxId") }
+        // a debit alert ("debited from A/c ... towards loan EMI") is still an ordinary card with Add; a payment confirmation is a Bill payment card
+        val button = if (has("inbox_add_$inboxId")) "inbox_add_$inboxId" else if (has("inbox_billpay_add_$inboxId")) "inbox_billpay_add_$inboxId" else "inbox_billpay_record_$inboxId"
+        var last = 0L
+        compose.waitUntil(20_000) { has("inbox_empty") || run { if (System.currentTimeMillis() - last > 2_000) { last = System.currentTimeMillis(); runCatching { if (button != "inbox_add_$inboxId") tap("inbox_billpay_from_${inboxId}_bank"); tap(button) } }; false } }
+    }
+
     @Test
     fun aCardPaymentTextAddedFromReviewSettlesTheTrackedCardBill() {
         ingest(cardText()); val id = bills(BillStatus.FOUND).single().id
         runBlocking { container.write { it.bills.track(id) } }
-        ingest("Payment of Rs 12,345.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.", at = System.currentTimeMillis() + 1_000)
-        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
-        val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
-        tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
+        settleFromReview("Payment of Rs 12,345.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.")
         compose.waitUntil(10_000) { bills(BillStatus.PAID).size == 1 }
         assertEquals(entries().single().id, bills(BillStatus.PAID).single().entryId)
     }
@@ -175,18 +185,8 @@ class BillsUiTest {
     fun aPaymentOfADifferentAmountDoesNotSettleTheBill() {
         ingest(cardText()); val id = bills(BillStatus.FOUND).single().id
         runBlocking { container.write { it.bills.track(id) } }
-        ingest("Payment of Rs 200.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.", at = System.currentTimeMillis() + 1_000)
-        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
-        val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
-        tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
+        settleFromReview("Payment of Rs 200.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.")
         assertEquals(emptyList(), bills(BillStatus.PAID)); assertEquals(1, bills(BillStatus.TRACKED).size)
-    }
-
-    private fun settleFromReview(payment: String): Unit {
-        ingest(payment, at = System.currentTimeMillis() + 1_000)
-        launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_list")
-        val inboxId = runBlocking { container.write { it.inbox.list().single().id } }!!
-        tap("inbox_add_$inboxId"); compose.waitUntil(10_000) { has("inbox_empty") }
     }
 
     @Test

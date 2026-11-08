@@ -78,6 +78,8 @@ fun BillsScreen(
     undo: app.expenses.ScreenUndo? = null, onUndo: (String) -> Unit = {}, onUndoGone: (String) -> Unit = {},
     /** The empty page's one first step: the Capture screen, where reading texts is turned on. Null where there is none. */
     onSetUpCapture: (() -> Unit)? = null,
+    /** "Move to To review": bills an earlier version made from the confirmation of a payment leave Bills and wait in To review as bill payments (the person's tap; Undo on the bar). */
+    onRepair: () -> Unit = {},
 ) {
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     var askingFor by remember { mutableStateOf<BillRowUi?>(null) }
@@ -111,6 +113,17 @@ fun BillsScreen(
                 if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 12.dp).testTag("bills_empty_setup")) { Text("Set up reading texts") }
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("bills_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (ui.repairable > 0) item(key = "repair") {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)).padding(12.dp).testTag("bills_repair_card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (ui.repairable == 1) "1 bill below is really the confirmation of a payment (\"bill payment ... was successful\"), made by an earlier version. Nothing is due. Move it to To review, where it can mark the bill it paid."
+                        else "${ui.repairable} bills below are really confirmations of payments (\"bill payment ... was successful\"), made by an earlier version. Nothing is due. Move them to To review, where each can mark the bill it paid.",
+                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("bills_repair_text"),
+                    )
+                    Button(onClick = onRepair, modifier = Modifier.testTag("bills_repair_move")) { Text("Move to To review") }
+                    Text("Nothing is deleted: the text waits in To review, and Undo puts the bill back.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             if (ui.found.isNotEmpty()) {
                 item(key = "found") { Section("Found in your messages", "Add a bill to be reminded before it is due.", "bills_found_title", Modifier.animateItem()) }
                 items(ui.found, key = { "f" + it.id }) { BillCard(it, onAdd = onAdd, onSkip = onSkip, onPay = { paying = it }, onSetDate = { dating = it }, onUnpay = onUnpay, modifier = Modifier.animateItem()) }
