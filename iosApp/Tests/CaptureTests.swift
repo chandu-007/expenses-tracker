@@ -74,6 +74,22 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(pasted.pending, before + 2)
     }
 
+    // A card bill PAYMENT confirmation (invented numbers) was filed as a NEW BILL: it is a payment, with a header and pasted with none (the card's bank is Axis, the text is signed by Kotak).
+    func testACardBillPaymentConfirmationIsAPaymentAndNeverANewBill() async throws {
+        let before = try await IosCapture.shared.pendingCount(host: host).int64Value
+        func text() -> String { "Hi Asha, Axis Bank Credit Card bill payment of Rs. \(Int.random(in: 1000...9999)).\(Int.random(in: 10...99)) was successful! T&C -Kotak811" }
+        let withHeader = try await IosCapture.shared.captureMessage(host: host, sender: "AX-KOTAKB-S", message: text())
+        XCTAssertEqual(withHeader.code, "CAPTURED", "a payment that was made is not a bill")
+        XCTAssertTrue(withHeader.kept)
+        let pasted = try await IosCapture.shared.captureMessage(host: host, sender: nil, message: text())
+        XCTAssertEqual(pasted.code, "CAPTURED")
+        XCTAssertEqual(pasted.pending, before + 2)
+        // a bill that is GENERATED stays a bill
+        let due = "\(Int.random(in: 10000...99999)).\(Int.random(in: 10...99))"
+        let bill = try await IosCapture.shared.captureMessage(host: host, sender: "AX-AXISBK-S", message: "Your Axis Bank credit card statement of Rs \(due) is generated, total amount due Rs \(due), due date 25-Nov-2026")
+        XCTAssertEqual(bill.code, "BILL")
+    }
+
     func testUnknownSenderIsNotReadButAHeaderTheListMissesIsOfferedByCountOnly() async throws {
         let r = try await IosCapture.shared.captureMessage(host: host, sender: "AX-NOSUCHBK-S", message: bank())
         XCTAssertEqual(r.code, "NOT_ALLOWLISTED")

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -45,7 +46,7 @@ class PairingUiTest {
     private fun card() = runBlocking { container.write { it.store.saveAccount(Account(AccountId("amex"), "Amex", AccountType.CREDIT_CARD, Currency.INR)) } }
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
+    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) || run { runCatching { compose.onNodeWithTag("inbox_list").performScrollToNode(hasTestTag(tag)) }; has(tag) } } // the cards are taller since a card can carry the type chips or a bill payment
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
@@ -74,9 +75,9 @@ class PairingUiTest {
         assertTrue(textOf("inbox_pair_$bank").contains("credit card payment: from Bank to Amex"), textOf("inbox_pair_$bank"))
         tap("inbox_add_$bank"); compose.waitUntil(10_000) { !has("inbox_$bank") }
         val e = entries().single(); assertEquals("TRANSFER", e.kind); assertEquals("bank", e.account_id); assertEquals("amex", e.counter_account_id)
-        waitFor("inbox_duplicate_$cardSide")
-        assertTrue(textOf("inbox_duplicate_$cardSide").startsWith("Looks like one you already added"))
-        tap("inbox_same_$cardSide"); compose.waitUntil(10_000) { has("inbox_empty") }
+        // the card's own text of the same payment is a Bill payment card that says it is already in the ledger and joins the entry (Slice 104; it was "Looks like one you already added" + "Same one: skip")
+        waitFor("inbox_billpay_same_$cardSide")
+        tap("inbox_billpay_join_$cardSide"); compose.waitUntil(10_000) { has("inbox_empty") }
         assertEquals(1, entries().size); assertEquals(1_500_000L, balance("amex"), "the card's debt is down by what was paid, once"); assertEquals(-1_500_000L, balance("bank"))
     }
 
@@ -132,9 +133,10 @@ class PairingUiTest {
         card()
         runBlocking { container.write { it.templates.putSetting("capture_acct:Axis Bank:0000", "amex") } }
         ingest("AX-AXISBK-S", "INR 4,000.00 credited to your Axis Bank Card XX0000 on 05-10-26. Avl limit INR 50,000", 5_000)
-        launch(); openInbox(); val id = idAt(5_000); waitFor("inbox_pair_$id")
-        assertTrue(textOf("inbox_pair_$id").contains("payment received on the card: from Bank to Amex"), textOf("inbox_pair_$id"))
-        tap("inbox_add_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
-        assertEquals("TRANSFER", entries().single().kind)
+        // since Slice 104 a credit "to your ... Card" is read as the card's payment confirmation: its card is a Bill payment (no open bill matches), recorded as a transfer from the paying account to the card, never as income
+        launch(); openInbox(); val id = idAt(5_000); waitFor("inbox_billpay_record_$id")
+        assertTrue(textOf("inbox_billpay_records_$id").contains("Recorded as a transfer from"), textOf("inbox_billpay_records_$id"))
+        tap("inbox_billpay_from_${id}_bank"); tap("inbox_billpay_record_$id"); compose.waitUntil(10_000) { has("inbox_empty") }
+        val e = entries().single(); assertEquals("TRANSFER", e.kind); assertEquals("bank", e.account_id); assertEquals("amex", e.counter_account_id)
     }
 }

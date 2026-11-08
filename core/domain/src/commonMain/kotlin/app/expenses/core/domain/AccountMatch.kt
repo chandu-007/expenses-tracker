@@ -26,13 +26,20 @@ class BankNames(private val banks: Collection<String>) {
         return if (known.any { other -> other.none { it in mine } && other.any { it in name } }) false else null
     }
 
-    private companion object {
+    companion object {
         /** Words of a bank's name that every bank has, or that are ordinary words: they say nothing about which bank. */
-        val GENERIC = setOf("bank", "banks", "card", "cards", "payments", "payment", "small", "finance", "limited", "ltd", "of", "india", "indian", "first", "national", "the", "and", "pay", "yes", "union", "standard")
+        private val GENERIC = setOf("bank", "banks", "card", "cards", "payments", "payment", "small", "finance", "limited", "ltd", "of", "india", "indian", "first", "national", "the", "and", "pay", "yes", "union", "standard")
 
-        fun wordsIn(text: String): Set<String> = text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+        private fun wordsIn(text: String): Set<String> = text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
 
         fun wordsOf(issuer: String): Set<String> = wordsIn(issuer).filter { it.length >= 3 && it !in GENERIC }.toSet()
+
+        /** Whether two names (an issuer as the app shows it, a bill's issuer, a card's name) share a distinctive word of a bank's name: "Axis Bank" and "Axis Bank Credit Card" do, "SBI" and "SBI Card" do, "HDFC Bank" and "ICICI Bank" do not. False when either has no distinctive word. */
+        fun sameBrand(a: String?, b: String?): Boolean {
+            if (a == null || b == null) return false
+            val x = wordsOf(a)
+            return x.isNotEmpty() && wordsOf(b).any { it in x }
+        }
     }
 }
 

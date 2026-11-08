@@ -60,7 +60,7 @@ class OwnTransferUiTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun hasWords(text: String) = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
+    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) || run { runCatching { compose.onNodeWithTag("inbox_list").performScrollToNode(hasTestTag(tag)) }; has(tag) } } // the cards are taller since a card can carry the type chips
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() }
     private fun textOf(tag: String): String { waitFor(tag); return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.Text)) c[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } else "" } }
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }

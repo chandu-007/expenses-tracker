@@ -118,6 +118,14 @@ import app.expenses.core.parsers.PayeeKinds
 import app.expenses.core.parsers.KindRules
 import app.expenses.core.parsers.MessageKind
 import app.expenses.core.parsers.Direction
+import app.expenses.core.parsers.BillPaymentSide
+import app.expenses.core.parsers.BillPayments
+import app.expenses.core.parsers.TransferClues
+import app.expenses.core.domain.PayeeKey
+import app.expenses.core.domain.TransferLearning
+import app.expenses.core.storage.firstTransferRule
+import app.expenses.core.storage.putTransferRule
+import app.expenses.core.storage.transferRule
 import app.expenses.core.domain.OwnExport
 import app.expenses.core.domain.EntryDrafts
 import app.expenses.core.domain.toPlainString
@@ -212,8 +220,42 @@ data class InboxRowUi(
     /** What a new account for this text starts as: its name ("ICICI Bank 123") and type ("BANK", or "CREDIT_CARD" when the text says credit card). The digits are [last4]. */
     val newAccountName: String = "",
     val newAccountType: String = "BANK",
+    /**
+     * The type the card starts as: "EXPENSE" or "INCOME" (the text's direction), or "TRANSFER" when [treatment] is one (a cash withdrawal, a card payment, or what the person did with texts like this
+     * before). The person can switch it on the card (Expense / Income / Transfer); Add all and a swipe add only a card left in its starting type.
+     */
+    val kind: String = "",
+    /** For a card that may become a transfer: the accounts the other end can be (ids): every live account but the text's own and loans, in the text's currency. The text's own account is [accountId]. */
+    val otherChoices: List<String> = emptyList(),
+    /** The account suggested as the OTHER end when the person picks Transfer ("To account" for money out, "From account" for money in): the Cash account for an ATM text when there is exactly one, the account the text names by its digits, what the person did before, or the only other account. Empty: none. */
+    val otherAccountId: String = "",
+    /** Why [otherAccountId] was suggested: "the only Cash account", "named in the text", "what you chose for texts like this", "your only other account". */
+    val otherWhy: String = "",
+    /** A transfer the app suggests from what the person did before ([treatment] "TRANSFER"): what to tell them ("You made texts like this a transfer 2 times."). */
+    val transferNote: String = "",
+    /** True when such a suggestion rests on three consistent choices ([app.expenses.core.domain.TransferLearning]): Add all and a swipe may add it. */
+    val transferSure: Boolean = false,
+    /** The text is the other leg of this transfer already in the ledger (the debit's credit, or the credit's debit): its id, and what to tell the person. "Add to that transfer" joins the text to it; nothing new is recorded. */
+    val otherLegEntryId: String = "",
+    val otherLegNote: String = "",
+    /** For [treatment] "BILL_PAYMENT": what the card asks and offers ("Mark the Axis card bill as paid?"). */
+    val billPay: BillPayUi? = null,
 )
 
+/** One open bill a payment text may pay, as the card lists it ([billId] "card:<account>" is a card statement the app works out itself, with no bill text behind it). [fit] is "total", "minimum", "part" (of a card's total) or "full". */
+data class BillMatchUi(val billId: String, val title: String, val amountText: String, val dueText: String, val fit: String)
+
+/**
+ * What a card for a bill payment text ("Axis Bank credit card bill payment of Rs 12,345.67 was successful") asks and offers. [question] is "Mark the Axis card bill as paid?" (the card named) or "Mark this bill as paid?";
+ * [matches] the open bills it may pay, best first ([billId] the one chosen first, empty when none matches); [payFromId] and [payFromChoices] the account the money left; [cardAccountId] and [cardChoices] the card account it went to
+ * (empty: the app tracks no account for this card, so it is recorded as an expense in Bills, the way Mark paid on the Bills page does); [sameEntryId] and [sameNote] when the same
+ * payment is already in the ledger (a recorded payment, a bill marked paid, the card's own text arriving after the bank's).
+ */
+data class BillPayUi(
+    val question: String, val kindLabel: String, val matches: List<BillMatchUi>, val billId: String,
+    val payFromId: String, val payFromChoices: List<String>, val cardAccountId: String, val cardChoices: List<String>,
+    val sameEntryId: String = "", val sameNote: String = "", val title: String = "", val received: Boolean = false, val isCard: Boolean = false,
+)
 /** Someone lent to or borrowed from. */
 data class PersonUi(val id: String, val name: String)
 
@@ -2125,8 +2167,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 reverses != null -> "Carries the reference of ${if (isCredit) "the payment" else "the money received"} \"${reverses.merchant ?: "an entry"}\" on ${fmt.format(dateOfMillis(reverses.occurred_at, zone))}: looks like its refund or reversal, not a repeat"
                 else -> null
             }
+            val bill = BillPayments.read(i.body.orEmpty())?.takeIf { it.currency == i.currency }
             // the account the text's digits point at (the same digits, else what the person chose for this bank and digits, else digits that end the same: AccountMatch), a card when the text says card
-            val accountMatch = resolver.resolve(i.issuer, i.accountLast4, preferCard = i.body.orEmpty().contains("card", ignoreCase = true))
+            // (the bank's own text of a bill payment is about the paying account, the card's own text about the card)
+            val accountMatch = resolver.resolve(i.issuer, i.accountLast4, preferCard = if (bill != null) bill.side == BillPaymentSide.RECEIVED else i.body.orEmpty().contains("card", ignoreCase = true))
             val remembered = (accountMatch as? AccountMatch.Result.Found)?.accountId
             val ask = AccountAsk.of(accountMatch, i.issuer, i.accountLast4, accountNames)
             // with several accounts that fit the digits there is no guess: the person is asked, and Add waits for the answer (with no digits that fit any, the first account stays the suggestion, as before)
@@ -2135,9 +2179,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val cards = accounts.filter { it.type == "CREDIT_CARD" }
             val cashAccounts = accounts.filter { it.type == "CASH" }
             val ownBank = accounts.firstOrNull { it.id == remembered && it.type != "CREDIT_CARD" && it.type != "CASH" } ?: accounts.firstOrNull { it.type == "BANK" }
+            val rawPayee = PayeeGuess.of(i.body.orEmpty())
+            val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
+            val payee = named ?: rawPayee?.let(::cleanPayee)
             var treatment = "PAYMENT"; var treatmentLabel = ""; var fromAcct = ""; var toAcct = ""; var refundOf = ""
             when {
-                kind == MessageKind.ATM_WITHDRAWAL && cashAccounts.isNotEmpty() && ownBank != null -> { treatment = "TRANSFER"; treatmentLabel = "cash withdrawal"; fromAcct = ownBank.id; toAcct = cashAccounts.first().id }
+                // a payment confirmation for a bill: not a bill (BillPayments) and not an ordinary expense; the card asks whether to mark the bill paid
+                bill != null -> { treatment = "BILL_PAYMENT"; treatmentLabel = "bill payment" }
+                // cash taken out at an ATM goes to the person's Cash account when there is exactly one (with several, which one is the person's choice)
+                kind == MessageKind.ATM_WITHDRAWAL && cashAccounts.size == 1 && ownBank != null -> { treatment = "TRANSFER"; treatmentLabel = "cash withdrawal"; fromAcct = ownBank.id; toAcct = cashAccounts.single().id }
                 kind == MessageKind.CARD_PAYMENT && cards.isNotEmpty() && ownBank != null -> {
                     treatment = "TRANSFER"; treatmentLabel = "credit card payment"
                     toAcct = (remembered?.takeIf { id -> cards.any { it.id == id } } ?: cards.first().id); fromAcct = ownBank.id
@@ -2155,10 +2205,36 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     if (pick != null) { treatment = "REFUND"; treatmentLabel = "refund of ${pick.merchant ?: pick.note ?: "an earlier expense"}"; refundOf = pick.id }
                 }
             }
+            // What the person taught: texts like this one were made a transfer before ([TransferLearning]). Offered as a transfer to look at; a rule made three times with no exception may be added in bulk.
+            // Only for a plain payment whose own account is known and that is not a repeat or a duplicate, and only to an account that is still there.
+            val isCreditText = i.direction == "CREDIT"
+            val counter = TransferClues.counterLast4(i.body.orEmpty(), i.accountLast4)
+            val rawKey = rawPayee?.takeIf { !PayeeKey.isMixed(it) }?.let { PayeeKey.of(it) }
+            val transferKeys = TransferLearning.keys(i.issuer, !isCreditText, rawKey, i.body.orEmpty(), counter)
+            val otherChoices = accounts.filter { it.type != "LOAN" && it.currency == i.currency }.map { it.id }
+            val taughtTransfer = if (treatment == "PAYMENT" && remembered != null) ok.templates.firstTransferRule(transferKeys)?.second?.takeIf { r -> r.accountId != remembered && r.accountId in otherChoices } else null
+            var transferNote = ""; var transferSure = false
+            if (taughtTransfer != null && note == null) {
+                treatment = "TRANSFER"; treatmentLabel = "transfer"
+                if (isCreditText) { fromAcct = taughtTransfer.accountId; toAcct = remembered!! } else { fromAcct = remembered!!; toAcct = taughtTransfer.accountId }
+                transferNote = "You made texts like this a transfer ${if (taughtTransfer.uses == 1) "once" else "${taughtTransfer.uses} times"} before, so it starts as one. Check it."
+                transferSure = TransferLearning.certainty(taughtTransfer) == Certainty.SURE
+            }
+            // the account the other end of a transfer would be, when the person picks Transfer on a card that starts as spending or income
+            var otherAcct = ""; var otherWhy = ""
+            if (otherChoices.isNotEmpty()) {
+                val here = remembered ?: goesTo
+                val learnedOther = taughtTransfer?.accountId ?: ok.templates.firstTransferRule(transferKeys)?.second?.accountId?.takeIf { it != here && it in otherChoices }
+                val namedOther = if (counter != null) resolver.accountFor(i.issuer, counter, bankKnown = false, allowEndsWith = false)?.takeIf { it != here && it in otherChoices } else null
+                val only = (otherChoices - here).singleOrNull()
+                when {
+                    learnedOther != null -> { otherAcct = learnedOther; otherWhy = "what you chose for texts like this" }
+                    namedOther != null -> { otherAcct = namedOther; otherWhy = "the account the text names" }
+                    kind == MessageKind.ATM_WITHDRAWAL && cashAccounts.size == 1 && cashAccounts.single().id in otherChoices && cashAccounts.single().id != here -> { otherAcct = cashAccounts.single().id; otherWhy = "your only Cash account" }
+                    only != null -> { otherAcct = only; otherWhy = "your only other account" }
+                }
+            }
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
-            val rawPayee = PayeeGuess.of(i.body.orEmpty())
-            val named = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() }
-            val payee = named ?: rawPayee?.let(::cleanPayee)
             // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
             val byName = ok.categories.list().filter { !it.hidden && it.kind.forExpense && it.parentId == null }.associate { it.name.lowercase() to it.id }
             // entries filed from a captured text carry the clean merchant name (cleanPayee), older ones the raw address: look under both
@@ -2180,17 +2256,46 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 // cash taken out at an ATM that is not moved to a cash account (the person has none): "Cash withdrawal", when they have that category
                 ?: byName["cash withdrawal"]?.takeIf { it in usable && kind == MessageKind.ATM_WITHDRAWAL && treatment == "PAYMENT" }?.let { CategoryAdvice(it, SuggestionSource.WORDS, Certainty.SURE, "the words of the text", emptyList()) }
             else null
+            // the text is the other leg of a transfer the person already added (the credit of a debit made a transfer, or the reverse): "Add to that transfer", never a second entry. The accounts must be the transfer's
+            // own two (the text's account is the transfer's other end) and the text must come within the pairing window of the first (30 minutes, a day when it names the other account's digits), or it carries the very
+            // same bank reference. As for two waiting texts ([TransferPairs]) the two texts' references are not compared: the person made the first a transfer, and joining is only offered, never done.
+            var legEntry = ""; var legNote = ""
+            if (bill == null) {
+                val namesOtherAccount = counter?.let { resolver.accountFor(i.issuer, it, bankKnown = false, allowEndsWith = false) }
+                val found = ok.db.schemaQueries.transferLegsNear(i.amountMinor, i.currency, from, until).executeAsList().mapNotNull { leg ->
+                    val mine = if (isCreditText) leg.counter_account_id else leg.account_id
+                    val theirs = if (isCreditText) leg.account_id else leg.counter_account_id
+                    val origin = ok.origins.get(leg.id)
+                    // a text that points the same way as one the transfer already keeps (its words, one text or two) tells the same leg again: that is a repeat, handled as one
+                    val said = origin?.text?.split("\n\n")?.mapNotNull { part -> app.expenses.core.parsers.OriginDirection.outgoing(origin.sender, part, origin.kind == app.expenses.core.storage.OriginKind.EMAIL) }.orEmpty()
+                    if (said.any { it == !isCreditText }) return@mapNotNull null
+                    val gap = kotlin.math.abs(i.receivedAt - (origin?.receivedAt ?: leg.occurred_at))
+                    val sameRef = i.reference != null && leg.source_ref?.removeSuffix("/transfer").equals(i.reference, ignoreCase = true) == true
+                    val close = gap <= TransferPairs.WINDOW_MS || (theirs != null && namesOtherAccount == theirs && gap <= TransferPairs.NAMED_WINDOW_MS)
+                    if (sameRef || (remembered != null && remembered == mine && close)) leg to gap else null
+                }.minByOrNull { it.second }?.first
+                if (found != null) {
+                    legEntry = found.id
+                    legNote = "This looks like the other half of the transfer you added (${found.merchant ?: "a transfer"}, from ${accountNames[found.account_id] ?: "an account"} to ${accountNames[found.counter_account_id] ?: "an account"}, on ${fmt.format(dateOfMillis(found.occurred_at, zone))}): " +
+                        "the money ${if (isCreditText) "arrived" else "left"}. Add this text to that transfer, so it shows both, or skip it. Nothing is recorded twice."
+                }
+            }
+            val billPay = bill?.let { BillPaymentRows.of(ok, i, it, accounts, resolver, accountMatch, goesTo, zone, todayLocal(zone), { m -> Money(m, Currency(i.currency, currencyDigits[i.currency] ?: 2)).formatted() }, { d -> fmt.format(d) }) }
+            val dupNote = when { bill != null -> note.takeIf { match == null && reverses == null && first != null }; legEntry.isNotEmpty() -> null; else -> note.takeIf { reverses == null } }
             InboxRowUi(
                 i.id, i.issuer, i.direction, money.formatted(), i.amountMinor, i.txnDate?.let { runCatching { fmt.format(LocalDate.parse(it)) }.getOrNull() } ?: fmt.format(i.receivedAt),
                 i.accountLast4, i.body.orEmpty(), payee, goesTo, suggestion?.categoryId.orEmpty(),
                 rememberedAccount = remembered != null, confidence = i.confidence,
-                duplicateNote = note.takeIf { reverses == null }, relatedNote = note.takeIf { reverses != null }, duplicateOfEntry = match?.entry?.id,
+                duplicateNote = dupNote, relatedNote = note.takeIf { reverses != null && bill == null && legEntry.isEmpty() }, duplicateOfEntry = match?.entry?.id,
                 nameable = rawPayee != null,
                 payeeKind = when (PayeeKinds.of(rawPayee)) { PayeeKind.PERSON -> "person"; PayeeKind.BUSINESS -> "business"; PayeeKind.UNKNOWN -> "" },
                 treatment = treatment, treatmentLabel = treatmentLabel, fromAccountId = fromAcct, toAccountId = toAcct, refundOfEntry = refundOf,
                 categoryNote = suggestion?.note.orEmpty(), certainty = when (suggestion?.certainty) { Certainty.SURE -> "sure"; Certainty.CHECK -> "check"; null -> "" },
                 categorySource = suggestion?.source?.name.orEmpty(), alternatives = suggestion?.alternatives.orEmpty(),
                 accountAsk = ask?.text.orEmpty(), accountChoices = ask?.choices.orEmpty(), newAccountName = AccountAsk.newName(i.issuer, i.accountLast4), newAccountType = AccountAsk.newType(i.body.orEmpty()),
+                kind = if (treatment == "TRANSFER") "TRANSFER" else if (isCreditText) "INCOME" else "EXPENSE",
+                otherChoices = otherChoices, otherAccountId = otherAcct, otherWhy = otherWhy, transferNote = transferNote, transferSure = transferSure,
+                otherLegEntryId = legEntry, otherLegNote = legNote, billPay = billPay,
             )
         }
         return withTransfers(ok, items, base, accounts)
@@ -2208,7 +2313,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
      * Nothing is recorded here; adding anything is the person's tap. Costs a few lookups per waiting item, and nothing when the person has fewer than two accounts to move money between.
      */
     private fun withTransfers(ok: AppContainer.Opened.Ok, items: List<app.expenses.core.storage.InboxItem>, rows: List<InboxRowUi>, accounts: List<app.expenses.core.storage.db.Account>): List<InboxRowUi> {
-        val scan = TransferScan.of(ok, items, rows.filter { it.treatment == "PAYMENT" && it.duplicateNote == null }.mapTo(HashSet()) { it.id }, accounts) ?: return rows
+        val scan = TransferScan.of(ok, items, rows.filter { it.treatment == "PAYMENT" && it.duplicateNote == null && it.otherLegEntryId.isEmpty() }.mapTo(HashSet()) { it.id }, accounts) ?: return rows
         val byId = items.associateBy { it.id }
         val rowById = rows.associateBy { it.id }
         val names = scan.accountNames
@@ -2407,6 +2512,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
         /** The id of the Undo bar of "Which account is this?": this and the item's id. */
         const val ACCOUNT_CHOICE_UNDO = "account:"
+
+        /** The id of the Undo bar of an add that did more than save an entry (a transfer the person chose, Mark paid on a bill payment, a text joined to the entry that holds its other leg): this and the item's id. */
+        const val ADDED_UNDO = "added:"
     }
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)
@@ -2421,6 +2529,31 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
      */
     fun confirmCapture(id: String, accountId: String, categoryId: String, onDone: (String?) -> Unit) = confirmCapture(id, accountId, categoryId, "PAYMENT", "", "", "", onDone)
 
+    /** What the last add from To review changed besides the entry, held for the few seconds its Undo is offered: what the store changed ([app.expenses.core.storage.CaptureAdds]) and the settings it wrote, with what they held. */
+    private class HeldAdd(val adds: app.expenses.core.storage.CaptureAdds.Held, val settings: List<Pair<String, String?>>)
+    @Volatile private var heldAdd: HeldAdd? = null
+
+    /** Writes a setting and remembers what it held, so Undo can put it back. */
+    private fun AppContainer.Opened.Ok.keepSetting(held: MutableList<Pair<String, String?>>, key: String, value: String) {
+        if (templates.setting(key) == value) return
+        held += key to templates.setting(key); templates.putSetting(key, value)
+    }
+
+    /** The bank reference an entry made from [i] is saved under, or the reason it is refused (second). The same reference on an entry that points the other way is the payment this one undoes: it gets its own key. */
+    private fun sourceRefFor(ok: AppContainer.Opened.Ok, i: app.expenses.core.storage.InboxItem): Pair<String, String?> {
+        var sourceRef = i.reference ?: i.id
+        ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
+            // ...but only an entry the person left as it was can be undone by it: one whose type was changed holds the same transaction, and a second text for it is a repeat
+            if (referenceVerdict(ok, existing.id, existing.kind, textOutgoing = i.direction != "CREDIT") == ReferenceReuse.Verdict.REVERSAL) sourceRef = "$sourceRef/reversal"
+        }
+        // the unique index on (source, reference) covers deleted entries too: say why instead of failing on it
+        val refused = ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
+            if (existing.deleted == 1L) "You deleted an entry from this message earlier, so it is not added again. Skip this one."
+            else "An entry from this message is already in your ledger (reference $sourceRef). Skip this one."
+        }
+        return sourceRef to refused
+    }
+
     /** As above, but recorded as [treatment]: a TRANSFER from [fromId] to [toId] (the person's own accounts), or a REFUND of the entry [refundOf]. */
     fun confirmCapture(id: String, accountId: String, categoryId: String, treatment: String, fromId: String, toId: String, refundOf: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
@@ -2434,8 +2567,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val rawPayee = PayeeGuess.of(i.body.orEmpty())
                     val payee = rawPayee?.let { ok.templates.setting(payeeNameKey(it)) }?.takeIf { it.isNotBlank() } ?: rawPayee?.let(::cleanPayee) ?: i.issuer
                     val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
+                    // what the card showed: a transfer the person picked (or accepted from what they did before) teaches; one the app proposed from the words (a cash withdrawal, a card payment) does not
+                    val shown = _inbox.value.firstOrNull { it.id == id }
+                    val taughtShown = shown != null && shown.treatment == "TRANSFER" && shown.transferNote.isNotEmpty()
+                    val personMadeTransfer = treatment == "TRANSFER" && shown != null && (shown.treatment == "PAYMENT" || taughtShown)
+                    val title = if (personMadeTransfer && rawPayee == null) {
+                        fun nameOf(account: String) = ok.db.schemaQueries.accountById(account).executeAsOneOrNull()?.name ?: "your account"
+                        if (i.direction == "CREDIT") "Transfer from ${nameOf(fromId)}" else "Transfer to ${nameOf(toId)}"
+                    } else payee
+                    if (treatment == "TRANSFER") {
+                        for (a in listOf(fromId, toId)) {
+                            val row = ok.db.schemaQueries.accountById(a).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.archived == 0L } ?: return@write "Choose the accounts this moved between."
+                            if (row.currency != i.currency) return@write "${row.name} is in ${row.currency}, but this text is in ${i.currency}. Choose accounts in ${i.currency}."
+                        }
+                    }
                     val draft = when (treatment) {
-                        "TRANSFER" -> EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), fromId, toId, payee, at)
+                        "TRANSFER" -> EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), fromId, toId, title, at)
                         "REFUND" -> (EntryActions(ok).startRefund(refundOf)?.draft ?: return@write "The expense this refunds is no longer there.").copy(amountText = amountText, occurredAt = at)
                         else -> EntryDraft(null, kind, amountText, categoryId, emptyList(), accountId, "", payee, at)
                     }
@@ -2443,38 +2590,144 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         is DraftResult.Ok -> r.entry
                         is DraftResult.Problem -> return@write r.message
                     }
-                    var sourceRef = i.reference ?: i.id
-                    // the same reference on an entry that points the other way is the payment this one undoes: it gets its own key, not a refusal
-                    ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
-                        // ...but only an entry the person left as it was can be undone by it: one whose type was changed holds the same transaction, and a second text for it is a repeat
-                        if (referenceVerdict(ok, existing.id, existing.kind, textOutgoing = i.direction != "CREDIT") == ReferenceReuse.Verdict.REVERSAL) sourceRef = "$sourceRef/reversal"
-                    }
-                    // the unique index on (source, reference) covers deleted entries too: say why instead of failing on it
-                    ok.db.schemaQueries.entryBySourceRef("sms", sourceRef).executeAsOneOrNull()?.let { existing ->
-                        return@write if (existing.deleted == 1L) "You deleted an entry from this message earlier, so it is not added again. Skip this one."
-                        else "An entry from this message is already in your ledger (reference $sourceRef). Skip this one."
-                    }
+                    val (sourceRef, refused) = sourceRefFor(ok, i)
+                    if (refused != null) return@write refused
                     ok.store.atomically {
-                        ok.store.save(entry, EntryDetails(merchant = payee, note = null, source = "sms", sourceRef = sourceRef))
+                        ok.store.save(entry, EntryDetails(merchant = title, note = null, source = "sms", sourceRef = sourceRef))
                         i.body?.let { ok.origins.put(entry.id.value, app.expenses.core.storage.OriginStore.kindOf(i.source, i.sender), i.sender, it, i.receivedAt) }
                         ok.inbox.confirm(id, entry.id.value)
                     }
-                    if (treatment == "PAYMENT") ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), accountId)
+                    val settings = ArrayList<Pair<String, String?>>()
+                    if (treatment == "PAYMENT") ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), accountId)
                     settleBillFor(ok, i, entry.id.value)?.let { title -> _state.update { st -> (st as? UiState.Ready)?.copy(message = "Marked $title as paid") ?: st } }
-                    // the account on the text's own side of a transfer is the one this bank and last four digits stand for
-                    if (treatment == "TRANSFER" && i.accountLast4 != null) ok.templates.putSettingIfChanged(accountKey(i.issuer, i.accountLast4), if (i.direction == "CREDIT") toId else fromId)
+                    // the account on the text's own side of a transfer is the one this bank and last four digits stand for (a transfer the person made of a text with no digits is remembered for the bank, as a payment is)
+                    if (treatment == "TRANSFER" && (i.accountLast4 != null || personMadeTransfer)) ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), if (i.direction == "CREDIT") toId else fromId)
                     if (treatment == "PAYMENT" && categoryId.isNotEmpty()) {
                         // The person's choice teaches; the app's own guess, accepted as it stood, does not (it would only be the guess repeating itself as "what you chose"): a different
                         // category than the one shown, a first choice, or the same as an earlier choice of theirs (which counts) is learned. Money in is learned for the payer, apart from money out.
-                        val shown = _inbox.value.firstOrNull { it.id == id }
                         if (shown == null || categoryId != shown.categoryId || shown.categorySource == SuggestionSource.LEARNED.name) ok.captureRules.learn(rawPayee, categoryId, payee, income = kind == DraftKind.INCOME)
+                    }
+                    // what the person taught about texts like this: a transfer they made (or accepted) counts for it, a plain entry of a kind they had made a transfer counts against it ([TransferLearning])
+                    val transferKeys = TransferLearning.keys(i.issuer, i.direction != "CREDIT", rawPayee?.takeIf { !PayeeKey.isMixed(it) }?.let { PayeeKey.of(it) }, i.body.orEmpty(), TransferClues.counterLast4(i.body.orEmpty(), i.accountLast4))
+                    if (personMadeTransfer) {
+                        val other = if (i.direction == "CREDIT") fromId else toId
+                        transferKeys.forEach { k -> settings += k to ok.templates.setting(k); ok.templates.putTransferRule(k, TransferLearning.after(ok.templates.transferRule(k), other)) }
+                    } else if (treatment == "PAYMENT" && (shown == null || shown.treatment == "PAYMENT" || taughtShown)) {
+                        transferKeys.forEach { k -> ok.templates.transferRule(k)?.let { r -> settings += k to ok.templates.setting(k); ok.templates.putTransferRule(k, TransferLearning.after(r, null)) } }
                     }
                     _inbox.value = inboxRows(ok)
                     refresh(ok)
+                    // a transfer the person chose on the card is offered an Undo (the card said "Transfer", the entry is not spending): everything it changed goes back, the text waits again. Not for a bulk add of strong rules.
+                    if (personMadeTransfer && shown?.transferSure != true) {
+                        heldAdd = HeldAdd(app.expenses.core.storage.CaptureAdds.Held(id, i.body, entry.id.value, created = true, originBefore = null, bill = null), settings)
+                        fun nameOf(account: String) = ok.db.schemaQueries.accountById(account).executeAsOneOrNull()?.name ?: "your account"
+                        _inboxUndo.value = ScreenUndo("$ADDED_UNDO$id", if (i.direction == "CREDIT") "Added as a transfer from ${nameOf(fromId)}" else "Added as a transfer to ${nameOf(toId)}")
+                    }
                     null
                 }
             } catch (e: IllegalArgumentException) { e.message }
             withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /**
+     * "Mark paid" on the card of a bill payment text: the payment is recorded the way Mark paid on the Bills page records one (a transfer from [payFromId] to the card account [cardAccountId], or, when the app has no account
+     * for the card, an expense in Bills), dated and filed as the text says, and the bill [billId] (empty: none matched; "card:<account>": a statement worked out from the billing dates, which the payment settles by being
+     * recorded) is marked paid with that payment and its date. The text is kept as the entry's origin. When the same payment is already in the ledger ([useEntryId]), nothing is recorded: the text joins that entry and the bill is
+     * marked paid by it, so the payment counts once. "Marked X as paid · Undo" puts everything back (the bill as it was, found or tracked, with its words). [onDone] gets null, or why not.
+     */
+    fun confirmBillPayment(id: String, billId: String, payFromId: String, cardAccountId: String, useEntryId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val i = ok.inbox.get(id) ?: return@write "That item is no longer in the inbox."
+                    if (i.status != InboxStatus.PENDING) return@write "That item was already handled."
+                    if (i.currency != BaseCurrency.current.code) return@write "This is in ${i.currency}, but your ledger is in ${BaseCurrency.current.code}. Dismiss it and add it by hand."
+                    val n = BillPayments.read(i.body.orEmpty())
+                    val bill = billId.takeIf { it.isNotEmpty() && !it.startsWith(CARD_DUE_PREFIX) }?.let { ok.bills.get(it) }
+                    if (billId.isNotEmpty() && !billId.startsWith(CARD_DUE_PREFIX) && (bill == null || (bill.status != app.expenses.core.storage.BillStatus.FOUND && bill.status != app.expenses.core.storage.BillStatus.TRACKED))) return@write "That bill was already handled."
+                    val at = app.expenses.core.domain.CaptureTime.entryTime(i.txnDate?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }, i.receivedAt, kotlinx.datetime.TimeZone.currentSystemDefault())
+                    val settings = ArrayList<Pair<String, String?>>()
+                    val held: app.expenses.core.storage.CaptureAdds.Held
+                    if (useEntryId.isNotEmpty()) {
+                        held = ok.store.atomically {
+                            val joined = ok.captureAdds.join(id, useEntryId)
+                            bill?.let { ok.bills.markPaid(it.id, useEntryId, at) }
+                            app.expenses.core.storage.CaptureAdds.Held(joined.itemId, joined.itemBody, joined.entryId, joined.created, joined.originBefore, bill)
+                        }
+                    } else {
+                        if (payFromId.isEmpty()) return@write "Choose the account it was paid from."
+                        val title = bill?.title ?: n?.let { BillPaymentRows.entryTitle(it, null) } ?: "Bill payment"
+                        val amountText = Money(i.amountMinor, BaseCurrency.current).toPlainString()
+                        val billsCategory = ok.categories.list().firstOrNull { it.parentId == null && !it.hidden && it.name.equals("Bills", ignoreCase = true) }?.id.orEmpty()
+                        // a card the app tracks is paid by a transfer, never by spending; a card it does not track, or a utility, by an expense in Bills (as Mark paid does on the Bills page)
+                        val draft = if (cardAccountId.isNotEmpty()) EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, title, at)
+                        else EntryDraft(null, DraftKind.EXPENSE, amountText, billsCategory, emptyList(), payFromId, "", title, at)
+                        for (a in listOfNotNull(payFromId, cardAccountId.takeIf { it.isNotEmpty() })) {
+                            val row = ok.db.schemaQueries.accountById(a).executeAsOneOrNull()?.takeIf { it.deleted == 0L && it.archived == 0L } ?: return@write "Choose the accounts this moved between."
+                            if (row.currency != i.currency) return@write "${row.name} is in ${row.currency}, but this text is in ${i.currency}. Choose accounts in ${i.currency}."
+                        }
+                        val entry = when (val r = EntryDrafts.build(draft, EntryId(Uuid.random().toString()), BaseCurrency.current)) {
+                            is DraftResult.Ok -> r.entry
+                            is DraftResult.Problem -> return@write r.message
+                        }
+                        val (sourceRef, refused) = sourceRefFor(ok, i)
+                        if (refused != null) return@write refused
+                        ok.store.atomically {
+                            ok.store.save(entry, EntryDetails(merchant = title, note = null, source = "sms", sourceRef = sourceRef))
+                            i.body?.let { ok.origins.put(entry.id.value, app.expenses.core.storage.OriginStore.kindOf(i.source, i.sender), i.sender, it, i.receivedAt) }
+                            ok.inbox.confirm(id, entry.id.value)
+                            bill?.let { ok.bills.markPaid(it.id, entry.id.value, at) }
+                        }
+                        held = app.expenses.core.storage.CaptureAdds.Held(id, i.body, entry.id.value, created = true, originBefore = null, bill = bill)
+                    }
+                    // what the text's own account stands for (the paying account for the bank's text, the card for the card's), and the card the words name, are remembered for next time
+                    val received = n?.side == BillPaymentSide.RECEIVED
+                    if (i.accountLast4 != null) ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), if (received) cardAccountId else payFromId)
+                    if (!received && cardAccountId.isNotEmpty() && n?.cardLast4 != null) ok.keepSetting(settings, accountKey(n.cardBank ?: i.issuer, n.cardLast4), cardAccountId)
+                    heldAdd = HeldAdd(held, settings)
+                    _inbox.value = inboxRows(ok)
+                    refresh(ok)
+                    _inboxUndo.value = ScreenUndo("$ADDED_UNDO$id", if (bill != null) "Marked ${bill.title} as paid" else if (useEntryId.isNotEmpty()) "Added to the payment you recorded" else "Recorded the bill payment")
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /**
+     * The waiting text [id] is the other leg of the entry [entryId] that is already in the ledger (the credit text of a transfer whose debit text was added, the card's "payment received" text of a bill payment already
+     * recorded): nothing new is recorded, the text is added to the entry's words and marked added. "Added to the transfer · Undo" puts it back. [onDone] gets null, or why not.
+     */
+    fun joinCapture(id: String, entryId: String, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val i = ok.inbox.get(id) ?: return@write "That item is no longer in the inbox."
+                    val held = ok.captureAdds.join(id, entryId)
+                    val settings = ArrayList<Pair<String, String?>>()
+                    // on a transfer the text's own side is the account the money reached (a credit) or left (a debit): remembered for this bank and these digits
+                    val row = ok.db.schemaQueries.entryById(entryId).executeAsOneOrNull()
+                    if (row != null && row.kind == "TRANSFER" && i.accountLast4 != null) (if (i.direction == "CREDIT") row.counter_account_id else row.account_id)?.let { own -> ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), own) }
+                    heldAdd = HeldAdd(held, settings)
+                    _inbox.value = inboxRows(ok)
+                    refresh(ok)
+                    _inboxUndo.value = ScreenUndo("$ADDED_UNDO$id", if (row?.kind == "TRANSFER") "Added to the transfer" else "Added to the payment you recorded")
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    private fun undoAdded(itemId: String) {
+        val held = heldAdd?.takeIf { it.adds.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
+        heldAdd = null
+        withStore { ok ->
+            try { ok.captureAdds.undo(held.adds) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            held.settings.asReversed().forEach { (key, before) -> if (before == null) ok.templates.removeSetting(key) else ok.templates.putSetting(key, before) }
+            _inbox.value = inboxRows(ok); refresh(ok)
         }
     }
 
@@ -2678,6 +2931,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun undoDismissCapture(id: String) {
         if (id.startsWith(MADE_TRANSFER_UNDO)) { undoMadeTransfer(id.removePrefix(MADE_TRANSFER_UNDO)); return }
         if (id.startsWith(ACCOUNT_CHOICE_UNDO)) { undoAccountChoice(id.removePrefix(ACCOUNT_CHOICE_UNDO)); return }
+        if (id.startsWith(ADDED_UNDO)) { undoAdded(id.removePrefix(ADDED_UNDO)); return }
         val held = skippedCapture?.takeIf { it.first == id } // taken now: the bar clears it as soon as it is gone, before the store work below runs
         if (held == null) return
         withStore { ok ->
@@ -2688,7 +2942,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** The Undo bar for a skip has gone (used, or timed out): what was kept for it is let go. A newer skip's own offer is left alone. */
     fun inboxUndoGone(id: String) {
-        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null; accountChoice = null }
+        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null; accountChoice = null; heldAdd = null }
     }
 
     /**

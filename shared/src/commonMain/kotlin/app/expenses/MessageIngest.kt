@@ -4,7 +4,9 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.formatted
 import app.expenses.core.parsers.BillKind
+import app.expenses.core.parsers.BankRules
 import app.expenses.core.parsers.BillNotice
+import app.expenses.core.parsers.BillPayments
 import app.expenses.core.parsers.CaptureClassifier
 import app.expenses.core.parsers.CaptureOutcome
 import app.expenses.core.parsers.Direction
@@ -134,7 +136,9 @@ object MessageIngest {
                         a.accountLast4, a.viaUpi, a.confidence.name, normalised(text).take(BODY_CAP), InboxStatus.PENDING, null,
                     )
                     if (ok.inbox.add(item, fingerprint(source, receivedAt, text))) CaptureEventOutcome.CAPTURED.also {
-                        detail = (if (a.direction == Direction.CREDIT) "Credit of " else "Debit of ") + Money(a.amountMinor, Currency(a.currency, 2)).formatted() + " from ${verdict.issuer}"
+                        val money = Money(a.amountMinor, Currency(a.currency, 2)).formatted()
+                        // a payment of a bill is said so ("Bill payment of ₹12,345.67 from Kotak Mahindra Bank"), not as a plain debit
+                        detail = if (BillPayments.read(text) != null) "Bill payment of $money from ${verdict.issuer}" else (if (a.direction == Direction.CREDIT) "Credit of " else "Debit of ") + money + " from ${verdict.issuer}"
                     } else CaptureEventOutcome.DUPLICATE
                 }
             }
@@ -165,13 +169,15 @@ object MessageIngest {
     }
 
     /**
-     * Texts that an earlier version filed as a debit or credit in To review but that the rules now read as a bill (0.7.1: "Your bill ... is due ... Total amount payable
-     * ... Kindly ignore, if already paid" was filed as a debit). Each still-PENDING text item (SMS or Shortcuts source, never an email or a payment-app notification,
-     * and never one the person already confirmed or skipped) is judged again from its stored sender and words by the same rules as a new message; one that is now a
-     * bill becomes a [Bill] (the same dedupe key as a new one, so a bill already on the Bills page is not doubled) and the item is skipped, which keeps its
-     * fingerprint so the same text is not captured twice. Idempotent: a skipped item is no longer pending, and an item that is still a transaction is not touched.
-     * Returns how many items became bills. Call inside the write lock.
+     * Texts that an earlier version filed wrongly, judged again by today's rules, in both directions:
+     *  - a still-PENDING text item (SMS or Shortcuts source, never an email or a payment-app notification, never one the person already confirmed or skipped) that the rules now read as a bill (0.7.1: "Your bill
+     *    ... is due ... Total amount payable ... Kindly ignore, if already paid" was filed as a debit) becomes a [Bill] (the same dedupe key as a new one, so a bill already on the Bills page is not doubled) and the
+     *    item is skipped, which keeps its fingerprint so the same text is not captured twice;
+     *  - a FOUND or TRACKED bill from a text that is really the confirmation of a bill that was PAID ("Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful!" was filed as a new bill) is skipped, and
+     *    its text waits in To review as a bill payment ([BillPayments]), where the card asks to mark the matching bill paid. A bill the person already paid or skipped is left alone.
+     * Idempotent: a skipped item or bill is no longer waiting, and one that is still what it was is not touched. Returns how many were moved. Call inside the write lock.
      */
+    @OptIn(ExperimentalUuidApi::class)
     fun reclassifyWaiting(ok: AppContainer.Opened.Ok): Int {
         val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         var converted = 0
@@ -181,6 +187,18 @@ object MessageIngest {
             if (verdict !is CaptureOutcome.Bill) continue
             ok.bills.add(billOf(verdict, item.source, item.sender, item.receivedAt, text))
             if (ok.inbox.dismiss(item.id)) converted++
+        }
+        for (b in ok.bills.list(BillStatus.FOUND, 500) + ok.bills.list(BillStatus.TRACKED, 500)) {
+            val text = b.body?.takeIf { b.source == CaptureKeys.SMS && BillPayments.read(it) != null } ?: continue
+            val verdict = classifyText(b.sender.trim(), text, extra, dateOfMillis(b.receivedAt)) as? CaptureOutcome.Transaction ?: continue
+            val a = verdict.alert
+            val item = InboxItem(
+                Uuid.random().toString(), b.source, b.sender, verdict.issuer, b.receivedAt, a.direction.name, a.amountMinor, a.currency, a.date?.toString(), a.reference,
+                a.accountLast4, a.viaUpi, a.confidence.name, normalised(text).take(BODY_CAP), InboxStatus.PENDING, null,
+            )
+            // a text already in To review (or added before) is not put there twice; the wrong bill goes either way
+            ok.inbox.add(item, fingerprint(b.source, b.receivedAt, text))
+            if (ok.bills.dismiss(b.id)) converted++
         }
         if (converted > 0) changes.value += 1
         return converted
@@ -228,17 +246,24 @@ object PasteRules {
     private val plainWords = setOf("slice")
 
     private val banks: List<Pair<String, Regex>> by lazy {
-        // the root itself (HDFCBK) and its display name (HDFC Bank); the first built-in root that matches wins
+        // the root itself (HDFCBK) and its display name (HDFC Bank); the first built-in root that matches wins. A bank that signs its texts in other words ("Kotak811") says so in [BankRule.textAliases], tried after every name.
         SenderRules.BUILT_IN.flatMap { (root, name) ->
             listOf(root to Regex("""\b${Regex.escape(root)}\b""", RegexOption.IGNORE_CASE), root to wordsOf(name, name.lowercase() in plainWords))
-        }
+        } + BankRules.ALL.flatMap { r -> r.textAliases.map { r.root to wordsOf(it, false) } }
     }
 
     private fun wordsOf(name: String, capitalsOnly: Boolean): Regex =
         Regex("""\b${Regex.escape(if (capitalsOnly) name.uppercase() else name)}\b""", if (capitalsOnly) emptySet() else setOf(RegexOption.IGNORE_CASE))
 
     fun evidence(body: String): Evidence {
-        banks.firstOrNull { (_, re) -> re.containsMatchIn(body) }?.let { return Evidence.Bank(it.first) }
+        val named = banks.filter { (_, re) -> re.containsMatchIn(body) }.map { it.first }.distinct()
+        if (named.isNotEmpty()) {
+            // A bill payment names the CARD's bank and is signed by the bank that paid it ("Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful! T&C -Kotak811"): the paying bank
+            // wrote the text, so it is the other one. With only the card's bank named, that bank stands in for the sender, as for any pasted text.
+            val card = if (named.size > 1) BillPayments.read(body)?.cardBank else null
+            val writer = card?.let { c -> named.firstOrNull { root -> SenderRules.BUILT_IN[root] != c } }
+            return Evidence.Bank(writer ?: named.first())
+        }
         return if (amount.containsMatchIn(body) && moved.containsMatchIn(body) && mask.containsMatchIn(body)) Evidence.AlertWords else Evidence.None
     }
 }

@@ -64,6 +64,14 @@ class BillStore(private val db: ExpensesDb) {
     /** PAID back to TRACKED. The entry that was made stays; deleting it is the person's call. */
     fun unpay(id: String) { q.unpayBill(id) }
 
+    /** Takes back a [markPaid] made from To review: the bill is [status] (FOUND or TRACKED, what it was) again holding [body], with no payment linked. False when it was not paid. */
+    fun unpayTo(id: String, status: BillStatus, body: String?): Boolean = db.transactionWithResult {
+        require(status == BillStatus.FOUND || status == BillStatus.TRACKED) { "A bill taken back from paid goes to found or tracked" }
+        val before = q.billById(id).executeAsOneOrNull()
+        q.unpayBillTo(status.name, body, id)
+        before != null && before.status == BillStatus.PAID.name
+    }
+
     /**
      * Keeps paid bills in step with the entries that paid them: a bill whose entry was deleted goes back to tracked, and one whose entry is live again
      * (undone, restored, or arrived by sync) is paid again. The link is kept either way. True when any bill changed.

@@ -85,6 +85,10 @@ fun InboxScreen(
     onChooseAccount: (itemId: String, accountId: String) -> Unit = { _, _ -> },
     /** "New account ending 123": makes an account (name, type) with the digits the text prints and uses it (item, name, type, answer: null or why not). */
     onCreateAccount: (itemId: String, name: String, type: String, done: (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
+    /** "Mark paid" on a bill payment card: the waiting text, the bill it pays ("" none; "card:<account>" a statement worked out from billing dates), the account it was paid from, the card account ("" when the app tracks none) and the entry that already records the same payment ("" none); answer: null or why not. */
+    onBillPaid: (itemId: String, billId: String, payFromId: String, cardId: String, useEntryId: String, done: (String?) -> Unit) -> Unit = { _, _, _, _, _, done -> done("Not available here.") },
+    /** "Add to that transfer": the waiting text is the other leg of an entry that is already in the ledger, so it joins that entry instead of becoming a second one (item, entry; answer: null or why not). */
+    onJoin: (itemId: String, entryId: String, done: (String?) -> Unit) -> Unit = { _, _, done -> done("Not available here.") },
     /** The empty list's one first step: the Capture screen, where reading texts is turned on. Null where there is none. */
     onSetUpCapture: (() -> Unit)? = null,
 ) {
@@ -95,7 +99,7 @@ fun InboxScreen(
     // and an ordinary payment (a transfer or refund asks to be looked at)
     // (and not one that might be half of a transfer: that is looked at, not added in bulk)
     // (and a category that is only a guess from a name, a payment to a person, or a marketplace is looked at: it is never added in bulk or by a swipe; no category at all is fine, it stays Uncategorised)
-    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.treatment == "PAYMENT" && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() && it.certainty != "check" }
+    val easy = rows.filter { it.duplicateNote == null && it.relatedNote == null && it.otherLegEntryId.isEmpty() && (it.rememberedAccount || accounts.size == 1) && it.accountId.isNotEmpty() && it.convertEntryId.isEmpty() && it.transferHint.isEmpty() && (it.treatment == "PAYMENT" && it.certainty != "check" || it.treatment == "TRANSFER" && it.transferSure && it.fromAccountId.isNotEmpty() && it.toAccountId.isNotEmpty()) }
     val refused = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     // the waiting texts whose account is not known (they are never "clear"): how many, on how many bank cards, and where the first one is, for the one-tap way to answer
     val needAccount = rows.count { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }
@@ -104,25 +108,31 @@ fun InboxScreen(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val easyIds = easy.map { it.id }.toSet()
-    val askLeaders = rows.filter { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && it.treatment == "PAYMENT" }.distinctBy { it.issuer + "|" + it.last4 }.mapTo(HashSet()) { it.id }
+    // the first card of each bank card (issuer and digits) that asks "Which account is this?" carries the question; a bill payment card asks it too (the paying account), the others follow it
+    val askLeaders = rows.filter { it.accountAsk.isNotEmpty() && it.pairedItemId.isEmpty() && (it.treatment == "PAYMENT" || it.treatment == "BILL_PAYMENT") }.distinctBy { it.issuer + "|" + it.last4 }.mapTo(HashSet()) { it.id }
     // items from the same payee (or, with no payee, the same bank): "Add all from <payee>" on their cards adds the ones among them that need no decision
     val byPayee = rows.groupBy { inboxGroupKey(it) }
-    fun addTogether(list: List<InboxRowUi>) { refused.clear(); list.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }
+    // a clear card is added as it stands: an expense or income, or the transfer it starts as (only a rule the person made three times with no exception starts one that may be added in bulk)
+    fun addTogether(list: List<InboxRowUi>) { refused.clear(); list.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, r.treatment, r.fromAccountId, r.toAccountId, "") { p -> if (p != null) refused += p } } }
     val cur = app.expenses.core.domain.BaseCurrency.current
+    val transfers = easy.filter { it.treatment == "TRANSFER" }
+    val plain = easy.filter { it.treatment != "TRANSFER" }
     // a combined transfer card is money out of one account and money in to another: it counts on both sides
     fun total(list: List<InboxRowUi>, credit: Boolean) = app.expenses.core.domain.Money(list.filter { (it.direction == "CREDIT") == credit || (credit && it.pairedItemId.isNotEmpty()) }.sumOf { it.amountMinor }, cur).formatted()
     if (confirmingAll) AlertDialog(
         onDismissRequest = { confirmingAll = false }, title = { Text("Add ${easy.size} items?") },
         text = {
-            val bare = easy.count { it.direction != "CREDIT" && it.categoryId.isEmpty() }
+            val bare = plain.count { it.direction != "CREDIT" && it.categoryId.isEmpty() }
             Text(
-                "Each one goes where its card says: ${total(easy, false)} out and ${total(easy, true)} in. Items that look like repeats, transfers or refunds, whose account is not yet known, or whose category is only a guess, are left for you to check." +
+                "Each one goes where its card says: ${total(plain, false)} out and ${total(plain, true)} in." +
+                    (if (transfers.isNotEmpty()) " ${transfers.size} ${if (transfers.size == 1) "is a transfer" else "are transfers"} between your own accounts (${app.expenses.core.domain.Money(transfers.sumOf { it.amountMinor }, cur).formatted()}): not spending or income." else "") +
+                    " Items that look like repeats, transfers or refunds, whose account is not yet known, or whose category is only a guess, are left for you to check." +
                     (if (needAccount > 0) " $needAccount ${if (needAccount == 1) "has" else "have"} no account yet: answer \"Which account is this?\" on its card." else "") +
                     if (bare > 0) " $bare of these have no category yet: they are added as Uncategorised, and you can file them from Reports later." else "",
                 modifier = Modifier.testTag("inbox_add_all_text"),
             )
         },
-        confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, "PAYMENT", "", "", "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
+        confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, r.treatment, r.fromAccountId, r.toAccountId, "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
     Scaffold(topBar = { AreaTopBar("To review", Area.CAPTURE, Icons.Outlined.Inbox, onBack, "inbox_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
@@ -171,7 +181,7 @@ fun InboxScreen(
                     r, accounts, categories, onConfirm, onDismiss, onFlip, onName, Modifier.animateItem(),
                     swipeable = r.id in easyIds,
                     payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
-                    onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, askHere = r.id in askLeaders, progress = progress,
+                    onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, onBillPaid = onBillPaid, onJoin = onJoin, askHere = r.id in askLeaders, progress = progress,
                 )
             }
         }
@@ -196,20 +206,26 @@ private fun InboxCard(
     r: InboxRowUi, accounts: List<AccountUi>, categories: List<CategoryUi>,
     onConfirm: (String, String, String, String, String, String, String, (String?) -> Unit) -> Unit, onDismiss: (String) -> Unit, onFlip: (String) -> Unit, onName: (String, String) -> Unit,
     modifier: Modifier = Modifier,
-    /** Needs no decision (see [InboxScreen]): can be swiped, right to add as the Add button would, left to skip. Other cards do not move. */
+    /** Needs no decision (see [InboxScreen]): can be swiped, right to add as the Add button would, left to skip. Other cards do not move; neither does one whose type the person changed from the one it started as. */
     swipeable: Boolean = false,
     /** The items from this card's payee that need no decision, when two or more pending items share the payee; empty otherwise (no button). */
     payeeGroup: List<InboxRowUi> = emptyList(), onAddPayee: (List<InboxRowUi>) -> Unit = {},
     onConvert: (String, String, String, String, (String?) -> Unit) -> Unit,
     onChooseAccount: (String, String) -> Unit = { _, _ -> },
     onCreateAccount: (String, String, String, (String?) -> Unit) -> Unit = { _, _, _, done -> done("Not available here.") },
+    onBillPaid: (String, String, String, String, String, (String?) -> Unit) -> Unit = { _, _, _, _, _, done -> done("Not available here.") },
+    onJoin: (String, String, (String?) -> Unit) -> Unit = { _, _, done -> done("Not available here.") },
     /** Whether this card carries the "Which account is this?" question: only the first waiting card of a bank card (issuer and digits) does; the others say they follow it. */
     askHere: Boolean = true,
     /** Where this card is in the list, "3 of 12". */
     progress: String = "",
 ) {
     var moreOptions by rememberSaveable(r.id) { mutableStateOf(false) }
-    var asPayment by rememberSaveable(r.id) { mutableStateOf(false) }
+    // null: the card is as the app proposed it; "TRANSFER" or "PLAIN": what the person chose with the type chips (or "Add as expense instead")
+    var mode by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    // "Not this" on a bill payment card, and "It is a different payment" on a card that is the other leg of a transfer: the card is an ordinary one
+    var notBill by rememberSaveable(r.id) { mutableStateOf(false) }
+    var asNew by rememberSaveable(r.id) { mutableStateOf(false) }
     var reporting by remember(r.id) { mutableStateOf(false) }
     if (reporting) ReportMessageDialog(
         "", r.body, emptySet(),
@@ -217,7 +233,20 @@ private fun InboxCard(
     ) { reporting = false }
     var fromAcct by rememberSaveable(r.id) { mutableStateOf(r.fromAccountId) }
     var toAcct by rememberSaveable(r.id) { mutableStateOf(r.toAccountId) }
-    val paired = r.treatment != "PAYMENT" && !asPayment
+    // the other end of a transfer the person makes of a card that started as spending or income, and the choices on a bill payment card
+    var otherPick by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    var billPick by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    var fromPick by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    var cardPick by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
+    val billPay = r.billPay
+    val billMode = r.treatment == "BILL_PAYMENT" && billPay != null && !notBill
+    val legMode = r.otherLegEntryId.isNotEmpty() && !asNew && !billMode
+    val proposed = r.treatment == "TRANSFER" || r.treatment == "REFUND"
+    val eff = mode ?: when (r.treatment) { "TRANSFER" -> "TRANSFER"; "REFUND" -> "REFUND"; else -> "PLAIN" }
+    // what the app proposed besides spending or income (a cash withdrawal, a card payment, a refund, a transfer from what the person did before), still chosen
+    val paired = proposed && eff == r.treatment
+    // a transfer the person chose on a card that started as something else
+    val pickedTransfer = eff == "TRANSFER" && r.treatment != "TRANSFER"
     // what the person picked on this card; until they do, the card follows the account the app has (so one chosen for this bank on another card shows here at once)
     var pickedAccount by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
     val account by rememberUpdatedState(pickedAccount ?: r.accountId)
@@ -232,31 +261,37 @@ private fun InboxCard(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val credit = r.direction == "CREDIT"
     val flow = if (credit) Flow3.IN else Flow3.OUT
+    val other = (otherPick ?: r.otherAccountId).takeIf { it != account }.orEmpty()
+    val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose an account" }
+    // the swipe's lambda is made once: it reads the row and the account through State, so it always sees the card as it is now
+    val rNow by rememberUpdatedState(r)
     var snapBack by remember { mutableStateOf(0) }
     val swipe = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
-                // the same as the Add button on this card; when it is refused the card slides back and says why
+                // the same as the Add button on this card (a card left as it started: an expense, income or the strong transfer it starts as); when it is refused the card slides back and says why
                 SwipeToDismissBoxValue.StartToEnd -> {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
-                    onConfirm(r.id, account, category, "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
+                    onConfirm(rNow.id, account, category, if (rNow.treatment == "TRANSFER") "TRANSFER" else "PAYMENT", rNow.fromAccountId, rNow.toAccountId, rNow.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
                     true
                 }
-                SwipeToDismissBoxValue.EndToStart -> { onDismiss(r.id); true }
+                SwipeToDismissBoxValue.EndToStart -> { onDismiss(rNow.id); true }
                 else -> false
             }
         },
     )
     LaunchedEffect(snapBack) { if (snapBack > 0) swipe.snapTo(SwipeToDismissBoxValue.Settled) }
+    // approving by a swipe is for a card left in the type it started as; a card whose type the person changed, a bill payment and the other leg of a transfer are answered with their buttons
+    val canSwipe = swipeable && mode == null && !billMode && !legMode
     SwipeToDismissBox(
         state = swipe,
-        enableDismissFromStartToEnd = swipeable,
-        enableDismissFromEndToStart = swipeable,
+        enableDismissFromStartToEnd = canSwipe,
+        enableDismissFromEndToStart = canSwipe,
         modifier = modifier,
         backgroundContent = {
             val adding = swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd
             val skipping = swipe.dismissDirection == SwipeToDismissBoxValue.EndToStart
-            if (swipeable && (adding || skipping)) Box(
+            if (canSwipe && (adding || skipping)) Box(
                 Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
                     .background(if (adding) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 24.dp),
                 contentAlignment = if (adding) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd,
@@ -285,6 +320,8 @@ private fun InboxCard(
             // warnings first: a repeat or a related entry changes what the right action is
             r.relatedNote?.let { Callout(it, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_related_${r.id}")) }
             r.duplicateNote?.let { Callout(it, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_duplicate_${r.id}")) }
+            // the other half of this is already in the ledger as a transfer: this text joins it, so the move is recorded once (and shows both texts as where it came from)
+            if (legMode) Callout(r.otherLegNote, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_otherleg_${r.id}"))
             // the other half of this is already in the ledger as an expense or income: offer to make the two one transfer (the earlier entry goes, and Undo brings it back)
             if (r.convertEntryId.isNotEmpty()) {
                 Callout(r.convertNote, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_convert_note_${r.id}"))
@@ -297,21 +334,38 @@ private fun InboxCard(
             // the account is not known (the digits fit none or several, or none are printed): ask once, remember the answer for this bank and these digits (the other waiting cards of it follow)
             // The one question that matters most comes first: which account (when it is not known, Add waits for it), else the category (when it is only a guess). What explains or varies
             // them is under "More options" below Add, so most cards are a line of facts, one answer and Add.
-            val asksAccount = r.accountAsk.isNotEmpty() && pickedAccount == null && !paired
+            val asksAccount = r.accountAsk.isNotEmpty() && pickedAccount == null && !paired && !legMode
             if (asksAccount) {
                 if (askHere) AccountQuestion(r, accounts, onChoose = { id -> onChooseAccount(r.id, id) }, onCreate = { name, type, done -> onCreateAccount(r.id, name, type, done) })
                 else Text("Which account is this? Answer on the first ${r.issuer}${r.last4?.let { " ending $it" } ?: ""} card above: this one follows.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_account_follow_${r.id}"))
             }
             // the other categories this payee has been in: shown at once only while the category is the open question (a guess to check, no account question first)
-            val alternativesNow = picked == null && r.alternatives.isNotEmpty() && !changing && !paired
+            val plainCard = !billMode && !legMode && !paired && !pickedTransfer
+            val alternativesNow = picked == null && r.alternatives.isNotEmpty() && !changing && plainCard
             val alternativesInline = alternativesNow && r.certainty == "check" && !asksAccount
             val accountDetail = asksAccount && askHere
             val hasMore = (alternativesNow && !alternativesInline) || accountDetail
+            // the type: Expense, Income or Transfer. Starts as the text says (a cash withdrawal or a card payment: a transfer); Expense and Income turn a text read the wrong way round
+            if (!billMode && !legMode) {
+                val pick: (String) -> Unit = { k: String ->
+                    when {
+                        k == "TRANSFER" -> mode = "TRANSFER"
+                        // the card stays a refund when Income is chosen on it: a refund is money in
+                        k == "INCOME" && eff == "REFUND" -> mode = null
+                        else -> { if ((k == "INCOME") != credit) onFlip(r.id); mode = "PLAIN" }
+                    }
+                }
+                KindChips(r.id, eff == "TRANSFER", credit || eff == "REFUND", pick)
+            }
+            if (billMode && billPay != null) BillPaymentBox(
+                r, billPay, accounts, billPick ?: billPay.billId, { billPick = it }, fromPick ?: billPay.payFromId, { fromPick = it },
+                cardPick ?: billPay.cardAccountId, { cardPick = it },
+            ) else if (!legMode) {
             // where it will go: the decision, with its own Change next to it
             Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (paired && r.treatment == "TRANSFER") {
-                    val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose" }
                     Text("Recorded as a ${r.treatmentLabel}: from ${nameOf(fromAcct)} to ${nameOf(toAcct)}. It moves money between your own accounts, so it is not spending.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+                    if (r.transferNote.isNotEmpty()) Text(r.transferNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_transfer_learned_${r.id}"))
                     if (changing) {
                         Text("From", style = MaterialTheme.typography.labelSmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == fromAcct, onClick = { fromAcct = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_from_${r.id}_${a.id}")) } }
@@ -320,6 +374,21 @@ private fun InboxCard(
                     }
                 } else if (paired && r.treatment == "REFUND") {
                     Text("Recorded as a ${r.treatmentLabel}, so the original expense is reduced instead of this counting as income.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
+                } else if (pickedTransfer) {
+                    // a transfer the person chose: the text's own account is known (or asked above); the only other question is the account at the other end
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text((if (credit) "Transfer into ${nameOf(account)}" else "Transfer out of ${nameOf(account)}"), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f).testTag("inbox_goes_${r.id}"))
+                        TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
+                    }
+                    if (changing) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { pickedAccount = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
+                    val choices = accounts.filter { it.id in r.otherChoices && it.id != account }
+                    if (choices.isEmpty()) Text("A transfer needs two accounts. Add the other one in More, Accounts first.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_other_none_${r.id}"))
+                    else {
+                        Text(if (credit) "From account" else "To account", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("inbox_other_label_${r.id}"))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { choices.forEach { a -> FilterChip(selected = a.id == other, onClick = { otherPick = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_other_${r.id}_${a.id}")) } }
+                        if (other.isNotEmpty() && otherPick == null && r.otherWhy.isNotEmpty()) Text("Suggested: ${r.otherWhy}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_other_why_${r.id}"))
+                    }
+                    Text("It moves money between your own accounts, so it is not spending or income.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_transfer_note_${r.id}"))
                 } else {
                     val accountName = accounts.firstOrNull { it.id == account }?.name ?: "choose an account"
                     val categoryName = categories.firstOrNull { it.id == category }?.name
@@ -352,13 +421,55 @@ private fun InboxCard(
                 }
                 if (paired) TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
             }
+            }
             problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
-            // the answer: one big Add (the label says what it will do) and Skip
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            // the answer: one big Add (the label says what it will do) and Skip; a bill payment asks "Mark paid", the other leg of a transfer joins it
+            if (billMode && billPay != null) {
+                val billId = billPick ?: billPay.billId
+                val from = fromPick ?: billPay.payFromId
+                val card = cardPick ?: billPay.cardAccountId
+                val sameHere = billPay.sameEntryId.isNotEmpty()
+                val isCard = billPay.isCard
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    when {
+                        billId.isNotEmpty() -> Button(
+                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onBillPaid(r.id, billId, from, card, billPay.sameEntryId) { p -> problem = p } },
+                            enabled = from.isNotEmpty() || sameHere, modifier = Modifier.weight(1f).testTag("inbox_billpay_add_${r.id}"),
+                        ) { Text("Mark paid") }
+                        sameHere -> Button(
+                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onJoin(r.id, billPay.sameEntryId) { p -> problem = p } },
+                            modifier = Modifier.weight(1f).testTag("inbox_billpay_join_${r.id}"),
+                        ) { Text("Same payment: add to it") }
+                        else -> Button(
+                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onBillPaid(r.id, "", from, card, "") { p -> problem = p } },
+                            enabled = from.isNotEmpty(), modifier = Modifier.weight(1f).testTag("inbox_billpay_record_${r.id}"),
+                        ) { Text(if (isCard) "Record a card bill payment of ${r.amountText}" else "Record the bill payment of ${r.amountText}") }
+                    }
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { notBill = true }, modifier = Modifier.testTag("inbox_billpay_not_${r.id}")) { Text("Not this") }
+                    OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_billpay_ignore_${r.id}")) { Text("Ignore") }
+                }
+            } else if (legMode) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onJoin(r.id, r.otherLegEntryId) { p -> problem = p } },
+                        modifier = Modifier.weight(1f).testTag("inbox_join_${r.id}"),
+                    ) { Text("Add to that transfer") }
+                    OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
+                }
+                TextButton(onClick = { asNew = true }, modifier = Modifier.testTag("inbox_leg_apart_${r.id}")) { Text("It is a different payment") }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirm(r.id, account, category, if (paired) r.treatment else "PAYMENT", fromAcct, toAcct, r.refundOfEntry) { p -> problem = p } },
-                    enabled = account.isNotEmpty() || (paired && r.treatment != "PAYMENT"), modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
-                ) { Text(if (r.duplicateNote != null) "Add anyway" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                        // a transfer the person chose goes from the text's account to the other (or the other way for money in); one the app proposed goes where its card says
+                        val from = if (pickedTransfer) (if (credit) other else account) else fromAcct
+                        val to = if (pickedTransfer) (if (credit) account else other) else toAcct
+                        onConfirm(r.id, account, category, if (paired) r.treatment else if (pickedTransfer) "TRANSFER" else "PAYMENT", from, to, r.refundOfEntry) { p -> problem = p }
+                    },
+                    enabled = if (pickedTransfer) account.isNotEmpty() && other.isNotEmpty() else account.isNotEmpty() || paired, modifier = Modifier.weight(1f).testTag("inbox_add_${r.id}"),
+                ) { Text(if (r.duplicateNote != null) "Add anyway" else if (pickedTransfer) "Add as transfer" else if (paired) "Add as ${r.treatmentLabel}" else "Add") }
                 OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
             }
             // what is not needed to answer: the other categories, and why the account is asked. One toggle, the same place on every card that has any of it (right under Add and Skip).
@@ -374,10 +485,10 @@ private fun InboxCard(
             // everything less usual, in small buttons that wrap on a narrow screen
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (r.duplicateNote != null) TextButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_same_${r.id}")) { Text("Same one: skip") }
-                if (r.treatment != "PAYMENT") TextButton(onClick = { asPayment = !asPayment }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (asPayment) "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
-                TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
-                if (payeeGroup.isNotEmpty()) TextButton(onClick = { onAddPayee(payeeGroup) }, modifier = Modifier.testTag("inbox_add_payee_${r.id}")) { Text("Add all from ${r.payee?.takeIf { it.isNotBlank() } ?: r.issuer} (${payeeGroup.size})") }
-                if (r.nameable) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
+                if (proposed) TextButton(onClick = { mode = if (eff == "PLAIN") null else "PLAIN" }, modifier = Modifier.testTag("inbox_plain_${r.id}")) { Text(if (eff == "PLAIN") "Use ${r.treatmentLabel}" else if (credit) "Add as income instead" else "Add as expense instead") }
+                if (!billMode && !legMode) TextButton(onClick = { onFlip(r.id) }, modifier = Modifier.testTag("inbox_flip_${r.id}")) { Text(if (credit) "It was money out" else "It was money in") }
+                if (payeeGroup.isNotEmpty() && !billMode && !legMode) TextButton(onClick = { onAddPayee(payeeGroup) }, modifier = Modifier.testTag("inbox_add_payee_${r.id}")) { Text("Add all from ${r.payee?.takeIf { it.isNotBlank() } ?: r.issuer} (${payeeGroup.size})") }
+                if (r.nameable && !billMode && !legMode) TextButton(onClick = { naming = !naming }, modifier = Modifier.testTag("inbox_name_btn_${r.id}")) { Text(if (r.payee.isNullOrBlank()) "Name this payee" else "Rename") }
                 TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("inbox_text_toggle_${r.id}")) { Text(if (showText) "Hide message" else "Show message") }
             }
             if (naming && r.nameable) {
@@ -397,6 +508,69 @@ private fun InboxCard(
             }
         }
     }
+    }
+}
+
+/** The type of an item in To review: Expense, Income or Transfer. [transfer] says Transfer is chosen; otherwise [credit] picks Income or Expense. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun KindChips(id: String, transfer: Boolean, credit: Boolean, onPick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("inbox_kinds_$id")) {
+        listOf("EXPENSE" to "Expense", "INCOME" to "Income", "TRANSFER" to "Transfer").forEach { (k, label) ->
+            val selected = if (transfer) k == "TRANSFER" else k == (if (credit) "INCOME" else "EXPENSE")
+            FilterChip(selected = selected, onClick = { onPick(k) }, label = { Text(label) }, modifier = Modifier.testTag("inbox_kind_${id}_$k"))
+        }
+    }
+}
+
+/**
+ * What a card for a bill payment text asks and offers: the question ("Mark the Axis card bill as paid?"), the open bills it may pay (or that none matched), whether the same payment is already in the ledger, which
+ * account the money left, which card it went to, and how it is recorded. The buttons are on the card itself.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun BillPaymentBox(
+    r: InboxRowUi, bill: app.expenses.BillPayUi, accounts: List<AccountUi>,
+    billId: String, onBill: (String) -> Unit, from: String, onFrom: (String) -> Unit, card: String, onCard: (String) -> Unit,
+) {
+    val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose an account" }
+    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(bill.kindLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_billpay_label_${r.id}"))
+        Text(bill.question, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_billpay_question_${r.id}"))
+        if (bill.sameNote.isNotEmpty()) Callout(bill.sameNote, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_billpay_same_${r.id}"))
+        if (bill.matches.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                bill.matches.forEach { m ->
+                    FilterChip(
+                        selected = billId == m.billId, onClick = { onBill(m.billId) },
+                        label = { Text("${m.title} · ${m.amountText} · ${m.dueText}" + when (m.fit) { "total" -> " · the total"; "minimum" -> " · the minimum"; "part" -> " · part of it"; else -> "" }) },
+                        modifier = Modifier.testTag("inbox_billpay_pick_${r.id}_${m.billId}"),
+                    )
+                }
+                FilterChip(selected = billId.isEmpty(), onClick = { onBill("") }, label = { Text("None of these") }, modifier = Modifier.testTag("inbox_billpay_pick_${r.id}_none"))
+            }
+        } else Text("No open bill matches this payment, so there is nothing to mark paid. It can still be recorded.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_billpay_nomatch_${r.id}"))
+        if (bill.sameEntryId.isNotEmpty() && billId.isNotEmpty()) {
+            Text("The payment is already in your ledger, so nothing new is recorded: the bill is marked paid by that entry.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_billpay_records_${r.id}"))
+        } else if (bill.sameEntryId.isEmpty()) {
+            if (!bill.received) Text("Paid from", style = MaterialTheme.typography.labelMedium)
+            else Text("Which account paid it?", style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                accounts.filter { it.id in bill.payFromChoices }.forEach { a -> FilterChip(selected = a.id == from, onClick = { onFrom(a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_billpay_from_${r.id}_${a.id}")) }
+            }
+            if (bill.isCard && bill.cardChoices.isNotEmpty()) {
+                Text("Which card", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    accounts.filter { it.id in bill.cardChoices }.forEach { a -> FilterChip(selected = a.id == card, onClick = { onCard(a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_billpay_card_${r.id}_${a.id}")) }
+                    FilterChip(selected = card.isEmpty(), onClick = { onCard("") }, label = { Text("None of these") }, modifier = Modifier.testTag("inbox_billpay_card_${r.id}_none"))
+                }
+            }
+            Text(
+                if (card.isNotEmpty()) "Recorded as a transfer from ${nameOf(from)} to ${nameOf(card)}, not as spending."
+                else "Recorded as an expense in Bills, paid from ${nameOf(from)}" + if (bill.isCard) " (the app has no account for this card)." else ".",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_billpay_records_${r.id}"),
+            )
+        }
     }
 }
 

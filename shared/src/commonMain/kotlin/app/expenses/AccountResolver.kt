@@ -29,9 +29,9 @@ internal class AccountResolver(private val ok: AppContainer.Opened.Ok, private v
     fun accountFor(issuer: String, digits: String?, preferCard: Boolean = false, bankKnown: Boolean = true, allowEndsWith: Boolean = true): String? =
         (resolve(issuer, digits, preferCard, bankKnown) as? AccountMatch.Result.Found)?.takeIf { allowEndsWith || it.basis != AccountMatch.Basis.ENDS_WITH }?.accountId
 
-    private companion object {
+    companion object {
         /** What the account names say about banks: the display names of the banks and card issuers the app reads (not the payment apps and bill senders, which are no bank). */
-        val banks: BankNames by lazy { BankNames(BankRules.ALL.filter { it.kind == SenderKind.BANK || it.kind == SenderKind.CARD }.map { it.issuer }.distinct()) }
+        internal val banks: BankNames by lazy { BankNames(BankRules.ALL.filter { it.kind == SenderKind.BANK || it.kind == SenderKind.CARD }.map { it.issuer }.distinct()) }
     }
 }
 

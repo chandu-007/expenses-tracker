@@ -708,6 +708,17 @@ UNION ALL
 SELECT id, occurred_at, source_ref, merchant FROM entry
 WHERE deleted = 0 AND kind = 'TRANSFER' AND to_amount_minor = :amount AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
 
+-- A captured payment of a bill (a card bill, a utility) may already be in the ledger as the payment the person recorded: an expense or a transfer of exactly this amount in a window of time
+-- (the caller narrows it by the day the text was sent). The kind and both accounts say what it is.
+entriesNearBillPayment:
+SELECT id, kind, occurred_at, source_ref, merchant, account_id, counter_account_id FROM entry
+WHERE deleted = 0 AND kind IN ('EXPENSE', 'TRANSFER') AND amount_minor = :amount AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
+-- Transfers of exactly this amount in a window: the other leg of a transfer is a text for money that already moved (from account_id to counter_account_id).
+transferLegsNear:
+SELECT id, account_id, counter_account_id, occurred_at, source_ref, merchant FROM entry
+WHERE deleted = 0 AND kind = 'TRANSFER' AND amount_minor = :amount AND currency = :currency AND occurred_at >= :fromMillis AND occurred_at < :untilMillis;
+
 -- The entries carrying a bank reference, whatever their date and amount: the same reference is the same transaction.
 entriesWithReference:
 SELECT id, occurred_at, source_ref, merchant, amount_minor, kind FROM entry WHERE deleted = 0 AND source_ref = :ref COLLATE NOCASE;
@@ -903,6 +914,10 @@ UPDATE bill SET status = 'PAID', entry_id = :entryId, paid_at = :at, body = NULL
 
 unpayBill:
 UPDATE bill SET status = 'TRACKED', entry_id = NULL, paid_at = NULL WHERE id = ? AND status = 'PAID';
+
+-- Undo of "Mark paid" in To review: the bill goes back to exactly the state it had (found or tracked) with the words it held; paying clears them.
+unpayBillTo:
+UPDATE bill SET status = :status, body = :body, entry_id = NULL, paid_at = NULL WHERE id = :id AND status = 'PAID';
 
 -- A bill paid by an entry that has since been deleted is not paid: back to being tracked. The link to the entry is kept, so bringing the entry
 -- back (undo, or a restore arriving from another device) pays the bill again; only "not paid after all" (unpayBill) cuts the link.

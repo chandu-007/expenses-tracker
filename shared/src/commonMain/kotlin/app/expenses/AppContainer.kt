@@ -62,6 +62,9 @@ class AppContainer(private val platform: Platform) {
             /** "This is a transfer between my own accounts": two waiting texts become one transfer, or a waiting text replaces the earlier expense or income it is the other half of. */
             val transfers: app.expenses.core.storage.CaptureTransfers = app.expenses.core.storage.CaptureTransfers(db, store, inbox, origins)
 
+            /** What an add from To review does besides saving the entry: joining a text to an entry that already holds the other leg, and taking an add back exactly. */
+            val captureAdds: app.expenses.core.storage.CaptureAdds = app.expenses.core.storage.CaptureAdds(db, store, inbox, origins, bills)
+
             /** "Change the type" of an expense, income or transfer: the entry is replaced by one of the new type, with an exact Undo. */
             val kindChanges: app.expenses.core.storage.KindChanges = app.expenses.core.storage.KindChanges(db, store, origins, expects, attachments)
 
