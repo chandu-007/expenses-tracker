@@ -1,0 +1,94 @@
+# Invented bill-payment texts: no real person, account, card, biller or amount. Tab separated: id, sender, body, expected class, amount in minor units (or empty), kind (or empty).
+# Classes: BILL_PAYMENT_PAID | BILL_PAYMENT_RECEIVED | BILL | DEBIT | CREDIT | IGNORED_NOT_A_TRANSACTION | IGNORED_OTP | IGNORED_DECLINED | IGNORED_NOT_ALLOWLISTED
+# P rows are confirmations of a bill or card-bill payment (a Transaction, never a Bill). F rows are false friends: each keeps the class the classifier gave it BEFORE bill payments were read
+# (recorded by running the unchanged classifier), except F07/F08/F29/F34/F41-F43: a failed, unsuccessful or declined bill payment that asks for nothing is IGNORED_DECLINED, never a bill. One that also says it is due stays a BILL (F44).
+P01	AX-KOTAKB-S	Hi Asha Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful! T&C -Kotak811	BILL_PAYMENT_PAID	1234567	CREDIT_CARD
+P02	AX-KOTAKB-S	Hi Test User, HDFC Bank Credit Card bill payment of Rs 4,500 was successful! T&C -Kotak811	BILL_PAYMENT_PAID	450000	CREDIT_CARD
+P03	VM-HDFCBK-S	Payment of Rs.8,200.00 received towards your HDFC Bank Credit Card ending 1234 on 05-11-2026. Thank you!	BILL_PAYMENT_RECEIVED	820000	CREDIT_CARD
+P04	JD-ICICIB-T	Thank you for your payment of Rs 15,000.00 towards your ICICI Bank credit card XX4321 on 06-Nov-26.	BILL_PAYMENT_RECEIVED	1500000	CREDIT_CARD
+P05	BP-SBICRD-S	Your SBI Card payment of Rs 23,456.00 was successful. Thank you.	BILL_PAYMENT_RECEIVED	2345600	CREDIT_CARD
+P06	BP-SBICRD-S	Your SBI Card payment was successful! Amount Rs.5000 credited to your card ending 4321.	BILL_PAYMENT_RECEIVED	500000	CREDIT_CARD
+P07	PHONEPE	Your credit card bill payment of Rs.7,350 to HDFC Bank Credit Card XX5678 was successful. UPI Ref 628374659283.	BILL_PAYMENT_PAID	735000	CREDIT_CARD
+P08	PAYTM	Credit card bill payment successful! Rs 3,999.00 paid for your ICICI Bank credit card ending 8765.	BILL_PAYMENT_PAID	399900	CREDIT_CARD
+P09	PHONEPE	CRED credit card bill payment of Rs 9,000 for your Axis Bank card is successful.	BILL_PAYMENT_PAID	900000	CREDIT_CARD
+P10	AX-AXISBK-S	Rs 12,000.00 credited to your Axis Bank Credit Card XX1234 on 07-11-2026. Thank you for the payment.	BILL_PAYMENT_RECEIVED	1200000	CREDIT_CARD
+P11	VM-JIOPAY-S	Payment of Rs.706.82 successful for your Jio bill.	BILL_PAYMENT_PAID	70682	MOBILE
+P12	AX-BESCOM-S	Your BESCOM bill payment of Rs 1,340.00 for consumer no 1234567890 is successful.	BILL_PAYMENT_PAID	134000	ELECTRICITY
+P13	AX-KOTAKB-S	Bill payment of Rs 1,340.00 for BESCOM successful. Ref: 7364528190	BILL_PAYMENT_PAID	134000	ELECTRICITY
+P14	AX-KOTAKB-S	Your electricity bill payment of Rs 2,150.50 is successful.	BILL_PAYMENT_PAID	215050	ELECTRICITY
+P15	AX-KOTAKB-S	Credit card payment of Rs 6,000.00 has been processed.	BILL_PAYMENT_PAID	600000	CREDIT_CARD
+P16	AX-AXISBK-S	We have received your payment of Rs 4,000.00 on your Axis Bank Credit Card ending 4455.	BILL_PAYMENT_RECEIVED	400000	CREDIT_CARD
+P17	AD-AIRTEL-S	Your Airtel postpaid bill payment of Rs.499.00 was successful.	BILL_PAYMENT_PAID	49900	MOBILE
+P18	VM-HDFCBK-S	Rs.15,000.00 credited to your card XX9012 on 08-Nov-2026.	BILL_PAYMENT_RECEIVED	1500000	CREDIT_CARD
+P19	VM-HDFCBK-S	Payment of Rs. 1,23,456.00 received towards your HDFC Bank Credit Card ending 1234.	BILL_PAYMENT_RECEIVED	12345600	CREDIT_CARD
+P20	AX-KOTAKB-S	Hi Test, ICICI Bank Credit Card bill payment of INR 1,23,456.00 was successful! T&C -Kotak811	BILL_PAYMENT_PAID	12345600	CREDIT_CARD
+P21	AX-KOTAKB-S	Hi Test, SBI Card bill payment of ₹5,000.50 was successful! T&C	BILL_PAYMENT_PAID	500050	CREDIT_CARD
+P22	AX-KOTAKB-S	Hi Test, American Express Card bill payment of Rs.5000 was successful!-Kotak811	BILL_PAYMENT_PAID	500000	CREDIT_CARD
+P23	BP-ICICIT-S	Rs 20,000.00 has been credited to your ICICI Bank Credit Card XX3456 towards bill payment. Ref No 5566778899	BILL_PAYMENT_RECEIVED	2000000	CREDIT_CARD
+P24	VM-HDFCBK-S	Dear Customer, Rs.2,500.00 debited from A/c XX1234 towards credit card bill payment, successful.	BILL_PAYMENT_PAID	250000	CREDIT_CARD
+P25	AX-AXISBK-S	Bill payment of Rs.1,999.00 from your A/c XX0987 to Tata Play was successful.	BILL_PAYMENT_PAID	199900	DTH
+P26	AX-KOTAKB-S	Bill payment of Rs 799.00 for LIC premium was successful.	BILL_PAYMENT_PAID	79900	INSURANCE
+P27	AX-KOTAKB-S	Your payment of Rs 8,500.00 towards loan EMI received.	BILL_PAYMENT_RECEIVED	850000	LOAN_EMI
+P28	AX-KOTAKB-S	Bill payment of Rs.650.00 for ACT Fibernet is successful on 07-Nov-2026. Ref: 4455667788	BILL_PAYMENT_PAID	65000	BROADBAND
+P29	AX-KOTAKB-S	Thank you! Your gas bill payment of Rs 312.00 to Mahanagar Gas was successful.	BILL_PAYMENT_PAID	31200	GAS
+P30	AX-KOTAKB-S	Water bill payment of Rs 220.00 was successful.	BILL_PAYMENT_PAID	22000	WATER
+P31	VM-HDFCBK-S	Thank you for your payment of Rs.3,000 towards your HDFC Bank credit card ending 1234.	BILL_PAYMENT_RECEIVED	300000	CREDIT_CARD
+P32	JD-ICICIB-T	Dear Customer, your credit card bill payment of Rs 5,400.00 from A/c XX123 was successful.	BILL_PAYMENT_PAID	540000	CREDIT_CARD
+P33	PHONEPE	Payment of Rs 12,000.00 to Axis Bank Credit Card is successful. Ref 4455667788	BILL_PAYMENT_PAID	1200000	CREDIT_CARD
+P34	PAYTM	Credit card bill payment of Rs.4,321.00 for card ending 1111 was successful via Paytm UPI.	BILL_PAYMENT_PAID	432100	CREDIT_CARD
+P35	AX-KOTAKB-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 800.00 has been received. T&C -Kotak811	BILL_PAYMENT_RECEIVED	80000	CREDIT_CARD
+P36	AX-AXISBK-S	Payment of Rs 45,000.00 successful for your Axis Bank credit card XX3366.	BILL_PAYMENT_PAID	4500000	CREDIT_CARD
+P37	AX-KOTAKB-S	Dear Customer, bill payment of Rs.2,000 for HDFC Bank Credit Card ending 4321 done successfully! T&C	BILL_PAYMENT_PAID	200000	CREDIT_CARD
+P38	AX-KOTAKB-S	INR 25,000.00 bill payment successful for your SBI Card ending 4321.	BILL_PAYMENT_PAID	2500000	CREDIT_CARD
+P39	AX-KOTAKB-S	Bill payment of Rs.1,00,000.00 to Axis Bank Credit Card XX4001 successful. Date: 2026-11-07	BILL_PAYMENT_PAID	10000000	CREDIT_CARD
+P40	PHONEPE	Your credit card bill payment of Rs 540 is successful. Ref no. 112233445566.	BILL_PAYMENT_PAID	54000	CREDIT_CARD
+P41	AX-KOTAKB-S	Bill payment of Rs.5000 was successful for HDFC Bank Credit Card ending 1234 from A/c XX7788.	BILL_PAYMENT_PAID	500000	CREDIT_CARD
+P42	VM-JIOPAY-S	Your Jio bill payment of Rs.299.00 using HDFC Bank Credit Card XX2468 was successful.	BILL_PAYMENT_PAID	29900	MOBILE
+F01	AX-AXISBK-S	Your Axis Bank credit card bill of Rs 12,345.67 is generated, due on 25-Nov-2026.	BILL	1234567	CREDIT_CARD
+F02	AX-KOTAKB-S	Your bill payment of Rs 2,000.00 is due on 25-Nov-2026.	BILL	200000	OTHER
+F03	VM-JIOPAY-S	Pay your bill of Rs 706.82 by 30-Nov-2026.	BILL	70682	OTHER
+F04	VM-HDFCBK-S	HDFC Bank Credit Card statement: Total amount due Rs 15,000.00, minimum due Rs 750.00, due date 25-Nov-2026.	BILL	1500000	CREDIT_CARD
+F05	PHONEPE	Pay your credit card bill on PhonePe and win cashback up to Rs 500!	IGNORED_NOT_A_TRANSACTION		
+F06	AX-KOTAKB-S	OTP 123456 for your bill payment of Rs 2,000.00. Do not share it with anyone.	IGNORED_OTP		
+F07	AX-KOTAKB-S	Your bill payment of Rs 2,000.00 failed. Please try again.	IGNORED_DECLINED		
+F08	AX-KOTAKB-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was unsuccessful! T&C -Kotak811	IGNORED_DECLINED		
+F09	AX-KOTAKB-S	Your bill payment of Rs 2,000.00 is pending. We will update you shortly.	BILL	200000	OTHER
+F10	AX-KOTAKB-S	Your bill payment of Rs 3,000.00 will be processed on 10-Nov-2026.	BILL	300000	OTHER
+F11	AX-KOTAKB-S	Auto-pay of Rs.199.00 for NETFLIX was successful.	DEBIT		
+F12	AX-KOTAKB-S	Auto-pay of Rs.199.00 for NETFLIX is scheduled on 05-12-2026.	BILL	19900	OTHER
+F13	AX-KOTAKB-S	Rs.1,499.00 will be debited from A/c XX1234 on 05-12-2026 towards your loan EMI.	BILL	149900	LOAN_EMI
+F14	AX-KOTAKB-S	Rs.450.00 debited from A/c XX1234 on 05-11-26 to VPA shop@upi. UPI Ref 628374659283.	DEBIT		
+F15	AX-KOTAKB-S	Rs.5,000.00 credited to A/c XX1234 on 05-11-26 by UPI. UPI Ref 628374659283.	CREDIT		
+F16	AX-KOTAKB-S	Payment of Rs 500.00 to RAVI KUMAR via UPI successful. UPI Ref 628374659283.	IGNORED_NOT_A_TRANSACTION		
+F17	VM-JIOPAY-S	Your Jio bill of Rs 706.82 is due on 30-11-2026. Kindly ignore, if already paid.	BILL	70682	MOBILE
+F18	VM-HDFCBK-S	Statement for Nov: Total amount due Rs 3,200.00, Min due Rs 200.00, Due date 28-Nov-2026.	BILL	320000	CREDIT_CARD
+F19	AX-BESCOM-S	Your bill amount of Rs 1,340.00 for consumer no 1234567890 is generated.	BILL	134000	ELECTRICITY
+F20	AX-AXISBK-S	Refund of Rs 799.00 credited to your Axis Bank Credit Card XX1234.	CREDIT		
+F21	VM-HDFCBK-S	Rs 450.00 reversed to your card XX1234 on 06-11-26.	CREDIT		
+F22	AX-AXISBK-S	Rs 482.35 spent using Axis Bank Card XX1234 at ACME STORES on 05-11-26.	DEBIT		
+F23	AX-KOTAKB-S	Payment of Rs 500.00 received from RAVI KUMAR via UPI. UPI Ref 628374659283.	CREDIT		
+F24	AX-KOTAK811-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful! T&C -Kotak811	IGNORED_NOT_ALLOWLISTED		
+F25	CRED	Your HDFC Bank credit card bill payment of Rs 4,000.00 was successful.	IGNORED_NOT_ALLOWLISTED		
+F26	BP-ICICIT-S	Rs 482.00 paid to ACME STORES using ICICI Bank Card XX1234 on 05-Nov-26.	DEBIT		
+F27	VM-HDFCBK-S	Payment of Rs 899.00 successful at ACME STORES using HDFC Bank Credit Card XX1234.	DEBIT		
+F28	AX-KOTAKB-S	Credit card bill payment failed. Rs 5,000.00 not debited.	IGNORED_DECLINED		
+F29	AX-KOTAKB-S	Bill payment of Rs 700.00 declined due to insufficient funds.	IGNORED_DECLINED		
+F30	BP-SBICRD-S	Your SBI Card statement for Nov is ready. Total due Rs 9,000.00, pay by 25-Nov-2026.	BILL	900000	CREDIT_CARD
+F31	AX-AXISBK-S	Reminder: payment of Rs 4,500.00 on your Axis Bank credit card is due on 25-Nov-2026. Kindly ignore if already paid.	BILL	450000	CREDIT_CARD
+F32	AX-KOTAKB-S	Your autopay mandate of Rs 999.00 for SPOTIFY has been created.	IGNORED_NOT_A_TRANSACTION		
+F33	AX-KOTAKB-S	OTP for credit card bill payment of Rs 3,000.00 is 445566.	IGNORED_OTP		
+F34	AX-KOTAKB-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 failed! T&C -Kotak811	IGNORED_DECLINED		
+F35	AX-KOTAKB-S	Bill payment of Rs 2,000.00 is scheduled for 12-Nov-2026.	BILL	200000	OTHER
+F36	AD-AIRTEL-S	Your Airtel postpaid bill of Rs 499.00 is due on 30-11-2026. Pay now.	BILL	49900	MOBILE
+F37	VM-JIOPAY-S	Pay your electricity bill via PhonePe and get Rs 50 cashback!	IGNORED_NOT_A_TRANSACTION		
+F38	AX-KOTAKB-S	Rs.10,000.00 credited to A/c XX1234 on 05-11-26. Salary credit.	CREDIT		
+F39	AX-BESCOM-S	Your electricity bill of Rs 1,340.00 is generated. Bill payment due on 30-11-2026.	BILL	134000	ELECTRICITY
+F40	VM-HDFCBK-S	Your credit card bill of Rs 22,000.00 is ready. Pay by 28-Nov-2026 to avoid late fee.	BILL	2200000	CREDIT_CARD
+F41	VM-KOTAKB-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 failed! T&C -Kotak811	IGNORED_DECLINED		
+F42	PHONEPE	Your credit card bill payment of Rs 4,321.00 could not be processed. Please try again.	IGNORED_DECLINED		
+F43	PAYTM	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was unsuccessful! T&C	IGNORED_DECLINED		
+F44	AX-KOTAKB-S	Your bill payment of Rs 2,000.00 failed. Bill is due on 25-Nov-2026.	BILL	200000	OTHER
+P43	VM-KOTAKB-S	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful! T&C -Kotak811	BILL_PAYMENT_PAID	1234567	CREDIT_CARD
+P44	AX-KOTAKB-S	Hi Test, HDFC Bank Credit Card bill payment of Rs. 54,321.00 was successful! T&C -Kotak811	BILL_PAYMENT_PAID	5432100	CREDIT_CARD
+P45	PHONEPE	Hi Test, Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful! T&C	BILL_PAYMENT_PAID	1234567	CREDIT_CARD
+P46	PAYTM	Hi Test, ICICI Bank Credit Card bill payment of Rs. 8,765.43 was successful! T&C	BILL_PAYMENT_PAID	876543	CREDIT_CARD

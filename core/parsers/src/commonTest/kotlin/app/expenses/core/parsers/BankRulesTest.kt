@@ -60,6 +60,15 @@ class BankRulesTest {
     }
 
     @Test
+    fun textAliasesAreLowerCaseUniqueAndKotakIsFoundInAPastedTextByItsOwnWords() {
+        val all = BankRules.ALL.flatMap { r -> r.textAliases.map { it to r.root } }
+        assertEquals(all.map { it.first.lowercase().trim() }, all.map { it.first }, "text aliases are written in lower case")
+        assertEquals(all.size, all.map { it.first }.toSet().size, "two banks claim one text alias")
+        assertEquals(listOf("kotak mahindra", "kotak811", "kotak"), BankRules.byRoot.getValue("KOTAKB").textAliases)
+        assertTrue(BankRules.ALL.filter { it.root != "KOTAKB" }.all { it.textAliases.isEmpty() })
+    }
+
+    @Test
     fun theBuiltInViewHasOneIssuerPerRootAndTheOnlyHeaderWithTheCardLayoutAreHdfcs() {
         assertEquals(BankRules.ALL.size, SenderRules.BUILT_IN.size)
         for (r in BankRules.ALL) assertEquals(r.issuer, SenderRules.BUILT_IN[r.root])

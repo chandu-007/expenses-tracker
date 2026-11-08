@@ -71,8 +71,9 @@ class BillReminderClassifierTest {
         // a receipt is never a bill; the transaction rules keep deciding what it is, exactly as before
         assertIs<CaptureOutcome.Transaction>(CaptureClassifier.classify("JIOPAY", "Payment of Rs.706.82 received for your Jio bill. Thank you.", extra, today))
         assertEquals(Direction.DEBIT, txn("JIOPAY", "Payment of Rs.706.82 successful for your Jio bill.").alert.direction)
-        // a card payment acknowledgement with no movement word was never a transaction (no direction); it must not turn into a bill
-        assertIs<CaptureOutcome.Ignored>(CaptureClassifier.classify("HDFCBK", "Thank you for your payment of Rs.5,000.00 towards your HDFC Bank Credit Card XX0862 on 21-10-2026.", extra, today))
+        // a card payment acknowledgement with no movement word was never a transaction (no direction); it must not turn into a bill. Since bill payments are read ([BillPayments]) it is the
+        // card receiving a payment: a credit on the card, never a bill
+        assertEquals(Direction.CREDIT, txn("HDFCBK", "Thank you for your payment of Rs.5,000.00 towards your HDFC Bank Credit Card XX0862 on 21-10-2026.").alert.direction)
         assertEquals(Direction.CREDIT, txn("HDFCBK", "Payment of Rs 12,345.00 received towards your HDFC Bank Credit Card ending 0862. Thank you.").alert.direction)
     }
 

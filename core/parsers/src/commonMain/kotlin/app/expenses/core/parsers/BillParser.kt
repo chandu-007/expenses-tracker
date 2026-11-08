@@ -37,7 +37,9 @@ object BillParser {
     /** A payment that happened: this is a receipt, not a bill. "Payments received after 05-Oct are not shown" is not one. */
     private val completed = Regex(
         """(?i)\b(?:payment|amount)\b[^.]{0,60}\b(?:was|has\s+been|is)\s+(?:successfully\s+)?(?:received|credited|processed|made)\b|\bpayment\s+of\b[^.]{0,40}\b(?:received|successful)\b""" +
-            """|thank\s*you\s*for\s*(?:your\s*)?payment|\bhas\s+been\s+(?:paid|debited)\b|\bpaid\s+successfully""",
+            """|thank\s*you\s*for\s*(?:your\s*)?payment|\bhas\s+been\s+(?:paid|debited)\b|\bpaid\s+successfully""" +
+            // "bill payment of Rs. 12,345.67 was successful!": the amount's own "Rs." dot must not end the look-ahead, so the amount is skipped first
+            """|\bpayment\s+of\s+$CUR\s*$NUM(?:(?!\b(?:will|shall|to)\s+be\b|\bnot\b)[^.!?]){0,60}?\b(?:(?:was|is|has\s+been)\s+)?(?:successful(?:ly)?|received|processed|completed|credited)\b""",
     )
     private val junk = Regex("""(?i)pre[- ]?approved|loan\s+up\s+to|instant\s+loan|\blucky\b|congratulations|\bwin\b""")
 
@@ -128,24 +130,41 @@ object BillParser {
         val amount = total ?: min ?: return null
         val minimum = if (total != null) min?.takeIf { it < total } else null
 
-        val kind = when {
-            kindCard.containsMatchIn(text) && !kindElectric.containsMatchIn(text) -> BillKind.CREDIT_CARD
-            kindElectric.containsMatchIn(text) -> BillKind.ELECTRICITY
-            kindWater.containsMatchIn(text) -> BillKind.WATER
-            kindGas.containsMatchIn(text) -> BillKind.GAS
-            kindDth.containsMatchIn(text) -> BillKind.DTH
-            kindBroadband.containsMatchIn(text) -> BillKind.BROADBAND
-            kindMobile.containsMatchIn(text) -> BillKind.MOBILE
-            kindInsurance.containsMatchIn(text) -> BillKind.INSURANCE
-            kindLoan.containsMatchIn(text) -> BillKind.LOAN_EMI
-            else -> BillKind.OTHER
-        }
+        val kind = kindOf(text)
         val card = last4.find(text)?.groupValues?.get(1)
         val ref = if (kind == BillKind.CREDIT_CARD) null else consumer.find(text)?.groupValues?.get(1)?.takeIf { it != card && it.any { c -> c.isDigit() } }
         return BillNotice(
-            kind, amount, minimum, dueDate(text, today), card, ref, billers.firstOrNull { it.first.containsMatchIn(text) }?.second, autoDebitWords.containsMatchIn(text),
+            kind, amount, minimum, dueDate(text, today), card, ref, billerIn(text), autoDebitWords.containsMatchIn(text),
         )
     }
+
+    private val failedPayment = Regex("""(?i)\b(?:fail(?:ed|ure)|unsuccessful|declined|rejected)\b|\b(?:could\s*n[o']?t|unable\s+to|not\s+been)\s+(?:be\s+)?(?:process|complet)\w*|\binsufficient\s+funds?\b""")
+
+    /**
+     * A payment that did NOT go through ("bill payment of Rs. X failed", "was unsuccessful", "could not be processed", "declined due to insufficient funds") and asks for nothing: no due date,
+     * no "pay by". It carries the cue words of a bill ("bill ... of") but is not one; a failed-payment text that also says it is due stays a bill.
+     */
+    internal fun isFailedPaymentNotice(body: String): Boolean {
+        val text = PaidDisclaimer.strip(body.replace(Regex("\\s+"), " ").trim())
+        return failedPayment.containsMatchIn(text) && !deadline.containsMatchIn(text) && !otp.containsMatchIn(text)
+    }
+
+    /** What the words are a bill for. [allowCard] false skips the credit card test: a payment text that merely names the card it was paid with is not a card bill. */
+    internal fun kindOf(text: String, allowCard: Boolean = true): BillKind = when {
+        allowCard && kindCard.containsMatchIn(text) && !kindElectric.containsMatchIn(text) -> BillKind.CREDIT_CARD
+        kindElectric.containsMatchIn(text) -> BillKind.ELECTRICITY
+        kindWater.containsMatchIn(text) -> BillKind.WATER
+        kindGas.containsMatchIn(text) -> BillKind.GAS
+        kindDth.containsMatchIn(text) -> BillKind.DTH
+        kindBroadband.containsMatchIn(text) -> BillKind.BROADBAND
+        kindMobile.containsMatchIn(text) -> BillKind.MOBILE
+        kindInsurance.containsMatchIn(text) -> BillKind.INSURANCE
+        kindLoan.containsMatchIn(text) -> BillKind.LOAN_EMI
+        else -> BillKind.OTHER
+    }
+
+    /** The biller named in the words (Jio, BESCOM...), or null. */
+    internal fun billerIn(text: String): String? = billers.firstOrNull { it.first.containsMatchIn(text) }?.second
 
     /** One date written in the text: where it starts, and the date itself with the year filled in when the text left it out. */
     private data class Found(val start: Int, val date: LocalDate)

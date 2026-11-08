@@ -11,6 +11,8 @@ enum class SenderKind { BANK, CARD, PAYMENT_APP, UTILITY }
  * @property kind what sort of sender it is.
  * @property emailNamed false when the issuer's name must not be matched in an email's sender name: payment apps send no bank email, and "slice" and "Jupiter" are ordinary words.
  * @property emailAliases other ways a bank writes its own name in an email's sender name or address, lower case ("kotak", "pnb"), each standing for this root.
+ * @property textAliases the words a bank is called inside a message or a pasted text ("kotak", "kotak811", "kotak mahindra"), lower case, for a paste that has no sender header: they say which bank wrote it.
+ * Used by whoever searches pasted words for a bank, never by [SenderRules.emailIssuer]; empty for most banks, whose issuer name already is how their texts name them.
  * @property cardTxnLayout HDFC's card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". For a root with this set, a card used at a
  * merchant is read as money out ([GenericAlertParser]).
  */
@@ -21,6 +23,7 @@ data class BankRule(
     val emailNamed: Boolean = true,
     val emailAliases: List<String> = emptyList(),
     val cardTxnLayout: Boolean = false,
+    val textAliases: List<String> = emptyList(),
 )
 
 /**
@@ -40,7 +43,9 @@ object BankRules {
         BankRule("SBIINB", "SBI", emailAliases = listOf("state bank of india")), BankRule("SBIPSG", "SBI"),
         BankRule("SBICRD", "SBI Card", SenderKind.CARD), BankRule("SBIUPI", "SBI"),
         BankRule("AXISBK", "Axis Bank"),
-        BankRule("KOTAKB", "Kotak Mahindra Bank", emailAliases = listOf("kotak")),
+        // Kotak signs its texts "Kotak811" (its digital bank's brand) and "Kotak Mahindra Bank": a pasted text carries those words instead of a header. KOTAKB is the only header seen on public sender
+        // directories (truecaller.com/who-texted-me/.../VD-KOTAKB, AD-, JD-, JK-, JM-, JX-, VM- prefixes); no public trace of KOTAK811, KMBL or KOTAKM as an Indian bank header was found.
+        BankRule("KOTAKB", "Kotak Mahindra Bank", emailAliases = listOf("kotak"), textAliases = listOf("kotak mahindra", "kotak811", "kotak")),
         BankRule("IDFCFB", "IDFC FIRST Bank", emailAliases = listOf("idfc first")),
         BankRule("INDUSB", "IndusInd Bank", emailAliases = listOf("indusind")),
         BankRule("YESBNK", "Yes Bank"),

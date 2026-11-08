@@ -233,7 +233,7 @@ object MessageReport {
     fun verdict(sender: String?, body: String, extraRoots: Set<String> = emptySet()): String {
         if (sender.isNullOrBlank()) return "no sender (a pasted message)"
         return when (val o = CaptureClassifier.classify(sender, body, extraRoots)) {
-            is CaptureOutcome.Transaction -> "read as ${if (o.alert.direction == Direction.CREDIT) "money in" else "money out"} by the " + (if (o.alert.confidence == Confidence.BANK_RULE) "bank's own rule" else "generic rules (low confidence)")
+            is CaptureOutcome.Transaction -> BillPayments.read(body)?.let { "read as a bill payment confirmation (${if (it.side == BillPaymentSide.PAID) "money out" else "money in on the card"})" } ?: "read as ${if (o.alert.direction == Direction.CREDIT) "money in" else "money out"} by the " + (if (o.alert.confidence == Confidence.BANK_RULE) "bank's own rule" else "generic rules (low confidence)")
             is CaptureOutcome.Bill -> "read as a bill to pay"
             is CaptureOutcome.Ignored -> when (o.reason) {
                 IgnoreReason.PERSONAL_SENDER -> "sent from a phone number, so never read"

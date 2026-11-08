@@ -155,7 +155,7 @@ object GenericAlertParser {
         return whole.toLong() * 100 + frac.toLong()
     }
 
-    private fun findDate(text: String): LocalDate? {
+    internal fun findDate(text: String): LocalDate? {
         ymd.find(text)?.let { m -> date(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())?.let { return it } }
         dMonY.find(text)?.let { m ->
             val month = months.indexOf(m.groupValues[2].lowercase()) + 1

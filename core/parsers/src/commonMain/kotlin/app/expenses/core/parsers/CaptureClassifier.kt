@@ -35,12 +35,35 @@ object CaptureClassifier {
         // bills (BillParser), so they keep going to the transaction rules. A text with no ask is judged by the transaction rules alone.
         // What went wrong before 0.7.1: any "paid" made GenericAlertParser read the text as a debit (Jio's "Kindly ignore, if already paid"), and a parsed alert skipped the
         // bill rules altogether, so a bill reminder became a debit in To review.
+        // A payment that was made is never a bill: "Axis Bank Credit Card bill payment of Rs. 12,345.67 was successful!" carries the words of a bill ("bill ... of") and was read as a NEW bill. The
+        // bill-payment confirmation is judged first ([BillPayments]); it is a transaction, money out of the paying account or in on the card, and the generic alert is kept when it agrees.
+        BillPayments.read(body)?.let { return CaptureOutcome.Transaction(issuer, root, alertFor(it, parsed)) }
         val bill = BillParser.parse(body, root, today)
+        // a payment that failed carries a bill's words but nothing is asked: not a bill (a failed payment that also says "due on ..." stays one)
+        if (bill != null && BillParser.isFailedPaymentNotice(body) && !(parsed is ParseResult.Parsed && MoneyMoved.stated(body))) return CaptureOutcome.Ignored(IgnoreReason.DECLINED, root)
         if (bill != null && !(parsed is ParseResult.Parsed && MoneyMoved.stated(body))) return CaptureOutcome.Bill(issuer, root, bill)
         return when (val r = parsed) {
             is ParseResult.NotATransaction -> CaptureOutcome.Ignored(if (r.reason == "otp") IgnoreReason.OTP else IgnoreReason.NOT_A_TRANSACTION, root)
             is ParseResult.Parsed -> if (r.alert.direction == Direction.DECLINED) CaptureOutcome.Ignored(IgnoreReason.DECLINED, root) else CaptureOutcome.Transaction(issuer, root, r.alert)
         }
+    }
+
+    /**
+     * The alert of a bill-payment confirmation: the generic parser's own when it already reads the same direction (so every field but the account stays as it was), else one built from the notice. The account is
+     * the text's OWN: for the bank or app that paid, the account the money left (only when the words say which, never the card that was paid: its digits would send the text to the card's account); for the
+     * card's own text, the card.
+     */
+    private fun alertFor(n: BillPaymentNotice, parsed: ParseResult): ParsedAlert {
+        val paid = n.side == BillPaymentSide.PAID
+        val direction = if (paid) Direction.DEBIT else Direction.CREDIT
+        if (parsed is ParseResult.Parsed && parsed.alert.direction == direction) {
+            val own = if (paid) n.payerLast4 else n.cardLast4 ?: parsed.alert.accountLast4
+            return parsed.alert.copy(accountLast4 = own, counterLast4 = null)
+        }
+        return ParsedAlert(
+            direction = direction, amountMinor = n.amountMinor, currency = n.currency, date = n.date, reference = n.reference,
+            accountLast4 = if (paid) n.payerLast4 else n.cardLast4, viaUpi = false, confidence = Confidence.GENERIC,
+        )
     }
 
     /**
