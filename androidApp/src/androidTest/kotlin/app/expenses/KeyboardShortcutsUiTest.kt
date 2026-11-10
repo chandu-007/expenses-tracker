@@ -31,9 +31,24 @@ class KeyboardShortcutsUiTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun launch() { scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
+    /**
+     * A key is injected into whichever window has the focus. Right after a launch (or after the keyboard of the page before has gone) another window may still have it, and the system then refuses
+     * the key ("Injecting to another application requires INJECT_EVENTS permission"; seen in a long run on an emulator, never alone): wait for this app's window to have the focus, and send the key
+     * again if it is refused.
+     */
     private fun ctrl(keyCode: Int) {
         val inst = InstrumentationRegistry.getInstrumentation()
-        inst.sendKeySync(android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, keyCode, 0, android.view.KeyEvent.META_CTRL_ON or android.view.KeyEvent.META_CTRL_LEFT_ON))
+        val end = System.currentTimeMillis() + 20_000
+        while (true) {
+            var focused = false
+            scenario!!.onActivity { focused = it.window.decorView.hasWindowFocus() }
+            if (focused) {
+                val sent = runCatching { inst.sendKeySync(android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, keyCode, 0, android.view.KeyEvent.META_CTRL_ON or android.view.KeyEvent.META_CTRL_LEFT_ON)) }
+                if (sent.isSuccess) return
+                if (System.currentTimeMillis() > end) throw sent.exceptionOrNull()!!
+            } else if (System.currentTimeMillis() > end) throw AssertionError("the app's window never had the focus")
+            Thread.sleep(300)
+        }
     }
     private fun back() { scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() } }
 
