@@ -33,6 +33,8 @@ class NotificationCaptureTest {
 
     @Before fun setUp() {
         resetApp()
+        // a notification the test posts is dropped by the system unless the app may post (Android 13+ asks at runtime). This was granted only by a class that ran earlier on the same emulator, so the class failed alone or after a cold boot.
+        if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         before = shell("settings get secure enabled_notification_listeners").trim().takeIf { it != "null" && it.isNotEmpty() }
         shell("settings put secure enabled_notification_listeners ${context.packageName}/${NotificationCaptureService::class.java.name}")
         // Android 14 does not bind a listener written only to the secure setting (the list the system keeps is not reloaded); its own command does, and is harmless on older versions

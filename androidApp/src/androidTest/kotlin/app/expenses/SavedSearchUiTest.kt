@@ -69,6 +69,13 @@ class SavedSearchUiTest {
     private fun hold(tag: String) { waitFor(tag); compose.onNodeWithTag(tag).performTouchInput { longClick() } }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
+    /** Presses [opener] again until what it opens ([expected], a menu item) is there: a press placed while the page is still moving up for the keyboard is lost (seen once in a long batch, with the menu never opening). */
+    private fun tapUntil(opener: String, expected: String) {
+        repeat(4) {
+            tap(opener)
+            if (runCatching { compose.waitUntil(2_500) { has(expected) } }.isSuccess) return
+        }
+    }
     private fun expense(id: String, merchant: String, minor: Long, cat: String, tags: List<String>? = null) = db { ok ->
         ok.store.save(Expense(EntryId(id), t++, AccountId("cash"), Money(minor, Currency.INR), listOf(CategorySplit(CategoryId(cat), Money(minor, Currency.INR)))), EntryDetails(merchant = merchant, tags = tags))
     }
@@ -78,7 +85,7 @@ class SavedSearchUiTest {
     fun aSearchSavedWithItsFiltersComesBackWithAllOfThemAfterARestart() {
         expense("a", "Uber ride", 50_000, "Transport"); expense("b", "Uber eats", 80_000, "Food", listOf("Work")); expense("c", "Zomato", 90_000, "Food"); expense("d", "Uber lunch", 70_000, "Food")
         openSearch()
-        type("search_text", "uber"); tap("search_kind_expense"); tap("search_category"); tap("search_cat_Food"); tap("search_tag"); tap("search_tag_Work")
+        type("search_text", "uber"); tap("search_kind_expense"); tapUntil("search_category", "search_cat_Food"); tap("search_cat_Food"); tapUntil("search_tag", "search_tag_Work"); tap("search_tag_Work")
         waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c") && !has("result_d"))
         tap("save_search"); type("saved_name", "Uber food"); tap("saved_ok"); show("saved_Uber food")
         launch(); tap("open_search"); waitFor("saved_Uber food")
