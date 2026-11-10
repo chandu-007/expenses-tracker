@@ -185,11 +185,28 @@ class MotionUiTest {
         waitFor("report_list")
         assertTrue(has("nav_home") && has("open_search") && has("more_menu"), "Reports carries the same bar")
         node("open_search").performClick(); waitFor("search_back")
-        runCatching { compose.waitUntil(10_000) { !has("open_reports") } } // the keyboard comes up a moment after the screen and hides the bar: press Back only once it has (on a slow emulator it may not come at all: then there is nothing to put away)
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 4").close() // the keyboard hides the bar; its Back key closes it
+        // The keyboard comes up a moment after the screen and hides the bar; its Back key puts it away. Back is sent only while the bar is hidden (a Back sent before the keyboard is up would leave Search
+        // instead, and one sent while it is going away is lost: both were seen, one run in six on a busy emulator), and again if the bar does not come back. If the keyboard never comes the bar is
+        // there at once and nothing is sent.
+        repeat(4) {
+            runCatching { compose.waitUntil(6_000) { !has("open_reports") } }
+            if (!has("open_reports")) {
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 4").close()
+                runCatching { compose.waitUntil(5_000) { has("open_reports") } }
+            }
+        }
         waitFor("open_reports"); assertTrue(has("open_reports"), "and so does Search once the keyboard is away")
-        node("more_menu").performClick(); waitFor("more_page")
-        node("nav_home").performClick(); waitFor("add")
+        pressUntil("more_menu", "more_page")
+        pressUntil("nav_home", "add")
+    }
+
+    /** Presses [tag] again until [expected] is there: a press placed while the screen is still settling after the keyboard went away is lost (seen at this step, one run in twelve on a busy emulator). */
+    private fun pressUntil(tag: String, expected: String) {
+        repeat(4) {
+            runCatching { node(tag).performClick() }
+            if (runCatching { compose.waitUntil(4_000) { has(expected) } }.isSuccess) return
+        }
+        waitFor(expected)
     }
 
     @Test
