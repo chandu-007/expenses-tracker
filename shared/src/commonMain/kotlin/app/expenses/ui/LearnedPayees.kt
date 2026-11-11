@@ -53,8 +53,9 @@ internal fun LazyListScope.learnedSection(
             if (learned.isEmpty()) Text("Nothing yet. When you choose a category for a shop in To review, the app remembers it here.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("learned_empty"))
         }
     }
-    if (shops != null) item(key = "alias_block") { AliasBlock(shops, learned) }
     if (open) items(learned, key = { "learned_" + it.key }) { l -> LearnedRow(l, categories, onForget, onChange, onFile, learned, shops) }
+    // after the list, so the learned rows stay where they were on this screen
+    if (shops != null) item(key = "alias_block") { AliasBlock(shops, learned) }
 }
 
 @Composable
