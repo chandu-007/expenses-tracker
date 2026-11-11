@@ -139,6 +139,9 @@ interface RootHost {
 
     /** Text shared to the app from another app, to be shown in "Check a message" (checked and forgotten: never saved). A host with no share target keeps the default. */
     val sharedTexts: StateFlow<SharedText?> get() = NoSharedTexts
+
+    /** The shared text has been taken by the screen: the host forgets it (it must not come back after the app lock, nor stay in memory while the person does other things). */
+    fun sharedTextTaken() {}
 }
 
 interface SmsPermission {
@@ -324,6 +327,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     val r = shared ?: return@LaunchedEffect
                     if (r.n <= handledShared) return@LaunchedEffect
                     handledShared = r.n; sharedWords = r.text
+                    host.sharedTextTaken()
                     closeEverything(); checkupOpen = true
                     viewModel.checkup.check("", r.text)
                 }
@@ -530,7 +534,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         if (disclosing) app.expenses.ui.SmsDisclosure(onAgree = { disclosing = false; sms.request() }, onDecline = { disclosing = false })
                         val askReminders = app.expenses.ui.rememberNotificationPermissionRequest { phone.refresh(); reload() }
                         val later = androidx.compose.runtime.rememberCoroutineScope()
-                        app.expenses.ui.CaptureCheckupScreen(
+                        // keyed on the share: a second text shared while the screen is open starts the screen again with that text (it reads its text box once)
+                        androidx.compose.runtime.key(handledShared) { app.expenses.ui.CaptureCheckupScreen(
                             checkup, checked, initialText = sharedWords,
                             onAct = { act, arg -> when (act) {
                                 app.expenses.core.domain.CheckAct.ALLOW_TEXTS -> disclosing = true
@@ -548,7 +553,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 app.expenses.core.domain.CheckAct.OPEN_SETUP -> openSetup()
                             } },
                             onTick = viewModel.checkup::tick, onCheck = viewModel.checkup::check, onClearResult = viewModel.checkup::clearResult, onBack = { checkupOpen = false },
-                        )
+                        ) }
                     }
                     k == 29 -> {
                         val step = app.expenses.core.domain.SetupStep.entries.firstOrNull { it.name == setupStep } ?: app.expenses.core.domain.SetupStep.PERMISSION

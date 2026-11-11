@@ -58,13 +58,14 @@ class MainActivity : FragmentActivity() {
     private val payCardRequests = MutableStateFlow<PayCardRequest?>(null)
     private val shortcutRequests = MutableStateFlow<ShortcutRequest?>(null)
     private val sharedTexts = MutableStateFlow<SharedText?>(null)
+    private var sharedCount = 0 // counts shares for the screen to tell a new one from one it took; it never goes back, whatever happens to [sharedTexts]
 
     /** Words another app shared (Share, Expenses): handed to "Check a message" and dropped from the intent, so they live in memory only. */
     private fun takeShared(from: Intent) {
         if (from.action != Intent.ACTION_SEND || from.type != "text/plain") return
         val words = from.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.takeIf { it.isNotBlank() } ?: return
         from.removeExtra(Intent.EXTRA_TEXT)
-        sharedTexts.value = SharedText((sharedTexts.value?.n ?: 0) + 1, words.take(4000))
+        sharedTexts.value = SharedText(++sharedCount, words.take(4000))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,6 +143,7 @@ class MainActivity : FragmentActivity() {
         override val payCardRequests get() = this@MainActivity.payCardRequests
         override val shortcutRequests get() = this@MainActivity.shortcutRequests
         override val sharedTexts get() = this@MainActivity.sharedTexts
+        override fun sharedTextTaken() { this@MainActivity.sharedTexts.value = null }
         // read on each use: tests replace ExpensesApp.lock
         private var port: ActivityLockPort? = null
         override val lock: AppLockPort get() = port?.takeIf { it.lock === app.lock } ?: ActivityLockPort(app.lock, this@MainActivity).also { port = it }

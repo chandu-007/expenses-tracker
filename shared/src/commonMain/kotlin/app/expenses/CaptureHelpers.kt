@@ -166,7 +166,10 @@ class CaptureCheckupModel(private val container: AppContainer, private val platf
         }
     }
 
-    fun clearResult() { _result.value = null }
+    private var generation = 0
+
+    /** Forgets the answer, and any answer still being worked out (it would otherwise appear later, next to an empty text box). */
+    fun clearResult() { generation++; _result.value = null }
 
     /**
      * Reads [text] (as sent by [sender], which may be blank) the way the app would and publishes the answer. Reads the person's accounts, categories and rules to say which account and category it would
@@ -174,13 +177,15 @@ class CaptureCheckupModel(private val container: AppContainer, private val platf
      */
     fun check(sender: String, text: String) {
         val words = text.take(MessageIngest.MAX_BODY)
+        val mine = ++generation
         scope.launch(IO) {
-            _result.value = container.write { ok ->
+            val answer = container.write { ok ->
                 val t = ok.templates
                 val extra = TrustedSenders.parse(t.setting(CaptureKeys.SETTING_EXTRA_ROOTS)).toSet()
                 val reading = MessageCheck.read(sender, words, extra, todayLocal())
                 describe(ok, reading, words)
             } ?: MessageCheckUi("ignore", "Expenses could not open its data.", emptyList(), "Nothing was read.")
+            if (mine == generation) _result.value = answer
         }
     }
 

@@ -2452,15 +2452,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val history = evidence?.takeIf { i.direction == "DEBIT" }?.history
             val toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON
             // money in: the same payer's earlier INCOME entries (a payer is not a payee: their expenses never count here)
-            val incomeHistory = if (i.direction == "CREDIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
-                SimilarEntries.profile(clean, (similarCandidates(ok, clean, "INCOME") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "INCOME") else emptyList()).distinctBy { it.id })
-            } else null
+            val incomeHistory = evidence?.takeIf { i.direction == "CREDIT" }?.history
             val suggestion = if (i.direction == "CREDIT") {
                 // a payment into a credit card is the bill being paid (a transfer), not income: nothing to categorise
-                if (treatment == "TRANSFER") null else CaptureCategory.adviseIncome(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, taught, usableIncome, byNameIncome, incomeHistory)
+                if (treatment == "TRANSFER") null else CaptureCategory.adviseIncome(rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, taught, usableIncome, byNameIncome, incomeHistory, band = evidence?.band)
             } else if (i.direction == "DEBIT") CaptureCategory.advise(
                 rawPayee, listOfNotNull(named, i.body).joinToString(" "), rules, taught, usable, byName, history, toAPerson = toAPerson,
-                personLike = toAPerson || PayeeKinds.looksLikePerson(rawPayee) || PayeeKinds.looksLikePerson(named),
+                personLike = toAPerson || PayeeKinds.looksLikePerson(rawPayee) || PayeeKinds.looksLikePerson(named), band = evidence?.band,
             )
                 // cash taken out at an ATM that is not moved to a cash account (the person has none): "Cash withdrawal", when they have that category
                 ?: byName["cash withdrawal"]?.takeIf { it in usable && kind == MessageKind.ATM_WITHDRAWAL && treatment == "PAYMENT" }?.let { CategoryAdvice(it, SuggestionSource.WORDS, Certainty.SURE, "the words of the text", emptyList()) }
