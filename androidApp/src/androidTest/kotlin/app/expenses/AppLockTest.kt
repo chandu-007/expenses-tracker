@@ -201,7 +201,7 @@ class AppLockTest {
         // locking and unlocking again does not open the page a second time
         compose.onNodeWithTag("capture_checkup_back", useUnmergedTree = true).performClick()
         waitGone("capture_checkup_headline")
-        now += 2 * minute; background(); fake.next = null; foreground()
+        background(); now += 2 * minute; fake.next = null; foreground()
         waitFor("locked_screen"); compose.waitUntil(10_000) { fake.pending != null }
         fake.finish(Authenticator.Result.Success)
         waitFor("add"); assertTrue(compose.onAllNodes(hasTestTag("capture_checkup_headline"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the shared text is not opened again after a lock")
