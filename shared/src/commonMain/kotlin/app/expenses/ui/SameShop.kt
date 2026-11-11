@@ -45,16 +45,17 @@ internal fun SameShopDialog(fromName: String?, suggestions: List<String>, onJoin
         title = { Text(if (fromName != null) "$fromName is the same shop as…" else "Count two names as one shop") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Both names then count as one for what the app learns, for search, for subscriptions and for the Merchant report. Your entries are not changed, and you can undo it.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // the boxes come first: at a large text size the explanation filled the visible part of the dialog and the box was below it, with nothing to say so
                 if (fromName == null) OutlinedTextField(from, { from = it; problem = null }, label = { Text("This name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("same_shop_from"))
                 OutlinedTextField(to, { to = it; problem = null }, label = { Text(if (fromName == null) "Same shop as" else "Name of the other shop") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("same_shop_to"))
                 if (suggestions.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     suggestions.forEachIndexed { i, s -> AssistChip(onClick = { to = s; problem = null }, label = { Text(s) }, modifier = Modifier.testTag("same_shop_suggest_$i")) }
                 }
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("same_shop_problem")) }
+                Text(
+                    "Both names then count as one for what the app learns, for search, for subscriptions and for the Merchant report. Your entries are not changed, and you can undo it.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {

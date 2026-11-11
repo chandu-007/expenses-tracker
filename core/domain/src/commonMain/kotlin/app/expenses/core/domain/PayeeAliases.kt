@@ -62,6 +62,9 @@ class PayeeAliases(aliases: Collection<PayeeAlias> = emptyList()) {
     /** The table with [alias] in it (replacing what [alias].from counted as before). Does not check; see [problemFor]. */
     fun with(alias: PayeeAlias): PayeeAliases = PayeeAliases(byFrom.values.filter { it.from != alias.from } + alias)
 
+    /** The most steps any name takes to reach its shop; more than [MAX_HOPS] when some chain is longer (the walk stops one step past it, so a cycle ends). */
+    private fun deepest(): Int = byFrom.keys.maxOfOrNull { start -> var k = start; var n = 0; while (n <= MAX_HOPS) { k = byFrom[k]?.to ?: break; n++ }; n } ?: 0
+
     fun without(from: String): PayeeAliases = if (from !in byFrom) this else PayeeAliases(byFrom.values.filter { it.from != from })
 
     /** What is wrong with making [from] count as [to], or null. Replacing an alias [from] already has is allowed; making one shop count as itself, or a cycle, is not. */
@@ -70,6 +73,8 @@ class PayeeAliases(aliases: Collection<PayeeAlias> = emptyList()) {
         if (byFrom[from]?.to == to) return "$fromLabel already counts as $toLabel."
         // without the alias [from] has now: if [to] still ends up at [from] they are one shop already (or the new alias would be a cycle)
         if (from == to || without(from).resolve(to) == from) return "$fromLabel and $toLabel already count as one shop."
+        // a chain of more than MAX_HOPS names stops short of its shop (resolve() follows that many steps), so two names of one shop would not count as one
+        if (with(PayeeAlias(from, to, fromLabel, toLabel)).deepest() > MAX_HOPS) return "$fromLabel and $toLabel are too many names apart. Count $fromLabel as the shop's main name instead."
         return null
     }
 

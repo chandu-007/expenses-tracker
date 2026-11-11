@@ -344,7 +344,7 @@ object CaptureCheckup {
     private fun MutableList<CheckRow>.addShortcuts(i: CheckupInputs) {
         val recent = i.lastSeenAt?.let { i.nowMillis - it < RECENT_DAYS * DAY } == true
         if (recent) {
-            add(CheckRow("shortcuts", CheckLevel.GOOD, "A message reached the app ${RelativeTime.ago(i.lastSeenAt!!, i.nowMillis)}", "The Shortcuts automation is working: it handed a message to this app in the last $RECENT_DAYS days."))
+            add(CheckRow("shortcuts", CheckLevel.GOOD, "A message reached the app ${RelativeTime.ago(i.lastSeenAt!!, i.nowMillis)}", "In the last $RECENT_DAYS days a message was handed to this app: by the Shortcuts automation, by Share, or by you with Paste or Send a test now. If it was not you, the automation is working."))
             return
         }
         add(

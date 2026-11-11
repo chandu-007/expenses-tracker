@@ -24,6 +24,9 @@ object AliasSearch {
     /** Most words a search may have for its text to count as naming a shop. */
     const val MAX_WORDS = 2
 
+    /** Most other names searched for: each one is a search of its own, and a hand-made backup may join thousands of names to one shop. */
+    const val MAX_NAMES = 6
+
     /** The other written names of the shop that [text] names through the person's [aliases], or empty (no alias, a longer text, a name that is in no alias). */
     fun otherNames(text: String, aliases: PayeeAliases): List<String> {
         if (aliases.isEmpty) return emptyList()
@@ -32,6 +35,6 @@ object AliasSearch {
         val key = PayeeKey.of(clean) ?: return emptyList()
         if (!aliases.inGroup(key)) return emptyList()
         val typed = clean.lowercase()
-        return aliases.labelsOf(key).filter { it.trim().lowercase() != typed }
+        return aliases.labelsOf(key).filter { it.trim().lowercase() != typed }.take(MAX_NAMES)
     }
 }

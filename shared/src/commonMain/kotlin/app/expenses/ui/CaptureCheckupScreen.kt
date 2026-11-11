@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.expenses.CheckupUi
 import app.expenses.MessageCheckUi
+import app.expenses.MessageIngest
 import app.expenses.core.domain.CaptureCheckup
 import app.expenses.core.domain.CheckAct
 import app.expenses.core.domain.CheckAction
@@ -106,7 +107,7 @@ internal fun checkupActionTag(rowId: String, a: CheckAction) = "capture_checkup_
 @Composable
 fun CaptureCheckupScreen(
     ui: CheckupUi?, result: MessageCheckUi?,
-    /** Words shared from another app: they start in the text box (the caller has already had them checked). */
+    /** Words shared from another app: they start in the text box and are checked as the screen appears (the screen is started again for each new share). */
     initialText: String = "",
     onAct: (CheckAct, String) -> Unit, onTick: (key: String, on: Boolean) -> Unit,
     onCheck: (sender: String, text: String) -> Unit, onClearResult: () -> Unit, onBack: () -> Unit,
@@ -115,6 +116,7 @@ fun CaptureCheckupScreen(
     var sender by remember { mutableStateOf("") }
     var text by remember { mutableStateOf(initialText) }
     DisposableEffect(Unit) { onDispose { onClearResult() } }
+    LaunchedEffect(Unit) { if (initialText.isNotBlank()) onCheck("", initialText) }
     val platform = LocalPlatform.current
     Scaffold(topBar = { AreaTopBar("Why isn't capture working?", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_checkup_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("capture_checkup"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -131,7 +133,7 @@ fun CaptureCheckupScreen(
                     if (head.notes > 0) Text(if (head.notes == 1) "1 note to read below. Nothing is broken." else "${head.notes} notes to read below. Nothing is broken.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("capture_checkup_notes"))
                 }
             }
-            Text("Each line below was checked just now, on this phone. Nothing is sent anywhere, and no message is read except one you paste at the bottom.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Each line below was checked just now, on this phone. Nothing is sent anywhere, and these checks read no message except one you paste or share at the bottom.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (ui.rows.isEmpty()) Text("This phone has no way to bring in bank messages, so there is nothing to check.", modifier = Modifier.testTag("capture_checkup_none"))
             ui.rows.forEach { r -> CheckRowView(r, onAct, onTick) }
 
@@ -139,7 +141,7 @@ fun CaptureCheckupScreen(
             Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Check a message", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }.testTag("capture_checkup_check_title"))
                 Text(
-                    "Paste a bank text here to see how the app would read it: who sent it, what amount, which account and category. Nothing is saved, counted or sent, and the text is gone when you leave this screen. This app never looks at your messages by itself.",
+                    "Paste a bank text here to see how the app would read it: who sent it, what amount, which account and category. Nothing is saved, counted or sent, and the text is gone when you leave this screen. This check reads only the words you paste or share here; it does not open your messages.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_checkup_check_intro"),
                 )
                 OutlinedTextField(
@@ -151,7 +153,7 @@ fun CaptureCheckupScreen(
                     modifier = Modifier.fillMaxWidth().testTag("capture_checkup_message"),
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { platform.readClipboardText()?.let { text = it } }, modifier = Modifier.heightIn(min = 48.dp).testTag("capture_checkup_paste")) { Text("Paste") }
+                    OutlinedButton(onClick = { platform.readClipboardText()?.let { text = it.take(MessageIngest.MAX_BODY) } }, modifier = Modifier.heightIn(min = 48.dp).testTag("capture_checkup_paste")) { Text("Paste") }
                     Button(onClick = { onCheck(sender, text) }, enabled = text.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp).testTag("capture_checkup_check")) { Text("Check") }
                     OutlinedButton(onClick = { sender = ""; text = ""; onClearResult() }, enabled = text.isNotEmpty() || sender.isNotEmpty() || result != null, modifier = Modifier.heightIn(min = 48.dp).testTag("capture_checkup_clear")) { Text("Clear") }
                 }

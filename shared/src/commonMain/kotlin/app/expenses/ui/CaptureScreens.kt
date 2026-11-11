@@ -316,7 +316,9 @@ private fun InboxCard(
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // where this card is in the list: "3 of 12"
             Text(progress, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_progress_${r.id}"))
-            // who, how much
+            // who, how much (from 140% text size the amount goes under the names, so the payee and the line of facts keep the width: beside the amount they broke in the middle of a word)
+            val stackAmount = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.4f
+            val amountText: @Composable (Modifier) -> Unit = { m -> Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = amountColor(flow), modifier = m.testTag("inbox_amount_${r.id}")) }
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 CategoryAvatar(r.payee ?: r.issuer, r.payee ?: r.issuer, Modifier.padding(end = 12.dp))
                 Column(Modifier.weight(1f)) {
@@ -326,8 +328,9 @@ private fun InboxCard(
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_meta_${r.id}"),
                     )
                 }
-                Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = amountColor(flow), modifier = Modifier.padding(start = 8.dp).testTag("inbox_amount_${r.id}"))
+                if (!stackAmount) amountText(Modifier.padding(start = 8.dp))
             }
+            if (stackAmount) amountText(Modifier.align(androidx.compose.ui.Alignment.End))
             // warnings first: a repeat or a related entry changes what the right action is
             r.relatedNote?.let { Callout(it, MaterialTheme.colorScheme.secondary, Modifier.testTag("inbox_related_${r.id}")) }
             r.duplicateNote?.let { Callout(it, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_duplicate_${r.id}")) }

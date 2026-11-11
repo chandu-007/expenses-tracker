@@ -140,7 +140,7 @@ class CaptureCheckupModel(private val container: AppContainer, private val platf
                     accountsWithoutDigits = withBank.filter { (a, _) -> looks[a.id]?.last4.isNullOrBlank() }.map { it.first.name },
                     accountsWithDigits = withBank.count { (a, _) -> !looks[a.id]?.last4.isNullOrBlank() },
                     trustedNames = extra, builtInCount = SenderRules.BUILT_IN.size, skipped = skipped,
-                    foundLast7Days = sum("CAPTURED") + sum("BILL"), lastFoundAt = health.lastCapturedAt, lastSeenAt = all.mapNotNull { it.last_at }.maxOrNull(),
+                    foundLast7Days = sum("CAPTURED") + sum("BILL"), lastFoundAt = all.filter { it.outcome == "CAPTURED" || it.outcome == "BILL" }.mapNotNull { it.last_at }.maxOrNull(), lastSeenAt = all.mapNotNull { it.last_at }.maxOrNull(),
                     ignored = IgnoredCounts(health.otps, health.personal, health.notices, health.declined, health.duplicates, thirty.filter { it.outcome == "NOT_ALLOWLISTED" }.sumOf { it.count }),
                     shortcutTicks = t.setting(CaptureCheckup.SHORTCUT_TICKS_KEY).orEmpty().split(',').filter { it in CaptureCheckup.SHORTCUT_TICK_KEYS }.toSet(),
                 )
@@ -257,7 +257,7 @@ class CaptureCheckupModel(private val container: AppContainer, private val platf
         val categories = ok.categories.list().filter { !it.hidden }
         val rules = ok.captureRules.rules()
         val rows = ok.captureRules.learnedRows()
-        val taught = CaptureCategory.Taught(rows.associate { it.key to it.categoryId }, rows.associate { it.key to it.uses })
+        val taught = CaptureCategory.Taught(rows.associate { it.key to it.categoryId }, rows.associate { it.key to it.uses }, ok.captureRules.aliases())
         val raw = r.rawPayee
         val named = raw?.let { ok.templates.setting("payee_name:" + app.expenses.core.domain.CategorySuggest.merchantKey(it)) }?.takeIf { it.isNotBlank() }
         val text = listOfNotNull(named, body).joinToString(" ")

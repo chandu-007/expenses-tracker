@@ -55,6 +55,8 @@ class BalanceFixes(private val db: ExpensesDb, private val store: LedgerStore) {
     fun undo(accountId: String, deltaMinor: Long, atMillis: Long, currency: Currency): Boolean = db.transactionWithResult {
         val row = q.accountById(accountId).executeAsOneOrNull()
         if (row == null || row.deleted != 0L || row.currency != currency.code) return@transactionWithResult false
+        // a fix is undone once: its history line is the proof that it is still in force (a second call would move the opening balance again)
+        if (history(accountId).none { it.atMillis == atMillis && it.deltaMinor == deltaMinor }) return@transactionWithResult false
         val opening = BalanceFix.newOpening(row.opening_minor, -deltaMinor) ?: return@transactionWithResult false
         store.saveAccount(Account(AccountId(row.id), row.name, AccountType.valueOf(row.type), currency, opening, row.archived == 1L))
         writeHistory(accountId, BalanceFixLog.remove(history(accountId), atMillis))

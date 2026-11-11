@@ -321,15 +321,18 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 }
                 // text shared from another app opens "Check a message" with it, checked at once
                 val shared by host.sharedTexts.collectAsState()
-                var handledShared by rememberSaveable { mutableIntStateOf(0) }
+                // NOT saveable: the activity's share counter starts at 0 in a new activity or process, so a restored count would swallow the first shares there
+                var handledShared by remember { mutableIntStateOf(0) }
                 var sharedWords by remember { mutableStateOf("") }
+                // the shared words are forgotten as soon as the page is left: they must not come back the next time it is opened
+                LaunchedEffect(checkupOpen) { if (!checkupOpen) sharedWords = "" }
                 LaunchedEffect(shared) {
                     val r = shared ?: return@LaunchedEffect
                     if (r.n <= handledShared) return@LaunchedEffect
                     handledShared = r.n; sharedWords = r.text
                     host.sharedTextTaken()
                     closeEverything(); checkupOpen = true
-                    viewModel.checkup.check("", r.text)
+                    // the screen checks them as it appears (see below): a check started here would be cleared by the screen it replaces
                 }
                 // the end of the first tour offers the setup, once
                 val setupRequested by viewModel.setupRequests.collectAsStateWithLifecycle(context = MAIN)
@@ -550,7 +553,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 app.expenses.core.domain.CheckAct.TRUST_SENDER -> viewModel.trustSkippedSender(arg)
                                 app.expenses.core.domain.CheckAct.OPEN_SHORTCUTS -> platform.openExternalUrl("shortcuts://")
                                 app.expenses.core.domain.CheckAct.TURN_ON_PAYMENT_APPS -> { viewModel.setNotificationCapture(true); if (!accessGranted) host.openNotificationAccessSettings() }
-                                app.expenses.core.domain.CheckAct.OPEN_SETUP -> openSetup()
+                                app.expenses.core.domain.CheckAct.OPEN_SETUP -> { checkupOpen = false; openSetup() }
                             } },
                             onTick = viewModel.checkup::tick, onCheck = viewModel.checkup::check, onClearResult = viewModel.checkup::clearResult, onBack = { checkupOpen = false },
                         ) }
@@ -724,10 +727,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 onCardPayments = viewModel::chooseCardPayments, onCreateCategories = viewModel::setCreateImportCategories, onPlainFile = viewModel::readImportAsPlainFile,
                             )
                         } else {
-                            BackHandler { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
+                            BackHandler { importFromEarlier = false; yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
                             DataScreen(
                                 state = dataState,
-                                onBack = { yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
+                                onBack = { importFromEarlier = false; yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
                                 onExportCsv = viewModel::exportCsv, onExportXlsx = viewModel::exportXlsx, onExportFinancialYear = viewModel::exportFinancialYear,
                                 autoExport = s.autoExport, onAutoFolder = viewModel::setAutoExportFolder, onAutoFrequency = viewModel::setAutoExportFrequency, onAutoNow = viewModel::exportNow, onAutoProtect = viewModel::setAutoProtect, onDeleteOldExcel = viewModel::deleteOldAutoExcel, onBackup = viewModel::createBackup, onOpenBackup = viewModel::openBackup, onImportStatement = viewModel::startImport,
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,

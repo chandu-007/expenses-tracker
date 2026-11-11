@@ -125,12 +125,12 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val words = app.expenses.core.domain.SimilarEntries.searchWords(label)
         val candidates = if (words.isEmpty()) emptyList() else ok.db.schemaQueries.similarCandidates("INCOME", words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
             .filter { it.id != d.id }.map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
-        val amount = app.expenses.core.domain.parseAmount(d.amountText, app.expenses.core.domain.Currency.INR)?.minorUnits ?: 0L
+        val amount = app.expenses.core.domain.parseAmount(d.amountText, BaseCurrency.current)?.minorUnits ?: 0L
         val advice = app.expenses.core.parsers.CaptureCategory.adviseIncome(
             payer, listOfNotNull(label, originText).joinToString(" "), ok.captureRules.rules(),
             app.expenses.core.parsers.CaptureCategory.Taught(learned.associate { it.key to it.categoryId }, learned.associate { it.key to it.uses }, aliases),
             cats.map { it.id }.toSet(), cats.filter { it.parentId == null }.associate { it.name.lowercase() to it.id }, app.expenses.core.domain.SimilarEntries.profile(label, candidates, aliases),
-            band = app.expenses.core.domain.AmountBands.of(label, amount, app.expenses.core.domain.Currency.INR.code, candidates, aliases),
+            band = app.expenses.core.domain.AmountBands.of(label, amount, BaseCurrency.current.code, candidates, aliases),
         ) ?: return e
         val name = cats.firstOrNull { it.id == advice.categoryId }?.name ?: return e
         return f.copy(suggestion = SuggestedCategoryUi(advice.categoryId, name, advice.note, advice.certainty == app.expenses.core.domain.Certainty.SURE))

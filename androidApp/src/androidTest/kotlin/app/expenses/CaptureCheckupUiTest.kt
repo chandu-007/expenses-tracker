@@ -312,6 +312,22 @@ class CaptureCheckupUiTest {
         // the words are in the box, and leaving and coming back does not bring the result back
         tap("capture_checkup_back"); gone("capture_checkup_headline")
         compose.openMore(); tap("more_capture_checkup"); waitFor("capture_checkup_headline"); assertFalse(has("capture_checkup_result"))
+        // the shared words are forgotten with the page: the box is empty when the page is opened again
+        assertEquals("", compose.onNodeWithTag("capture_checkup_message", useUnmergedTree = true).performScrollTo().fetchSemanticsNode().config[SemanticsProperties.EditableText].text, "the shared words came back")
+    }
+
+    @Test
+    fun aSecondTextSharedWhileThePageIsOpenReplacesTheWordsAndIsCheckedToo() {
+        hook(sms = true)
+        compose.waitForIdle(); scenario?.close()
+        scenario = ActivityScenario.launch(Intent(Intent.ACTION_SEND).setClassName(context.packageName, MainActivity::class.java.name).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "HDFC Bank: $payment"))
+        waitFor("capture_checkup_result")
+        assertTrue(textOf("capture_checkup_result_bank").endsWith("HDFC Bank"), textOf("capture_checkup_result_bank"))
+        val second = Intent(Intent.ACTION_SEND).setClassName(context.packageName, MainActivity::class.java.name).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "ICICI Bank: ${payment.replace("HDFC", "ICICI").replace("okhdfc", "okicici")}")
+        scenario!!.onActivity { instrumentation.callActivityOnNewIntent(it, second) }
+        // the answer shown is the second text's, with the second text in the box
+        compose.waitUntil(10_000) { has("capture_checkup_result_bank") && textOf("capture_checkup_result_bank").endsWith("ICICI Bank") }
+        assertTrue(compose.onNodeWithTag("capture_checkup_message", useUnmergedTree = true).performScrollTo().fetchSemanticsNode().config[SemanticsProperties.EditableText].text.startsWith("ICICI Bank"))
     }
 
     /** What a check must not change: the number of waiting texts, capture log rows and skipped-sender counters, and the bills. */

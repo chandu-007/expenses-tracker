@@ -2997,6 +2997,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         for (row in ok.db.schemaQueries.uncategorisedExpenses(app.expenses.core.storage.CaptureRuleStore.HISTORY_SCAN).executeAsList()) {
             val key = app.expenses.core.domain.PayeeKey.of(row.label, aliases) ?: continue
             out.getOrPut(key) { ArrayList(2) } += row.id
+            // a choice learned before the built-in same-merchant table sits under the name's own key ("amazonpay"): the entries waiting for it are found there too
+            app.expenses.core.domain.PayeeKey.ownKey(row.label)?.takeIf { it != key }?.let { own -> out.getOrPut(own) { ArrayList(2) } += row.id }
         }
         return out
     }
@@ -3007,6 +3009,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         for (row in ok.db.schemaQueries.uncategorisedIncomes(app.expenses.core.storage.CaptureRuleStore.HISTORY_SCAN).executeAsList()) {
             val key = app.expenses.core.domain.PayeeKey.of(row.label, aliases) ?: continue
             out.getOrPut(key) { ArrayList(2) } += row.id
+            app.expenses.core.domain.PayeeKey.ownKey(row.label)?.takeIf { it != key }?.let { own -> out.getOrPut(own) { ArrayList(2) } += row.id }
         }
         return out
     }
@@ -3331,10 +3334,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val origin = ok.origins.get(item.id)?.text
         val payee = origin?.let { PayeeGuess.of(it) } ?: item.label.takeIf { it.isNotBlank() }
         val label = item.label.ifBlank { payee.orEmpty() }
-        val history = if (label.isBlank()) null else SimilarEntries.profile(label, similarCandidates(ok, label, "EXPENSE").filter { it.id != item.id })
+        val history = if (label.isBlank()) null else SimilarEntries.profile(label, similarCandidates(ok, label, "EXPENSE").filter { it.id != item.id }, ok.captureRules.aliases())
         val toAPerson = PayeeKinds.of(payee) == PayeeKind.PERSON
         val advice = CaptureCategory.advise(
-            payee, listOfNotNull(item.label, origin).joinToString(" "), ok.captureRules.rules(), CaptureCategory.Taught(learnedRows.associate { it.key to it.categoryId }, learnedRows.associate { it.key to it.uses }),
+            payee, listOfNotNull(item.label, origin).joinToString(" "), ok.captureRules.rules(), CaptureCategory.Taught(learnedRows.associate { it.key to it.categoryId }, learnedRows.associate { it.key to it.uses }, ok.captureRules.aliases()),
             cats.map { it.id }.toSet(), cats.filter { it.parentId == null }.associate { it.name.lowercase() to it.id }, history, toAPerson = toAPerson, personLike = toAPerson || PayeeKinds.looksLikePerson(payee),
         )
         val suggestions = buildList {

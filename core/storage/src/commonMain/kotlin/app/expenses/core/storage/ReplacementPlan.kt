@@ -34,11 +34,13 @@ internal class ReplacementPlan(
     fun firstLiveAfter(id: String, live: (String) -> Boolean): String? {
         var n = replacedBy[id]
         val seen = HashSet<String>()
-        while (n != null && seen.add(n)) { if (live(n)) return n; n = replacedBy[n] }
+        while (n != null && seen.size < MAX_CHAIN && seen.add(n)) { if (live(n)) return n; n = replacedBy[n] }
         return null
     }
 
     companion object {
+        /** A chain of more than this many links is not one the app makes (a type changed three times is rare); a longer one comes from a damaged or hand-made file and is treated like a loop: left alone (and the walk stays short). */
+        private const val MAX_CHAIN = 64
         /** No record on this phone and none in the file: a restore decides exactly as it did before records existed. */
         val NONE = ReplacementPlan(emptySet(), emptySet(), emptyList(), emptyMap(), emptyList(), emptyMap())
 
@@ -65,7 +67,7 @@ internal class ReplacementPlan(
             val candidates = ArrayList<Candidate>()
             for (id in fromFile.keys) if (live(id)) {
                 val after = ArrayList<String>(); val seen = hashSetOf(id); var n = replacedBy[id]; var loops = false
-                while (n != null) { if (!seen.add(n)) { loops = true; break }; after += n; n = replacedBy[n] }
+                while (n != null) { if (after.size >= MAX_CHAIN || !seen.add(n)) { loops = true; break }; after += n; n = replacedBy[n] }
                 if (!loops) candidates += Candidate(id, after)
             }
             val tied = candidates.associate { it.id to tied(q, it.id) }
