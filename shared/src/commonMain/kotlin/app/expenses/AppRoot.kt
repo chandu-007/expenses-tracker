@@ -609,6 +609,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onSaveCard = viewModel::saveCardTerms, onClearCard = viewModel::clearCardTerms, onSetCreditLimit = viewModel::setCreditLimit,
                             onShowEntries = { id -> viewModel.showAccountOnHome(id); managingAccounts = false; moreOpen = false },
                             safeToSpend = s.safeToSpend, onSafeToSpendOnHome = viewModel::setSafeToSpendOnHome,
+                            onFixBalance = viewModel::fixBalance, onDismissFixHint = viewModel::dismissFixHint,
                         )
                     }
                     k == 12 -> {

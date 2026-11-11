@@ -125,6 +125,16 @@ Use your own real credit texts (salary, interest, a refund, money from a friend)
 - [ ] Then Axis's own text of the same payment (`Payment of Rs 12,345.67 received towards your Axis Bank Credit Card ending 1234`): it must say "Already in your ledger" / "You already marked ... as paid" with **Same payment: add to it**, never a second payment or income.
 - [ ] A real card statement text ("total amount due ... due date ...") still becomes a bill; a promo ("Pay your bill on the app and win cashback") and an OTP are still not captured.
 
+### Fix this balance (Slice 105; the owner's credit card report; all amounts below are examples: use your own)
+- [ ] **Your real credit card that shows "extra balance" after paying the bill.** More, Accounts: a line above the cards says "Looks like some earlier spending is missing." with the card's name, **Fix this balance** and **Dismiss**. Tap Fix this balance: it says "The app thinks you owe nothing and have ₹X extra in credit". Type what the card app says you owe now (usually 0) and read the "Difference" line: it must equal the figure you used to work out by hand. **Fix balance**: the card's tile shows the new balance at once (no old number first), the bar says "Balance fixed: ... → ..." with **Undo**.
+- [ ] Open the card (tap it): "Balance now", the history line "Balance fixed: ... on <today>", and, if you set billing dates, the card summary (left to pay, limit used %) agrees with the card statement. Undo (before the bar goes) puts it exactly back; a second fix with the same amount after the Undo works again.
+- [ ] A bank account whose balance in the bank app differs from the app: Fix this balance, type the bank app's balance, check the difference line says whether spending or money received is missing, fix it. Net worth and the Home balance strip show the corrected number. Reports, the month's spending and the budget did not move at all.
+- [ ] The "Overdrawn" and "In credit (nothing owed)" choices; a ₹ sign and commas typed in the amount are accepted ("₹1,26,000"), a minus sign or a $ amount is refused in words; the same amount again says "Already matches".
+- [ ] Hide amounts on: every amount in the dialog and the bar is hidden; what you type stays visible.
+- [ ] A restore on a second phone (More, Your data): the fixed balances and the history lines are the same there, including the first start's Bank and Cash accounts.
+- [ ] Two-pane / unfolded: the dialog stays a normal dialog width, never edge to edge.
+- [ ] TalkBack: the dialog title is a heading; the difference and the effect are read after the amount; the chips say whether they are selected.
+
 ### Speed
 - [ ] With a year or more of real entries, Home opens and scrolls without a pause, and narrowing to one account is instant.
 

@@ -296,6 +296,28 @@ class BalanceFixesTest {
         assertEquals(atEnd - atStart, e2 - s2, "what the entries do between the two dates is unchanged (the 3,000 spent)")
     }
 
+    // ---- what must not move ----
+
+    @Test
+    fun transferCandidatesTheSubscriptionSamplesAndTheCardPaymentTransfersAreUnaffectedByAFix() {
+        val origins = OriginStore(db); val expects = ExpectStore(db); val attachments = AttachmentStore(db, clock) { 3L }
+        val templates = TemplateStore(db, clock) { 3L }
+        val candidates = TransferCandidateStore(db, KindChanges(db, ledger, origins, expects, attachments), templates)
+        // a cash withdrawal the finder knows, a monthly charge the subscription finder samples, and a card bill paid from the bank (a transfer)
+        ledger.save(Expense(EntryId("atm"), at(2026, 10, 3), bank, Money(5_000_00, inr), listOf(CategorySplit(CategoryId("Other"), Money(5_000_00, inr)))), EntryDetails(merchant = "ATM cash", source = "sms", sourceRef = "R1"))
+        origins.put("atm", OriginKind.SMS, "AX-BANK", "Rs.5,000.00 withdrawn at ATM 12345 on 03-10-26", at(2026, 10, 3))
+        for (m in 8..10) ledger.save(Expense(EntryId("nf$m"), at(2026, m, 5), card, Money(649_00, inr), listOf(CategorySplit(CategoryId("Fun"), Money(649_00, inr)))), EntryDetails(merchant = "Netflix"))
+        ledger.save(Transfer(EntryId("billpay"), at(2026, 10, 25), bank, card, Money(1_947_00, inr)))
+        val candidatesBefore = candidates.scan("INR")
+        val samplesBefore = db.schemaQueries.expenseSamples("INR", 0L).executeAsList()
+        val transferBefore = db.schemaQueries.entryById("billpay").executeAsOne()
+        assertEquals(listOf("atm"), candidatesBefore.cashWithdrawals.map { it.entry.id }, "the withdrawal is found")
+        fixed(fixes.fix("bank", 1_234_56, inr, 1L)); fixed(fixes.fix("card", -9_999_00, inr, 2L))
+        assertEquals(candidatesBefore, candidates.scan("INR"), "Transfer candidates read entries only")
+        assertEquals(samplesBefore, db.schemaQueries.expenseSamples("INR", 0L).executeAsList(), "so does the subscription finder")
+        assertEquals(transferBefore, db.schemaQueries.entryById("billpay").executeAsOne(), "the card payment is the same transfer, untouched")
+    }
+
     // ---- the history ----
 
     @Test

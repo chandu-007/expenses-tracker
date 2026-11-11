@@ -68,8 +68,13 @@ fun AccountsScreen(
     /** The balance-based safe to spend, once it is worked out (a moment after the page opens), and the switch for showing it on Home. */
     safeToSpend: app.expenses.SafeToSpendUi? = null,
     onSafeToSpendOnHome: (Boolean) -> Unit = {},
+    /** "Fix this balance": the account, what the bank app says, whether it is the second choice (in credit or overdrawn), and where the reason goes if it is refused (null: done). */
+    onFixBalance: (id: String, amount: String, other: Boolean, done: (String?) -> Unit) -> Unit = { _, _, _, done -> done(null) },
+    /** "Dismiss" on the hint that earlier spending seems to be missing from a card. */
+    onDismissFixHint: (String) -> Unit = {},
 ) {
     var editing by remember { mutableStateOf<AccountRowUi?>(null) }
+    var fixing by rememberSaveable { mutableStateOf<String?>(null) } // the account whose balance is being fixed: its dialog is drawn over the Edit account one (or over the page, from the hint)
     var safeOpen by rememberSaveable { mutableStateOf(false) }
     if (safeOpen && safeToSpend != null) SafeToSpendDialog(safeToSpend, onClose = { safeOpen = false }, onShowOnHome = onSafeToSpendOnHome)
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -92,6 +97,10 @@ fun AccountsScreen(
                 if (safeToSpend != null) SafeToSpendLine(safeToSpend, "safe_to_spend_line", onClick = { safeOpen = true }, compact = true)
                 HorizontalDivider()
             }
+            // a credit card that shows extra money after a payment: a gentle hint, once, for the first such card (answering it shows the next)
+            rows.firstOrNull { it.fixHint }?.let { card ->
+                item(key = "fix_hint_${card.id}") { FixBalanceHint(card, onFix = { fixing = card.id }, onDismiss = { onDismissFixHint(card.id) }, modifier = Modifier.animateItem()) }
+            }
             // each account is a card; one that is archived stays a plain line below
             if (active.isNotEmpty()) item(key = "wallet") { WalletStack(active, onOpen = { editing = it }, modifier = Modifier.animateItem()) }
             if (archived.isNotEmpty()) {
@@ -101,7 +110,9 @@ fun AccountsScreen(
         }
     }
     if (creating) AccountDialog(null, rows, { creating = false }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit)
-    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit, onShowEntries) }
+    editing?.let { e -> AccountDialog(rows.firstOrNull { it.id == e.id } ?: e, rows, { editing = null }, onSave, onArchive, onDelete, onSaveCard, onClearCard, onSetCreditLimit, onShowEntries, onFixThis = { fixing = it }) }
+    // once fixed, the page already shows the new balance: the dialog goes, and the Edit account dialog under it with it
+    fixing?.let { id -> rows.firstOrNull { it.id == id }?.let { row -> FixBalanceDialog(row, onFixBalance, onClose = { fixing = null }, onFixed = { fixing = null; editing = null }) } }
 }
 
 @Composable
@@ -134,6 +145,8 @@ private fun AccountDialog(
     onClearCard: (String) -> Unit,
     onSetCreditLimit: (id: String, limit: String) -> Unit = { _, _ -> },
     onShowEntries: ((String) -> Unit)? = null,
+    /** "Fix this balance" for this account: the page opens that dialog over this one. */
+    onFixThis: (String) -> Unit = {},
 ) {
     var cardOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -167,6 +180,8 @@ private fun AccountDialog(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ACCOUNT_TYPE_LABELS.forEach { (key, label) -> FilterChip(selected = type == key, onClick = { type = key; problem = null }, label = { Text(label) }, modifier = Modifier.testTag("type_$key")) }
                 }
+                // what the balance is now and the way to correct it (the opening balance below is what the balance started from, which is not what most people mean by a wrong balance)
+                if (existing != null) FixBalanceSection(existing, onOpen = { onFixThis(existing.id) })
                 OutlinedTextField(
                     opening, { opening = it; problem = null },
                     label = { Text(if (liability) "Amount owed today (optional)" else "Balance today (optional)") },

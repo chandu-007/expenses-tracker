@@ -73,6 +73,9 @@ class AppContainer(private val platform: Platform) {
 
             /** "Transfer candidates": expenses and income that are really money moving between the person's own accounts, found for the person to convert (never converted by themselves). */
             val transferCandidates: app.expenses.core.storage.TransferCandidateStore = app.expenses.core.storage.TransferCandidateStore(db, kindChanges, templates)
+
+            /** "Fix this balance": what the bank app says moves an account's opening balance by the difference, with one line of history and an exact Undo. No entry is made. */
+            val balanceFixes: app.expenses.core.storage.BalanceFixes = app.expenses.core.storage.BalanceFixes(db, store)
         }
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */

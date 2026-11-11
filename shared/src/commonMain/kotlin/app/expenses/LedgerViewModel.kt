@@ -58,6 +58,9 @@ import app.expenses.core.domain.Template
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.AccountRules
+import app.expenses.core.domain.BalanceFix
+import app.expenses.core.domain.BalanceFixText
+import app.expenses.core.storage.BalanceFixes
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BaseCurrencyRules
@@ -345,6 +348,10 @@ data class AccountRowUi(
     val card: CardRowUi? = null,
     /** What the tile looks like and the digits texts use: a [app.expenses.core.domain.CardNetwork] and [app.expenses.core.domain.CardTier] name for a credit card, and the last four digits. */
     val network: String? = null, val tier: String? = null, val last4: String? = null,
+    /** A credit card in credit (it shows extra money) whose hint "Looks like some earlier spending is missing" has not been dismissed or answered: the Accounts page offers Fix this balance for it. */
+    val fixHint: Boolean = false,
+    /** The lines of "Balance fixed: ... on 11 Nov 2026" for this account, newest first. */
+    val fixLines: List<String> = emptyList(),
 )
 
 /** A card's billing dates and where its latest statement stands, as the accounts screen shows them. */
@@ -482,7 +489,12 @@ data class UndoUi(
     val kindChanges: List<app.expenses.core.storage.KindChanges.Changed> = emptyList(),
     /** For an archived account: its id; Undo brings it back into the pickers. */
     val unarchiveAccountId: String? = null,
+    /** For a fixed balance: what Undo moves back. */
+    val balanceFix: BalanceFixUndo? = null,
 )
+
+/** What taking a "Fix this balance" back needs: the account, how far the fix moved it, and the time that names its line of history. */
+data class BalanceFixUndo(val accountId: String, val deltaMinor: Long, val atMillis: Long)
 
 /** One transaction found in a statement, as shown in the preview. A [transfer] is money moving between the person's own accounts. */
 data class ImportRowUi(val text: String, val amount: String, val spending: Boolean, val transfer: Boolean = false)
@@ -964,14 +976,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** Takes back an entry that was just added. */
     fun undo(u: UndoUi) = withStore { ok ->
+        var balanceNote: String? = null
         if (u.kindChanges.isNotEmpty()) ok.store.atomically { u.kindChanges.asReversed().forEach { EntryActions(ok).undoKindChange(it) } }
         else if (u.bulkCreated.isNotEmpty()) ok.store.atomically { u.bulkCreated.forEach { EntryActions(ok).undo(it) } }
         else if (u.bulkDrafts.isNotEmpty()) ok.store.atomically { u.bulkDrafts.forEach { EntryActions(ok).save(it, teach = false) } }
         else if (u.bulkRestore.isNotEmpty()) ok.store.atomically { u.bulkRestore.forEach { EntryActions(ok).restore(it) } }
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
+        else if (u.balanceFix != null) {
+            val f = u.balanceFix
+            balanceNote = if (ok.balanceFixes.undo(f.accountId, f.deltaMinor, f.atMillis, inr)) { accountRowsCache = freshAccountRows(ok); "Put the balance back." } else "The balance could not be put back: the account has changed since."
+        }
         else if (u.unarchiveAccountId != null) ok.db.schemaQueries.accountById(u.unarchiveAccountId).executeAsOneOrNull()?.let { row -> ok.store.saveAccount(Account(AccountId(row.id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, false)) }
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
         refresh(ok)
+        balanceNote?.let { say(it) }
         _search.update { it.copy(notice = null, undo = null) }
     }
 
@@ -1454,6 +1472,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>, balances: Map<AccountId, Money>): List<AccountRowUi> {
         val looks = ok.looks.all().associateBy { it.accountId }
+        val fixes = ok.balanceFixes.allHistory() // one small read for every account, and the dismissed hints below
+        val dismissed = ok.balanceFixes.dismissedHints()
+        val fixDay = DatePattern("d MMM yyyy")
         val today = todayLocal()
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         return rows.map { a ->
@@ -1473,6 +1494,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         summary?.let { CardSummaryText.due(it) { m -> Money(m, inr).formatted() } }.orEmpty())
                 },
                 looks[a.id]?.network?.name, looks[a.id]?.tier?.name, looks[a.id]?.last4,
+                fixHint = type == AccountType.CREDIT_CARD && a.archived == 0L && bal.minorUnits > 0 && a.id !in dismissed,
+                fixLines = fixes[a.id].orEmpty().asReversed().map { BalanceFixText.historyLine(type, it, fixDay.format(it.atMillis)) { m -> Money(m, inr).formatted() } },
             )
         }.sortedWith(compareBy({ it.archived }, { ACCOUNT_ORDER.indexOf(it.type).let { i -> if (i < 0) ACCOUNT_ORDER.size else i } }, { it.name.lowercase() }))
     }
@@ -1490,13 +1513,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     AccountRules.checkName(all.map { Account(AccountId(it.id), it.name, AccountType.valueOf(it.type), inr) }, clean, id)?.let { return@write it }
                     val kind = AccountType.valueOf(type)
                     val digits = AccountDigits.parse(last4Text).getOrElse { return@write it.message }
+                    val existing = id?.let { ok.db.schemaQueries.accountById(it).executeAsOneOrNull() }
                     val typed = openingText.trim()
-                    val opening = if (typed.isEmpty()) 0L else (parseAmount(typed, inr)?.minorUnits ?: return@write "Enter the amount as a number, like 25000 or 1250.50")
+                    // An opening balance the form shows exactly as it is stored is kept as it is when the text is not changed: a fix can leave a card in credit or a bank account below zero,
+                    // which the form cannot take back as typed (it takes no minus sign), and saving the name must not refuse or lose it.
+                    val shownBefore = existing?.let { row -> (if (AccountType.valueOf(row.type).isLiability) -row.opening_minor else row.opening_minor).let { if (it == 0L) "" else Money(it, inr).toPlainString() } }
+                    val keepsOpening = existing != null && typed == shownBefore && AccountType.valueOf(existing.type).isLiability == kind.isLiability
+                    val opening = if (keepsOpening) existing!!.opening_minor else {
+                        val amount = if (typed.isEmpty()) 0L else (parseAmount(typed, inr)?.minorUnits ?: return@write "Enter the amount as a number, like 25000 or 1250.50")
+                        if (kind.isLiability) -amount else amount
+                    }
                     if (id != null && all.first { it.id == id }.type.let { AccountType.valueOf(it).isLiability } != kind.isLiability &&
                         ok.store.accountUsage(AccountId(id)) > 0) return@write "A card or loan cannot become a bank, cash or wallet account once it has entries, or the other way round."
-                    val existing = id?.let { ok.db.schemaQueries.accountById(it).executeAsOneOrNull() }
                     val accountId = id ?: Uuid.random().toString()
-                    ok.store.saveAccount(Account(AccountId(accountId), clean, kind, inr, if (kind.isLiability) -opening else opening, existing?.archived == 1L))
+                    ok.store.saveAccount(Account(AccountId(accountId), clean, kind, inr, opening, existing?.archived == 1L))
                     // the network and tier are a credit card's; the digits belong to any account
                     val isCard = kind == AccountType.CREDIT_CARD
                     ok.looks.save(AccountLook(accountId, if (isCard) CardNetwork.entries.firstOrNull { it.name == network } else null, if (isCard) CardTier.entries.firstOrNull { it.name == tier } else null, digits))
@@ -1576,6 +1606,47 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         ok.store.deleteAccount(AccountId(id))
         refresh(ok)
         say("Deleted ${name ?: "the account"}.")
+    }
+
+    /** The rows of the accounts page and Home's strip worked out now, so a fix is on the screen the moment the dialog closes (the usual figures job follows a moment later). */
+    private fun freshAccountRows(ok: AppContainer.Opened.Ok): List<AccountRowUi> = accountRows(ok, ok.db.schemaQueries.selectAccounts().executeAsList(), ok.store.balances())
+
+    /**
+     * "Fix this balance": [amountText] is what the bank app or the card statement says, in the ledger's currency: for a card or loan what is owed, for the other accounts what is held;
+     * [other] says "in credit" (card, loan) or "overdrawn" (the rest) instead. The difference from what the app shows moves the account's opening balance (see [BalanceFixes]); no entry is made, so
+     * nothing that counts spending or income changes. [onDone] gets null when it was done, otherwise the reason (shown in the dialog, which stays open). Undo is on the bar of the page.
+     */
+    fun fixBalance(accountId: String, amountText: String, other: Boolean, onDone: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val row = ok.db.schemaQueries.accountById(accountId).executeAsOneOrNull()
+                    if (row == null || row.deleted != 0L) return@write BalanceFix.NO_ACCOUNT
+                    val type = AccountType.valueOf(row.type)
+                    val typed = when (val read = BalanceFix.read(amountText, inr)) {
+                        BalanceFix.Input.Empty -> return@write BalanceFix.EMPTY
+                        is BalanceFix.Input.Bad -> return@write read.message
+                        is BalanceFix.Input.Amount -> read.minor
+                    }
+                    when (val result = ok.balanceFixes.fix(accountId, BalanceFix.statedBalance(type, typed, other), inr, nowMillis())) {
+                        is BalanceFixes.Result.Refused -> result.message
+                        is BalanceFixes.Result.Fixed -> {
+                            accountRowsCache = freshAccountRows(ok)
+                            refresh(ok, undo = UndoUi(accountId, BalanceFixText.fixed(type, result.beforeMinor, result.afterMinor) { m -> Money(m, inr).formatted() }, balanceFix = BalanceFixUndo(accountId, result.deltaMinor, result.atMillis)))
+                            null
+                        }
+                    }
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** "Dismiss" on the hint "Looks like some earlier spending is missing": it does not come back for this account. */
+    fun dismissFixHint(accountId: String) = withStore { ok ->
+        ok.balanceFixes.dismissHint(accountId)
+        accountRowsCache = freshAccountRows(ok)
+        refresh(ok, undo = (_state.value as? UiState.Ready)?.undo)
     }
 
     // ---- saved searches ----
