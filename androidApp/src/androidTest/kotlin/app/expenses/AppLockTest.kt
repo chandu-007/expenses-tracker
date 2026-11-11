@@ -184,6 +184,30 @@ class AppLockTest {
     }
 
     @Test
+    fun aTextSharedToALockedAppIsNotShownUntilUnlockedAndThenOpensCheckAMessageWithItsResult() {
+        lockOn(LockTimeout.ONE_MINUTE)
+        fake.next = null
+        scenario = ActivityScenario.launch(
+            Intent(Intent.ACTION_SEND).setClassName(context.packageName, MainActivity::class.java.name).setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, "HDFC Bank: Rs.1,250.00 debited from A/c XX1234 on 05-10-26 to VPA shop@okhdfc (UPI Ref 628374659283). Not you? Call 18002586161"),
+        )
+        waitFor("locked_screen")
+        compose.waitUntil(10_000) { fake.pending != null }
+        assertTrue(compose.onAllNodes(hasTestTag("capture_checkup_headline"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "nothing of the page shows while locked")
+        assertTrue(compose.onAllNodes(hasTestTag("capture_checkup_result"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        fake.finish(Authenticator.Result.Success)
+        waitGone("locked_screen")
+        waitFor("capture_checkup_headline"); waitFor("capture_checkup_result") // not a blank page: the page and the checked words
+        // locking and unlocking again does not open the page a second time
+        compose.onNodeWithTag("capture_checkup_back", useUnmergedTree = true).performClick()
+        waitGone("capture_checkup_headline")
+        now += 2 * minute; background(); fake.next = null; foreground()
+        waitFor("locked_screen"); compose.waitUntil(10_000) { fake.pending != null }
+        fake.finish(Authenticator.Result.Success)
+        waitFor("add"); assertTrue(compose.onAllNodes(hasTestTag("capture_checkup_headline"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the shared text is not opened again after a lock")
+    }
+
+    @Test
     fun cancellingOrFailingStaysLockedAndTheButtonTriesAgain() {
         lockOn(LockTimeout.ONE_MINUTE)
         fake.next = Authenticator.Result.Failed("Cancelled", cancelled = true)

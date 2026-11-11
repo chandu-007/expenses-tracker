@@ -44,7 +44,7 @@ class BalanceFixes(private val db: ExpensesDb, private val store: LedgerStore) {
         val type = AccountType.valueOf(row.type)
         store.saveAccount(Account(AccountId(row.id), row.name, type, currency, opening, row.archived == 1L))
         writeHistory(accountId, BalanceFixLog.add(history(accountId), BalanceFixEntry(atMillis, current, stated)))
-        dismissHint(accountId)
+        hideHintForFix(accountId)
         Result.Fixed(row.id, row.name, type, current, stated, atMillis)
     }
 
@@ -60,6 +60,8 @@ class BalanceFixes(private val db: ExpensesDb, private val store: LedgerStore) {
         val opening = BalanceFix.newOpening(row.opening_minor, -deltaMinor) ?: return@transactionWithResult false
         store.saveAccount(Account(AccountId(row.id), row.name, AccountType.valueOf(row.type), currency, opening, row.archived == 1L))
         writeHistory(accountId, BalanceFixLog.remove(history(accountId), atMillis))
+        // the hint this fix hid comes back (a hint the person dismissed themselves stays dismissed)
+        if (q.settingValue(HINT_PREFIX + accountId).executeAsOneOrNull() == HIDDEN_BY_FIX) q.removeSetting(HINT_PREFIX + accountId)
         true
     }
 
@@ -77,11 +79,15 @@ class BalanceFixes(private val db: ExpensesDb, private val store: LedgerStore) {
     // ---- the hint "Looks like some earlier spending is missing" ----
 
     /** The accounts whose hint was dismissed (or whose balance was fixed), by id, in one query. A setting of this phone only: it is not in a backup. */
-    fun dismissedHints(): Set<String> = q.settingsWithPrefix(HINT_PREFIX).executeAsList().filter { it.value_ == "1" }.mapTo(HashSet()) { it.key.removePrefix(HINT_PREFIX) }
+    fun dismissedHints(): Set<String> = q.settingsWithPrefix(HINT_PREFIX).executeAsList().filter { it.value_ == "1" || it.value_ == HIDDEN_BY_FIX }.mapTo(HashSet()) { it.key.removePrefix(HINT_PREFIX) }
 
     fun dismissHint(accountId: String) = q.putSetting(HINT_PREFIX + accountId, "1")
 
+    /** A fix makes the hint pointless, so it is hidden, but as "hidden by a fix", so that Undo can show it again; a dismissal by the person stays a dismissal. */
+    private fun hideHintForFix(accountId: String) { if (q.settingValue(HINT_PREFIX + accountId).executeAsOneOrNull() != "1") q.putSetting(HINT_PREFIX + accountId, HIDDEN_BY_FIX) }
+
     companion object {
         const val HINT_PREFIX = "fix_hint_off:"
+        private const val HIDDEN_BY_FIX = "fix"
     }
 }

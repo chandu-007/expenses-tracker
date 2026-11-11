@@ -52,6 +52,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -247,7 +249,8 @@ internal fun FiltersPanel(
     onEdit: (SearchInput, Boolean) -> Unit, onUseSaved: (SearchInput) -> Unit, onRemoveSaved: (SavedSearchUi) -> Unit, onSave: () -> Unit,
     onPickDay: (String) -> Unit, onDone: () -> Unit, onClose: () -> Unit,
 ) {
-    val opened = remember { input }
+    // saved with the page (a font-size change rebuilds the activity): Reset must still know what the filters were when the panel opened
+    val opened = rememberSaveable(stateSaver = SearchInputSaver) { mutableStateOf(input) }.value
     val count = input.filterCount()
     val changed = input.withFiltersOf(opened) != input
     val label = when {
@@ -343,3 +346,14 @@ internal fun FiltersPanel(
         }
     }
 }
+
+/** [SearchInput] for rememberSaveable: every field as text, the two choices by name. */
+private val SearchInputSaver = Saver<SearchInput, List<String?>>(
+    save = { i -> listOf(i.text, i.minRupees, i.maxRupees, i.categoryId, i.kind.name, i.range.name, i.tag, i.fromDay?.toString(), i.toDay?.toString(), i.accountId) },
+    restore = { v ->
+        SearchInput(
+            text = v[0].orEmpty(), minRupees = v[1].orEmpty(), maxRupees = v[2].orEmpty(), categoryId = v[3], kind = SearchKind.entries.firstOrNull { it.name == v[4] } ?: SearchKind.ANY,
+            range = SearchRange.entries.firstOrNull { it.name == v[5] } ?: SearchRange.ANY, tag = v[6], fromDay = v[7]?.toLongOrNull(), toDay = v[8]?.toLongOrNull(), accountId = v[9],
+        )
+    },
+)
