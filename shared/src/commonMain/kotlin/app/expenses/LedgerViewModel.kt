@@ -240,13 +240,13 @@ data class InboxRowUi(
     val otherLegNote: String = "",
     /** For [treatment] "BILL_PAYMENT": what the card asks and offers ("Mark the Axis card bill as paid?"). */
     val billPay: BillPayUi? = null,
-)
-
-/** One open bill a payment text may pay, as the card lists it ([billId] "card:<account>" is a card statement the app works out itself, with no bill text behind it). [fit] is "total", "minimum", "part" (of a card's total) or "full". */
     /** For a suggestion that rests on the amount ([categorySource] "AMOUNT"): the whole reason with its counts ("You chose Subscriptions for Amazon amounts like ₹199 (4 times)"); empty otherwise. */
     val categoryReason: String = "",
     /** The payee as the person would call it ("Swiggy Instamart"): what "Same shop as..." starts from; empty when the text names none. */
     val payeeName: String = "",
+)
+
+/** One open bill a payment text may pay, as the card lists it ([billId] "card:<account>" is a card statement the app works out itself, with no bill text behind it). [fit] is "total", "minimum", "part" (of a card's total) or "full". */
 data class BillMatchUi(val billId: String, val title: String, val amountText: String, val dueText: String, val fit: String)
 
 /**
@@ -2345,6 +2345,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 kind = if (treatment == "TRANSFER") "TRANSFER" else if (isCreditText) "INCOME" else "EXPENSE",
                 otherChoices = otherChoices, otherAccountId = otherAcct, otherWhy = otherWhy, transferNote = transferNote, transferSure = transferSure,
                 otherLegEntryId = legEntry, otherLegNote = legNote, billPay = billPay,
+                categoryReason = if (suggestion?.source == SuggestionSource.AMOUNT && evidence?.band != null) CategoryEvidence.reason(allCategories.firstOrNull { it.id == suggestion.categoryId }?.name ?: "that category", cleanName.orEmpty(), evidence.band, isCreditText) else "",
+                payeeName = cleanName.orEmpty(),
             )
         }
         return withTransfers(ok, items, base, accounts)
@@ -2515,8 +2517,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     /** What "Make it a transfer" changed, held for the few seconds its Undo is offered. */
-                categoryReason = if (suggestion?.source == SuggestionSource.AMOUNT && evidence?.band != null) CategoryEvidence.reason(allCategories.firstOrNull { it.id == suggestion.categoryId }?.name ?: "that category", cleanName.orEmpty(), evidence.band, isCreditText) else "",
-                payeeName = cleanName.orEmpty(),
     @Volatile private var madeTransfer: app.expenses.core.storage.CaptureTransfers.Replaced? = null
 
     /**
@@ -2566,6 +2566,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
         /** The id of the Undo bar of an add that did more than save an entry (a transfer the person chose, Mark paid on a bill payment, a text joined to the entry that holds its other leg): this and the item's id. */
         const val ADDED_UNDO = "added:"
+
+        /** The id of the Undo bar of "Same shop as..." made from a To review card: this and the key of the name that was joined. */
+        const val ALIAS_UNDO = "alias:"
 
         /** The id of the Undo bar of "Move to To review" on the Bills page. */
         const val BILL_REPAIR_UNDO = "bill-repair"
@@ -2737,9 +2740,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     }
                     // what the text's own account stands for (the paying account for the bank's text, the card for the card's), and the card the words name, are remembered for next time
                     val received = n?.side == BillPaymentSide.RECEIVED
-        /** The id of the Undo bar of "Same shop as..." made from a To review card: this and the key of the name that was joined. */
-        const val ALIAS_UNDO = "alias:"
-
                     if (i.accountLast4 != null) ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), if (received) cardAccountId else payFromId)
                     if (!received && cardAccountId.isNotEmpty() && n?.cardLast4 != null) ok.keepSetting(settings, accountKey(n.cardBank ?: i.issuer, n.cardLast4), cardAccountId)
                     heldAdd = HeldAdd(held, settings)
@@ -2812,6 +2812,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         class Filing(val drafts: List<EntryDraft>) : RulesHeld
         class Rule(val snapshot: app.expenses.core.storage.RuleSnapshot) : RulesHeld
         class Choice(val key: String, val before: app.expenses.core.storage.LearnedSnapshot) : RulesHeld
+        class Alias(val from: String, val before: app.expenses.core.domain.PayeeAlias?) : RulesHeld
     }
     private var rulesHeld: RulesHeld? = null
 
@@ -2899,6 +2900,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     is RulesHeld.Filing -> ok.store.atomically { held.drafts.forEach { EntryActions(ok).save(it, teach = false) } }
                     is RulesHeld.Rule -> ok.captureRules.restoreRule(held.snapshot)
                     is RulesHeld.Choice -> ok.captureRules.restoreLearned(held.before)
+                    is RulesHeld.Alias -> ok.captureRules.restoreAlias(held.from, held.before)
                 }
                 null
             } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
@@ -2909,6 +2911,56 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun learnedUndoGone(id: String) { if (_learnedUndo.value?.id == id) { _learnedUndo.value = null; rulesHeld = null } }
+
+    // ---- "same shop as": two names of one shop counted as one ----
+
+    private val _aliases = MutableStateFlow<List<PayeeAliasUi>>(emptyList())
+    /** The names the person said are the same shop as another, for the list under "What the app has learned". */
+    val payeeAliases: StateFlow<List<PayeeAliasUi>> get() = _aliases
+
+    private fun aliasRows(ok: AppContainer.Opened.Ok): List<PayeeAliasUi> = ok.captureRules.aliases().all.map { PayeeAliasUi(it.from, it.fromLabel, it.toLabel) }
+
+    private var heldAlias: RulesHeld.Alias? = null
+
+    /**
+     * Says that [fromName] is the same shop as [toName]. An overlay on how names are counted: nothing stored about an entry changes. What was learned and what earlier entries say for one is used for the other,
+     * a search for one finds the other, and the subscription finder and the Merchant report count them together. [onDone] gets null, or a plain message with nothing changed. Undo goes back to what
+     * [fromName] counted as before; the bar is the To review bar when [fromInbox], else the one of the Category rules screen.
+     */
+    fun joinShops(fromName: String, toName: String, fromInbox: Boolean = false, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val before = ok.captureRules.snapshotAlias(app.expenses.core.domain.PayeeKey.of(fromName).orEmpty())
+                    val a = ok.captureRules.addAlias(fromName, toName)
+                    _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+                    val text = "${a.fromLabel} now counts as ${a.toLabel}"
+                    if (fromInbox) { heldAlias = RulesHeld.Alias(a.from, before); _inboxUndo.value = ScreenUndo("$ALIAS_UNDO${a.from}", text) }
+                    else offerRulesUndo("alias:${a.from}", text, RulesHeld.Alias(a.from, before))
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** Makes a name its own shop again. Undo puts the alias back. What was learned under each name is untouched either way. */
+    fun removeAlias(from: String) = withStore { ok ->
+        val before = ok.captureRules.snapshotAlias(from) ?: return@withStore
+        ok.captureRules.removeAlias(from)
+        _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+        offerRulesUndo("alias-off:$from", "${before.fromLabel} is its own shop again", RulesHeld.Alias(from, before))
+    }
+
+    private fun undoAlias(from: String) {
+        val held = heldAlias?.takeIf { it.from == from } ?: return // taken now: the bar clears it as soon as it is gone
+        heldAlias = null
+        withStore { ok ->
+            val problem = try { ok.captureRules.restoreAlias(held.from, held.before); null } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+            if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
+        }
+    }
 
     fun addCaptureRule(pattern: String, categoryId: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
@@ -2986,7 +3038,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val skipped = ok.inbox.dismiss(id)
         _inbox.value = inboxRows(ok); refresh(ok)
         if (skipped && item != null) { skippedCapture = id to item.body; _inboxUndo.value = ScreenUndo(id, "Skipped $label") }
-        class Alias(val from: String, val before: app.expenses.core.domain.PayeeAlias?) : RulesHeld
     }
 
     /** Brings back the item whose skip was just offered for Undo, as it was (its text included). */
@@ -2994,6 +3045,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         if (id.startsWith(MADE_TRANSFER_UNDO)) { undoMadeTransfer(id.removePrefix(MADE_TRANSFER_UNDO)); return }
         if (id.startsWith(ACCOUNT_CHOICE_UNDO)) { undoAccountChoice(id.removePrefix(ACCOUNT_CHOICE_UNDO)); return }
         if (id.startsWith(ADDED_UNDO)) { undoAdded(id.removePrefix(ADDED_UNDO)); return }
+        if (id.startsWith(ALIAS_UNDO)) { undoAlias(id.removePrefix(ALIAS_UNDO)); return }
         val held = skippedCapture?.takeIf { it.first == id } // taken now: the bar clears it as soon as it is gone, before the store work below runs
         if (held == null) return
         withStore { ok ->
@@ -3070,7 +3122,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "Not now" on the Home card: it stays away for [UncategorisedNudge.SNOOZE_DAYS] days. Only the card goes: nothing else is read or rebuilt. */
     fun snoozeCategoriseNudge() = withStore { ok ->
         ok.templates.putSetting(SETTING_CATEGORISE_SNOOZED_AT, nowMillis().toString())
-                    is RulesHeld.Alias -> ok.captureRules.restoreAlias(held.from, held.before)
         categoriseCache = 0
         _state.update { st -> (st as? UiState.Ready)?.copy(categoriseNudge = 0) ?: st }
     }
@@ -3082,56 +3133,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "Not now" on a Home card: it stays away for [HomeNudges.SNOOZE_HOURS] hours, or until more is waiting than [count] (what it was about now). */
     fun snoozeNudge(nudge: HomeNudge, count: Int) = withStore { ok ->
         val snooze = NudgeSnooze(nowMillis(), count)
-    // ---- "same shop as": two names of one shop counted as one ----
-
-    private val _aliases = MutableStateFlow<List<PayeeAliasUi>>(emptyList())
-    /** The names the person said are the same shop as another, for the list under "What the app has learned". */
-    val payeeAliases: StateFlow<List<PayeeAliasUi>> get() = _aliases
-
-    private fun aliasRows(ok: AppContainer.Opened.Ok): List<PayeeAliasUi> = ok.captureRules.aliases().all.map { PayeeAliasUi(it.from, it.fromLabel, it.toLabel) }
-
-    private var heldAlias: RulesHeld.Alias? = null
-
-    /**
-     * Says that [fromName] is the same shop as [toName]. An overlay on how names are counted: nothing stored about an entry changes. What was learned and what earlier entries say for one is used for the other,
-     * a search for one finds the other, and the subscription finder and the Merchant report count them together. [onDone] gets null, or a plain message with nothing changed. Undo goes back to what
-     * [fromName] counted as before; the bar is the To review bar when [fromInbox], else the one of the Category rules screen.
-     */
-    fun joinShops(fromName: String, toName: String, fromInbox: Boolean = false, onDone: (String?) -> Unit = {}) {
-        viewModelScope.launch(BACKGROUND) {
-            val problem = try {
-                container.write { ok ->
-                    val before = ok.captureRules.snapshotAlias(app.expenses.core.domain.PayeeKey.of(fromName).orEmpty())
-                    val a = ok.captureRules.addAlias(fromName, toName)
-                    _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
-                    val text = "${a.fromLabel} now counts as ${a.toLabel}"
-                    if (fromInbox) { heldAlias = RulesHeld.Alias(a.from, before); _inboxUndo.value = ScreenUndo("$ALIAS_UNDO${a.from}", text) }
-                    else offerRulesUndo("alias:${a.from}", text, RulesHeld.Alias(a.from, before))
-                    null
-                }
-            } catch (e: IllegalArgumentException) { e.message }
-            withContext(Dispatchers.Main) { onDone(problem) }
-        }
-    }
-
-    /** Makes a name its own shop again. Undo puts the alias back. What was learned under each name is untouched either way. */
-    fun removeAlias(from: String) = withStore { ok ->
-        val before = ok.captureRules.snapshotAlias(from) ?: return@withStore
-        ok.captureRules.removeAlias(from)
-        _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
-        offerRulesUndo("alias-off:$from", "${before.fromLabel} is its own shop again", RulesHeld.Alias(from, before))
-    }
-
-    private fun undoAlias(from: String) {
-        val held = heldAlias?.takeIf { it.from == from } ?: return // taken now: the bar clears it as soon as it is gone
-        heldAlias = null
-        withStore { ok ->
-            val problem = try { ok.captureRules.restoreAlias(held.from, held.before); null } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
-            _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
-            if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
-        }
-    }
-
         ok.templates.putSetting(HomeNudges.settingKey(nudge), snooze.encode())
         _state.update { st -> (st as? UiState.Ready)?.copy(nudgeSnoozes = st.nudgeSnoozes + (nudge to snooze)) ?: st }
     }
@@ -3216,7 +3217,6 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun undoCategorise(id: String) {
         val held = reviewChoice?.takeIf { "categorise:${it.itemId}" == id } ?: return
         reviewChoice = null; reviewUndo = null
-        if (id.startsWith(ALIAS_UNDO)) { undoAlias(id.removePrefix(ALIAS_UNDO)); return }
         withStore { ok ->
             val s = reviewSession
             ok.store.atomically { EntryActions(ok).save(held.before, teach = false) }

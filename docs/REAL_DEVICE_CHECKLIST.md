@@ -164,10 +164,11 @@ Settings, Accessibility, VoiceOver. Swipe right through each screen.
 - [ ] Dynamic Type at the largest size: Home and the Shortcuts screen stay usable.
 - [ ] iPad: the two-pane layout above, now in both ways up (an iPad mini upright is 744 pt wide). The size comes from the same window API as the guide screen but has not been run on an iPad. iPhones, in both ways up, stay one pane.
 
-## What to send back
-For anything that fails: the screen, what you tapped, what you expected, and the version from More. The Send feedback button writes that down for you.
-## Same shop as… and amounts (Slice 108, nothing here has been run on a phone)
+## Same shop as… and amounts (Slice 108)
 - [ ] More, Capture, Category rules: under "What the app has learned" the block "Names counted as one shop" is there. "Count two names as one shop" with Swiggy Instamart and Swiggy: a bar "Swiggy Instamart now counts as Swiggy" with Undo; Remove on its row brings "Swiggy Instamart is its own shop again" with Undo.
 - [ ] To review, a card of a shop with a name that is another's: Change, then "Same shop as…", pick one of the other waiting names or type it. Search for one of the two names: the entries of both show. Reports, Merchant: one row for the two names, tapping it lists both names' entries and they add up to the figure.
 - [ ] A shop you really pay for different things (a marketplace, a wallet): after you have filed a few entries of about ₹199 as one category and of about ₹2,500 as another, a new text of about ₹199 says "You chose … for … amounts like ₹199 (N times)" under the category and starts as a check; it is only added in bulk when 3 or more agree and none is different. Tell us when it is wrong.
+- [ ] Back up and restore on a second phone: the joins ("Names counted as one shop") come back with the backup.
 
+## What to send back
+For anything that fails: the screen, what you tapped, what you expected, and the version from More. The Send feedback button writes that down for you.

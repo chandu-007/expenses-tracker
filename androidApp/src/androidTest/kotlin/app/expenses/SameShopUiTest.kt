@@ -67,7 +67,7 @@ class SameShopUiTest {
     private fun scrollInbox(tag: String) { compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
     private fun waitUndo() = compose.waitUntil(15_000) { compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
     private fun undo() { waitUndo(); repeat(3) { if (compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty()) runCatching { compose.onNodeWithText("Undo").performClick() }; compose.waitForIdle() } }
-    private fun aliases() = runBlocking { container.write { it.captureRules.aliases().all.map { a -> a.from to a.to } } }
+    private fun aliases(): List<Pair<String, String>> = runBlocking { container.write { it.captureRules.aliases().all.map { a -> a.from to a.to } } } ?: emptyList()
 
     private fun spend(id: String, daysAgo: Long, rupees: Long, category: String, merchant: String) = runBlocking {
         container.write { ok ->

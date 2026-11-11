@@ -188,9 +188,9 @@ fun InboxScreen(
                     swipeable = r.id in easyIds,
                     payeeGroup = if (same.size >= 2) same.filter { it.id in easyIds } else emptyList(), onAddPayee = ::addTogether,
                     onConvert = onConvert, onChooseAccount = onChooseAccount, onCreateAccount = onCreateAccount, onBillPaid = onBillPaid, onJoin = onJoin, askHere = r.id in askLeaders, progress = progress,
+                    onSameShop = onSameShop, sameShopNames = waitingNames,
                 )
             }
-                    onSameShop = onSameShop, sameShopNames = waitingNames,
         }
     }
 }
@@ -226,10 +226,10 @@ private fun InboxCard(
     askHere: Boolean = true,
     /** Where this card is in the list, "3 of 12". */
     progress: String = "",
-) {
-    var moreOptions by rememberSaveable(r.id) { mutableStateOf(false) }
     /** "Same shop as..." under Change (see [InboxScreen.onSameShop]) and the other waiting payees it offers as chips. */
     onSameShop: ((from: String, to: String, done: (String?) -> Unit) -> Unit)? = null, sameShopNames: List<String> = emptyList(),
+) {
+    var moreOptions by rememberSaveable(r.id) { mutableStateOf(false) }
     // null: the card is as the app proposed it; "TRANSFER" or "PLAIN": what the person chose with the type chips (or "Add as expense instead")
     var mode by rememberSaveable(r.id) { mutableStateOf<String?>(null) }
     // "Not this" on a bill payment card, and "It is a different payment" on a card that is the other leg of a transfer: the card is an ordinary one
@@ -407,10 +407,10 @@ private fun InboxCard(
                         TextButton(onClick = { changing = !changing }, modifier = Modifier.testTag("inbox_change_${r.id}")) { Text(if (changing) "Done" else "Change") }
                     }
                     if (picked == null && r.certainty == "check" && category.isNotEmpty()) Text("This is a guess: please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_check_${r.id}"))
-                    if (alternativesInline) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
                     // a suggestion that rests on the amount says why, with its counts ("You chose Subscriptions for Amazon amounts like ₹199 (4 times)")
                     if (picked == null && category == r.categoryId && r.categoryReason.isNotEmpty()) Text(r.categoryReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_why_${r.id}"))
+                    if (alternativesInline) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        r.alternatives.forEach { id -> categories.firstOrNull { it.id == id }?.let { c -> AssistChip(onClick = { picked = c.id }, label = { Text("Or ${c.name}") }, modifier = Modifier.testTag("inbox_alt_${r.id}_${c.id}")) } }
                     }
                     // money in with nothing to go on: the first income categories as chips right on the card (a person's category is optional, so this stays one line and Add still works without a choice)
                     if (credit && picked == null && category.isEmpty() && !changing && !paired) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -418,13 +418,13 @@ private fun InboxCard(
                     }
                     if (changing) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { pickedAccount = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("inbox_account_${r.id}_${a.id}")) } }
-                        run {
-                            val offered = offeredCategories(categories, income = credit, keep = category)
                         if (onSameShop != null && r.payeeName.isNotEmpty()) {
                             var joining by remember(r.id) { mutableStateOf(false) }
                             TextButton(onClick = { joining = true }, modifier = Modifier.testTag("inbox_same_shop_${r.id}")) { Text("Same shop as…") }
                             if (joining) SameShopDialog(r.payeeName, sameShopNames.filter { n -> !n.equals(r.payeeName, ignoreCase = true) }.take(SAME_SHOP_CARD_SUGGESTIONS), onSameShop, onClose = { joining = false })
                         }
+                        run {
+                            val offered = offeredCategories(categories, income = credit, keep = category)
                             // the first few as chips (and the chosen one, wherever it is); every other one is behind "More", in a list with search, as on the Add screen
                             val chips = (offered.take(CATEGORY_CHIPS) + offered.filter { it.id == category }).distinctBy { it.id }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -770,8 +770,6 @@ private fun CaptureSource(
 /** The person's own rules: "when the payee or text mentions X, use this category", tried top to bottom, tested against past entries before saving. */
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-    /** The names the person counts as one shop, shown under what the app has learned (see [AliasControls]); null where there is none. */
-    shops: AliasControls? = null,
 fun CaptureRulesScreen(
     rules: List<app.expenses.CaptureRuleUi>, categories: List<CategoryUi>,
     onAdd: (pattern: String, categoryId: String, done: (String?) -> Unit) -> Unit, onRemove: (String) -> Unit, onMove: (String, Boolean) -> Unit,
@@ -779,6 +777,8 @@ fun CaptureRulesScreen(
     /** What the app learned from the person's own choices (see [learnedSection]); empty by default so a caller without it shows the screen as it was. */
     learned: List<app.expenses.LearnedUi>? = null, onForgetLearned: (String) -> Unit = {}, onChangeLearned: (String, String, (String?) -> Unit) -> Unit = { _, _, _ -> }, onFileLearned: (String) -> Unit = {},
     learnedUndo: app.expenses.ScreenUndo? = null, onUndoLearned: (String) -> Unit = {}, onUndoLearnedGone: (String) -> Unit = {},
+    /** The names the person counts as one shop, shown under what the app has learned (see [AliasControls]); null where there is none. */
+    shops: AliasControls? = null,
 ) {
     val undoHost = rememberUndoSnackbar(learnedUndo, onUndoLearned, onUndoLearnedGone)
     var pattern by rememberSaveable { mutableStateOf("") }
@@ -833,9 +833,6 @@ fun CaptureRulesScreen(
             if (learned != null) learnedSection(learned, categories, learnedOpen ?: (learned.size <= LEARNED_OPEN_MAX), { learnedOpen = !(learnedOpen ?: (learned.size <= LEARNED_OPEN_MAX)) }, onForgetLearned, onChangeLearned, onFileLearned, shops)
         }
     }
-
-/** How many other waiting payees "Same shop as..." on a card offers as chips; the rest are typed. */
-private const val SAME_SHOP_CARD_SUGGESTIONS = 6
 }
 
 /** How many categories show as chips on a captured item and in the rule form; the rest are behind "More". */
@@ -843,3 +840,6 @@ private const val CATEGORY_CHIPS = 10
 
 /** How many income categories show right on a money-in card that has no suggestion; Change shows the rest. */
 private const val CREDIT_QUICK_CHIPS = 4
+
+/** How many other waiting payees "Same shop as..." on a card offers as chips; the rest are typed. */
+private const val SAME_SHOP_CARD_SUGGESTIONS = 6
