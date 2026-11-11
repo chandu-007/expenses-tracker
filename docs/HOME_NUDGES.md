@@ -12,9 +12,10 @@ Code: `HomeNudge`, `HomeNudges` and `NudgeSnooze` in `core/domain/.../HomeNudges
 | 3 | New bills (`BILLS_NEW`) | bills were found in messages and nothing is due this week | same |
 | 4 | Money to get back (`WAITING`) | expenses are marked as expected back | same |
 | 5 | No category (`CATEGORISE`) | 3 or more expenses have none (capped at 500) | "Not now": its own 7 days (unchanged) |
-| 6 | Getting started (`FIRST_WEEK`) | the first-week checklist has steps left | "Hide": for good (unchanged) |
+| 6 | Set up reading bank texts (`SETUP`) | the guided capture setup was offered (at the end of the first tour) or begun and left, the phone has a way to capture, and nothing is capturing yet (no capture switch on; on iPhone, no message has reached the app) | "Not now": 24 hours (the usual put-off); "Hide": for good (the setup stays in More, Capture) |
+| 7 | Getting started (`FIRST_WEEK`) | the first-week checklist has steps left | "Hide": for good (unchanged) |
 
-Why this order: money and dates first (a due bill costs a fee or a lapsed policy), then what only the person can place in the books, then tidying, and the checklist last because it is for someone with nothing else to do yet. A card that is put off lets the next one through; one that is put off comes back after the day, or at once when more arrives (a new text, another bill due), so a put-off is never a way to miss something new.
+Why this order: money and dates first (a due bill costs a fee or a lapsed policy), then what only the person can place in the books, then tidying, then the capture setup (one step that makes later ticks of the checklist happen by themselves: a person with something real waiting sees that first, and on a new install nothing is above it), and the checklist last because it is for someone with nothing else to do yet. A card that is put off lets the next one through; one that is put off comes back after the day, or at once when more arrives (a new text, another bill due), so a put-off is never a way to miss something new.
 
 ## What is not a Home nudge, and why
 - **The budget block and its safe-to-spend line**: part of the Budget section the person arranges in Customise home; it is a figure, not a request.
@@ -26,4 +27,4 @@ Why this order: money and dates first (a due bill costs a fee or a lapsed policy
 The cards at the top of More (at most two are drawn) follow the same order and are never put off: Bills (due this week, else new), To review, Money to get back, No category. A card put off on Home is therefore always one tap away there; each also has its row below.
 
 ## Tags
-`inbox_banner`, `bills_banner`, `waiting_banner`, `categorise_nudge` (+ `categorise_nudge_review`, `categorise_nudge_later`), `first_week_card` are unchanged. New: `nudge_notnow_inbox`, `nudge_notnow_bills`, `nudge_notnow_waiting` (the close buttons), `home_more_nudges` (the "Also waiting" line), `open_categorise` (More row and card).
+`inbox_banner`, `bills_banner`, `waiting_banner`, `categorise_nudge` (+ `categorise_nudge_review`, `categorise_nudge_later`), `first_week_card` are unchanged. New (guided setup, Slice 107): `setup_nudge` (+ `setup_nudge_title`, `setup_nudge_line`, `setup_nudge_open`, `nudge_notnow_setup`, `setup_nudge_hide`). The open Getting started card also has two quiet links, `first_week_checkup` (while its capture step is not done) and `first_week_earlier`. New: `nudge_notnow_inbox`, `nudge_notnow_bills`, `nudge_notnow_waiting` (the close buttons), `home_more_nudges` (the "Also waiting" line), `open_categorise` (More row and card).

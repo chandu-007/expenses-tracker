@@ -9,14 +9,15 @@ package app.expenses.core.domain
  * 3. [BILLS_NEW]: bills found in messages, not yet added to be tracked (nothing due soon).
  * 4. [WAITING]: money expected back for expenses (a loan, a shared bill).
  * 5. [CATEGORISE]: expenses with no category. Tidying; nothing is lost by waiting.
- * 6. [FIRST_WEEK]: the "Getting started" checklist. Last: it is for someone with nothing else to do yet, and a person with real things waiting should see those.
+ * 6. [SETUP]: "Set up reading bank texts" (the guided first-run setup, [CaptureSetup]), offered after the first tour and kept until it is finished, hidden or capture is running. A new install has nothing above it; it comes before the checklist because it is the one step that makes the checklist's other ticks happen by themselves.
+ * 7. [FIRST_WEEK]: the "Getting started" checklist. Last: it is for someone with nothing else to do yet, and a person with real things waiting should see those.
  *
  * Not in this list, on purpose: the budget block and its safe-to-spend line (part of the Budget section the person arranges, not a card that asks for something), Due today
  * (the Bills section: posting a repeating item is the section's own job), the Welcome card (what the empty Home is made of) and the backup reminder and the iPhone signing
  * notice (More page only, see [moreNotice]).
  *
  * Each can be put off. [INBOX], [BILLS_DUE], [BILLS_NEW] and [WAITING] by "Not now": gone for [SNOOZE_HOURS] hours, or until more is waiting than when it was put off ([NudgeSnooze]);
- * [CATEGORISE] has its own week ([UncategorisedNudge.SNOOZE_DAYS]); [FIRST_WEEK] by Hide, for good.
+ * [CATEGORISE] has its own week ([UncategorisedNudge.SNOOZE_DAYS]); [SETUP] by "Not now" (a day, like the others) or Hide (for good); [FIRST_WEEK] by Hide, for good.
  */
 enum class HomeNudge(val key: String, val label: String) {
     BILLS_DUE("bills_due", "Bills due"),
@@ -24,6 +25,7 @@ enum class HomeNudge(val key: String, val label: String) {
     BILLS_NEW("bills_new", "New bills"),
     WAITING("waiting", "Money to get back"),
     CATEGORISE("categorise", "Expenses with no category"),
+    SETUP("setup", "Set up reading bank texts"),
     FIRST_WEEK("first_week", "Getting started"),
 }
 

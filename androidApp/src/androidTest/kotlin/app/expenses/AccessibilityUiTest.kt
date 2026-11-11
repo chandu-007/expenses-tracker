@@ -311,6 +311,36 @@ class AccessibilityUiTest {
         check("Transfer candidates with a destination menu open", "transfer_candidates_to_self_Cash")
     }
 
+    /** The capture checkup in its busiest state (a fix for every kind of row, a tick, a result), the guided setup's four steps and "Bring in earlier spending": icons beside words, 48 dp buttons, contrast. */
+    @Test
+    fun captureCheckupSetupAndEarlierSpending() {
+        CheckupTestHook.smsPermission = false
+        CheckupTestHook.phone = PhoneStatus(postNotifications = false, battery = app.expenses.core.domain.BatteryState.RESTRICTED, maker = app.expenses.core.domain.PhoneMaker.SAMSUNG)
+        try {
+            runBlocking { container.write { it.templates.putSetting("capture_notif_on", "1"); it.store.saveAccount(Account(AccountId("hdfc"), "HDFC Savings", AccountType.BANK, inr)) } }
+            launch(); compose.openMore(); tap("more_capture_checkup"); waitFor("capture_checkup_headline")
+            check("Capture checkup", "capture_checkup_headline")
+            compose.onNodeWithTag("capture_checkup_message", useUnmergedTree = true).performScrollTo().performTextInput("Rs.1,250.00 debited from A/c XX1234 on 05-10-26 to VPA shop@okhdfc (UPI Ref 628374659283).")
+            compose.onNodeWithTag("capture_checkup_sender", useUnmergedTree = true).performScrollTo().performTextInput("AX-HDFCBK-S")
+            tap("capture_checkup_check"); waitFor("capture_checkup_result")
+            check("Capture checkup with a result", "capture_checkup_result")
+            tap("capture_checkup_back"); waitFor("more_page")
+            tap("more_capture_setup"); waitFor("setup_screen")
+            check("Setup step 1", "setup_screen")
+            tap("setup_skip_step"); waitFor("setup_step_banks"); tap("setup_bank_HDFC Bank"); tap("setup_bank_not_listed"); waitFor("setup_not_listed_box")
+            check("Setup step 2", "setup_screen")
+            tap("setup_next"); waitFor("setup_step_accounts")
+            check("Setup step 3", "setup_screen")
+            tap("setup_next"); waitFor("setup_step_done")
+            check("Setup step 4", "setup_screen")
+            tap("setup_done"); waitFor("more_page")
+            tap("open_earlier_spending"); waitFor("earlier_spending_title")
+            check("Bring in earlier spending", "earlier_spending")
+        } finally {
+            CheckupTestHook.smsPermission = null; CheckupTestHook.phone = null
+        }
+    }
+
     @Test
     fun more() {
         seedHome(); launch(); compose.openMore()

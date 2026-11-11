@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import app.expenses.ui.BackHandler
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
@@ -66,6 +67,11 @@ import app.expenses.ui.SecurityScreen
 import app.expenses.ui.ReportsScreen
 import app.expenses.ui.SearchScreen
 import app.expenses.ui.RecurringScreen
+
+/** Text another app shared to this one (Android's Share, "Expenses") for "Check a message": [n] counts shares, so the same words shared twice are two. Kept in memory only. */
+data class SharedText(val n: Int, val text: String)
+
+private val NoSharedTexts: StateFlow<SharedText?> = kotlinx.coroutines.flow.MutableStateFlow(null)
 
 /** A request to pay a credit card: open the add form as a transfer to [accountId]. [n] counts requests, so the same card asked twice is two requests. */
 data class PayCardRequest(val n: Int, val accountId: String)
@@ -118,6 +124,21 @@ interface RootHost {
     /** The privacy screen: what the app is allowed to do and whether it may use the internet. */
     fun privacyRows(): List<PermissionRow>
     val canUseInternet: Boolean
+
+    /** What the capture checkup reads from the phone itself: reminders permission, battery setting, whether the notification listener is bound, the maker. Cheap; read again each time the app comes back. */
+    fun phoneStatus(): PhoneStatus = PhoneStatus()
+
+    /** Opens the system page of this app's own settings (where a permission that Android no longer asks for is changed). */
+    fun openAppSettings() {}
+
+    /** Opens the system's battery page for this app (App info, Battery). */
+    fun openBatterySettings() {}
+
+    /** Asks Android to bind the notification listener again (it drops the link now and then). */
+    fun reconnectNotificationListener() {}
+
+    /** Text shared to the app from another app, to be shown in "Check a message" (checked and forgotten: never saved). A host with no share target keeps the default. */
+    val sharedTexts: StateFlow<SharedText?> get() = NoSharedTexts
 }
 
 interface SmsPermission {
@@ -181,6 +202,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var captureOpen by rememberSaveable { mutableStateOf(false) }
             var rulesOpen by rememberSaveable { mutableStateOf(false) }
             var healthOpen by rememberSaveable { mutableStateOf(false) }
+            // "Why isn't capture working?", the guided setup (with the step it is on) and "Bring in earlier spending"
+            var checkupOpen by rememberSaveable { mutableStateOf(false) }
+            var setupOpen by rememberSaveable { mutableStateOf(false) }
+            var setupStep by rememberSaveable { mutableStateOf(app.expenses.core.domain.SetupStep.PERMISSION.name) }
+            var earlierOpen by rememberSaveable { mutableStateOf(false) }
+            // the statement picked from "Bring in earlier spending" closes Your data again when the import is over
+            var importFromEarlier by rememberSaveable { mutableStateOf(false) }
             // the one-at-a-time review of expenses with no category, opened from the card on Home
             var categorising by rememberSaveable { mutableStateOf(false) }
             val categoriseState by viewModel.categorise.collectAsStateWithLifecycle(context = MAIN)
@@ -196,6 +224,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted); if (!granted) viewModel.say("Android did not allow it, so bank texts are not being read.") }
             val smsPermission = sms.granted
             val notifAccess = app.expenses.ui.rememberResumeState { host.notificationAccessGranted() }
+            // what the checkup and the setup say about the permission and the notification access: the phone's answer (a test may stand in for it with [CheckupTestHook]; the app never sets it)
+            val smsGranted = CheckupTestHook.smsPermission ?: smsPermission
+            val accessGranted = CheckupTestHook.notifAccess ?: notifAccess.value
             val currencyBlocker by viewModel.currencyBlocker.collectAsStateWithLifecycle(context = MAIN)
             LaunchedEffect(managingAccounts) { viewModel.setAccountsScreenOpen(managingAccounts) }
             var budgeting by rememberSaveable { mutableStateOf(false) }
@@ -273,10 +304,33 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val closeEverything = {
                     adding = false; searching = false; reporting = false; calendaring = false; subscribing = false; transferring = false; goaling = false; inboxOpen = false; captureOpen = false; rulesOpen = false; healthOpen = false
                     billsOpen = false; managingAccounts = false; managingCategories = false; budgeting = false; repeating = false; loansOpen = false; alerts = false
+                    checkupOpen = false; setupOpen = false; earlierOpen = false; importFromEarlier = false
                     privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false; categorising = false; viewModel.closeCategorise()
                     viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeTransferCandidates(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                 }
+                // the guided setup opens at the step the person left it on (the first step when it was never begun or is finished)
+                val openSetup = {
+                    viewModel.openSetup { st ->
+                        setupStep = (if (st.status == app.expenses.core.domain.SetupStatus.IN_PROGRESS || st.status == app.expenses.core.domain.SetupStatus.OFFERED) st.step else app.expenses.core.domain.SetupStep.PERMISSION).name
+                        setupOpen = true
+                    }
+                }
+                // text shared from another app opens "Check a message" with it, checked at once
+                val shared by host.sharedTexts.collectAsState()
+                var handledShared by rememberSaveable { mutableIntStateOf(0) }
+                var sharedWords by remember { mutableStateOf("") }
+                LaunchedEffect(shared) {
+                    val r = shared ?: return@LaunchedEffect
+                    if (r.n <= handledShared) return@LaunchedEffect
+                    handledShared = r.n; sharedWords = r.text
+                    closeEverything(); checkupOpen = true
+                    viewModel.checkup.check("", r.text)
+                }
+                // the end of the first tour offers the setup, once
+                val setupRequested by viewModel.setupRequests.collectAsStateWithLifecycle(context = MAIN)
+                var handledSetupRequests by rememberSaveable { mutableIntStateOf(0) }
+                LaunchedEffect(setupRequested) { if (setupRequested > handledSetupRequests) { handledSetupRequests = setupRequested; openSetup() } }
                 val tourStep = guide?.steps?.getOrNull(tourIndex.coerceAtLeast(0))
                 androidx.compose.runtime.LaunchedEffect(guide?.steps, tourIndex) {
                     val t = tourStep ?: return@LaunchedEffect
@@ -307,7 +361,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         g, index = tourIndex, onIndex = { tourIndex = it },
                         onShowAll = { tourIndex = 0; viewModel.showWholeGuide() },
                         onTryIt = { viewModel.finishGuide(false); tourIndex = 0 }, // ends the tour and stays on the screen being shown
-                        onFinish = { never -> viewModel.finishGuide(never); tourIndex = 0; closeEverything() },
+                        onFinish = { never -> viewModel.finishGuide(never, completed = tourIndex >= g.steps.lastIndex); tourIndex = 0; closeEverything() },
                     )
                 }
                 val similarOffer by viewModel.similar.collectAsStateWithLifecycle(context = MAIN)
@@ -359,6 +413,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val screens = listOf(
                     history != null, false, false, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                     customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
+                    checkupOpen, setupOpen, earlierOpen,
                 )
                 // The entry editor is the pane beside Home on a wide window, but only while Home is what is showing: opened from Search, the calendar or another screen it is a full screen over that
                 // screen on a wide window too (there is no Home beside it to put it next to), and Back returns to that screen.
@@ -422,7 +477,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 2 -> if (editorFull) editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
-                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
+                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onOpenCheckup = { inboxOpen = false; checkupOpen = true }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
@@ -457,6 +512,81 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onHeaders = viewModel::setExtraHeaders, onOpenRules = { rulesOpen = true; viewModel.loadCaptureRules() }, onOpenHealth = { healthOpen = true; viewModel.loadCaptureHealth(smsPermission) }, onBack = { captureOpen = false },
                             onTestMessage = { text, done -> viewModel.pasteMessage(text) { r -> done(r); viewModel.loadCaptureSettings() } },
                             skipped = skippedSenders, onTrustSkipped = viewModel::trustSkippedSender,
+                            onOpenCheckup = { captureOpen = false; checkupOpen = true }, onOpenSetup = { captureOpen = false; openSetup() },
+                        )
+                    }
+                    k == 28 -> {
+                        BackHandler { checkupOpen = false }
+                        // read again whenever the app comes back from Android's settings, so a permission given there shows at once
+                        val phone = app.expenses.ui.rememberResumeState { host.phoneStatus() }
+                        val phoneNow = CheckupTestHook.phone ?: phone.value
+                        val checkup by viewModel.checkup.checkup.collectAsStateWithLifecycle(context = MAIN)
+                        val checked by viewModel.checkup.result.collectAsStateWithLifecycle(context = MAIN)
+                        val reload = { viewModel.checkup.load(phoneNow, smsGranted, accessGranted) }
+                        // the listener binds a moment after access is given, and Android says nothing when it does: the phone's status is read again every two seconds while this page is open (a power-manager call; a changed value only reloads)
+                        LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2_000); phone.refresh() } }
+                        LaunchedEffect(phoneNow, smsGranted, accessGranted, captureSettings.smsOn, captureSettings.notifOn, captureSettings.emailOn, captureSettings.extraHeaders) { reload() }
+                        var disclosing by rememberSaveable { mutableStateOf(false) }
+                        if (disclosing) app.expenses.ui.SmsDisclosure(onAgree = { disclosing = false; sms.request() }, onDecline = { disclosing = false })
+                        val askReminders = app.expenses.ui.rememberNotificationPermissionRequest { phone.refresh(); reload() }
+                        val later = androidx.compose.runtime.rememberCoroutineScope()
+                        app.expenses.ui.CaptureCheckupScreen(
+                            checkup, checked, initialText = sharedWords,
+                            onAct = { act, arg -> when (act) {
+                                app.expenses.core.domain.CheckAct.ALLOW_TEXTS -> disclosing = true
+                                app.expenses.core.domain.CheckAct.TURN_ON_TEXTS -> viewModel.setSmsCapture(true)
+                                app.expenses.core.domain.CheckAct.OPEN_APP_SETTINGS -> host.openAppSettings()
+                                app.expenses.core.domain.CheckAct.OPEN_NOTIFICATION_ACCESS -> host.openNotificationAccessSettings()
+                                app.expenses.core.domain.CheckAct.RECONNECT_LISTENER -> { host.reconnectNotificationListener(); later.launch { kotlinx.coroutines.delay(1_500); phone.refresh(); reload() } }
+                                app.expenses.core.domain.CheckAct.ALLOW_REMINDERS -> askReminders()
+                                app.expenses.core.domain.CheckAct.OPEN_BATTERY -> host.openBatterySettings()
+                                app.expenses.core.domain.CheckAct.OPEN_SENDERS, app.expenses.core.domain.CheckAct.OPEN_CAPTURE -> { captureOpen = true; viewModel.loadCaptureSettings() }
+                                app.expenses.core.domain.CheckAct.OPEN_ACCOUNTS -> managingAccounts = true
+                                app.expenses.core.domain.CheckAct.TRUST_SENDER -> viewModel.trustSkippedSender(arg)
+                                app.expenses.core.domain.CheckAct.OPEN_SHORTCUTS -> platform.openExternalUrl("shortcuts://")
+                                app.expenses.core.domain.CheckAct.TURN_ON_PAYMENT_APPS -> { viewModel.setNotificationCapture(true); if (!accessGranted) host.openNotificationAccessSettings() }
+                                app.expenses.core.domain.CheckAct.OPEN_SETUP -> openSetup()
+                            } },
+                            onTick = viewModel.checkup::tick, onCheck = viewModel.checkup::check, onClearResult = viewModel.checkup::clearResult, onBack = { checkupOpen = false },
+                        )
+                    }
+                    k == 29 -> {
+                        val step = app.expenses.core.domain.SetupStep.entries.firstOrNull { it.name == setupStep } ?: app.expenses.core.domain.SetupStep.PERMISSION
+                        BackHandler { viewModel.setupLeave(step); setupOpen = false }
+                        val setupUi by viewModel.setup.collectAsStateWithLifecycle(context = MAIN)
+                        LaunchedEffect(Unit) { viewModel.loadCaptureSettings(); viewModel.loadSetup() }
+                        app.expenses.ui.GuidedSetupScreen(
+                            step, setupUi,
+                            app.expenses.ui.SetupFacts(viewModel.checkup.way(), smsGranted, captureSettings.smsOn, captureSettings.notifOn, accessGranted, captureSettings.lastReceivedFresh, captureSettings.extraHeaders),
+                            s.accountRows,
+                            app.expenses.ui.SetupActions(
+                                onStep = { to -> setupStep = to.name; viewModel.setupMoveTo(to) },
+                                onLeave = { st -> viewModel.setupLeave(st); setupOpen = false },
+                                onAllowTexts = { if (smsGranted) viewModel.setSmsCapture(true) else sms.request() },
+                                onTurnOnPaymentApps = { viewModel.setNotificationCapture(true); if (!accessGranted) host.openNotificationAccessSettings() },
+                                onOpenShortcuts = { platform.openExternalUrl("shortcuts://") },
+                                onOpenCaptureSteps = { captureOpen = true; viewModel.loadCaptureSettings() },
+                                onChooseBank = viewModel::setupChooseBank, onHeaders = viewModel::setExtraHeaders,
+                                onSaveDigits = { row, digits, done -> viewModel.saveAccount(row.id, row.name, row.type, row.openingText, row.network, row.tier, digits, done) },
+                                onOpenAccounts = { managingAccounts = true },
+                                onOpenCheckup = { setupOpen = false; checkupOpen = true },
+                                onDone = { setupOpen = false },
+                            ),
+                        )
+                    }
+                    k == 30 -> {
+                        BackHandler { earlierOpen = false }
+                        val pickers = app.expenses.ui.rememberFilePickers()
+                        app.expenses.ui.EarlierSpendingScreen(
+                            accounts = s.accounts, categories = s.categories,
+                            // the statement importer is the one in Your data: the picked file goes to it, and its page opens over this one until the import is closed
+                            onImportStatement = {
+                                val start = { uri: String -> viewModel.startImport(uri); importFromEarlier = true; yourData = true }
+                                val fixed = CheckupTestHook.statement
+                                if (fixed != null) start(fixed) else pickers.openDocument(listOf("*/*")) { uri -> if (uri != null) start(uri) }
+                            },
+                            onOpenAccounts = { managingAccounts = true },
+                            onAdd = viewModel::addEarlierSpending, onBack = { earlierOpen = false },
                         )
                     }
                     k == 8 -> {
@@ -576,6 +706,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val dataState by viewModel.data.collectAsStateWithLifecycle(context = MAIN)
                         val autoRunning by viewModel.autoExportRunning.collectAsStateWithLifecycle(context = MAIN)
                         val statement by viewModel.statement.collectAsStateWithLifecycle(context = MAIN)
+                        // an import started from "Bring in earlier spending" returns there when it is closed (it may not have become active yet when this page opens: it is waited for)
+                        var sawImport by remember { mutableStateOf(false) }
+                        LaunchedEffect(statement.active) { if (statement.active) sawImport = true else if (sawImport && importFromEarlier) { importFromEarlier = false; yourData = false } }
                         if (statement.active) {
                             BackHandler { viewModel.closeImport() }
                             ImportScreen(
@@ -732,6 +865,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenInbox = { inboxOpen = true; viewModel.loadInbox() },
                         onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },
                         onOpenPrivacy = { privacyOpen = true },
+                        onOpenSetup = { openSetup() }, onHideSetup = viewModel::hideSetupCard,
+                        onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )
                 } }
                 }

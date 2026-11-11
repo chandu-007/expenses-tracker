@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Autorenew
@@ -170,6 +173,11 @@ fun EntryListScreen(
     onOpenInbox: () -> Unit,
     onOpenCapture: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    /** The guided capture setup (Home's card and More), hiding that card for good, the capture checkup, and "Bring in earlier spending". */
+    onOpenSetup: () -> Unit = {},
+    onHideSetup: () -> Unit = {},
+    onOpenCheckup: () -> Unit = {},
+    onOpenEarlier: () -> Unit = {},
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
@@ -325,12 +333,15 @@ fun EntryListScreen(
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
                         MoreRow("open_goals", Icons.Outlined.Flag, "Savings goals", "Save up for a trip or a laptop", onClick = onOpenGoals),
                         MoreRow("open_subscriptions", Icons.Outlined.Autorenew, "Subscriptions", "Charges that keep coming, and what they cost a year", onClick = onOpenSubscriptions),
+                        MoreRow("open_earlier_spending", Icons.Outlined.History, "Bring in earlier spending", "Started after you had already spent? Import a statement, add old entries, set balances", onClick = onOpenEarlier),
                         MoreRow("open_transfer_candidates", Icons.Outlined.CompareArrows, "Transfer candidates", "Cash withdrawals and moves between your accounts that are counted as spending", onClick = onOpenTransferCandidates),
                         MoreRow("open_loans", Icons.Outlined.SwapHoriz, "Lent and borrowed", if (state.waiting.isEmpty) "Who owes whom" else "Who owes whom \u00B7 ${state.waiting.count} ${if (state.waiting.count == 1) "expense" else "expenses"} to get back", onClick = onOpenLoans),
                         MoreRow("open_categorise", Icons.Outlined.Label, "Fill in missing categories", if (state.categoriseNudge > 0) "${state.categoriseNudge} ${if (state.categoriseNudge == 1) "expense has" else "expenses have"} no category" else "Go through expenses that have no category, one at a time", onClick = onOpenCategorise),
                     )),
                     MoreSection("Capture", teal.top, teal.bottom, listOf(
                         MoreRow("open_capture", Icons.Outlined.Sms, if (reads) "Capture from texts" else "Capture from payment apps", if (reads) "Bank texts and payment alerts, added only when you approve" else "Google Pay, PhonePe, Paytm and BHIM alerts, and bank emails if you turn that on, added only when you approve", onClick = onOpenCapture),
+                        MoreRow("more_capture_checkup", Icons.Outlined.TaskAlt, "Why isn't capture working?", "Checks every step and says what to fix", onClick = onOpenCheckup),
+                        MoreRow("more_capture_setup", Icons.Outlined.Checklist, "Set up reading bank texts", "Four short steps: permission, banks, accounts", onClick = onOpenSetup),
                         MoreRow("open_notifications", Icons.Outlined.Notifications, "Notifications", "Bills, budgets and the weekly recap", onClick = onOpenNotifications),
                     )),
                     MoreSection("Make it yours", purple.top, purple.bottom, listOf(
@@ -384,7 +395,8 @@ fun EntryListScreen(
                         HomeNudge.INBOX -> InboxBanner(state, onOpenInbox, notNow(card))
                         HomeNudge.WAITING -> WaitingBanner(state.waiting, onOpenLoans, notNow(card))
                         HomeNudge.CATEGORISE -> CategoriseNudgeCard(state.categoriseNudge, onReview = onOpenCategorise, onNotNow = onSnoozeCategorise)
-                        HomeNudge.FIRST_WEEK -> FirstWeekCard(state.firstWeek, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
+                        HomeNudge.SETUP -> state.setupCard?.let { SetupNudgeCard(it, onOpen = onOpenSetup, onNotNow = notNow(card), onHide = onHideSetup) }
+                        HomeNudge.FIRST_WEEK -> FirstWeekCard(state.firstWeek, onCheckup = if (state.firstWeek.any { it.step == FirstWeekStep.CAPTURE && !it.done }) onOpenCheckup else null, onEarlier = onOpenEarlier, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
                         null -> {}
                     }
                     val alsoWaiting = HomeNudges.alsoWaiting(shownNudges)
@@ -656,5 +668,6 @@ internal fun homeNudgeCounts(state: UiState.Ready): Map<HomeNudge, Int> = buildM
     if (state.inboxPending > 0) put(HomeNudge.INBOX, state.inboxPending)
     if (!state.waiting.isEmpty) put(HomeNudge.WAITING, state.waiting.count)
     if (state.categoriseNudge > 0) put(HomeNudge.CATEGORISE, state.categoriseNudge)
+    if (state.setupCard != null) put(HomeNudge.SETUP, 1)
     if (state.firstWeek.isNotEmpty()) put(HomeNudge.FIRST_WEEK, state.firstWeek.size)
 }

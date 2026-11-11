@@ -73,7 +73,10 @@ class GuideUiTest {
         }
         gone("guide")
         assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN)); assertNull(setting(GuideSettings.OFF))
+        // a tour gone through to its end leads into the guided capture setup (which is skippable at once and leaves a card on Home)
+        waitFor("setup_screen"); tap("setup_close")
         waitFor("add"); assertTrue(everyScreenTag.minus("add").none { has(it) }, "finishing leaves the app on the home screen")
+        assertEquals("OFFERED:PERMISSION", setting("capture_setup"))
         launch(); waitFor("add"); assertTrue(!has("guide"), "finished: it does not come back")
     }
 

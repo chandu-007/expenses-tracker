@@ -12,9 +12,9 @@ class HomeNudgesTest {
     private fun visible(present: Map<HomeNudge, Int>, snoozes: Map<HomeNudge, NudgeSnooze> = emptyMap(), at: Long = now) = HomeNudges.visible(present, snoozes, at)
 
     @Test
-    fun theOrderIsBillsDueThenReviewThenNewBillsThenMoneyBackThenCategoriesThenGettingStarted() {
+    fun theOrderIsBillsDueThenReviewThenNewBillsThenMoneyBackThenCategoriesThenSetupThenGettingStarted() {
         assertEquals(
-            listOf("bills_due", "inbox", "bills_new", "waiting", "categorise", "first_week"),
+            listOf("bills_due", "inbox", "bills_new", "waiting", "categorise", "setup", "first_week"),
             HomeNudge.entries.map { it.key },
             "the enum order is the documented priority order (docs/HOME_NUDGES.md)",
         )

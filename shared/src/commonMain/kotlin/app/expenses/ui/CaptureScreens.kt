@@ -150,16 +150,18 @@ fun InboxScreen(
                         Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                         Text("Payments found in your bank texts wait here for you to add or skip. Nothing is added until you say so. You can also paste a message below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 8.dp).testTag("inbox_empty_setup")) { Text("Set up reading texts") }
+                        if (onOpenCheckup != null) OutlinedButton(onClick = onOpenCheckup, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp).testTag("inbox_empty_checkup")) { Text("Why isn't capture working?") }
                     }
                 }
                 item(key = "paste") { PasteBox(onPaste, paste!!) }
             }
         } else if (rows.isEmpty()) {
-            Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
+            Column(Modifier.padding(pad).padding(24.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
                 EmptyArt(EmptyKind.INBOX, Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("Nothing to review.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_empty"))
                 Text("Payments found in your bank texts wait here for you to add or skip. Nothing is added until you say so.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 8.dp).testTag("inbox_empty_setup")) { Text("Set up reading texts") }
+                        if (onOpenCheckup != null) OutlinedButton(onClick = onOpenCheckup, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp).testTag("inbox_empty_checkup")) { Text("Why isn't capture working?") }
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("inbox_list"), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             if (onPaste != null) item(key = "paste") { PasteBox(onPaste, paste!!, Modifier.animateItem()) }
@@ -653,28 +655,19 @@ fun CaptureSettingsScreen(
     onTestMessage: ((String, (app.expenses.PasteOutcome) -> Unit) -> Unit)? = null,
     /** Payment-looking texts skipped from senders not on the list, with a one-tap "Treat NAME as my bank" ([SkippedSendersSection]); empty when there are none. */
     skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {},
+    /** "Why isn't capture working?" (the checkup) and "Set up step by step" (the guided setup): a prominent button each; null where there is none. */
+    onOpenCheckup: (() -> Unit)? = null, onOpenSetup: (() -> Unit)? = null,
 ) {
-    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage, skipped, onTrustSkipped); return }
+    if (LocalPlatform.current.supportsShortcutsCapture) { ShortcutsCaptureScreen(settings, onHeaders, onOpenRules, onOpenHealth, onBack, onTestMessage, skipped, onTrustSkipped, onOpenCheckup, onOpenSetup); return }
     // the Google Play build has no SMS permission: only the payment-app notifications are offered there (every other build keeps the text switch)
     val readsTexts = LocalPlatform.current.supportsSmsCapture
     // Google Play's rule for the text permission: a prominent disclosure, answered with a tap, before Android's own permission question
     var disclosing by rememberSaveable { mutableStateOf(false) }
-    if (disclosing) AlertDialog(
-        onDismissRequest = { disclosing = false },
-        title = { Text("Allow Expenses to read your bank texts?", modifier = Modifier.testTag("sms_disclosure")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("This app uses the permission to receive text messages (RECEIVE_SMS) for one purpose: to find the payments, credits and bills in texts from your bank, card or biller, and put them in a list for you to approve, so you can track your money.")
-                Text("Each text is read on this phone, and the sender is checked first. Texts from people, one-time passwords and senders that are not a known bank or biller are ignored and thrown away: only a count is kept. Nothing is sent anywhere: the app has no internet access at all.")
-                Text("You can turn this off in this screen at any time. Android will ask you next; if you say no, the app works as before and you can add entries by hand.")
-            }
-        },
-        confirmButton = { TextButton(onClick = { disclosing = false; onToggle(true) }, modifier = Modifier.testTag("sms_disclosure_agree")) { Text("Agree and continue") } },
-        dismissButton = { TextButton(onClick = { disclosing = false }, modifier = Modifier.testTag("sms_disclosure_decline")) { Text("No thanks") } },
-    )
+    if (disclosing) SmsDisclosure(onAgree = { disclosing = false; onToggle(true) }, onDecline = { disclosing = false })
     Scaffold(topBar = { AreaTopBar(if (readsTexts) "Capture from texts" else "Capture from payment apps", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Capture finds payments in the alerts your phone gets and lists them in To review. Nothing is added until you approve it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_intro"))
+            CheckupButtons(onOpenCheckup, onOpenSetup)
             CaptureSection("Set up", "What this app may read. Each one is off until you turn it on.", "setup") {
                 if (readsTexts) {
                     CaptureSource("Read bank texts", "Finds payments, credits and bills in texts from your bank, card or biller. Read on this phone, never sent anywhere.", settings.smsOn && permissionGranted, { on -> if (on && !permissionGranted) disclosing = true else onToggle(on) }, "capture_sms_switch", "sms", notes = {

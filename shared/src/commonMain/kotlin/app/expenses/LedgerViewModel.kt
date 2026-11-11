@@ -699,6 +699,8 @@ sealed interface UiState {
         val billPeek: BillPeekUi = BillPeekUi(),
         /** The first-week checklist on Home (see [FirstWeek]); empty when it should not show. */
         val firstWeek: List<FirstWeekItem> = emptyList(),
+        /** The guided capture setup's Home card (see [CaptureSetup.nudgeCount]): where the person stands, or null when it should not show. */
+        val setupCard: app.expenses.core.domain.SetupState? = null,
         val spark: SparkUi = SparkUi(),
         /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
         val reduceMotion: Boolean = false,
@@ -781,7 +783,7 @@ private const val SIMILAR_DELAY_MS = 1_200L
 private const val SETTING_NUDGE_SNOOZED_AT = "backup_nudge_snoozed_at"
 private const val SETTING_CATEGORISE_SNOOZED_AT = "categorise_nudge_snoozed_at"
 /** The Home cards that "Not now" puts off for a day (see [HomeNudges]); the categorise card keeps its own week and the first-week card its Hide. */
-private val PUT_OFF_NUDGES = listOf(HomeNudge.BILLS_DUE, HomeNudge.INBOX, HomeNudge.BILLS_NEW, HomeNudge.WAITING)
+private val PUT_OFF_NUDGES = listOf(HomeNudge.BILLS_DUE, HomeNudge.INBOX, HomeNudge.BILLS_NEW, HomeNudge.WAITING, HomeNudge.SETUP)
 /** The first-week checklist: "pending" while the ledger has had no entry yet (a new install), then when the first one was noticed; "0" on a ledger that already had entries before the checklist existed. */
 private const val SETTING_FIRST_WEEK_STARTED = "first_week_started"
 private const val SETTING_FIRST_WEEK_DISMISSED = "first_week_dismissed"
@@ -1898,14 +1900,101 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** After an update the person asked for the whole guide, not just what is new. */
     fun showWholeGuide() { _guide.update { it?.copy(steps = app.expenses.core.domain.Guide.steps) } }
 
-    /** Finished, or skipped: either way it is not offered again for this version. [neverAgain] also stops it being offered after later updates. */
-    fun finishGuide(neverAgain: Boolean) {
+    /**
+     * Finished, or skipped: either way it is not offered again for this version. [neverAgain] also stops it being offered after later updates. At the end of the FIRST tour the guided capture setup is offered:
+     * as a card on Home always, and opened at once when the tour was gone through to its last page ([completed]); a tour that was skipped or left to try a screen only leaves the card.
+     */
+    fun finishGuide(neverAgain: Boolean, completed: Boolean = false) {
         val mode = _guide.value?.mode ?: return
         _guide.value = null
         if (mode == app.expenses.core.domain.GuideMode.MANUAL) return
         withStore { ok ->
             ok.templates.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString())
             if (neverAgain) ok.templates.putSetting(GuideSettings.OFF, "1")
+            // the end of the first tour is where the guided capture setup is offered, once
+            if (mode == app.expenses.core.domain.GuideMode.FIRST_RUN) offerSetup(ok, open = completed)
+        }
+    }
+
+    // ---- the capture checkup, the guided setup and earlier spending ----
+
+    /** "Why isn't capture working?" and "Check a message": see [CaptureCheckupModel]. */
+    val checkup = CaptureCheckupModel(container, platform, viewModelScope)
+
+    private val _setup = MutableStateFlow(SetupUi())
+
+    /** Where the guided setup stands and the banks chosen; loaded when the screen opens. */
+    val setup: StateFlow<SetupUi> get() = _setup
+
+    private val _setupRequests = MutableStateFlow(0)
+
+    /** Counts the moments the setup opens by itself: the end of the first tour. */
+    val setupRequests: StateFlow<Int> get() = _setupRequests
+
+    fun loadSetup() = withStore { ok ->
+        _setup.value = SetupUi(app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE)), CaptureSetupKeys.chosenBanks(ok.templates.setting(CaptureSetupKeys.BANKS)))
+    }
+
+    /** Reads where the setup stands and hands it over on the main thread, so the screen opens at the right step. */
+    fun openSetup(done: (app.expenses.core.domain.SetupState) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val st = container.write { ok -> app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE)) } ?: app.expenses.core.domain.SetupState()
+            withContext(Dispatchers.Main) { done(st) }
+        }
+    }
+
+    private fun saveSetup(ok: AppContainer.Opened.Ok, s: app.expenses.core.domain.SetupState) {
+        ok.templates.putSetting(CaptureSetupKeys.STATE, s.encode())
+        _setup.update { it.copy(state = s) }
+        refresh(ok) // the Home card follows the state
+    }
+
+    private fun offerSetup(ok: AppContainer.Opened.Ok, open: Boolean) {
+        if (!platform.hasCaptureWay() || ok.captureRunning(platform)) return
+        val before = app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE))
+        val after = app.expenses.core.domain.CaptureSetup.offered(before)
+        if (after != before) { saveSetup(ok, after); if (open) _setupRequests.update { it + 1 } }
+    }
+
+    /** The person moved to [step] of the setup (Next, Back, Skip this step): remembered, so the Home card can say "Continue". Reaching the last step finishes it. */
+    fun setupMoveTo(step: app.expenses.core.domain.SetupStep) = withStore { ok -> saveSetup(ok, app.expenses.core.domain.CaptureSetup.moved(step)) }
+
+    /** The person left the setup at [step] without finishing (Back from the first step, the close button): remembered there. */
+    fun setupLeave(step: app.expenses.core.domain.SetupStep) = withStore { ok ->
+        saveSetup(ok, app.expenses.core.domain.CaptureSetup.left(app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE)), step))
+    }
+
+    /** "Hide" on the Home card: the card never comes back; the setup stays in More, Capture. */
+    fun hideSetupCard() = withStore { ok ->
+        saveSetup(ok, app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE)).copy(status = app.expenses.core.domain.SetupStatus.HIDDEN))
+    }
+
+    /** A bank chip in step 2: chosen or not. Nothing is added to the trusted senders: every listed bank is read already. */
+    fun setupChooseBank(issuer: String, on: Boolean) = withStore { ok ->
+        val have = CaptureSetupKeys.chosenBanks(ok.templates.setting(CaptureSetupKeys.BANKS))
+        val now = if (on) have + issuer else have - issuer
+        ok.templates.putSetting(CaptureSetupKeys.BANKS, app.expenses.core.domain.CaptureSetup.encodeBanks(now))
+        _setup.update { it.copy(banks = CaptureSetupKeys.chosenBanks(ok.templates.setting(CaptureSetupKeys.BANKS))) }
+    }
+
+    /**
+     * "Add earlier spending": one expense on a past day, from the fast form of "Bring in earlier spending". Same save as the add form ([EntryActions.save]); [done] gets null when saved or the reason
+     * it was refused, on the main thread.
+     */
+    fun addEarlierSpending(amountText: String, categoryId: String, accountId: String, epochDay: Long, note: String, done: (String?) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            var problem: String? = null
+            try {
+                val ran = container.write { ok ->
+                    val noon = localDateOfEpochDay(epochDay).startOfDayMillis() + 12L * 3_600_000L
+                    EntryActions(ok).save(EntryDraft(null, DraftKind.EXPENSE, amountText, categoryId, emptyList(), accountId, "", note.trim(), noon))
+                    refresh(ok)
+                }
+                if (ran == null) problem = "Expenses could not open its data."
+            } catch (e: IllegalArgumentException) {
+                problem = plainMessage(e)
+            }
+            withContext(Dispatchers.Main) { done(problem) }
         }
     }
 
@@ -4409,6 +4498,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             inboxPeek = inboxPeek(ok),
             billPeek = billPeek(ok),
             firstWeek = firstWeekUi(ok, accounts),
+            setupCard = setupCardUi(ok),
             spark = sparkCache,
             reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
             motionSpeed = if (ok.templates.setting(SETTING_REDUCE_MOTION) == "1") "off" else ok.templates.setting(SETTING_MOTION_SPEED) ?: "relaxed",
@@ -4512,6 +4602,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             backupDone = t.setting(DataTransfer.SETTING_BACKUP_AT)?.toLongOrNull() != null || folderChosen,
             hasEntry = hasEntry,
         ))
+    }
+
+    /** The guided setup's Home card: the setting is read first (one value), and only a setup that was offered or begun looks any further. Null: nothing to show. */
+    private fun setupCardUi(ok: AppContainer.Opened.Ok): app.expenses.core.domain.SetupState? {
+        val state = app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE))
+        if (state.status != app.expenses.core.domain.SetupStatus.OFFERED && state.status != app.expenses.core.domain.SetupStatus.IN_PROGRESS) return null
+        return state.takeIf { app.expenses.core.domain.CaptureSetup.nudgeCount(it, platform.hasCaptureWay(), ok.captureRunning(platform)) > 0 }
     }
 
     /** The close button on the first-week card: it is not shown again. */

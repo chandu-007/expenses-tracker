@@ -75,11 +75,12 @@ private fun SetupStep(number: Int, title: String, tag: String, content: @Composa
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null, skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {}) {
+internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null, skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {}, onOpenCheckup: (() -> Unit)? = null, onOpenSetup: (() -> Unit)? = null) {
     val platform = LocalPlatform.current
     Scaffold(topBar = { AreaTopBar("Capture from texts", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Bank texts on iPhone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("shortcuts_title"))
+            CheckupButtons(onOpenCheckup, onOpenSetup)
             Text("iPhone does not let any app read your text messages. What it does allow is an automation in the Shortcuts app that runs when a message arrives and hands that message to this app. Set it up once and bank texts land in To review by themselves, with nothing added to your ledger until you say so.", style = MaterialTheme.typography.bodyMedium)
             // is it working? the time of the newest text that reached capture (from the capture log, which keeps counts and times only, never the words)
             val received = settings.lastReceivedText?.let { "Last text received $it" } ?: "Nothing received yet"

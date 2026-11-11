@@ -13,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import app.expenses.core.domain.BatteryState
+import app.expenses.core.domain.PhoneMaker
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.glance.appwidget.updateAll
@@ -55,6 +57,15 @@ class MainActivity : FragmentActivity() {
     private val billsRequests = MutableStateFlow(0)
     private val payCardRequests = MutableStateFlow<PayCardRequest?>(null)
     private val shortcutRequests = MutableStateFlow<ShortcutRequest?>(null)
+    private val sharedTexts = MutableStateFlow<SharedText?>(null)
+
+    /** Words another app shared (Share, Expenses): handed to "Check a message" and dropped from the intent, so they live in memory only. */
+    private fun takeShared(from: Intent) {
+        if (from.action != Intent.ACTION_SEND || from.type != "text/plain") return
+        val words = from.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.takeIf { it.isNotBlank() } ?: return
+        from.removeExtra(Intent.EXTRA_TEXT)
+        sharedTexts.value = SharedText((sharedTexts.value?.n ?: 0) + 1, words.take(4000))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("onCreate: begin")
@@ -63,7 +74,8 @@ class MainActivity : FragmentActivity() {
         if (savedInstanceState == null && intent.action == ACTION_ADD_EXPENSE) addRequests.value = 1
         if (savedInstanceState == null && intent.action == ACTION_OPEN_BILLS) billsRequests.value = 1
         if (savedInstanceState == null && intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest(1, it) }
-        if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS)) viewModel.deferGuide()
+        if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS || intent.action == Intent.ACTION_SEND)) viewModel.deferGuide()
+        if (savedInstanceState == null) takeShared(intent)
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
 
@@ -129,6 +141,7 @@ class MainActivity : FragmentActivity() {
         override val billsRequests get() = this@MainActivity.billsRequests
         override val payCardRequests get() = this@MainActivity.payCardRequests
         override val shortcutRequests get() = this@MainActivity.shortcutRequests
+        override val sharedTexts get() = this@MainActivity.sharedTexts
         // read on each use: tests replace ExpensesApp.lock
         private var port: ActivityLockPort? = null
         override val lock: AppLockPort get() = port?.takeIf { it.lock === app.lock } ?: ActivityLockPort(app.lock, this@MainActivity).also { port = it }
@@ -182,6 +195,26 @@ class MainActivity : FragmentActivity() {
         override fun openNotificationAccessSettings() = startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         override fun privacyRows(): List<PermissionRow> = PermissionNotes.rows(this@MainActivity)
         override val canUseInternet get() = PermissionNotes.canUseInternet(this@MainActivity)
+
+        /** The checkup's cheap reads: three calls to system services and one permission check, nothing from the database. */
+        override fun phoneStatus(): PhoneStatus {
+            val power = getSystemService(android.os.PowerManager::class.java)
+            val battery = when {
+                power == null -> BatteryState.UNKNOWN
+                power.isIgnoringBatteryOptimizations(packageName) -> BatteryState.UNRESTRICTED
+                android.os.Build.VERSION.SDK_INT >= 28 && getSystemService(android.app.ActivityManager::class.java)?.isBackgroundRestricted == true -> BatteryState.RESTRICTED
+                else -> BatteryState.OPTIMISED
+            }
+            val reminders = if (android.os.Build.VERSION.SDK_INT >= 33) ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED else null
+            return PhoneStatus(reminders, battery, NotificationCaptureService.connected, PhoneMaker.of(android.os.Build.MANUFACTURER))
+        }
+
+        override fun openAppSettings() { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", packageName, null))) }
+
+        /** App info, where Battery is one tap away; no phone gives an app a deeper link, and asking to be exempt from battery optimisation needs a permission this app does not have. */
+        override fun openBatterySettings() = openAppSettings()
+
+        override fun reconnectNotificationListener() = android.service.notification.NotificationListenerService.requestRebind(android.content.ComponentName(this@MainActivity, NotificationCaptureService::class.java))
     }
 
     /** Ctrl+N adds an expense and Ctrl+F searches, from a hardware keyboard (a tablet or foldable with one, DeX). Tried after the view has had the key, so a text field keeps its own Ctrl keys. */
@@ -206,7 +239,8 @@ class MainActivity : FragmentActivity() {
         if (intent.action == ACTION_ADD_EXPENSE) addRequests.value += 1
         if (intent.action == ACTION_OPEN_BILLS) billsRequests.value += 1
         if (intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest((payCardRequests.value?.n ?: 0) + 1, it) }
-        if (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS) viewModel.deferGuide()
+        if (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS || intent.action == Intent.ACTION_SEND) viewModel.deferGuide()
+        takeShared(intent)
     }
 
     companion object {

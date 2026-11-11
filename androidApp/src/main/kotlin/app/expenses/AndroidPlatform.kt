@@ -152,6 +152,11 @@ class AndroidPlatform(context: Context) : Platform {
         (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Expenses", text)); true
     } catch (_: RuntimeException) { false }
 
+    /** The text on the clipboard, read only when the person taps Paste (the checkup's "Check a message"); null when there is none. */
+    override fun readClipboardText(): String? = try {
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.takeIf { it.isNotBlank() }
+    } catch (_: RuntimeException) { null }
+
     override val appVersionText: String get() = BuildConfig.VERSION_NAME
     override val osVersionText: String get() = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     override val deviceModelText: String get() = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL else "${Build.MANUFACTURER} ${Build.MODEL}"

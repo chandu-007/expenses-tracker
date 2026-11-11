@@ -136,6 +136,21 @@ Use your own real credit texts (salary, interest, a refund, money from a friend)
 - [ ] More, Privacy: the Allowed / Not allowed words follow the same changes on return.
 - [ ] iPhone: More, Notifications: with notifications off in Settings, the notice shows; go to Settings, Expenses, Notifications, turn them on, come back: the notice is gone (not verified on a phone).
 
+### Why isn't capture working?, the guided setup and earlier spending (Slice 107; use your own bank, account and texts)
+- [ ] More, Capture: the top button "Why isn't capture working?" opens one page. Its first line says "Everything looks fine" or "N things need attention", and every row says OK, Fix this or Note in words (not only a colour or an icon).
+- [ ] With the text permission NOT given (Settings, Apps, Expenses, Permissions, Text messages: Don't allow): the row "Reading bank texts is not allowed" has "Allow reading texts" (the same disclosure and Android's question) and "Open app settings". Allow it in Settings, press Back: the row turns OK **without leaving the page**.
+- [ ] Turn on "Read payment app notifications" in Capture and leave Notification access off: the row says so and "Give notification access" opens Android's list. Turn it on and come back: after a couple of seconds the row is OK. Switch access off and on again, or wait for Android to drop the link: "Reconnect" brings it back.
+- [ ] Android 13 and later: with reminders not allowed, "Allow reminders" asks Android; after allowing, the row is OK.
+- [ ] Battery row: change Settings, Apps, Expenses, Battery between Optimised, Unrestricted and Restricted: the row follows when you come back (Restricted is "Fix this"). **Samsung only**: the line "Samsung: Deep sleeping apps" shows the path Settings, Battery, Background usage limits, Deep sleeping apps; the app cannot see that list, so tick it yourself; the tick stays after closing the app.
+- [ ] With an account named after your bank (for example "HDFC Savings") and a real text from that bank received since you turned capture on: "HDFC Bank: texts from HDFCBK or HDFCBN recognised". For a bank you have not had a text from yet: the note "No text from ... seen yet". If the bank texts you from another name: More, Capture, "Senders we skipped" should list it, and the checkup row "N sender names were skipped" offers "Treat NAME as my bank".
+- [ ] An account of your bank with no last digits shows "needs its last digits"; add the 3 or 4 digits it prints in its texts, come back: OK.
+- [ ] "Check a message": paste a real bank text (with its sender name if you know it, like AX-HDFCBK-S) and press Check. It says what the app would do, the bank, money out or in, the amount, the payee, which of your accounts it matches and the category it would suggest; only the last two digits of the account are shown. Nothing appears in To review or Bills, and the capture counts on this page do not change. Leave the page and come back: the text and the answer are gone. Try a text from a name that is on no list: it says it would be skipped and offers "Treat NAME as my bank".
+- [ ] Select a text in your messages app, Share, Expenses (Android): the page opens with it already checked.
+- [ ] More, Set up reading bank texts (or Home's card after the first tour): four steps, each skippable; Close at any step and Home says "Continue" at that step; "Not now" hides the card for a day and "Hide" for good; the setup stays in More.
+- [ ] More, Bring in earlier spending: the three ways in order; "Choose a statement" opens the file picker and then the importer you know; the fast form starts on the last day of last month, keeps the date and category, and each added expense shows in the list on that day; "Open Accounts" opens your accounts.
+- [ ] Largest text size (Settings, Display, Font size) and, on a tablet or an unfolded foldable, the same three pages: nothing is cut off, every button can be reached by scrolling.
+- [ ] iPhone: the same page shows "No message has reached the app yet" until an automation delivers one, then the checklist of three Shortcuts lines you tick, and "Check a message" with Paste. (Not verified on a phone.)
+
 ## iPhone
 
 ### Install

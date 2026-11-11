@@ -40,7 +40,13 @@ import app.expenses.core.domain.FirstWeekStep
  * each a tap away from the screen where it is done. Nothing is drawn when [items] is empty. "Hide" closes it for good; the title folds it to one line for now.
  */
 @Composable
-fun FirstWeekCard(items: List<FirstWeekItem>, onOpen: (FirstWeekStep) -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun FirstWeekCard(
+    items: List<FirstWeekItem>, onOpen: (FirstWeekStep) -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier,
+    /** "Why isn't capture working?": offered while the capture step is not done; null draws nothing. */
+    onCheckup: (() -> Unit)? = null,
+    /** "Bring in earlier spending": for a person who started the app after already spending; null draws nothing. */
+    onEarlier: (() -> Unit)? = null,
+) {
     if (items.isEmpty()) return
     // Folded to one line until opened: the card must not push the entry just added below the fold of a small screen.
     var folded by rememberSaveable { mutableStateOf(true) }
@@ -68,6 +74,10 @@ fun FirstWeekCard(items: List<FirstWeekItem>, onOpen: (FirstWeekStep) -> Unit, o
                         if (!item.done) Text(item.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+            }
+            if (!folded) {
+                onCheckup?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_checkup")) { Text("Why isn't capture working?") } }
+                onEarlier?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_earlier")) { Text("Bring in earlier spending") } }
             }
         }
     }
