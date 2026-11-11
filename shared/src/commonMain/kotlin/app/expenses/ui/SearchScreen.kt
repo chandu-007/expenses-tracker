@@ -119,6 +119,9 @@ fun SearchScreen(
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     PlatformBackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     val focusManager = LocalFocusManager.current
+    // measurement builds only (see Platform.trace): when the page is first composed, when anything the search is made of changes, and when results are shown
+    val platform = LocalPlatform.current
+    LaunchedEffect(Unit) { platform.trace("search: composed") }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // Done on the keyboard, choosing entries and scrolling the results all put the keyboard away, so the results can be seen
     val dismissKeyboard = { focusManager.clearFocus(); keyboard?.hide() }
@@ -130,6 +133,7 @@ fun SearchScreen(
     }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     LaunchedEffect(state.results) {
+        if (state.results.isNotEmpty()) platform.trace("search: results")
         if (selected.isNotEmpty()) { val listed = state.results.mapTo(HashSet()) { it.id }; if (selected.any { it !in listed }) selected = selected.filter { it in listed } }
     }
     // choosing entries is done with the keyboard out of the way
@@ -156,6 +160,7 @@ fun SearchScreen(
     /** [typing]: the change is the text or an amount being typed, so the keyboard stays; any other change (a chip, a day, a saved search) is the person looking at results, so the keyboard goes. */
     fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag, fd: Long? = fromDay, td: Long? = toDay, ac: String? = accountId, typing: Boolean = false) {
         if (!typing) dismissKeyboard()
+        if (t != text || lo != min || hi != max || c != categoryId || k != kind || r != range || g != tag || fd != fromDay || td != toDay || ac != accountId) platform.trace("search: input")
         selected = emptyList() // the results are about to be different: a selection made on the old ones would be of entries no longer listed
         text = t; min = lo; max = hi; categoryId = c; kind = k; range = r; tag = g; fromDay = fd; toDay = td; accountId = ac
         onChange(SearchInput(t, lo, hi, c, k, r, g, fd, td, ac))

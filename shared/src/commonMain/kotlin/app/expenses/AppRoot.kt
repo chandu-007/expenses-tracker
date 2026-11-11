@@ -435,7 +435,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     if (searching && t != "Search") { searching = false; searchAccount = null; viewModel.closeSearch() }
                     if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
                     when {
-                        t == "Search" && !searching -> { searchAccount = null; searching = true }
+                        t == "Search" && !searching -> { platform.trace("search: tapped"); searchAccount = null; searching = true }
                         t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
                         t == "More" -> wantMore = true
                     }
