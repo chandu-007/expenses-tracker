@@ -105,7 +105,7 @@ object IosBackupDebug {
                     is DataTransfer.Opened.Ready -> { ids += opened.data.attachments.map { it.id }; transfer.restore(opened) }
                 }
             }
-            answer ?: ("live=" + container.write { ok -> ok.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().map { it.id }.sorted() }.joinToString(","))
+            answer ?: ("live=" + container.write { ok -> ok.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().map { it.id }.sorted() }.orEmpty().joinToString(","))
         } catch (e: BackupException) {
             "refused: ${e.message}"
         } catch (e: Throwable) {

@@ -46,9 +46,9 @@ internal class ReplacementPlan(
             val here = q.allReplaced().executeAsList()
             if (here.isEmpty() && data.replaced.isEmpty()) return NONE
             val fileEntry = HashMap<String, BackupEntry>()
-            for (e in data.entries) fileEntry.putIfAbsent(e.id, e)
+            for (e in data.entries) if (e.id !in fileEntry) fileEntry[e.id] = e
             val fromFile = LinkedHashMap<String, BackupReplaced>()
-            for (r in data.replaced) if (r.entryId.isNotEmpty() && r.replacedBy.isNotEmpty() && r.entryId != r.replacedBy && r.entryId !in fileEntry) fromFile.putIfAbsent(r.entryId, r)
+            for (r in data.replaced) if (r.entryId.isNotEmpty() && r.replacedBy.isNotEmpty() && r.entryId != r.replacedBy && r.entryId !in fileEntry && r.entryId !in fromFile) fromFile[r.entryId] = r
             val replacedBy = HashMap<String, String>(fromFile.size + here.size)
             for ((id, r) in fromFile) replacedBy[id] = r.replacedBy
             for (r in here) replacedBy[r.entry_id] = r.replaced_by // what this phone already knows wins over the file
