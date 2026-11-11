@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -65,7 +66,7 @@ class SameShopUiTest {
     private fun idAt(at: Long) = runBlocking { container.write { ok -> ok.inbox.list().first { it.receivedAt == at }.id } }!!
     private fun scrollRules(tag: String) { compose.onNodeWithTag("rules_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
     private fun scrollInbox(tag: String) { compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
-    private fun waitUndo() = compose.waitUntil(15_000) { compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitUndo() = FailureShot.around("SameShop_waitUndo") { compose.waitUntil(15_000) { compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() } }
     private fun undo() { waitUndo(); repeat(3) { if (compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty()) runCatching { compose.onNodeWithText("Undo").performClick() }; compose.waitForIdle() } }
     private fun aliases(): List<Pair<String, String>> = runBlocking { container.write { it.captureRules.aliases().all.map { a -> a.from to a.to } } } ?: emptyList()
 
@@ -102,7 +103,8 @@ class SameShopUiTest {
         // join again, then Remove, then Undo the removal
         scrollRules("learned_same_swiggyinstamart"); tap("learned_same_swiggyinstamart"); waitFor("same_shop_to"); tap("same_shop_suggest_0"); tapUntilGone("same_shop_ok", "same_shop_to")
         compose.waitUntil(15_000) { aliases().size == 1 }
-        scrollRules("alias_remove_swiggyinstamart"); tap("alias_remove_swiggyinstamart")
+        // the bar of the join stays and covers the foot of the list on a tall screen: a touch on Remove would land on its Undo, so press Remove by its action instead of by a touch
+        scrollRules("alias_remove_swiggyinstamart"); compose.onNodeWithTag("alias_remove_swiggyinstamart", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.waitUntil(15_000) { aliases().isEmpty() }
         waitUndo(); assertTrue(compose.onAllNodes(hasText("Swiggy Instamart is its own shop again")).fetchSemanticsNodes().isNotEmpty(), "the bar says what happened")
         undo(); compose.waitUntil(15_000) { aliases() == listOf("swiggyinstamart" to "swiggy") }

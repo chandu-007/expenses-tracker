@@ -6,6 +6,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -46,10 +48,18 @@ class CaptureRulesUiTest {
     private fun openRules() { compose.openMore(); tap("open_capture"); tap("open_rules"); waitFor("rule_pattern") }
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun pendingId() = runBlocking { container.write { it.inbox.list().first().id } }!!
-    private fun addRule(pattern: String, category: String) { compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput(pattern); tap("rule_category_$category")
-        // Add can be lost while the keyboard moves the page: press it again until the rule is listed (a second press with the box already cleared adds nothing)
-        repeat(4) { if (!has("rule_$pattern")) { tap("rule_add"); compose.waitForIdle(); Thread.sleep(500) } }
-        compose.waitUntil(10_000) { has("rule_$pattern") }
+    private fun addRule(pattern: String, category: String) {
+        // The rules are a lazy list: a rule below the screen is not in the tree until the list is scrolled to it (on a taller or shorter phone it is not on the first screen), so look by scrolling to it.
+        fun listed(): Boolean { runCatching { compose.onNodeWithTag("rules_list", useUnmergedTree = true).performScrollToNode(hasTestTag("rule_$pattern")) }; return has("rule_$pattern") }
+        // A tap or typed text can be lost while the keyboard moves the page. Each round types the pattern afresh (clearing first), picks the category and presses Add, until the rule is listed;
+        // a round after success is skipped, and a press with the box cleared adds nothing.
+        repeat(4) {
+            if (!listed()) {
+                compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).apply { performTextClearance(); performTextInput(pattern) }
+                tap("rule_category_$category"); tap("rule_add"); compose.waitForIdle(); Thread.sleep(700)
+            }
+        }
+        FailureShot.around("CaptureRules_addRule_$pattern") { compose.waitUntil(10_000) { listed() } }
     }
 
     @Test

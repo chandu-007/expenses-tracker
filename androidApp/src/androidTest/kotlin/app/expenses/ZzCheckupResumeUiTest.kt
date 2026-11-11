@@ -53,7 +53,9 @@ class ZzCheckupResumeUiTest {
     }
 
     private fun setAccess(on: Boolean) {
-        if (on) shell("settings put secure enabled_notification_listeners $component") else shell("settings delete secure enabled_notification_listeners")
+        // Android 14 binds the listener only through the notification service's own command (what the Settings switch does), not from the bare setting
+        if (on) { shell("settings put secure enabled_notification_listeners $component"); shell("cmd notification allow_listener $component") }
+        else { shell("cmd notification disallow_listener $component"); shell("settings delete secure enabled_notification_listeners") }
         val end = System.currentTimeMillis() + 10_000
         while (NotificationCaptureService.accessGranted(context) != on && System.currentTimeMillis() < end) Thread.sleep(100)
         assertEquals(on, NotificationCaptureService.accessGranted(context), "the setting reached the system")

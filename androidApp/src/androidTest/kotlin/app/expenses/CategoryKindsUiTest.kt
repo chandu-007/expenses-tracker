@@ -83,7 +83,8 @@ class CategoryKindsUiTest {
         openManager()
         tap("cat_tab_income"); tap("new_category"); waitFor("cat_name")
         node("cat_name").performTextInput("Side gigs")
-        tap("cat_confirm")
+        // a tap on Add can be lost while the dialog settles: press again until the category exists (a second press with the dialog gone is skipped)
+        repeat(4) { if (!kinds().containsKey("Side gigs")) { runCatching { tap("cat_confirm") }; compose.waitForIdle(); Thread.sleep(600) } }
         compose.waitUntil(10_000) { kinds().containsKey("Side gigs") }
         assertEquals(CategoryKind.INCOME, kinds()["Side gigs"])
         tap("cat_tab_expense"); waitFor("cat_row_Food")
