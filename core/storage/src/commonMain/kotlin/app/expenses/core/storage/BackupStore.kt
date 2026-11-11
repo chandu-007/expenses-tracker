@@ -1,6 +1,8 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.AttachmentRules
+import app.expenses.core.domain.BalanceFixEntry
+import app.expenses.core.domain.BalanceFixLog
 import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.StarterCategories
 import app.expenses.core.domain.Currency
@@ -111,6 +113,10 @@ class BackupStore(
             origins = q.allLiveOrigins().executeAsList().map { BackupOrigin(it.entry_id, it.kind, it.sender, it.text, it.received_at) },
             recurringDone = q.allRecurringDone().executeAsList().map { BackupDone(it.recurring_id, it.day, it.outcome, it.entry_id) },
             attachments = if (fileSize == null) emptyList() else q.liveAttachments().executeAsList().filter { fileSize(it.id) == it.size_bytes }.map { BackupAttachment(it.id, it.entry_id, it.name, it.mime, it.size_bytes, it.sha256, it.created_at) },
+            balanceFixes = q.settingsWithPrefix(BalanceFixLog.PREFIX).executeAsList().flatMap { row ->
+                val id = row.key.removePrefix(BalanceFixLog.PREFIX)
+                if (q.accountById(id).executeAsOneOrNull()?.deleted != 0L) emptyList() else BalanceFixLog.parse(row.value_).map { BackupBalanceFix(id, it.atMillis, it.beforeMinor, it.afterMinor) }
+            },
             settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
@@ -178,7 +184,22 @@ class BackupStore(
         fun currency(code: String) = Currency(code, digits[code] ?: error("The backup does not say how many decimal places $code has"))
         data.currencies.forEach { q.insertCurrency(it.code, it.digits.toLong()) }
 
-        for (a in data.accounts) if (q.accountById(a.id).executeAsOneOrNull() == null) ledger.saveAccount(Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency), a.openingMinor, a.archived))
+        // A phone with no entries yet has the two accounts the app makes on its first start (Cash and Bank, never used, opening balance zero). Such an account takes the opening balance of the
+        // backup's account with the same id: nothing of this phone's is replaced, and without it the balance (a fix of it included) would come back short by the opening balance.
+        val fresh = q.recentEntries(1).executeAsList().isEmpty()
+        val addedAccounts = HashSet<String>()
+        for (a in data.accounts) {
+            val here = q.accountById(a.id).executeAsOneOrNull()
+            if (here == null) { ledger.saveAccount(Account(AccountId(a.id), a.name, AccountType.valueOf(a.type), currency(a.currency), a.openingMinor, a.archived)); addedAccounts += a.id }
+            else if (fresh && a.id in FIRST_START_ACCOUNTS && a.openingMinor != 0L && here.deleted == 0L && here.opening_minor == 0L && here.type == a.type && here.currency == a.currency && q.accountUsage(a.id).executeAsOne() == 0L) {
+                ledger.saveAccount(Account(AccountId(here.id), here.name, AccountType.valueOf(here.type), currency(here.currency), a.openingMinor, here.archived == 1L)); addedAccounts += a.id
+            }
+        }
+        // the lines of balance fixes come with an account this restore added or gave its opening balance to (an account already here keeps its own opening balance, so a line about the backup's would be untrue)
+        for ((id, fixes) in data.balanceFixes.groupBy { it.accountId }) if (id in addedAccounts && q.settingValue(BalanceFixLog.key(id)).executeAsOneOrNull() == null) {
+            val kept = BalanceFixLog.parse(BalanceFixLog.format(fixes.sortedBy { it.at }.map { BalanceFixEntry(it.at, it.beforeMinor, it.afterMinor) }))
+            if (kept.isNotEmpty()) q.putSetting(BalanceFixLog.key(id), BalanceFixLog.format(kept))
+        }
         // Parents before children, so a subcategory never refers to a category that is not there yet.
         for (c in data.categories.sortedBy { it.parentId != null }) {
             val here = q.categoryById(c.id).executeAsOneOrNull()
@@ -329,6 +350,9 @@ class BackupStore(
         val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots",
             "goals", "budget_rollover", "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit",
             "safe_to_spend_on_home", "sinking_funds_on")
+
+        /** The accounts the app makes by itself on its first start (see AppContainer): `cash` and `bank`. */
+        val FIRST_START_ACCOUNTS = setOf("cash", "bank")
 
         /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
         const val CARD_LIMIT_PREFIX = "card_limit:"

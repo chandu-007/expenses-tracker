@@ -101,6 +101,12 @@ private val MIME_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9!#&^_.+-]{0,126}/[A-Za-z0
 /** Money expected back for an expense ("I expect this back"): from whom (free text, or a person's id), how much, and whether the person stopped expecting it. */
 @Serializable data class BackupExpect(val entryId: String, val from: String? = null, val personId: String? = null, val expectedMinor: Long, val closed: Boolean = false)
 
+/**
+ * A time the person fixed an account's balance ("Fix this balance"): [beforeMinor] is the balance the app showed, [afterMinor] what it showed after, both signed (negative is owed on a card or loan), [at] when
+ * (epoch milliseconds). The fix itself is in the account's `openingMinor`; this is only the line that says it happened.
+ */
+@Serializable data class BackupBalanceFix(val accountId: String, val at: Long, val beforeMinor: Long, val afterMinor: Long)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -131,6 +137,8 @@ data class BackupData(
     @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val expects: List<BackupExpect> = emptyList(),
     /** The photos and files attached to the entries in this file, when the backup carries them (version 2; their bytes follow the payload). Left out of the JSON when empty, so a backup without files is exactly a version 1 file. */
     @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val attachments: List<BackupAttachment> = emptyList(),
+    /** The fixes the person made to account balances. Left out of the JSON when there are none, so a backup without any is exactly as it was before this existed; an older reader ignores the key. */
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val balanceFixes: List<BackupBalanceFix> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 
