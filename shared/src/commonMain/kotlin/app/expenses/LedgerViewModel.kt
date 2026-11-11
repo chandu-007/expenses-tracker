@@ -635,6 +635,8 @@ data class PendingRestoreUi(
     val madeAt: String, val entriesInFile: Int, val newEntries: Int, val alreadyHereEntries: Int, val otherNewItems: Int,
     /** Photos and files the backup carries, their size together, and how many of them this phone would take. */
     val filesInFile: Int = 0, val filesBytes: Long = 0, val newFiles: Int = 0,
+    /** Entries of the file that a type change replaced (not added) and entries on this phone that the backup says a type change replaced (taken away): see [replacedEntriesText]. */
+    val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0,
 )
 
 /** The photos and files a backup would carry: how many, how large together, and whether the switch for including them is on. */
@@ -647,10 +649,9 @@ data class DataUi(
     val statusIsError: Boolean = false,
     val needsPassphrase: Boolean = false,
     val pending: PendingRestoreUi? = null,
-    /** Entries of the file that a type change replaced (not added) and entries on this phone that the backup says a type change replaced (taken away): see [replacedEntriesText]. */
-    val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0,
     val files: BackupFilesUi = BackupFilesUi(),
 )
+
 /**
  * What a restore says about the entries a type change replaced (an expense made a transfer, for example), in plain words and with a leading space, or nothing when there were none: [notRestored]
  * of the backup were not added because the type change had replaced them, and [removed] that were here (brought back earlier by an older backup) were taken away because this backup says a
