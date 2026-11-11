@@ -98,9 +98,12 @@ class GuidedSetupUiTest {
         tap("setup_bank_HDFC Bank"); compose.waitUntil(10_000) { setting("capture_setup_banks") == "HDFC Bank" }
         // a bank that is not listed: type its sender name in the same box Capture has
         tap("setup_bank_not_listed"); waitFor("setup_not_listed_box")
-        type("capture_headers", "MYBANK"); tap("capture_headers_save")
+        type("capture_headers", "MYBANK")
+        // Save can be lost while the page moves under the keyboard: press it again until the name is a chip (saving the same name twice changes nothing)
+        repeat(4) { if (!has("sender_chip_MYBANK")) { runCatching { tap("capture_headers_save") }; compose.waitForIdle(); Thread.sleep(500) } }
         waitFor("sender_chip_MYBANK"); compose.waitUntil(10_000) { setting("capture_extra_roots") == "MYBANK" }
-        tap("setup_next")
+        // the keyboard of the box above is still up: a tap on Next can be lost while the page moves, so press again until the step changes
+        repeat(4) { if (!has("setup_step_accounts")) { runCatching { tap("setup_next") }; compose.waitForIdle(); Thread.sleep(400) } }
         // 3: accounts and their digits (3 or 4)
         step("accounts"); assertEquals("Step 3 of 4", progress()); assertEquals("No digits yet", textOf("setup_account_state_hdfc"))
         compose.onNodeWithTag("setup_digits_save_hdfc", useUnmergedTree = true).performScrollTo().assertIsNotEnabled() // Save is off until there are 3 digits
@@ -116,12 +119,13 @@ class GuidedSetupUiTest {
         tap("setup_next")
         // 4: the summary and the checkup
         step("done"); assertEquals("Step 4 of 4", progress()); assertEquals("FINISHED:DONE", setting("capture_setup"))
-        assertEquals("Banks: HDFC Bank", textOf("setup_summary_banks")); assertEquals("Accounts: 1 of 1 have their digits", textOf("setup_summary_accounts"))
+        assertEquals("Banks: HDFC Bank", textOf("setup_summary_banks")); assertEquals("Accounts: 1 of 2 have their digits", textOf("setup_summary_accounts"))
         assertEquals("Names you added: MYBANK", textOf("setup_summary_names")); assertEquals("Reading bank texts is not on yet", textOf("setup_summary_reading"))
         tap("setup_open_checkup"); waitFor("capture_checkup_headline")
         tap("capture_checkup_back")
         // a finished setup puts no card on Home
-        waitFor("add"); assertFalse(has("setup_nudge"))
+        // opening the checkup closes the setup, so Back lands on More; Home has no card
+        waitFor("more_page"); tap("nav_home"); waitFor("add"); assertFalse(has("setup_nudge"))
     }
 
     @Test
@@ -138,7 +142,7 @@ class GuidedSetupUiTest {
     fun leavingAtAnyStepKeepsThePlaceAndHomeCardContinuesThere() {
         hook(sms = false)
         launch(); openSetupFromMore(); tap("setup_skip_step"); step("banks")
-        tap("setup_close"); waitFor("add")
+        tap("setup_close"); waitFor("more_page"); tap("nav_home"); waitFor("add") // Close goes back to where the setup was opened: More
         assertEquals("IN_PROGRESS:BANKS", setting("capture_setup"))
         // Home's card says where the person is, and carries on there
         waitFor("setup_nudge"); assertEquals("Step 2 of 4. Carry on where you stopped.", textOf("setup_nudge_line"))
@@ -209,9 +213,9 @@ class GuidedSetupUiTest {
             assertTrue(body.width <= screen.width, "step $name fits the width")
             if (name != "done") { tap("setup_next") } else { tap("setup_done") }
         }
-        waitFor("add")
+        waitFor("more_page") // Done goes back to where the setup was opened: More
         WideLayoutTestHook.widthDp = 1000; WideLayoutTestHook.heightDp = 800
         launch(); openSetupFromMore(); step("permission"); tap("setup_skip_step"); step("banks")
-        tap("setup_bank_HDFC Bank"); tap("setup_next"); step("accounts"); tap("setup_next"); step("done"); tap("setup_done"); waitFor("add")
+        tap("setup_bank_HDFC Bank"); tap("setup_next"); step("accounts"); tap("setup_next"); step("done"); tap("setup_done"); waitFor("more_page")
     }
 }

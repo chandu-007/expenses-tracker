@@ -46,7 +46,11 @@ class CaptureRulesUiTest {
     private fun openRules() { compose.openMore(); tap("open_capture"); tap("open_rules"); waitFor("rule_pattern") }
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun pendingId() = runBlocking { container.write { it.inbox.list().first().id } }!!
-    private fun addRule(pattern: String, category: String) { compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput(pattern); tap("rule_category_$category"); tap("rule_add"); compose.waitUntil(10_000) { has("rule_$pattern") } }
+    private fun addRule(pattern: String, category: String) { compose.onNodeWithTag("rule_pattern", useUnmergedTree = true).performTextInput(pattern); tap("rule_category_$category")
+        // Add can be lost while the keyboard moves the page: press it again until the rule is listed (a second press with the box already cleared adds nothing)
+        repeat(4) { if (!has("rule_$pattern")) { tap("rule_add"); compose.waitForIdle(); Thread.sleep(500) } }
+        compose.waitUntil(10_000) { has("rule_$pattern") }
+    }
 
     @Test
     fun aRuleIsTestedAgainstHistoryAddedAndThenSuggestedOnTheMatchingInboxItem() {

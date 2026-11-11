@@ -140,7 +140,7 @@ fun DataScreen(
             onDismissRequest = onCancelRestore,
             title = { Text("Restore this backup?") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("restore_preview")) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState()).testTag("restore_preview")) {
                     Text("Made ${p.madeAt}. It holds ${p.entriesInFile} entries.")
                     Text("${p.newEntries} entries are new to this phone and will be added" + if (p.otherNewItems > 0) ", along with ${p.otherNewItems} other items (categories, budgets, repeating expenses…)." else ".")
                     Text("${p.alreadyHereEntries} are already here and will be left exactly as they are. Nothing is overwritten" + if (p.replacedRemoved > 0) "." else " or deleted.")

@@ -259,7 +259,8 @@ class DataTest {
         viewModel().openBackup(uri.toString())
         waitFor("open_passphrase")
         compose.onNodeWithTag("open_passphrase").performTextInput("wrong one!")
-        compose.onNodeWithTag("open_unlock").performClick()
+        // a tap on Unlock can be lost while the keyboard moves the dialog: press again until the answer shows (the same wrong passphrase is refused again, harmlessly)
+        repeat(4) { if (compose.onAllNodes(hasTestTag("data_status") and hasText("passphrase is wrong", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) { runCatching { compose.onNodeWithTag("open_unlock").performClick() }; compose.waitForIdle(); Thread.sleep(500) } }
         waitText("data_status", "passphrase is wrong")
         waitFor("open_passphrase")
         compose.onNodeWithTag("open_passphrase").performTextInput("correct horse")
