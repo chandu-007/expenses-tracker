@@ -165,4 +165,24 @@ class PayeeAliasStoreTest {
         assertEquals(listOf("d", "b"), db.searchFiltered(SearchQuery(text = "swiggy"), joined, 2).map { it.id })
         assertNull(db.schemaQueries.entryById("a").executeAsOne().note, "no entry was rewritten")
     }
+
+    @Test
+    fun withoutAliasesSearchAndTheMerchantReportAreExactlyWhatTheyWereAndAnUnrelatedAliasChangesNeitherForOtherNames() {
+        val rnd = kotlin.random.Random(33)
+        val shops = listOf("Swiggy", "swiggy ", "Swiggy Instamart", "Uber", "Big Basket", "Zomato", "Amazon", "Amazon Pay", "Cafe Corner", null, "")
+        repeat(300) { i -> spend("r$i", 1 + rnd.nextInt(28), 100L + rnd.nextLong(50_000), shops[rnd.nextInt(shops.size)], if (rnd.nextInt(4) == 0) "note ${rnd.nextInt(5)} swiggy food" else null) }
+        val queries = listOf("swiggy", "Swiggy Instamart", "instamart", "uber", "big basket", "zomato", "amazon", "ab", "cafe", "swiggy food", "note 3", "zzz", "", "swiggy food for ten").map { SearchQuery(text = it) } +
+            SearchQuery(text = "swiggy", minMinor = 5_000, maxMinor = 20_000, currency = "INR") + SearchQuery(text = "uber", fromMillis = at(5), untilMillis = at(20)) + SearchQuery(text = "", kind = "EXPENSE")
+        for (q in queries) assertEquals(db.searchFiltered(q, 50).map { it.id }, db.searchFiltered(q, PayeeAliases.NONE, 50).map { it.id }, "no alias: '${q.text}' finds exactly what it found")
+        // the merchant report is the same rows the query gives, ranked as before
+        val old = db.schemaQueries.spendByMerchant("INR", month.startMillis(zone), month.endMillis(zone)).executeAsList()
+            .map { Triple<String?, String, Money>(it.key, it.display?.trim()?.takeIf { d -> d.isNotEmpty() } ?: "No merchant", Money(it.mine ?: 0L, inr)) }
+        val expected = app.expenses.core.domain.ReportMath.groups(old, inr)
+        assertEquals(expected, reports.groups(ReportGroup.MERCHANT, month, zone, inr), "no alias: the report is what it was")
+        assertEquals(reports.spent(month, zone, inr), expected.fold(m(0)) { s, r -> s + r.total })
+        // an alias between two names that are not in these queries or rows changes nothing else
+        store.addAlias("Zepto Cafe", "Zepto")
+        for (q in queries) assertEquals(db.searchFiltered(q, 50).map { it.id }, db.searchFiltered(q, store.aliases(), 50).map { it.id }, "an unrelated alias: '${q.text}'")
+        assertEquals(expected, reports.groups(ReportGroup.MERCHANT, month, zone, inr), "an unrelated alias: the report is what it was")
+    }
 }

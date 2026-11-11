@@ -16,7 +16,7 @@ fun ExpensesDb.searchFiltered(query: SearchQuery, aliases: PayeeAliases, limit: 
     if (others.isEmpty()) return own
     val found = LinkedHashMap<String, Entry>()
     own.forEach { found[it.id] = it }
-    for (name in others) searchFiltered(query.copy(text = name), limit).forEach { found.putIfAbsent(it.id, it) }
+    for (name in others) searchFiltered(query.copy(text = name), limit).forEach { if (it.id !in found) found[it.id] = it }
     return found.values.sortedWith(compareByDescending<Entry> { it.occurred_at }.thenByDescending { it.seq }).take(limit.toInt())
 }
 
