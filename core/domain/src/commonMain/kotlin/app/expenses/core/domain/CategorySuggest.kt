@@ -20,10 +20,11 @@ data class CaptureRule(val id: String, val pattern: String, val categoryId: Stri
 }
 
 /**
- * [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. [CREDIT_WORDS] is a guess from the words of a CREDIT text ([IncomeWords]): only ever
- * something to check.
+ * [HISTORY] is the category most of the person's earlier entries for the same payee were filed under. [AMOUNT] is the category the person's earlier entries of AMOUNTS LIKE THIS ONE for the same
+ * payee are filed under ([AmountBands]): it is only asked for a payee they have filed under more than one category, and then it comes before what was chosen last time. [CREDIT_WORDS] is a guess
+ * from the words of a CREDIT text ([IncomeWords]): only ever something to check.
  */
-enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS, KEYWORD, CREDIT_WORDS }
+enum class SuggestionSource { RULE, LEARNED, HISTORY, STARTER, PERSON, WORDS, KEYWORD, CREDIT_WORDS, AMOUNT }
 
 data class CategorySuggestion(val categoryId: String, val source: SuggestionSource)
 
@@ -48,10 +49,15 @@ object CategorySuggest {
         byName: Map<String, String> = emptyMap(), toAPerson: Boolean = false,
         /** The category most earlier entries of this payee are in (see [SimilarEntries.topCategory]), used after the person's rules and what they chose last time. */
         history: String? = null,
+        /** What the earlier entries of this payee of amounts like this one say ([AmountBands]); asked first after the person's rules, because the payee's own answer is not one. */
+        band: AmountBand? = null,
+        /** The person's own "same shop as" aliases: a choice made for one name is found for the others. */
+        aliases: PayeeAliases = PayeeAliases.NONE,
     ): CategorySuggestion? {
         val text = listOfNotNull(payee, body).joinToString(" ")
         rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
-        PayeeKey.lookup(payee, learned)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        band?.top?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.AMOUNT) }
+        PayeeKey.lookup(payee, learned, aliases)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
         history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
         // below the person's own choices: a common merchant, then "a payment to a person" (no merchant to go by, so the catch-all)
         // the payee only, never the whole text: a bank's own name or footer ("Airtel Payments Bank") must not pick a category
@@ -72,10 +78,12 @@ object CategorySuggest {
      */
     fun suggestIncome(
         payee: String?, body: String, rules: List<CaptureRule>, learned: Map<String, String>, usable: Set<String>, byName: Map<String, String> = emptyMap(), history: String? = null,
+        band: AmountBand? = null, aliases: PayeeAliases = PayeeAliases.NONE,
     ): CategorySuggestion? {
         val text = listOfNotNull(payee, body).joinToString(" ")
         rules.firstOrNull { it.categoryId in usable && it.matches(text) }?.let { return CategorySuggestion(it.categoryId, SuggestionSource.RULE) }
-        PayeeKey.lookupIncome(payee, learned)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
+        band?.top?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.AMOUNT) }
+        PayeeKey.lookupIncome(payee, learned, aliases)?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.LEARNED) }
         history?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.HISTORY) }
         IncomeWords.categoryNameFor(body)?.let { name -> byName[name.lowercase()]?.takeIf { it in usable }?.let { return CategorySuggestion(it, SuggestionSource.CREDIT_WORDS) } }
         return null

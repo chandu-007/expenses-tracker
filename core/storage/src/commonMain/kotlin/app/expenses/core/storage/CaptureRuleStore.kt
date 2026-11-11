@@ -1,6 +1,8 @@
 package app.expenses.core.storage
 
 import app.expenses.core.domain.CaptureRule
+import app.expenses.core.domain.PayeeAlias
+import app.expenses.core.domain.PayeeAliases
 import app.expenses.core.domain.PayeeKey
 import app.expenses.core.storage.db.ExpensesDb
 
@@ -83,19 +85,25 @@ class CaptureRuleStore(private val db: ExpensesDb) {
     }
 
     /**
-     * Remembers that this payee goes to [categoryId], under [PayeeKey.of] (so "SWIGGY BANGALORE KA IN", "swiggy@icici" and "Swiggy" are one payee). A later different choice replaces it:
-     * corrections stick. A choice remembered before that key existed (stored under the payee's letters and digits as read) is carried over and its count kept when it agrees. Payees without a
-     * usable key are not remembered.
+     * Remembers that this payee goes to [categoryId], under [PayeeKey.of] with the person's aliases followed (so "SWIGGY BANGALORE KA IN", "swiggy@icici" and "Swiggy" are one payee, and a name the
+     * person said is the same shop as another is remembered under that other's key). A later different choice replaces it: corrections stick. A choice remembered before that key existed (stored
+     * under the payee's letters and digits as read) is carried over and its count kept when it agrees; so is one stored under the key before the built-in same-merchant table ([PayeeKey.ownKey]).
+     * Payees without a usable key are not remembered.
      */
     fun learn(payee: String?, categoryId: String, label: String? = null, income: Boolean = false) {
-        val key = (if (income) PayeeKey.incomeOf(payee) else PayeeKey.of(payee)) ?: return
+        val aliases = aliases()
+        val key = (if (income) PayeeKey.incomeOf(payee, aliases) else PayeeKey.of(payee, aliases)) ?: return
         if (categoryId.isEmpty()) return
         db.transaction {
-            (label ?: payee)?.trim()?.takeIf { it.isNotEmpty() && '@' !in it }?.let { l -> if (q.settingValue(LABEL_PREFIX + key).executeAsOneOrNull() != l) q.putSetting(LABEL_PREFIX + key, l) }
-            // an income choice has no older key to carry over: it was never stored before income was learned
-            val old = if (income) null else PayeeKey.legacy(payee)?.takeIf { it != key }?.let { l -> q.allMerchantMap().executeAsList().firstOrNull { it.key == l } }
+            // the list shows the shop under the name it was learned as; a choice made through another name the person joined to it keeps the shop's own name
+            val named = if (key != (if (income) PayeeKey.incomeOf(payee) else PayeeKey.of(payee))) aliases.labelOf(key.removePrefix(PayeeKey.INCOME_PREFIX)) else null
+            (named ?: label ?: payee)?.trim()?.takeIf { it.isNotEmpty() && '@' !in it }?.let { l -> if (q.settingValue(LABEL_PREFIX + key).executeAsOneOrNull() != l) q.putSetting(LABEL_PREFIX + key, l) }
+            // an income choice has no older key to carry over: it was never stored before income was learned. A row of another NAME the person joined to this shop is not an older key: it stays, so removing the alias gives it back.
+            val own = PayeeKey.of(payee)
+            val olds = if (income) emptyList() else listOfNotNull(PayeeKey.legacy(payee), PayeeKey.ownKey(payee)).filter { it != key && it != own }.distinct()
+            val rows = if (olds.isEmpty()) emptyList() else q.allMerchantMap().executeAsList().filter { it.key in olds }
             q.learnMerchant(key, categoryId)
-            if (old != null) {
+            for (old in rows) {
                 if (old.category_id == categoryId) repeat(old.uses.toInt()) { q.learnMerchant(key, categoryId) }
                 q.forgetMerchant(old.key)
             }
@@ -109,8 +117,10 @@ class CaptureRuleStore(private val db: ExpensesDb) {
     }
 
     fun forget(payee: String, income: Boolean = false) {
-        if (income) { PayeeKey.incomeOf(payee)?.let { forgetKey(it) }; return }
-        PayeeKey.of(payee)?.let { forgetKey(it) }
+        val aliases = aliases()
+        if (income) { PayeeKey.incomeOf(payee, aliases)?.let { forgetKey(it) }; return }
+        PayeeKey.of(payee, aliases)?.let { forgetKey(it) }
+        PayeeKey.ownKey(payee)?.let { forgetKey(it) }
         PayeeKey.legacy(payee)?.let { forgetKey(it) }
     }
 
@@ -134,6 +144,50 @@ class CaptureRuleStore(private val db: ExpensesDb) {
             if (s.label != null) q.putSetting(LABEL_PREFIX + s.key, s.label) else q.removeSetting(LABEL_PREFIX + s.key)
         }
     }
+
+    // ---- "same shop as": the person's own aliases ----
+
+    /**
+     * The names the person said are one shop, read from the settings (device-local rows `payee_alias:<key>`, like the labels of learned choices). An overlay on how names are counted: nothing
+     * stored about an entry changes, and removing an alias puts every name back as it was.
+     */
+    fun aliases(): PayeeAliases = PayeeAliases(q.settingsWithPrefix(PayeeAliases.PREFIX).executeAsList().mapNotNull { PayeeAliases.decode(it.key, it.value_) })
+
+    /** The key [payee] is remembered under now: [PayeeKey.of] with the person's aliases followed (for a payer's money in, [PayeeKey.incomeOf]). */
+    fun keyOf(payee: String?, income: Boolean = false): String? = aliases().let { if (income) PayeeKey.incomeOf(payee, it) else PayeeKey.of(payee, it) }
+
+    /**
+     * Says that [fromName] is the same shop as [toName] and returns the alias made, which replaces what [fromName] counted as before. Both are read like any payee ("SWIGGY INSTAMART", "swiggy@icici"):
+     * what is stored is their [PayeeKey]s and how they were written. Refuses, with a plain message and nothing changed, a name that is no name, one shop with itself, and a cycle.
+     */
+    fun addAlias(fromName: String, toName: String): PayeeAlias {
+        val a = PayeeAlias(PayeeKey.of(fromName).orEmpty(), PayeeKey.of(toName).orEmpty(), labelFor(fromName), labelFor(toName))
+        db.transaction {
+            aliases().problemFor(a.from, a.to, a.fromLabel, a.toLabel)?.let { throw IllegalArgumentException(it) }
+            q.putSetting(PayeeAliases.PREFIX + a.from, PayeeAliases.encode(a))
+        }
+        return a
+    }
+
+    /** What [from] counts as now, exactly as stored, or null. Read before [addAlias] or [removeAlias] so Undo can put it back. */
+    fun snapshotAlias(from: String): PayeeAlias? = q.settingValue(PayeeAliases.PREFIX + from).executeAsOneOrNull()?.let { PayeeAliases.decode(PayeeAliases.PREFIX + from, it) }
+
+    fun removeAlias(from: String) { q.removeSetting(PayeeAliases.PREFIX + from) }
+
+    /**
+     * Puts what [from] counted as back as it was: [before] when it counted as something, else nothing (the alias made since is removed). Refuses, changing nothing, when [before] would now make a cycle
+     * (the person joined the other names since).
+     */
+    fun restoreAlias(from: String, before: PayeeAlias?) {
+        db.transaction {
+            if (before == null) { q.removeSetting(PayeeAliases.PREFIX + from); return@transaction }
+            aliases().problemFor(before.from, before.to, before.fromLabel, before.toLabel)?.takeIf { snapshotAlias(from) != before }?.let { throw IllegalArgumentException(it) }
+            q.putSetting(PayeeAliases.PREFIX + before.from, PayeeAliases.encode(before))
+        }
+    }
+
+    /** How a name is written in the alias list and searched for: as typed (so a search for "Instamart" finds the entries called that), except an address, which is shown as the merchant it is ("swiggy@icici" is "Swiggy"). */
+    private fun labelFor(name: String): String = (if ('@' in name) app.expenses.core.domain.DefaultRules.displayNameFor(name) ?: name.substringBefore('@') else name).trim().replace(Regex("\\s+"), " ")
 
     /** How many past expenses and incomes mention every word of [pattern] in their payee or note: what the rule would have caught. */
     fun matchesInHistory(pattern: String): Long {

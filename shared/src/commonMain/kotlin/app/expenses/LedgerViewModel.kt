@@ -243,6 +243,10 @@ data class InboxRowUi(
 )
 
 /** One open bill a payment text may pay, as the card lists it ([billId] "card:<account>" is a card statement the app works out itself, with no bill text behind it). [fit] is "total", "minimum", "part" (of a card's total) or "full". */
+    /** For a suggestion that rests on the amount ([categorySource] "AMOUNT"): the whole reason with its counts ("You chose Subscriptions for Amazon amounts like ₹199 (4 times)"); empty otherwise. */
+    val categoryReason: String = "",
+    /** The payee as the person would call it ("Swiggy Instamart"): what "Same shop as..." starts from; empty when the text names none. */
+    val payeeName: String = "",
 data class BillMatchUi(val billId: String, val title: String, val amountText: String, val dueText: String, val fit: String)
 
 /**
@@ -305,7 +309,10 @@ data class BillPeekUi(val newCount: Int = 0, val rows: List<BillPeekRow> = empty
 data class CaptureRuleUi(val id: String, val pattern: String, val categoryId: String, val categoryName: String)
 
 /** One thing the app learned from the person's choices: a payee ([label]) goes to [categoryName]; [uses] times in a row; [waiting] earlier expenses of the same payee have no category yet. */
-data class LearnedUi(val key: String, val label: String, val categoryId: String, val categoryName: String, val uses: Int, val waiting: Int, /** A payer whose money in goes to an income category (not a payee of money out). */ val income: Boolean = false)
+data class LearnedUi(val key: String, val label: String, val categoryId: String, val categoryName: String, val uses: Int, val waiting: Int, /** A payer whose money in goes to an income category (not a payee of money out). */ val income: Boolean = false, /** The shop this name was joined to ("Swiggy"), empty when it was not: what is learned for the shop is used for this name too. */ val sameAs: String = "")
+
+/** One "same shop as" alias the person made: [fromLabel] counts as [toLabel]. [from] is the key to remove it by. */
+data class PayeeAliasUi(val from: String, val fromLabel: String, val toLabel: String)
 
 /** One category the review offers for an expense: [why] says where it comes from ("you chose it 2 times for this payee"), [sure] that it rests on the person's own choices (otherwise it is a guess to look at). */
 data class CategoriseSuggestionUi(val categoryId: String, val name: String, val why: String, val sure: Boolean)
@@ -1093,7 +1100,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val words = SimilarEntries.searchWords(label)
         if (words.isEmpty()) return emptyList()
         return ok.db.schemaQueries.similarCandidates(kind, words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
-            .map { SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at) }
+            .map { SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
     }
 
     /**
@@ -2164,7 +2171,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val byNameIncome = allCategories.filter { it.kind.forIncome && it.parentId == null }.associate { it.name.lowercase() to it.id }
         val rules = ok.captureRules.rules()
         val learnedRows = ok.captureRules.learnedRows()
-        val taught = CaptureCategory.Taught(learnedRows.associate { it.key to it.categoryId }, learnedRows.associate { it.key to it.uses })
+        val aliases = ok.captureRules.aliases()
+        val taught = CaptureCategory.Taught(learnedRows.associate { it.key to it.categoryId }, learnedRows.associate { it.key to it.uses }, aliases)
         val zone = systemZone()
         val fmt = DatePattern("d MMM")
         val items = ok.inbox.list()
@@ -2264,10 +2272,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val money = Money(i.amountMinor, Currency(i.currency, currencyDigits[i.currency] ?: 2))
             // top-level categories only: a subcategory called "Other" under Travel must not stand in for the top-level one the starter list means
             val byName = ok.categories.list().filter { !it.hidden && it.kind.forExpense && it.parentId == null }.associate { it.name.lowercase() to it.id }
-            // entries filed from a captured text carry the clean merchant name (cleanPayee), older ones the raw address: look under both
-            val history = if (i.direction == "DEBIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
-                SimilarEntries.profile(clean, (similarCandidates(ok, clean, "EXPENSE") + if (clean != rawPayee) similarCandidates(ok, rawPayee, "EXPENSE") else emptyList()).distinctBy { it.id })
-            } else null
+            // entries filed from a captured text carry the clean merchant name (cleanPayee), older ones the raw address: look under both, and under the other names of a shop the person joined to others.
+            // The same entries give the plain history and, for a payee filed under more than one category, what the earlier entries of amounts like this one say.
+            val cleanName = rawPayee?.let { cleanPayee(it) }
+            val evidence = if (rawPayee != null && cleanName != null && (i.direction == "DEBIT" || i.direction == "CREDIT")) CategoryEvidence.of(ok, cleanName, rawPayee, if (i.direction == "CREDIT") "INCOME" else "EXPENSE", i.amountMinor, i.currency, aliases) else null
+            val history = evidence?.takeIf { i.direction == "DEBIT" }?.history
             val toAPerson = PayeeKinds.of(rawPayee) == PayeeKind.PERSON
             // money in: the same payer's earlier INCOME entries (a payer is not a payee: their expenses never count here)
             val incomeHistory = if (i.direction == "CREDIT" && rawPayee != null) cleanPayee(rawPayee).let { clean ->
@@ -2493,6 +2502,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     /** What "Make it a transfer" changed, held for the few seconds its Undo is offered. */
+                categoryReason = if (suggestion?.source == SuggestionSource.AMOUNT && evidence?.band != null) CategoryEvidence.reason(allCategories.firstOrNull { it.id == suggestion.categoryId }?.name ?: "that category", cleanName.orEmpty(), evidence.band, isCreditText) else "",
+                payeeName = cleanName.orEmpty(),
     @Volatile private var madeTransfer: app.expenses.core.storage.CaptureTransfers.Replaced? = null
 
     /**
@@ -2713,6 +2724,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     }
                     // what the text's own account stands for (the paying account for the bank's text, the card for the card's), and the card the words name, are remembered for next time
                     val received = n?.side == BillPaymentSide.RECEIVED
+        /** The id of the Undo bar of "Same shop as..." made from a To review card: this and the key of the name that was joined. */
+        const val ALIAS_UNDO = "alias:"
+
                     if (i.accountLast4 != null) ok.keepSetting(settings, accountKey(i.issuer, i.accountLast4), if (received) cardAccountId else payFromId)
                     if (!received && cardAccountId.isNotEmpty() && n?.cardLast4 != null) ok.keepSetting(settings, accountKey(n.cardBank ?: i.issuer, n.cardLast4), cardAccountId)
                     heldAdd = HeldAdd(held, settings)
@@ -2769,7 +2783,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return ok.captureRules.rules().map { CaptureRuleUi(it.id, it.pattern, it.categoryId, names[it.categoryId] ?: "a category that was removed") }
     }
 
-    fun loadCaptureRules() = withStore { ok -> _rules.value = ruleRows(ok); _learned.value = learnedRows(ok) }
+    fun loadCaptureRules() = withStore { ok -> _rules.value = ruleRows(ok); _learned.value = learnedRows(ok); _aliases.value = aliasRows(ok) }
 
     // ---- what the app has learned: look, change, forget, and file earlier entries; and the Undo bar of this screen ----
 
@@ -2793,30 +2807,33 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun learnedRows(ok: AppContainer.Opened.Ok): List<LearnedUi> {
         val names = ok.categories.list().associate { it.id to it.name }
         val rows = ok.captureRules.learnedRows()
-        val waiting = uncategorisedByKey(ok)
-        val waitingIncome = if (rows.any { it.income }) uncategorisedIncomeByKey(ok) else emptyMap()
+        val aliases = ok.captureRules.aliases()
+        val waiting = uncategorisedByKey(ok, aliases)
+        val waitingIncome = if (rows.any { it.income }) uncategorisedIncomeByKey(ok, aliases) else emptyMap()
         return rows.sortedWith(compareByDescending<app.expenses.core.storage.Learned> { it.uses }.thenBy { it.label.lowercase() })
             .map {
                 val here = if (it.income) waitingIncome[it.key.removePrefix(app.expenses.core.domain.PayeeKey.INCOME_PREFIX)] else waiting[it.key]
-                LearnedUi(it.key, it.label, it.categoryId, names[it.categoryId] ?: "a category that was removed", it.uses, if (it.categoryId in names) here?.size ?: 0 else 0, it.income)
+                // a name the person joined to another shop: what is learned for the shop counts for it, and the list says so
+                val sameAs = if (it.income) "" else aliases.resolve(it.key).takeIf { head -> head != it.key }?.let { head -> aliases.labelOf(head) ?: head }.orEmpty()
+                LearnedUi(it.key, it.label, it.categoryId, names[it.categoryId] ?: "a category that was removed", it.uses, if (it.categoryId in names) here?.size ?: 0 else 0, it.income, sameAs)
             }
     }
 
     /** The ids of expenses with no category, by the key of their title: what a learned choice could still be applied to. One pass over those entries; read only on the learned list. */
-    private fun uncategorisedByKey(ok: AppContainer.Opened.Ok): Map<String, List<String>> {
+    private fun uncategorisedByKey(ok: AppContainer.Opened.Ok, aliases: app.expenses.core.domain.PayeeAliases = app.expenses.core.domain.PayeeAliases.NONE): Map<String, List<String>> {
         val out = HashMap<String, MutableList<String>>()
         for (row in ok.db.schemaQueries.uncategorisedExpenses(app.expenses.core.storage.CaptureRuleStore.HISTORY_SCAN).executeAsList()) {
-            val key = app.expenses.core.domain.PayeeKey.of(row.label) ?: continue
+            val key = app.expenses.core.domain.PayeeKey.of(row.label, aliases) ?: continue
             out.getOrPut(key) { ArrayList(2) } += row.id
         }
         return out
     }
 
     /** The same for income with no category: by the key of the payer's name (without the income prefix). */
-    private fun uncategorisedIncomeByKey(ok: AppContainer.Opened.Ok): Map<String, List<String>> {
+    private fun uncategorisedIncomeByKey(ok: AppContainer.Opened.Ok, aliases: app.expenses.core.domain.PayeeAliases = app.expenses.core.domain.PayeeAliases.NONE): Map<String, List<String>> {
         val out = HashMap<String, MutableList<String>>()
         for (row in ok.db.schemaQueries.uncategorisedIncomes(app.expenses.core.storage.CaptureRuleStore.HISTORY_SCAN).executeAsList()) {
-            val key = app.expenses.core.domain.PayeeKey.of(row.label) ?: continue
+            val key = app.expenses.core.domain.PayeeKey.of(row.label, aliases) ?: continue
             out.getOrPut(key) { ArrayList(2) } += row.id
         }
         return out
@@ -2847,7 +2864,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** Files the earlier expenses (or income) of this payee that have no category under what was learned, as one change that [undoLearnedFiling] takes back. */
     fun fileEarlierLike(key: String) = withStore { ok ->
         val category = ok.captureRules.learned()[key] ?: return@withStore
-        val ids = (if (app.expenses.core.domain.PayeeKey.isIncomeKey(key)) uncategorisedIncomeByKey(ok)[key.removePrefix(app.expenses.core.domain.PayeeKey.INCOME_PREFIX)] else uncategorisedByKey(ok)[key]).orEmpty()
+        val aliases = ok.captureRules.aliases()
+        val ids = (if (app.expenses.core.domain.PayeeKey.isIncomeKey(key)) uncategorisedIncomeByKey(ok, aliases)[key.removePrefix(app.expenses.core.domain.PayeeKey.INCOME_PREFIX)] else uncategorisedByKey(ok, aliases)[key]).orEmpty()
         if (ids.isEmpty()) return@withStore
         // applying what was learned is not a new choice: it must not count as the person choosing it again, which would raise the app's confidence on its own
         val r = EntryActions(ok).bulkSetCategory(ids, category, teach = false)
@@ -2871,7 +2889,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 }
                 null
             } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
-            _rules.value = ruleRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+            _rules.value = ruleRows(ok); _learned.value = learnedRows(ok); _aliases.value = aliasRows(ok); _inbox.value = inboxRows(ok)
             if (held is RulesHeld.Filing) refresh(ok)
             if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
         }
@@ -2955,6 +2973,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val skipped = ok.inbox.dismiss(id)
         _inbox.value = inboxRows(ok); refresh(ok)
         if (skipped && item != null) { skippedCapture = id to item.body; _inboxUndo.value = ScreenUndo(id, "Skipped $label") }
+        class Alias(val from: String, val before: app.expenses.core.domain.PayeeAlias?) : RulesHeld
     }
 
     /** Brings back the item whose skip was just offered for Undo, as it was (its text included). */
@@ -2972,7 +2991,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** The Undo bar for a skip has gone (used, or timed out): what was kept for it is let go. A newer skip's own offer is left alone. */
     fun inboxUndoGone(id: String) {
-        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null; accountChoice = null; heldAdd = null }
+        if (_inboxUndo.value?.id == id) { _inboxUndo.value = null; skippedCapture = null; madeTransfer = null; accountChoice = null; heldAdd = null; heldAlias = null }
     }
 
     /**
@@ -3038,6 +3057,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "Not now" on the Home card: it stays away for [UncategorisedNudge.SNOOZE_DAYS] days. Only the card goes: nothing else is read or rebuilt. */
     fun snoozeCategoriseNudge() = withStore { ok ->
         ok.templates.putSetting(SETTING_CATEGORISE_SNOOZED_AT, nowMillis().toString())
+                    is RulesHeld.Alias -> ok.captureRules.restoreAlias(held.from, held.before)
         categoriseCache = 0
         _state.update { st -> (st as? UiState.Ready)?.copy(categoriseNudge = 0) ?: st }
     }
@@ -3049,6 +3069,56 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "Not now" on a Home card: it stays away for [HomeNudges.SNOOZE_HOURS] hours, or until more is waiting than [count] (what it was about now). */
     fun snoozeNudge(nudge: HomeNudge, count: Int) = withStore { ok ->
         val snooze = NudgeSnooze(nowMillis(), count)
+    // ---- "same shop as": two names of one shop counted as one ----
+
+    private val _aliases = MutableStateFlow<List<PayeeAliasUi>>(emptyList())
+    /** The names the person said are the same shop as another, for the list under "What the app has learned". */
+    val payeeAliases: StateFlow<List<PayeeAliasUi>> get() = _aliases
+
+    private fun aliasRows(ok: AppContainer.Opened.Ok): List<PayeeAliasUi> = ok.captureRules.aliases().all.map { PayeeAliasUi(it.from, it.fromLabel, it.toLabel) }
+
+    private var heldAlias: RulesHeld.Alias? = null
+
+    /**
+     * Says that [fromName] is the same shop as [toName]. An overlay on how names are counted: nothing stored about an entry changes. What was learned and what earlier entries say for one is used for the other,
+     * a search for one finds the other, and the subscription finder and the Merchant report count them together. [onDone] gets null, or a plain message with nothing changed. Undo goes back to what
+     * [fromName] counted as before; the bar is the To review bar when [fromInbox], else the one of the Category rules screen.
+     */
+    fun joinShops(fromName: String, toName: String, fromInbox: Boolean = false, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch(BACKGROUND) {
+            val problem = try {
+                container.write { ok ->
+                    val before = ok.captureRules.snapshotAlias(app.expenses.core.domain.PayeeKey.of(fromName).orEmpty())
+                    val a = ok.captureRules.addAlias(fromName, toName)
+                    _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+                    val text = "${a.fromLabel} now counts as ${a.toLabel}"
+                    if (fromInbox) { heldAlias = RulesHeld.Alias(a.from, before); _inboxUndo.value = ScreenUndo("$ALIAS_UNDO${a.from}", text) }
+                    else offerRulesUndo("alias:${a.from}", text, RulesHeld.Alias(a.from, before))
+                    null
+                }
+            } catch (e: IllegalArgumentException) { e.message }
+            withContext(Dispatchers.Main) { onDone(problem) }
+        }
+    }
+
+    /** Makes a name its own shop again. Undo puts the alias back. What was learned under each name is untouched either way. */
+    fun removeAlias(from: String) = withStore { ok ->
+        val before = ok.captureRules.snapshotAlias(from) ?: return@withStore
+        ok.captureRules.removeAlias(from)
+        _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+        offerRulesUndo("alias-off:$from", "${before.fromLabel} is its own shop again", RulesHeld.Alias(from, before))
+    }
+
+    private fun undoAlias(from: String) {
+        val held = heldAlias?.takeIf { it.from == from } ?: return // taken now: the bar clears it as soon as it is gone
+        heldAlias = null
+        withStore { ok ->
+            val problem = try { ok.captureRules.restoreAlias(held.from, held.before); null } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
+            if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
+        }
+    }
+
         ok.templates.putSetting(HomeNudges.settingKey(nudge), snooze.encode())
         _state.update { st -> (st as? UiState.Ready)?.copy(nudgeSnoozes = st.nudgeSnoozes + (nudge to snooze)) ?: st }
     }
@@ -3068,7 +3138,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val rows = ok.db.schemaQueries.uncategorisedExpenseList(inr.code, REVIEW_LIMIT).executeAsList()
         val items = rows.map { ReviewItem(it.id, it.label, it.amount_minor, it.occurred_at, it.source) }
         reviewChoice = null; reviewUndo = null
-        reviewSession = ReviewSession(ReviewSession.order(items) { app.expenses.core.domain.PayeeKey.of(it) })
+        val aliases = ok.captureRules.aliases()
+        reviewSession = ReviewSession(ReviewSession.order(items) { app.expenses.core.domain.PayeeKey.of(it, aliases) })
         publishReview(ok)
     }
 
@@ -3107,7 +3178,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val item = s.current ?: return@withStore
         val form = EntryActions(ok).editable(item.id) as? Editable.Form
         if (form == null) { reviewSession = s.withSkipped(); publishReview(ok); return@withStore }
-        val key = app.expenses.core.domain.PayeeKey.of(ok.origins.get(item.id)?.text?.let { PayeeGuess.of(it) } ?: item.label.takeIf { it.isNotBlank() })
+        val key = ok.captureRules.keyOf(ok.origins.get(item.id)?.text?.let { PayeeGuess.of(it) } ?: item.label.takeIf { it.isNotBlank() })
         val learnedBefore = key?.let { ok.captureRules.snapshotLearned(it) }
         EntryActions(ok).save(form.draft.copy(category = categoryId))
         // an entry that did not come from a text is not taught by the editor; here the person answered for this payee on purpose, so it is learned from the title
@@ -3132,6 +3203,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun undoCategorise(id: String) {
         val held = reviewChoice?.takeIf { "categorise:${it.itemId}" == id } ?: return
         reviewChoice = null; reviewUndo = null
+        if (id.startsWith(ALIAS_UNDO)) { undoAlias(id.removePrefix(ALIAS_UNDO)); return }
         withStore { ok ->
             val s = reviewSession
             ok.store.atomically { EntryActions(ok).save(held.before, teach = false) }
@@ -3532,7 +3604,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             fromMillis = if (period == null) app.expenses.core.domain.SearchDates.fromMillis(input.fromDay, zone) else period.startMillis(zone),
             untilMillis = if (period == null) app.expenses.core.domain.SearchDates.untilMillis(input.toDay, zone) else period.endMillis(zone),
         )
-        val found = ok.db.searchFiltered(query, SEARCH_LIMIT + 1)
+        val found = ok.db.searchFiltered(query, ok.captureRules.aliases(), SEARCH_LIMIT + 1)
         val shown = found.take(SEARCH_LIMIT.toInt())
         accountNames = ok.db.schemaQueries.selectAccounts().executeAsList().associate { it.id to it.name }
         val firsts = firstCategories(ok, shown)
@@ -3586,7 +3658,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
         val ignored = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
-        val all = SubscriptionFinder.find(samples, today.toEpochDays().toInt())
+        val all = SubscriptionFinder.find(samples, today.toEpochDays().toInt(), ok.captureRules.aliases())
         val shown = all.filter { !it.ignoredBy(ignored) } // by merchant and cadence: a changed typical price does not bring a hidden row back
         val dayFmt = DatePattern("d MMM")
         fun cadence(d: Int) = when (d) { 28 -> "every 28 days"; 30 -> "every month"; 84 -> "every 12 weeks"; 91 -> "every 3 months"; 182 -> "every 6 months"; else -> "every year" }
@@ -3612,7 +3684,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
-        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt()).firstOrNull { it.key == key } ?: return@withStore say("That one is not a subscription any more.")
+        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt(), ok.captureRules.aliases()).firstOrNull { it.key == key } ?: return@withStore say("That one is not a subscription any more.")
         if (ok.recurring.list().any { it.name.trim().lowercase() == sub.name.trim().lowercase() }) return@withStore say("${sub.name} is already in Repeating expenses.")
         // the latest charge is looked up by the merchant as it was written on it (the finder's key may be a clean name for several spellings)
         val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, sub.lastName.trim().lowercase()).executeAsOneOrNull() ?: return@withStore say("Could not set up ${sub.name}. Add it under Repeating expenses by hand.")

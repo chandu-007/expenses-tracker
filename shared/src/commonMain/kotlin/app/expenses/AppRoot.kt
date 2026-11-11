@@ -32,6 +32,7 @@ import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
 import app.expenses.ui.BillsScreen
 import app.expenses.ui.GuideScreen
+import app.expenses.ui.AliasControls
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.Appearance
@@ -216,6 +217,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var reporting by rememberSaveable { mutableStateOf(false) }
             var calendaring by rememberSaveable { mutableStateOf(false) }
             var subscribing by rememberSaveable { mutableStateOf(false) }
+            val payeeAliases by viewModel.payeeAliases.collectAsStateWithLifecycle(context = MAIN)
             var transferring by rememberSaveable { mutableStateOf(false) }
             var goaling by rememberSaveable { mutableStateOf(false) }
             var searching by rememberSaveable { mutableStateOf(false) }
@@ -420,7 +422,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 2 -> if (editorFull) editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
-                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() })
+                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onOpenCheckup = { inboxOpen = false; checkupOpen = true }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
@@ -496,6 +498,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 13 -> {
                         BackHandler { securing = false; lock.dismissMessage() }
                         SecurityScreen(
+                            shops = AliasControls(payeeAliases, { from, to, done -> viewModel.joinShops(from, to, false, done) }, viewModel::removeAlias),
                             settings = lockSettings, availability = lock::availability, message = lockMessage,
                             onEnable = { lock.enable(it) }, onDisable = { lock.disable() },
                             onTimeout = { lock.setTimeout(it) },

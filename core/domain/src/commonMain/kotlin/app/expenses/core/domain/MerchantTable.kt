@@ -72,8 +72,8 @@ internal object MerchantTable {
         m("Barista", FOOD, "barista coffee", "barista lavazza"), m("Chili's", FOOD, "chilis"), m("Biryani Blues", FOOD),
         m("Punjab Grill", FOOD), m("Mainland China", FOOD), m("Nirula's", FOOD, "nirulas"), m("Keventers", FOOD), m("Naturals Ice Cream", FOOD),
         // ---- Groceries: quick commerce, supermarkets, dairy, meat
-        m("BigBasket", GROCERIES, "big basket", "bb daily", "bbdaily", "supermarket grocery supplies"), m("Blinkit", GROCERIES, "grofers", "blink commerce"), m("Zepto", GROCERIES, "kiranakart"), m("DMart", GROCERIES, "d mart", "avenue supermarts", "dmart ready"),
-        m("JioMart", GROCERIES, "jio mart"), m("Swiggy Instamart", GROCERIES, "instamart"), m("Milkbasket", GROCERIES, "milk basket"), m("Licious", GROCERIES), m("Reliance Fresh", GROCERIES),
+        m("BigBasket", GROCERIES, "big basket", "bb daily", "bbdaily", "supermarket grocery supplies", "innovative retail concepts"), m("Blinkit", GROCERIES, "grofers", "blink commerce"), m("Zepto", GROCERIES, "kiranakart"), m("DMart", GROCERIES, "d mart", "avenue supermarts", "dmart ready"),
+        m("JioMart", GROCERIES, "jio mart"), m("Swiggy Instamart", GROCERIES, "instamart"), m("Milkbasket", GROCERIES, "milk basket"), m("Licious", GROCERIES, "delightful gourmet"), m("Reliance Fresh", GROCERIES),
         m("Nature's Basket", GROCERIES, "natures basket"), m("Reliance Smart", GROCERIES, "reliance smart bazaar", "smart bazaar"), m("More Retail", GROCERIES, "more supermarket", "more megastore"),
         m("Spencer's", GROCERIES, "spencers"), m("Star Bazaar", GROCERIES, "star bazar"), m("Big Bazaar", GROCERIES, "big bazar"), m("Easyday", GROCERIES, "easy day"), m("SPAR Hypermarket", GROCERIES),
         m("Metro Cash & Carry", GROCERIES, "metro cash carry", "metro cash and carry"), m("Country Delight", GROCERIES, "countrydelight"), m("Akshayakalpa", GROCERIES, "akshaya kalpa"),
@@ -115,8 +115,8 @@ internal object MerchantTable {
         m("Spectranet", BILLS, "spectra net"), m("Den Networks", BILLS, "den broadband"), m("Siti Cable", BILLS, "siti networks"),
         kw(BILLS, "electricity", home = UTILITIES), kw(BILLS, "broadband", "recharge", home = MOBILE),
         // ---- Shopping: marketplaces, fashion, electronics, home, beauty
-        m("Amazon", SHOPPING, "amazon india", "amazon seller services", "amazon in", "amzn"), m("Amazon Pay", SHOPPING, "amazonpay", "amazon pay india", "amazon payments"), m("Flipkart", SHOPPING, "flipkart internet", "flipkart payments"),
-        m("Myntra", SHOPPING, "myntra designs"), m("Ajio", SHOPPING), m("Meesho", SHOPPING), m("Nykaa", SHOPPING, "nykaa fashion", "fsn e commerce", "nykaa e retail"), m("Tata CLiQ", SHOPPING, "tata cliq", "tatacliq"),
+        m("Amazon", SHOPPING, "amazon india", "amazon seller services", "amazon in", "amzn", "amzn mktp"), m("Amazon Pay", SHOPPING, "amazonpay", "amazon pay india", "amazon payments"), m("Flipkart", SHOPPING, "flipkart internet", "flipkart payments"),
+        m("Myntra", SHOPPING, "myntra designs"), m("Ajio", SHOPPING), m("Meesho", SHOPPING, "fashnear technologies"), m("Nykaa", SHOPPING, "nykaa fashion", "fsn e commerce", "nykaa e retail"), m("Tata CLiQ", SHOPPING, "tata cliq", "tatacliq"),
         m("Decathlon", SHOPPING, "decathlon sports"), m("IKEA", SHOPPING, "ikea india"), m("Croma", SHOPPING, "infiniti retail", "chroma"), m("Lenskart", SHOPPING, "lenskart solutions"), m("Reliance Digital", SHOPPING),
         m("Shoppers Stop", SHOPPING), m("Pantaloons", SHOPPING), m("Westside", SHOPPING), m("Max Fashion", SHOPPING), m("Uniqlo", SHOPPING), m("Reliance Trends", SHOPPING),
         m("FirstCry", SHOPPING, "first cry"), m("Mamaearth", SHOPPING, "honasa consumer"), m("Purplle", SHOPPING), m("Tira Beauty", SHOPPING, "tira"), m("Sephora", SHOPPING), m("Bewakoof", SHOPPING),
@@ -163,7 +163,7 @@ internal object MerchantTable {
         n("Times Prime", FUN, SUBS, "timesprime"), n("Lionsgate Play", FUN, SUBS, "lionsgate"), n("Discovery Plus", FUN, SUBS), n("Aha Video", FUN, SUBS),
         // Fuel and travel
         n("Hindustan Petroleum Pump", TRANSPORT, FUEL, "petrol pump", "fuel station", "petrol bunk"),
-        n("Booking.com", null, TRAVEL, "booking com", "bookingcom"), n("Airbnb", null, TRAVEL), n("OYO", null, TRAVEL, "oyo rooms"), n("Agoda", null, TRAVEL), n("Treebo", null, TRAVEL, "treebo hotels"), n("FabHotels", null, TRAVEL, "fab hotels"),
+        n("Booking.com", null, TRAVEL, "booking com", "bookingcom"), n("Airbnb", null, TRAVEL), n("OYO", null, TRAVEL, "oyo rooms", "oravel stays"), n("Agoda", null, TRAVEL), n("Treebo", null, TRAVEL, "treebo hotels"), n("FabHotels", null, TRAVEL, "fab hotels"),
         n("Yatra", null, TRAVEL, "yatra online"), n("Thomas Cook", null, TRAVEL, "thomas cook india"), n("SOTC Travel", null, TRAVEL, "sotc"), n("Taj Hotels", null, TRAVEL, "indian hotels company", "taj hotel"),
         n("Marriott", null, TRAVEL, "marriott hotels"), n("Lemon Tree Hotels", null, TRAVEL, "lemon tree"), n("IXIGO Trains", TRANSPORT, TRAVEL, "ixigo trains"),
         // Education

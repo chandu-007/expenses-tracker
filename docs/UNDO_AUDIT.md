@@ -41,6 +41,7 @@ is a dialog asked before the action; "reversible" is a button on the item itself
 | **Remove a capture rule** | Category rules | **Undo bar (new, after 0.10.4)**: "Removed the rule \"swiggy\""; Undo puts it back in its place in the order (`snapshotRule` / `restoreRule`). Refused, with a message and nothing changed, when its category was deleted meanwhile or the person made another rule with the same words since | RulesUndoUiTest, CaptureRuleStoreTest |
 | Clear a budget limit | Budget | None. Left: one number, shown in the dialog that clears it | |
 | Remove billing dates from a card | Accounts | None. Left: three numbers, the dialog that removes them shows them | |
+| **Count two names as one shop ("Same shop as…") / make a name its own shop again** | Category rules (learned list), To review card (Change) | **Undo bar (new, Slice 108)**: "X now counts as Y" / "X is its own shop again" (on the card: the To review bar; on the rules page: its own bar). Undo puts back exactly what the name counted as before, or nothing (`CaptureRuleStore.snapshotAlias` / `restoreAlias`); refused with a message and nothing changed when it would now make a cycle. The alias is an overlay setting: no entry, learned row or rule is changed by making it or removing it, so there is nothing else to restore | PayeeAliasStoreTest (host); device test not written |
 | Forget one / all recent searches | Search | None. Left: they are only a shortcut list | |
 
 ## Why a statement import has no Undo

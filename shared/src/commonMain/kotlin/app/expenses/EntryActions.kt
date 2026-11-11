@@ -121,13 +121,16 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val label = d.note.trim().ifEmpty { f.title }
         val payer = originText?.let { PayeeGuess.of(it) } ?: label.takeIf { it.isNotEmpty() }
         val learned = ok.captureRules.learnedRows()
+        val aliases = ok.captureRules.aliases()
         val words = app.expenses.core.domain.SimilarEntries.searchWords(label)
         val candidates = if (words.isEmpty()) emptyList() else ok.db.schemaQueries.similarCandidates("INCOME", words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
-            .filter { it.id != d.id }.map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at) }
+            .filter { it.id != d.id }.map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
+        val amount = app.expenses.core.domain.parseAmount(d.amountText, app.expenses.core.domain.Currency.INR)?.minorUnits ?: 0L
         val advice = app.expenses.core.parsers.CaptureCategory.adviseIncome(
             payer, listOfNotNull(label, originText).joinToString(" "), ok.captureRules.rules(),
-            app.expenses.core.parsers.CaptureCategory.Taught(learned.associate { it.key to it.categoryId }, learned.associate { it.key to it.uses }),
-            cats.map { it.id }.toSet(), cats.filter { it.parentId == null }.associate { it.name.lowercase() to it.id }, app.expenses.core.domain.SimilarEntries.profile(label, candidates),
+            app.expenses.core.parsers.CaptureCategory.Taught(learned.associate { it.key to it.categoryId }, learned.associate { it.key to it.uses }, aliases),
+            cats.map { it.id }.toSet(), cats.filter { it.parentId == null }.associate { it.name.lowercase() to it.id }, app.expenses.core.domain.SimilarEntries.profile(label, candidates, aliases),
+            band = app.expenses.core.domain.AmountBands.of(label, amount, app.expenses.core.domain.Currency.INR.code, candidates, aliases),
         ) ?: return e
         val name = cats.firstOrNull { it.id == advice.categoryId }?.name ?: return e
         return f.copy(suggestion = SuggestedCategoryUi(advice.categoryId, name, advice.note, advice.certainty == app.expenses.core.domain.Certainty.SURE))
@@ -406,7 +409,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     private fun makeTransfers(moves: List<TransferMove>, allowIncome: Boolean): BulkResult {
         val q = ok.db.schemaQueries
         val todo = ArrayList<EntryDraft>(); val absorbed = ArrayList<String>(); var skipped = 0; val reasons = LinkedHashSet<String>()
-        val used = HashSet<String>(); val carriedNote = HashMap<String, String?>()
+        val used = HashSet<String>(); val carriedNote = HashMap<String, String?>(); val partnerOf = HashMap<String, String>()
         fun skip(why: String) { skipped++; reasons += why.trimEnd('.').replaceFirstChar { it.lowercase() } }
         for (m in moves) {
             val id = m.entryId
@@ -438,12 +441,13 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
                 problem != null -> skip(problem)
                 partnerProblem != null -> skip(partnerProblem)
                 draft == null || EntryDrafts.build(draft, EntryId("preview"), BaseCurrency.current) !is DraftResult.Ok -> skip("it could not be made a transfer")
-                else -> { todo += draft; partner?.let { absorbed += it.id; carriedNote[id] = it.note } }
+                else -> { todo += draft; partner?.let { absorbed += it.id; partnerOf[id] = it.id; carriedNote[id] = it.note } }
             }
         }
         val done = ok.store.atomically {
             val kinds = todo.map { changeKind(it, carriedNote[it.id]) }
-            absorbed.forEach { ok.store.delete(EntryId(it)) }
+            // the income of a pair is deleted and recorded as replaced by the transfer that took over its move, so an older backup restored later does not bring it back (Undo restores it, which drops the record)
+            kinds.forEach { c -> partnerOf[c.oldId]?.let { ok.kindChanges.absorb(it, c.newId) } }
             kinds
         }
         return BulkResult(done.size, skipped, reasons.joinToString("; ").takeIf { skipped > 0 }, undoKinds = done, undoRestore = absorbed.reversed())

@@ -5,6 +5,7 @@ import app.expenses.core.domain.CategoryRow
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DatePeriod
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.PayeeKey
 import app.expenses.core.domain.ReportMath
 import app.expenses.core.storage.db.ExpensesDb
 import kotlinx.datetime.TimeZone
@@ -93,7 +94,7 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
             is DrillTarget.InAccount -> grouped(currency, from, until, account = target.id)
             is DrillTarget.WithTag -> grouped(currency, from, until, tag = target.tag)
             DrillTarget.Untagged -> grouped(currency, from, until, untagged = true)
-            is DrillTarget.AtMerchant -> grouped(currency, from, until, merchantKey = target.key)
+            is DrillTarget.AtMerchant -> merchantLines(currency, from, until, target.key, limit)
         }
         return rows.map { DrillLine(it.id, it.at, it.kind, title(it.kind, it.merchant, it.note), it.category?.let { id -> names[id] ?: id }, money(it.mine)) }
     }
@@ -102,6 +103,39 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
         q.drillGrouped(currency.code, from, until, account, tag, merchantKey, if (untagged) 1L else 0L, limit).executeAsList().map { Row(it.entry_id, it.kind, it.merchant, it.note, it.occurred_at, it.mine ?: 0L, it.category_id) }
 
     private data class Row(val id: String, val kind: String, val merchant: String?, val note: String?, val at: Long, val mine: Long, val category: String?)
+
+    private class MerchantSum(var key: String?, var display: String, var mine: Long, var biggest: Long)
+
+    /**
+     * The merchant rows of the report. Names the person joined as one shop ("same shop as", [CaptureRuleStore.aliases]) are one row under the name they gave the shop, with the key of its biggest name
+     * (what [DrillTarget.AtMerchant] opens: it opens every name of the shop, see [merchantLines]); every other name is its own row as typed, ignoring capitals, as before. Entries are not changed.
+     */
+    private fun merchantRows(currency: Currency, from: Long, until: Long): List<Triple<String?, String, Money>> {
+        val rows = q.spendByMerchant(currency.code, from, until).executeAsList()
+        val aliases = CaptureRuleStore(db).aliases()
+        val out = ArrayList<Triple<String?, String, Money>>(rows.size)
+        val joined = LinkedHashMap<String, MerchantSum>()
+        for (r in rows) {
+            val display = r.display?.trim()?.takeIf { it.isNotEmpty() }
+            val mine = r.mine ?: 0L
+            val head = if (aliases.isEmpty || display == null) null else PayeeKey.of(display)?.takeIf { aliases.inGroup(it) }?.let { aliases.resolve(it) }
+            if (head == null) { out += Triple<String?, String, Money>(r.key, display ?: "No merchant", Money(mine, currency)); continue }
+            val sum = joined.getOrPut(head) { MerchantSum(r.key, aliases.labelOf(head) ?: display.orEmpty(), 0L, Long.MIN_VALUE) }
+            sum.mine += mine
+            if (mine > sum.biggest) { sum.biggest = mine; sum.key = r.key }
+        }
+        for (s in joined.values) out += Triple<String?, String, Money>(s.key, s.display, Money(s.mine, currency))
+        return out
+    }
+
+    /** The entries of one merchant row: every name of the shop when the row is a joined one, else the one name as typed. They add up to the row's total. */
+    private fun merchantLines(currency: Currency, from: Long, until: Long, key: String, limit: Long): List<Row> {
+        val aliases = CaptureRuleStore(db).aliases()
+        val head = if (aliases.isEmpty || key.isEmpty()) null else PayeeKey.of(key)?.takeIf { aliases.inGroup(it) }?.let { aliases.resolve(it) }
+        if (head == null) return grouped(currency, from, until, merchantKey = key)
+        val keys = q.spendByMerchant(currency.code, from, until).executeAsList().filter { r -> r.display?.trim()?.takeIf { it.isNotEmpty() }?.let { PayeeKey.of(it) }?.let { aliases.resolve(it) } == head }.map { it.key }.ifEmpty { listOf(key) }
+        return keys.flatMap { grouped(currency, from, until, merchantKey = it) }.sortedByDescending { it.at }.take(limit.toInt())
+    }
 
     /** Your spending in [period] grouped by account, tag or merchant (the category report has its own tree), biggest first. */
     fun groups(group: ReportGroup, period: DatePeriod, zone: TimeZone, currency: Currency): List<ReportMath.GroupRow> {
@@ -117,7 +151,7 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
                 val untagged = q.spendUntagged(currency.code, from, until).executeAsOne()
                 if (untagged != 0L) tagged + Triple(null, "No tag", Money(untagged, currency)) else tagged
             }
-            ReportGroup.MERCHANT -> q.spendByMerchant(currency.code, from, until).executeAsList().map { Triple<String?, String, Money>(it.key, it.display?.trim()?.takeIf { d -> d.isNotEmpty() } ?: "No merchant", Money(it.mine ?: 0L, currency)) }
+            ReportGroup.MERCHANT -> merchantRows(currency, from, until)
         }
         return ReportMath.groups(items, currency)
     }

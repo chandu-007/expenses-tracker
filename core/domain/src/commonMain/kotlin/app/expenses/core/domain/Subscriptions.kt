@@ -73,14 +73,27 @@ object SubscriptionFinder {
     private const val MOST_CHARGES_IN_30_DAYS = 6
     private const val MIN_ONE_OFF_YEARLY_MINOR = 20_000L
 
-    /** The merchant as one name: the clean name from the merchant table when the text is a known service ("APPLE.COM/BILL" and "Apple Services" are both "apple services"), else the text in lower case with its spaces tidied. */
-    fun keyOf(name: String): String = (DefaultRules.displayNameFor(name) ?: name).trim().lowercase().replace(Regex("\\s+"), " ")
+    /**
+     * The merchant as one name: the clean name from the merchant table when the text is a known service ("APPLE.COM/BILL" and "Apple Services" are both "apple services"), else the text in lower
+     * case with its spaces tidied. Names the person joined as one shop ([aliases]) are one merchant here, under the name they gave the shop; charges are never renamed, only counted together. The
+     * built-in same-merchant table ([MerchantAliases]) is deliberately not applied: a subscription the person hid under its old name must not come back under a merged one.
+     */
+    fun keyOf(name: String, aliases: PayeeAliases = PayeeAliases.NONE): String {
+        val key = tidy(DefaultRules.displayNameFor(name) ?: name)
+        if (aliases.isEmpty) return key
+        val payee = PayeeKey.of(name) ?: return key
+        val shop = aliases.resolve(payee)
+        // every name of a shop the person joined, the shop's own included, is counted under the name they gave the shop
+        return if (aliases.inGroup(payee) || aliases.inGroup(shop)) tidy(aliases.labelOf(shop) ?: shop) else key
+    }
+
+    private fun tidy(s: String) = s.trim().lowercase().replace(Regex("\\s+"), " ")
 
     /** Cash taken out at an ATM is one merchant to the finder ("ATM cash", "ATM-CASH") and so would look like a bill: it is left out. */
     private fun isCashWithdrawal(name: String): Boolean = name.trim().lowercase().let { it == "cash" || it == "cash withdrawal" || Regex("^atm\\b").containsMatchIn(it) }
 
-    fun find(samples: List<SubscriptionSample>, today: Int): List<Subscription> =
-        samples.filter { it.name.isNotBlank() && it.amountMinor > 0 && !isCashWithdrawal(it.name) }.groupBy { keyOf(it.name) }.flatMap { (key, all) -> judgeMerchant(key, all, today) }.sortedByDescending { it.yearlyMinor }
+    fun find(samples: List<SubscriptionSample>, today: Int, aliases: PayeeAliases = PayeeAliases.NONE): List<Subscription> =
+        samples.filter { it.name.isNotBlank() && it.amountMinor > 0 && !isCashWithdrawal(it.name) }.groupBy { keyOf(it.name, aliases) }.flatMap { (key, all) -> judgeMerchant(key, all, today) }.sortedByDescending { it.yearlyMinor }
 
     /**
      * The merchant as a whole, or each of its prices on its own when it bills several things at once. Two prices that are charged during the same months (Apple's iCloud at 75 and Music at 219

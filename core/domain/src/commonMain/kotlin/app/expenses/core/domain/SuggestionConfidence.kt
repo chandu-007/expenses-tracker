@@ -11,9 +11,17 @@ data class HistoryProfile(val top: String?, val agree: Int, val other: Int, /** 
  * (a missing one is shown as "Uncategorised"), so only a suggestion that rests on the person's own consistent choices, or on a merchant the starter list names with no doubt, is [Certainty.SURE]:
  * - their own rule, the words of a bank charge, a starter merchant that sells one kind of thing: sure;
  * - a marketplace or wallet (Amazon, Paytm, Google Play), a payment to a person, and a guess from the words of a name ("tea stall"): always check;
- * - what they chose before: sure when the payee is a plain shop and nothing in their history disagrees, otherwise check; a person or marketplace needs two agreeing choices and no disagreement.
+ * - what they chose before: sure when the payee is a plain shop and nothing in their history disagrees, otherwise check; a person or marketplace needs two agreeing choices and no disagreement;
+ * - what they filed for amounts like this one ([SuggestionSource.AMOUNT], for a payee that is paid for different things, so always held to the higher bar): sure only when [AGREE_MIXED] or more
+ *   of the nearby earlier entries agree and none of them is in another category; otherwise a check, with the counts shown.
  */
 object SuggestionConfidence {
+    /** Agreeing earlier entries a plain shop needs for its history to be sure. */
+    const val AGREE_PLAIN = 2
+
+    /** Agreeing earlier entries a marketplace, a person, or a payee that is paid for different things needs. */
+    const val AGREE_MIXED = 3
+
     fun of(source: SuggestionSource, mixed: Boolean, person: Boolean, uses: Int, history: HistoryProfile?, suggested: String): Certainty {
         val disagrees = history != null && history.other > 0 && (history.top != suggested || history.other >= history.agree)
         val needsTwo = mixed || person
@@ -28,8 +36,10 @@ object SuggestionConfidence {
             }
             SuggestionSource.HISTORY -> {
                 val agree = history?.agree ?: 0
-                if (history == null || history.other > 0 || agree < (if (needsTwo) 3 else 2)) Certainty.CHECK else Certainty.SURE
+                if (history == null || history.other > 0 || agree < (if (needsTwo) AGREE_MIXED else AGREE_PLAIN)) Certainty.CHECK else Certainty.SURE
             }
+            // [history] here is the profile of the nearby amounts, not of the payee
+            SuggestionSource.AMOUNT -> if (history == null || history.top != suggested || history.other > 0 || history.agree < AGREE_MIXED) Certainty.CHECK else Certainty.SURE
         }
     }
 }

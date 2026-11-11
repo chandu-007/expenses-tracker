@@ -787,7 +787,7 @@ ORDER BY (amount_minor = :amount) DESC, occurred_at DESC LIMIT 8;
 -- Earlier expenses and incomes whose merchant or note shares a word with :match (a full-text query such as "icloud" OR "storage"), with the one category each is
 -- filed under (an entry with more than one split has none, so it is never offered a move). The caller keeps only those that really read alike.
 similarCandidates:
-SELECT e.id, e.kind, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label, e.amount_minor, e.occurred_at, e.account_id,
+SELECT e.id, e.kind, coalesce(nullif(trim(e.merchant), ''), e.note, '') AS label, e.amount_minor, e.currency, e.occurred_at, e.account_id,
   CASE WHEN e.kind = 'INCOME' THEN coalesce(e.category_id, '')
        WHEN (SELECT COUNT(*) FROM entry_split s WHERE s.entry_id = e.id) = 1 THEN (SELECT s.category_id FROM entry_split s WHERE s.entry_id = e.id)
        ELSE '' END AS category_id
