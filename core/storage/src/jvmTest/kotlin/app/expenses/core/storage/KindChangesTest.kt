@@ -376,4 +376,47 @@ class KindChangesTest {
         changes.change("b", transfer("t2", "main", "cash", at = 2_000), "ATM", emptyList(), fallbackNote = "from the income")
         assertEquals("own note", q.entryById("t2").executeAsOne().note)
     }
+
+    private fun records() = q.allReplaced().executeAsList().associate { it.entry_id to it.replaced_by }
+    private fun recordOps(row: String) = q.opsSince("", 100_000).executeAsList().filter { it.entity == "entry_replaced" && it.row_id == row }.map { it.value_ }
+
+    @Test
+    fun aChangeRecordsWhichEntryItReplacedAChainKeepsEveryLinkAndUndoDropsThemOneByOneEachLogged() {
+        capturedExpense("a1", "UPI-5")
+        val c1 = changes.change("a1", transfer("t1", "main", "cash"), "ATM", emptyList())
+        assertEquals(mapOf("a1" to "t1"), records()); assertEquals("CHANGED", q.replacedOf("a1").executeAsOne().reason)
+        val c2 = changes.change("t1", income("i1"), "ATM", emptyList())
+        assertEquals(mapOf("a1" to "t1", "t1" to "i1"), records(), "the record of the first change stays when the replacement is changed again")
+        changes.undo(c2)
+        assertEquals(mapOf("a1" to "t1"), records())
+        changes.undo(c1)
+        assertEquals(emptyMap(), records())
+        assertEquals(listOf("t1", null), recordOps("a1")); assertEquals(listOf("i1", null), recordOps("t1"))
+    }
+
+    @Test
+    fun aChangeThatIsRefusedLeavesNoRecordAndABackupWithoutAnyChangeCarriesNone() {
+        ledger.save(expense("a"), EntryDetails(merchant = "ATM"))
+        assertFailsWith<IllegalArgumentException> { changes.change("a", expense("a2"), "ATM", emptyList()) }
+        assertFailsWith<IllegalArgumentException> { changes.change("gone", income("i"), "ATM", emptyList()) }
+        assertEquals(emptyMap(), records()); assertEquals(emptyList(), recordOps("a"))
+        val data = BackupStore(db, clock, { now }, ledger, TemplateStore(db, clock) { now }, RecurringStore(db, clock, { now }, ledger)).export()
+        assertEquals(emptyList(), data.replaced)
+        assertTrue("\"replaced\"" !in BackupFile.encode(data, 1L).decodeToString(), "a ledger with no change writes the file it wrote before records existed")
+    }
+
+    @Test
+    fun theIncomeOfAPairIsDeletedAndRecordedAsPairedAndBringingItBackDropsTheRecord() {
+        ledger.save(income("inc", account = "cash"), EntryDetails(merchant = "Moved in"))
+        ledger.save(expense("exp"), EntryDetails(merchant = "Moved out"))
+        val c = changes.change("exp", transfer("t", "main", "cash"), "Moved", emptyList())
+        changes.absorb("inc", c.newId)
+        assertEquals(1L, q.entryById("inc").executeAsOne().deleted)
+        assertEquals(mapOf("exp" to "t", "inc" to "t"), records()); assertEquals("PAIRED", q.replacedOf("inc").executeAsOne().reason)
+        assertEquals(listOf("t"), live().map { it.id })
+        // Undo, in the order the app does it: the changes back, then the absorbed incomes
+        changes.undo(c); ledger.restore(EntryId("inc"))
+        assertEquals(emptyMap(), records()); assertEquals(setOf("exp", "inc"), live().map { it.id }.toSet())
+        assertEquals(listOf("t", null), recordOps("inc"))
+    }
 }

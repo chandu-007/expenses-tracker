@@ -7,8 +7,10 @@ import app.expenses.core.domain.Money
 import app.expenses.core.domain.ledger.Account
 import app.expenses.core.domain.ledger.AccountId
 import app.expenses.core.domain.ledger.AccountType
+import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.domain.ledger.Income
 import app.expenses.core.storage.BackupException
 import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.Sha256
@@ -88,6 +90,32 @@ object IosBackupDebug {
         }
     }
 
+    /** Restores each plain backup in [paths], in that order, into ONE scratch database and answers `live=` and the sorted ids of the live entries (a replaced entry must not come back in either order). */
+    suspend fun restoreInOrderThroughTheApp(host: IosHostServices, paths: List<String>): String {
+        if (!runningUnderXCTest()) return ONLY_IN_TESTS
+        val platform = ScratchPlatform(IosCore.get(host).platform)
+        val container = AppContainer(platform)
+        val transfer = DataTransfer(platform, container)
+        val ids = mutableListOf<String>()
+        return try {
+            var answer: String? = null
+            for (path in paths) {
+                when (val opened = transfer.open(uriOf(path), null)) {
+                    is DataTransfer.Opened.NeedsPassphrase -> { answer = "needs a passphrase"; break }
+                    is DataTransfer.Opened.Ready -> { ids += opened.data.attachments.map { it.id }; transfer.restore(opened) }
+                }
+            }
+            answer ?: ("live=" + container.write { ok -> ok.db.schemaQueries.liveEntriesInInsertionOrder().executeAsList().map { it.id }.sorted() }.joinToString(","))
+        } catch (e: BackupException) {
+            "refused: ${e.message}"
+        } catch (e: Throwable) {
+            "failed: ${e::class.simpleName}: ${e.message}"
+        } finally {
+            ids.forEach(platform.attachmentFiles::delete)
+            runCatching { container.close() }
+        }
+    }
+
     /**
      * Makes a backup with four sample files through [DataTransfer.backup] (a scratch database, the real attachment store, the Files-style stream, the sealed layout
      * when [passphrase] is not null) and writes it to [path], read back and checked as the app does. [path] is then read by the Java reference.
@@ -101,7 +129,10 @@ object IosBackupDebug {
         return try {
             container.write { ok ->
                 ok.store.saveAccount(Account(AccountId("cash"), "Cash", AccountType.CASH, Currency.INR))
-                for (e in 1..2) ok.store.save(Expense(EntryId("e$e"), e.toLong(), AccountId("cash"), Money(500L + e, Currency.INR)), EntryDetails(merchant = "Sample $e"))
+                ok.store.save(Expense(EntryId("e1"), 1, AccountId("cash"), Money(501L, Currency.INR)), EntryDetails(merchant = "Sample 1"))
+                // e2 is made by a type change, so the backup also carries one "replaced" record (e2-before -> e2) and has exactly two live entries
+                ok.store.save(Expense(EntryId("e2-before"), 2, AccountId("cash"), Money(502L, Currency.INR)), EntryDetails(merchant = "Sample 2"))
+                ok.kindChanges.change("e2-before", Income(EntryId("e2"), 2, AccountId("cash"), Money(502L, Currency.INR), CategoryId("income:other")), "Sample 2", emptyList())
             }
             for (k in 1..sizes.size) {
                 val bytes = pattern(k, sizes[k - 1])

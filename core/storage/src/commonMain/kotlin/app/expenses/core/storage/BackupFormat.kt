@@ -107,6 +107,12 @@ private val MIME_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9!#&^_.+-]{0,126}/[A-Za-z0
  */
 @Serializable data class BackupBalanceFix(val accountId: String, val at: Long, val beforeMinor: Long, val afterMinor: Long)
 
+/**
+ * An entry another entry took the place of ([entryId] was replaced by [replacedBy]; [reason] is `CHANGED`, `PAIRED` or `MATCHED`, see [ReplacedEntries]). A backup carries live entries only, so this record
+ * is the only trace of an original that a type change made not live: a restore never brings back an entry that is listed here, whatever the order of the restores.
+ */
+@Serializable data class BackupReplaced(val entryId: String, val replacedBy: String, val reason: String = ReplacedEntries.CHANGED)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -139,6 +145,11 @@ data class BackupData(
     @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val attachments: List<BackupAttachment> = emptyList(),
     /** The fixes the person made to account balances. Left out of the JSON when there are none, so a backup without any is exactly as it was before this existed; an older reader ignores the key. */
     @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val balanceFixes: List<BackupBalanceFix> = emptyList(),
+    /**
+     * The entries a type change replaced (an expense made a transfer, the income of a moved pair, an earlier entry a text made a transfer): the original and the entry that took its place. Left out of the JSON
+     * when there are none, so a backup of a ledger without any is exactly as it was before this existed; an older reader ignores the key (and then restores like an older app: see docs/BACKUP_FORMAT.md).
+     */
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val replaced: List<BackupReplaced> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

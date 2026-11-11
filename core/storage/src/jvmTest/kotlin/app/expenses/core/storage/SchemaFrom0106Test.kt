@@ -11,8 +11,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A database made by 0.10.6 (the commit before the work of Slice 104; its CREATE statements are `schema-0.10.6.sql`, taken from that commit) opens with the current code, needs no migration (the work added
- * queries only: no table, column or index changed), keeps every row it had, and works with the new queries and with the move of a bill made from a payment's confirmation. Rows, texts and amounts are invented.
+ * A database made by 0.10.6 (the commit before the work of Slice 104; its CREATE statements are `schema-0.10.6.sql`, taken from that commit) opens with the current code, keeps every row it had, and works
+ * with the new queries and with the move of a bill made from a payment's confirmation. The one schema change since is additive: the small table `entry_replaced` (the record of entries a type change
+ * replaced, Slice 109), which `SchemaUpgrade.ensureLatest` creates; no table, column or index changed. Rows, texts and amounts are invented.
  */
 class SchemaFrom0106Test {
     private val statements = checkNotNull(javaClass.classLoader.getResourceAsStream("schema-0.10.6.sql")).readBytes().decodeToString().split("-- @@").drop(1).map { it.trim() }.filter { it.isNotEmpty() }
@@ -43,13 +44,37 @@ class SchemaFrom0106Test {
     private fun exec(c: Connection, sql: String) = c.createStatement().use { it.execute(sql) }
 
     @Test
-    fun the0106DatabaseHasExactlyTheSchemaTheCurrentCodeCreatesSoNothingIsMigrated() {
+    fun the0106DatabaseDiffersFromTheCurrentSchemaOnlyByTheTableOfReplacedEntriesAndTheUpgradeStepAddsExactlyThat() {
         val old = baseline(); val now = fresh()
         assertTrue(shape(old).size > 200, "the baseline was read: ${shape(old).size} objects and columns")
-        assertEquals(shape(now), shape(old), "no table, column, index or trigger changed since 0.10.6")
+        val replaced = { s: String -> s.startsWith("table entry_replaced") || s.startsWith("entry_replaced.") }
+        assertEquals(shape(now).filterNot(replaced), shape(old), "no other table, column, index or trigger changed since 0.10.6")
+        assertEquals(listOf("table entry_replaced", "entry_replaced.entry_id TEXT notnull=1 pk=1", "entry_replaced.replaced_by TEXT notnull=1 pk=0", "entry_replaced.reason TEXT notnull=1 pk=0"), shape(now).filter(replaced), "the record of replaced entries is one small table")
         val d = JdbcSqliteDriver("jdbc:sqlite:${old.path}")
         SchemaUpgrade.ensureLatest(d); SchemaUpgrade.ensureLatest(d); d.close()
-        assertEquals(shape(now), shape(old), "the upgrade step changes nothing on it, run once or twice")
+        assertEquals(shape(now), shape(old), "the upgrade step makes it the same schema, run once or twice")
+    }
+
+    @Test
+    fun aDatabaseOf0106GetsTheTableAndTheRecordOfAReplacedEntryWorksOnItWithItsRowsIntact() {
+        val f = baseline()
+        DriverManager.getConnection("jdbc:sqlite:${f.path}").use { c ->
+            exec(c, "INSERT INTO currency(code, digits) VALUES ('INR', 2)")
+            exec(c, "INSERT INTO account(id, name, type, currency, deleted, opening_minor, archived) VALUES ('main', 'Main', 'BANK', 'INR', 0, 0, 0)")
+            exec(c, "INSERT INTO account(id, name, type, currency, deleted, opening_minor, archived) VALUES ('cash', 'Cash', 'CASH', 'INR', 0, 0, 0)")
+            exec(c, "INSERT INTO entry(id, kind, occurred_at, account_id, amount_minor, currency, merchant, source, source_ref, deleted) VALUES ('e1', 'EXPENSE', 5000, 'main', 250000, 'INR', 'ATM', 'sms', 'ref-1', 0)")
+        }
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${f.path}")
+        SchemaUpgrade.ensureLatest(driver)
+        val db = ExpensesDb(driver); val clock = app.expenses.core.domain.sync.HlcClock("n")
+        val ledger = LedgerStore(db, clock) { 1L }
+        assertEquals(emptyList(), db.schemaQueries.allReplaced().executeAsList(), "nothing was replaced on a database from before")
+        val changes = KindChanges(db, ledger, OriginStore(db), ExpectStore(db), AttachmentStore(db, clock) { 1L })
+        val c = changes.change("e1", app.expenses.core.domain.ledger.Transfer(app.expenses.core.domain.ledger.EntryId("t1"), 5000, app.expenses.core.domain.ledger.AccountId("main"), app.expenses.core.domain.ledger.AccountId("cash"), app.expenses.core.domain.Money(250000, app.expenses.core.domain.Currency.INR)), "ATM", emptyList())
+        assertEquals("t1", ledger.replaced.by("e1")); assertEquals(1, db.schemaQueries.entryCount().executeAsOne().toInt())
+        changes.undo(c)
+        assertNull(ledger.replaced.by("e1")); assertEquals("e1", db.schemaQueries.recentEntries(10).executeAsList().single().id); assertEquals("ref-1", db.schemaQueries.entryById("e1").executeAsOne().source_ref)
+        driver.close()
     }
 
     @Test

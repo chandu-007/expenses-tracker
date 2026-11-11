@@ -143,7 +143,21 @@ fun DataScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("restore_preview")) {
                     Text("Made ${p.madeAt}. It holds ${p.entriesInFile} entries.")
                     Text("${p.newEntries} entries are new to this phone and will be added" + if (p.otherNewItems > 0) ", along with ${p.otherNewItems} other items (categories, budgets, repeating expenses…)." else ".")
-                    Text("${p.alreadyHereEntries} are already here and will be left exactly as they are. Nothing is overwritten or deleted.")
+                    Text("${p.alreadyHereEntries} are already here and will be left exactly as they are. Nothing is overwritten" + if (p.replacedRemoved > 0) "." else " or deleted.")
+                    if (p.replacedNotRestored > 0) {
+                        Text(
+                            if (p.replacedNotRestored == 1) "1 entry in this backup was changed to another type later (an expense made a transfer, for example), so it will not be added again."
+                            else "${p.replacedNotRestored} entries in this backup were changed to another type later (an expense made a transfer, for example), so they will not be added again.",
+                            modifier = Modifier.testTag("restore_replaced"),
+                        )
+                    }
+                    if (p.replacedRemoved > 0) {
+                        Text(
+                            if (p.replacedRemoved == 1) "1 entry on this phone was changed to another type in this backup, and this phone still has the older copy. The older copy will be taken away, so it is not counted twice."
+                            else "${p.replacedRemoved} entries on this phone were changed to another type in this backup, and this phone still has the older copies. The older copies will be taken away, so they are not counted twice.",
+                            modifier = Modifier.testTag("restore_removed"),
+                        )
+                    }
                     if (p.filesInFile > 0) {
                         Text(
                             "It also holds ${fileCountText(p.filesInFile)} (${AttachmentRules.sizeText(p.filesBytes)}): ${if (p.newFiles == 1) "1 is" else "${p.newFiles} are"} not on this phone and will be put back. Each is checked as it is restored; a damaged one is skipped and counted, never stopping the rest.",

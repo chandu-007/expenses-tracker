@@ -9,7 +9,8 @@ import app.expenses.core.domain.ledger.Entry as DomainEntry
  * one story about one kind of thing), so it is done as one all-or-nothing step on the database, the same swap as [CaptureTransfers.replaceEarlier]:
  * the old entry is soft-deleted (the ordinary delete, so it can be restored) and a new entry of the new kind takes its place, carrying its date, account, title, note, tags,
  * source, bank reference, original text (origin) and attachments. [undo] puts the old entry back exactly (same id, same fields, history intact) and removes the new one.
- * Nothing is learned from a change (no rule, no "last used" memory). Not thread-safe: use through the process-wide write lock.
+ * The swap is also recorded ([ReplacedEntries], reason CHANGED: old id replaced by new id), so a backup restore never brings the old entry back next to the new one; [undo] drops the record
+ * (the old entry is live again). Nothing is learned from a change (no rule, no "last used" memory). Not thread-safe: use through the process-wide write lock.
  */
 class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, private val origins: OriginStore, private val expects: ExpectStore, private val attachments: AttachmentStore) {
     private val q get() = db.schemaQueries
@@ -38,7 +39,19 @@ class KindChanges(private val db: ExpensesDb, private val ledger: LedgerStore, p
         ledger.save(entry, EntryDetails(merchant = merchant?.takeIf { it.isNotBlank() }, note = if (row.note.isNullOrBlank()) fallbackNote?.takeIf { it.isNotBlank() } ?: row.note else row.note, source = row.source, sourceRef = reference, tags = tags))
         if (origin != null) origins.put(entry.id.value, origin.kind, origin.sender, origin.text, origin.receivedAt)
         attachments.move(oldId, entry.id.value)
+        ledger.replaced.mark(oldId, entry.id.value, ReplacedEntries.CHANGED)
         Changed(entry.id.value, oldId, reference)
+    }
+
+    /**
+     * Deletes the income [incomeId], the other half of a move that the transfer [replacedBy] (which replaced the expense, see [change]) now stands for, and records that it was replaced by it
+     * (reason PAIRED), so an older backup restored later does not bring the income back next to the transfer. Bringing it back (Undo: [LedgerStore.restore]) drops the record.
+     */
+    fun absorb(incomeId: String, replacedBy: String) {
+        ledger.atomically {
+            ledger.delete(EntryId(incomeId))
+            ledger.replaced.mark(incomeId, replacedBy, ReplacedEntries.PAIRED)
+        }
     }
 
     /** Why [oldId] cannot have its type changed (the message for the person), or null when it can: what [change] checks of the old entry, without writing anything. */

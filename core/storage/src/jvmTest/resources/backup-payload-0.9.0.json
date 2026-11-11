@@ -1,0 +1,64 @@
+{
+"currencies":[
+{"code":"INR","digits":2}
+],
+"accounts":[
+{"id":"bank","name":"Everyday bank","type":"BANK","currency":"INR","openingMinor":500000},
+{"id":"cash","name":"Wallet cash","type":"CASH","currency":"INR"},
+{"id":"card","name":"Blue card","type":"CREDIT_CARD","currency":"INR","openingMinor":-120000}
+],
+"categories":[
+{"id":"Food","name":"Food","position":0},
+{"id":"Groceries","name":"Groceries","position":1},
+{"id":"Transport","name":"Transport","position":2},
+{"id":"pets","name":"Pets","position":20,"color":4283215696}
+],
+"entries":[
+{"id":"e09-exp1","kind":"EXPENSE","occurredAt":1735689600000,"accountId":"bank","amountMinor":45000,"currency":"INR","merchant":"Swiggy Bangalore KA","note":"Dinner for two","source":"sms","sourceRef":"REF-0.9.0-1001","splits":[{"categoryId":"Food","amountMinor":30000},{"categoryId":"Groceries","amountMinor":15000}],"tags":["trip","80c"]},
+{"id":"e09-cashx","kind":"EXPENSE","occurredAt":1735776000000,"accountId":"cash","amountMinor":8000,"currency":"INR","merchant":"Pet shop","splits":[{"categoryId":"pets","amountMinor":8000}]},
+{"id":"e09-dup","kind":"EXPENSE","occurredAt":1735862400000,"accountId":"bank","amountMinor":45000,"currency":"INR","merchant":"Swiggy Bangalore KA","source":"sms","sourceRef":"REF-0.9.0-1001","splits":[{"categoryId":"Food","amountMinor":45000}]},
+{"id":"e09-inc","kind":"INCOME","occurredAt":1735948800000,"accountId":"bank","amountMinor":8500000,"currency":"INR","source":"sms","sourceRef":"SAL-0.9.0-01"},
+{"id":"e09-trf","kind":"TRANSFER","occurredAt":1736035200000,"accountId":"bank","counterAccountId":"cash","amountMinor":100000,"currency":"INR","toAmountMinor":100000,"toCurrency":"INR","note":"Cash for the week"},
+{"id":"e09-refund","kind":"REFUND","occurredAt":1736121600000,"accountId":"bank","amountMinor":5000,"currency":"INR","refundsEntry":"e09-exp1"},
+{"id":"e09-settle","kind":"SETTLEMENT","occurredAt":1736208000000,"accountId":"bank","personId":"asha","amountMinor":20000,"currency":"INR","direction":"RECEIVED_FROM_PERSON"},
+{"id":"e09-friend","kind":"FRIEND_PAID","occurredAt":1736294400000,"personId":"ravi","amountMinor":25000,"currency":"INR","splits":[{"categoryId":"Food","amountMinor":25000}]},
+{"id":"e09-shared","kind":"EXPENSE","occurredAt":1736380800000,"accountId":"card","amountMinor":60000,"currency":"INR","merchant":"Cinema","splits":[{"categoryId":"Food","amountMinor":60000}],"shares":[{"amountMinor":30000},{"personId":"asha","amountMinor":30000}]},
+{"id":"e09-upi","kind":"EXPENSE","occurredAt":1736467200000,"accountId":"bank","amountMinor":129900,"currency":"INR","merchant":"Amazon Pay","source":"upi","sourceRef":"UPI-0.9.0-5521","splits":[{"categoryId":"Transport","amountMinor":129900}]},
+{"id":"e09-inc2","kind":"INCOME","occurredAt":1736553600000,"accountId":"cash","amountMinor":150000,"currency":"INR"},
+{"id":"e09-mail","kind":"EXPENSE","occurredAt":1736640000000,"accountId":"card","amountMinor":34900,"currency":"INR","merchant":"Streamly","note":"Yearly plan","source":"email","sourceRef":"MAIL-0.9.0-77","splits":[{"categoryId":"Food","amountMinor":34900}],"tags":["subscription"]}
+],
+"templates":[
+{"id":"e09-tpl","name":"Chai","amountMinor":2000,"currency":"INR","categoryId":"Food","accountId":"cash","merchant":"Corner stall"}
+],
+"budgets":[
+{"scope":"Food","limitMinor":1500000,"currency":"INR"},
+{"scope":"Transport","limitMinor":400000,"currency":"INR"}
+],
+"budgetPeriod":{"kind":"monthly","startValue":1},
+"recurring":[
+{"id":"e09-net","name":"Broadband","amountMinor":79900,"currency":"INR","categoryId":"Food","accountId":"bank","merchant":"Fibre Co","unit":"MONTH","every":1,"startDay":20089,"endKind":"never"}
+],
+"recurringDone":[
+{"recurringId":"e09-net","day":20089,"outcome":"posted","entryId":"e09-exp1"},
+{"recurringId":"e09-net","day":20120,"outcome":"skipped"}
+],
+"cardTerms":[
+{"accountId":"card","statementDay":5,"dueDay":25}
+],
+"captureRules":[
+{"id":"e09-rule","position":0,"pattern":"swiggy","categoryId":"Food"}
+],
+"merchantMap":[
+{"key":"swiggybangaloreka","categoryId":"Food","uses":4},
+{"key":"amazonpayindia","categoryId":"Transport"},
+{"key":"bigbasketcom","categoryId":"Groceries","uses":2}
+],
+"people":[
+{"id":"asha","name":"Asha"},
+{"id":"ravi","name":"Ravi"}
+],
+"accountLooks":[
+{"accountId":"card","network":"VISA","tier":"CLASSIC","last4":"4821"}
+],
+"settings":{"notif_bills":"true"}
+}

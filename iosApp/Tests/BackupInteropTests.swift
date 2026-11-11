@@ -109,6 +109,15 @@ final class BackupInteropTests: XCTestCase {
         }
     }
 
+    /// docs/BACKUP_FORMAT.md "Replaced entries": the file written after a type change says the old entry was replaced, so the old file never brings it back, whichever is restored first.
+    func testAReplacedEntryIsNotBroughtBackInEitherOrderOnIPhone() async throws {
+        let old = fixturePath("reference-replaced-old.expbak"), new = fixturePath("reference-replaced-new.expbak")
+        for order in [[old, new], [new, old]] {
+            let answer = try await IosBackupDebug.shared.restoreInOrderThroughTheApp(host: CryptoServices(), paths: order)
+            XCTAssertEqual(answer, "live=keep,moved", "\(order.map { ($0 as NSString).lastPathComponent }): \(answer)")
+        }
+    }
+
     func testIPhoneEncryptionRoundTripsAndIsWrittenForTheReferenceToRead() throws {
         let plain = try fixture("plain.txt")
         let sealed = cipher.encrypt(plain: bytes(plain), passphrase: passphrase)

@@ -50,6 +50,7 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS person (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_origin (entry_id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, sender TEXT, text TEXT NOT NULL, received_at INTEGER)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_expect (entry_id TEXT NOT NULL PRIMARY KEY, from_text TEXT, person_id TEXT, expected_minor INTEGER NOT NULL, closed INTEGER NOT NULL DEFAULT 0)")
+        run(driver, "CREATE TABLE IF NOT EXISTS entry_replaced (entry_id TEXT NOT NULL PRIMARY KEY, replaced_by TEXT NOT NULL, reason TEXT NOT NULL)")
     }
 
     private fun run(driver: SqlDriver, sql: String) { driver.execute(null, sql, 0) }

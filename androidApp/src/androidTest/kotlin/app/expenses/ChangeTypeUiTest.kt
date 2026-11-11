@@ -115,11 +115,13 @@ class ChangeTypeUiTest {
         assertEquals("ATM Indiranagar", t.merchant); assertEquals("for the trip", t.note); assertEquals("sms", t.source); assertEquals("UPI-55", t.source_ref)
         assertEquals(800_000L, balance("bank")); assertEquals(amount, balance("cash")); assertEquals(0L, spendTotal(), "a cash withdrawal is not spending")
         assertEquals(listOf("Trip"), db { ok -> ok.store.tagsOf(EntryId(t.id)) }); assertEquals("AX-BANK", db { ok -> ok.origins.get(t.id)?.sender })
+        assertEquals(t.id, db { ok -> ok.store.replaced.by("e1") }, "the replacement is recorded, so an older backup cannot bring the expense back next to the transfer")
         waitText("Changed to a transfer")
         compose.onNodeWithText("Undo").performClick()
         waitKinds("EXPENSE")
         assertEquals("e1", liveRows().single().id); assertEquals(800_000L, balance("bank")); assertEquals(0L, balance("cash")); assertEquals(amount, spendTotal())
         assertEquals("UPI-55", liveRows().single().source_ref); assertEquals("AX-BANK", db { ok -> ok.origins.get("e1")?.sender })
+        assertNull(db { ok -> ok.store.replaced.by("e1") }, "Undo drops the record: the expense is live again")
         waitText("Indiranagar")
     }
 

@@ -207,8 +207,14 @@ class TransferCandidatesUiTest {
         assertEquals(listOf("TRANSFER"), kinds().values.toList(), "one transfer replaces both")
         assertEquals(bank, balance("bank")); assertEquals(savings, balance("savings"))
         assertEquals(spend - 1_200_000, spendTotal()); assertEquals(income - 1_200_000, incomeTotal())
+        // both halves are recorded as replaced by the one transfer (the expense by its type change, the income as absorbed), and a backup made now carries them
+        val transfer = kinds().keys.single()
+        assertEquals(mapOf("x" to transfer, "i" to transfer), db { ok -> ok.db.schemaQueries.allReplaced().executeAsList().associate { it.entry_id to it.replaced_by } })
+        assertEquals(mapOf("x" to "CHANGED", "i" to "PAIRED"), db { ok -> ok.db.schemaQueries.allReplaced().executeAsList().associate { it.entry_id to it.reason } })
+        assertEquals(setOf("x", "i"), db { ok -> ok.backup.export().replaced.map { it.entryId }.toSet() })
         tapUndo(); waitFor("transfer_candidates_row_x")
         assertEquals(mapOf("x" to "EXPENSE", "i" to "INCOME"), kinds())
+        assertEquals(emptyMap(), db { ok -> ok.db.schemaQueries.allReplaced().executeAsList().associate { it.entry_id to it.replaced_by } }, "Undo drops both records")
         assertEquals(bank, balance("bank")); assertEquals(savings, balance("savings")); assertEquals(spend, spendTotal()); assertEquals(income, incomeTotal())
     }
 

@@ -54,7 +54,8 @@ class CaptureTransfers(private val db: ExpensesDb, private val ledger: LedgerSto
     /**
      * Replaces the entry [earlierId] (an expense or income added from an earlier text) and the pending item [itemId] with one [transfer]: the earlier entry is soft-deleted, the
      * transfer saved, the item marked added, and both texts kept as the transfer's origin, all or nothing. The earlier entry's note and tags carry over to the transfer (its category and
-     * title stay with the deleted entry, and come back with Undo). Returns what [undoReplace] needs.
+     * title stay with the deleted entry, and come back with Undo). The replacement is recorded ([ReplacedEntries], reason MATCHED) so a restore of an older backup does not bring the earlier entry
+     * back next to the transfer; [undoReplace] drops the record. Returns what [undoReplace] needs.
      * Throws [IllegalArgumentException], changing nothing, when the item is no longer waiting, the earlier entry is gone or not a plain expense or income, or the reference is taken by
      * some other entry. When the two texts carry the same bank reference (the usual UPI or IMPS case) the earlier entry holds it, and the transfer is saved under "<reference>/transfer".
      */
@@ -67,6 +68,7 @@ class CaptureTransfers(private val db: ExpensesDb, private val ledger: LedgerSto
         val tags = ledger.tagsOf(EntryId(earlierId))
         ledger.delete(EntryId(earlierId))
         ledger.save(transfer, EntryDetails(merchant = merchant, note = row.note, source = "sms", sourceRef = ref, tags = tags))
+        ledger.replaced.mark(earlierId, transfer.id.value, ReplacedEntries.MATCHED)
         origins.put(transfer.id.value, OriginStore.kindOf(item.source, item.sender), item.sender, joined(before?.text, item.body), item.receivedAt)
         require(inbox.confirm(itemId, transfer.id.value)) { "That item was already handled." }
         Replaced(transfer.id.value, earlierId, itemId, item.body)

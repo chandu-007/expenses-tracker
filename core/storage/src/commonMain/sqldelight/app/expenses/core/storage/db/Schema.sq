@@ -222,6 +222,35 @@ SELECT x.* FROM entry_expect x JOIN entry e ON e.id = x.entry_id WHERE e.deleted
 insertExpectRaw:
 INSERT OR IGNORE INTO entry_expect(entry_id, from_text, person_id, expected_minor, closed) VALUES (?, ?, ?, ?, ?);
 
+-- An entry another entry took the place of: an expense made a transfer (a type change), the income that was the other half of a move absorbed into one transfer, or an earlier entry a text
+-- made a transfer. Kept for good: it is how a restore of an OLDER backup knows not to bring the original back next to its replacement (a backup carries live entries only), and a backup
+-- carries these rows. [entry_id] is the entry that was replaced, [replaced_by] the entry that took its place (which may itself have been replaced, or deleted, since: the row stays), [reason]
+-- is CHANGED, PAIRED or MATCHED. Undo of the change (and any other way the original comes back to life) removes the row. Written through ReplacedEntries, which logs each change.
+CREATE TABLE entry_replaced (
+    entry_id TEXT NOT NULL PRIMARY KEY,
+    replaced_by TEXT NOT NULL,
+    reason TEXT NOT NULL
+);
+
+putReplaced:
+INSERT OR REPLACE INTO entry_replaced(entry_id, replaced_by, reason) VALUES (?, ?, ?);
+
+adoptReplaced:
+INSERT OR IGNORE INTO entry_replaced(entry_id, replaced_by, reason) VALUES (?, ?, ?);
+
+replacedOf:
+SELECT * FROM entry_replaced WHERE entry_id = :entryId;
+
+deleteReplaced:
+DELETE FROM entry_replaced WHERE entry_id = :entryId;
+
+allReplaced:
+SELECT * FROM entry_replaced ORDER BY entry_id;
+
+-- What a backup carries: the records of originals that are not live (an original that is live again, by Undo, has no record, so this is a guard only).
+exportReplaced:
+SELECT r.* FROM entry_replaced r LEFT JOIN entry e ON e.id = r.entry_id WHERE e.id IS NULL OR e.deleted = 1 ORDER BY r.entry_id;
+
 -- Someone the person lends to, borrows from or settles with. An entry refers to one by [id] (entry.person_id); the name lives only here.
 CREATE TABLE person (
     id TEXT NOT NULL PRIMARY KEY,

@@ -647,8 +647,20 @@ data class DataUi(
     val statusIsError: Boolean = false,
     val needsPassphrase: Boolean = false,
     val pending: PendingRestoreUi? = null,
+    /** Entries of the file that a type change replaced (not added) and entries on this phone that the backup says a type change replaced (taken away): see [replacedEntriesText]. */
+    val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0,
     val files: BackupFilesUi = BackupFilesUi(),
 )
+/**
+ * What a restore says about the entries a type change replaced (an expense made a transfer, for example), in plain words and with a leading space, or nothing when there were none: [notRestored]
+ * of the backup were not added because the type change had replaced them, and [removed] that were here (brought back earlier by an older backup) were taken away because this backup says a
+ * type change replaced them, so the amount is not counted twice.
+ */
+fun replacedEntriesText(notRestored: Int, removed: Int): String = buildString {
+    if (notRestored > 0) append(if (notRestored == 1) " 1 entry was not added because a type change had replaced it." else " $notRestored entries were not added because a type change had replaced them.")
+    if (removed > 0) append(if (removed == 1) " 1 entry here was replaced by a type change in this backup and was taken away so it is not counted twice." else " $removed entries here were replaced by a type change in this backup and were taken away so they are not counted twice.")
+}
+
 
 sealed interface UiState {
     data object Opening : UiState
@@ -4114,7 +4126,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         needsPassphrase = false,
                         pending = PendingRestoreUi(
                             made, o.data.entries.size, r.added.entries, r.alreadyHere.entries, r.added.accounts + r.added.categories + r.added.templates + r.added.budgets + r.added.recurring,
-                            o.data.attachments.size, o.data.attachments.sumOf { a -> a.sizeBytes }, r.added.attachments,
+                            o.data.attachments.size, o.data.attachments.sumOf { a -> a.sizeBytes }, r.added.attachments, replacedNotRestored = r.replacedNotRestored, replacedRemoved = r.replacedRemoved,
                         ),
                     )
                 }
@@ -4138,7 +4150,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 _data.update { it.copy(pending = null) }
                 container.write { ok -> refresh(ok) }
                 loadBackupFiles()
-                "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are." + (restored.files?.let { restoredFilesText(it, report.added.attachments, restored.skipped) } ?: "")
+                "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are." + replacedEntriesText(report.replacedNotRestored, report.replacedRemoved) + (restored.files?.let { restoredFilesText(it, report.added.attachments, restored.skipped) } ?: "")
             } finally {
                 restoreFlight.leave()
             }

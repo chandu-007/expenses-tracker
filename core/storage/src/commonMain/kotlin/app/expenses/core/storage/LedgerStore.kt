@@ -42,6 +42,9 @@ class LedgerStore(
     private val q get() = db.schemaQueries
     private val digits = HashMap<String, Int>().apply { q.selectCurrencies().executeAsList().forEach { put(it.code, it.digits.toInt()) } }
 
+    /** Which entries another entry took the place of (type changes). Brought back to life, an entry loses its record: see [restore]. */
+    val replaced = ReplacedEntries(db, clock, nowMillis)
+
     // ---- accounts ----
 
     fun saveAccount(account: Account) {
@@ -165,7 +168,10 @@ class LedgerStore(
         }
     }
 
-    /** Brings back a deleted entry, if it still obeys the ledger rules (for a refund: the expense is live and has room). */
+    /**
+     * Brings back a deleted entry, if it still obeys the ledger rules (for a refund: the expense is live and has room). An entry that was replaced by another (a type change) and is
+     * brought back, which is what Undo of the change does, is no longer "replaced": its record goes, so a backup restored later may bring it back again like any live entry.
+     */
     fun restore(id: EntryId) {
         db.transaction {
             val row = q.entryById(id.value).executeAsOneOrNull() ?: throw IllegalArgumentException("That entry is no longer there.")
@@ -174,6 +180,7 @@ class LedgerStore(
             validate(entry)
             q.restoreEntry(id.value)
             logChanges("entry", id.value, mapOf("deleted" to "1"), mapOf("deleted" to "0"))
+            replaced.clear(id.value)
             rebuildSpendLines(entry)
         }
     }

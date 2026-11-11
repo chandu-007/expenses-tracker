@@ -6,9 +6,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
@@ -25,8 +27,10 @@ import javax.crypto.spec.SecretKeySpec;
  * Backups with photos and files (docs/BACKUP_FORMAT.md, version 2, and the EXPENC2 chunked layout), written and read here from the document alone, with no code shared with the app:
  *   java tools/backup_interop/Interop.java make2   <passphrase or -> <out.expbak>   a version 2 file with four sample files (the pattern below), sealed as EXPENC2 with a fixed salt unless "-"
  *   java tools/backup_interop/Interop.java make3   <passphrase> <out.expbak>   the same sample, sealed as EXPENC3 (an automatic copy, docs/BACKUP_FORMAT.md "Automatic copies") with fixed salts
- *   java tools/backup_interop/Interop.java verify2 <passphrase or -> <in.expbak> [pattern]   opens a version 1 or 2 file (plain, EXPENC1, EXPENC2 or EXPENC3): payload length and sha256, every file's sha256, no bytes left over;
- *                                                                                           with "pattern" also that file k (1, 2, ...) holds byte i = (i*31 + k*7) mod 256, which is what the apps' sample writer produces; exit 1 on any mismatch
+ *   java tools/backup_interop/Interop.java verify2 <passphrase or -> <in.expbak> [pattern] [replaced=N]   opens a version 1 or 2 file (plain, EXPENC1, EXPENC2 or EXPENC3): payload length and sha256, every file's sha256, no bytes left over;
+ *                                                                                           with "pattern" also that file k (1, 2, ...) holds byte i = (i*31 + k*7) mod 256, which is what the apps' sample writer produces; the "replaced" list (if any) is checked
+ *                                                                                           and with "replaced=N" must hold exactly N records; exit 1 on any mismatch
+ *   java tools/backup_interop/Interop.java make-replaced <passphrase or -> <outPrefix>   writes <outPrefix>-old.expbak and <outPrefix>-new.expbak, two plain version 1 files of a type change (an expense made a transfer; the new one carries one replaced record); both are verified
  */
 public class Interop {
     static final byte[] MAGIC = "EXPENC1\n".getBytes(StandardCharsets.UTF_8);
@@ -206,7 +210,10 @@ public class Interop {
     static void fail(String why) { System.err.println("FAIL: " + why); System.exit(1); }
 
     @SuppressWarnings("unchecked")
-    static void verify2(String pass, byte[] bytes, boolean checkPattern) throws Exception {
+    static void verify2(String pass, byte[] bytes, boolean checkPattern) throws Exception { verify2(pass, bytes, checkPattern, -1); }
+
+    @SuppressWarnings("unchecked")
+    static void verify2(String pass, byte[] bytes, boolean checkPattern, int expectReplaced) throws Exception {
         byte[] plain;
         if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC2)) plain = open2(bytes, pass);
         else if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC3)) plain = open3(bytes, pass);
@@ -227,6 +234,25 @@ public class Interop {
         byte[] payload = Arrays.copyOfRange(plain, p0, p1);
         if (!sha256(payload).equals(header.get("sha256"))) fail("payload sha256 differs");
         Map<String, Object> data = (Map<String, Object>) new Json(new String(payload, StandardCharsets.UTF_8)).value();
+        int replacedCount = 0;
+        if (data.containsKey("replaced")) {
+            if (!(data.get("replaced") instanceof List)) fail("replaced is not a list");
+            Set<String> seen = new HashSet<>(), liveIds = new HashSet<>();
+            if (data.get("entries") instanceof List) for (Object e : (List<Object>) data.get("entries")) liveIds.add(String.valueOf(((Map<String, Object>) e).get("id")));
+            for (Object o : (List<Object>) data.get("replaced")) {
+                if (!(o instanceof Map)) fail("a replaced record is not an object");
+                Map<String, Object> r = (Map<String, Object>) o;
+                Object id = r.get("entryId"), by = r.get("replacedBy"), reason = r.get("reason");
+                if (!(id instanceof String) || ((String) id).isEmpty()) fail("a replaced record has no entryId");
+                if (!(by instanceof String) || ((String) by).isEmpty()) fail("replaced record " + id + " has no replacedBy");
+                if (id.equals(by)) fail("replaced record " + id + " is replaced by itself");
+                if (reason != null && !(reason instanceof String)) fail("replaced record " + id + " has a reason that is not text");
+                if (!seen.add((String) id)) fail("entry " + id + " is recorded as replaced twice");
+                if (liveIds.contains(id)) fail("entry " + id + " is both live and recorded as replaced");
+                replacedCount++;
+            }
+        }
+        if (expectReplaced >= 0 && replacedCount != expectReplaced) fail("expected " + expectReplaced + " replaced records, found " + replacedCount);
         List<Object> list = version >= 2 && data.get("attachments") != null ? (List<Object>) data.get("attachments") : new ArrayList<>();
         int pos = p1; long total = 0; int k = 0;
         for (Object o : list) {
@@ -241,7 +267,30 @@ public class Interop {
         }
         if (version == 1) { for (int i = p1; i < plain.length; i++) if (plain[i] != '\n' && plain[i] != '\r' && plain[i] != ' ') fail("version 1 file has data after the payload"); }
         else if (pos != plain.length) fail((plain.length - pos) + " bytes left after the last file");
-        System.out.println("ok: version " + version + ", payload " + payloadBytes + " bytes (sha256 verified), " + list.size() + " files verified (" + total + " bytes)" + (checkPattern ? ", sample pattern matches" : ""));
+        System.out.println("ok: version " + version + ", payload " + payloadBytes + " bytes (sha256 verified), " + list.size() + " files verified (" + total + " bytes)" + (checkPattern ? ", sample pattern matches" : "") + ", " + replacedCount + " replaced records");
+    }
+
+    static byte[] plainV1(String payloadText) throws Exception {
+        byte[] payload = payloadText.getBytes(StandardCharsets.UTF_8);
+        String line = "{\"format\":\"expenses-backup\",\"version\":1,\"createdAt\":1760000000000,\"payloadBytes\":" + payload.length + ",\"sha256\":\"" + sha256(payload) + "\"}\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(line.getBytes(StandardCharsets.UTF_8)); out.write(payload);
+        return out.toByteArray();
+    }
+
+    /** The type change of the document: an expense (orig) made a transfer (moved). OLD is the file from before, NEW the one from after, which records the replacement. */
+    static void makeReplaced(String prefix) throws Exception {
+        String head = "{\"currencies\":[{\"code\":\"INR\",\"digits\":2}],\"accounts\":[{\"id\":\"cash\",\"name\":\"Cash\",\"type\":\"CASH\",\"currency\":\"INR\"},{\"id\":\"bank\",\"name\":\"Bank\",\"type\":\"BANK\",\"currency\":\"INR\"}],";
+        String keep = "{\"id\":\"keep\",\"kind\":\"EXPENSE\",\"occurredAt\":1,\"accountId\":\"cash\",\"amountMinor\":700,\"currency\":\"INR\",\"splits\":[{\"categoryId\":\"Food\",\"amountMinor\":700}]}";
+        String orig = "{\"id\":\"orig\",\"kind\":\"EXPENSE\",\"occurredAt\":2,\"accountId\":\"cash\",\"amountMinor\":500,\"currency\":\"INR\",\"splits\":[{\"categoryId\":\"Cash\",\"amountMinor\":500}],\"source\":\"sms\",\"sourceRef\":\"UPI-77\"}";
+        String moved = "{\"id\":\"moved\",\"kind\":\"TRANSFER\",\"occurredAt\":2,\"accountId\":\"cash\",\"counterAccountId\":\"bank\",\"amountMinor\":500,\"currency\":\"INR\",\"toAmountMinor\":500,\"toCurrency\":\"INR\",\"source\":\"sms\",\"sourceRef\":\"UPI-77\"}";
+        byte[] old = plainV1(head + "\"entries\":[" + keep + "," + orig + "],\"settings\":{}}");
+        byte[] now = plainV1(head + "\"entries\":[" + keep + "," + moved + "],\"settings\":{},\"replaced\":[{\"entryId\":\"orig\",\"replacedBy\":\"moved\",\"reason\":\"CHANGED\"}]}");
+        Files.write(Path.of(prefix + "-old.expbak"), old);
+        Files.write(Path.of(prefix + "-new.expbak"), now);
+        verify2("", old, false, 0);
+        verify2("", now, false, 1);
+        System.out.println("wrote " + prefix + "-old.expbak and " + prefix + "-new.expbak");
     }
 
     public static void main(String[] a) throws Exception {
@@ -258,7 +307,13 @@ public class Interop {
             return;
         }
         if (mode.equals("verify2")) {
-            verify2(pass.equals("-") ? "" : pass, Files.readAllBytes(Path.of(a[2])), a.length > 3 && a[3].equals("pattern"));
+            int want = -1; boolean pat = false;
+            for (int i = 3; i < a.length; i++) { if (a[i].equals("pattern")) pat = true; else if (a[i].startsWith("replaced=")) want = Integer.parseInt(a[i].substring(9)); }
+            verify2(pass.equals("-") ? "" : pass, Files.readAllBytes(Path.of(a[2])), pat, want);
+            return;
+        }
+        if (mode.equals("make-replaced")) {
+            makeReplaced(a[2]);
             return;
         }
         if (mode.equals("make")) {

@@ -107,6 +107,29 @@ class CaptureTransfersTest {
     }
 
     @Test
+    fun theReplacementIsRecordedForBackupsAndUndoDropsTheRecordSoAnOlderBackupCannotBringTheExpenseBack() {
+        item("out", "DEBIT", "1234", 1_000, outText)
+        addedPlain("out", outgoing = true, account = "main", at = 1_000)
+        val old = d.backup.export()
+        item("in", "CREDIT", "5678", 60_000, inText)
+        val r = transfers.replaceEarlier(transfer("t2", 1_000), "Trip", "in-ref", "in", "plain-out")
+        assertEquals("t2", d.ledger.replaced.by("plain-out"))
+        val new = d.backup.export()
+        assertEquals(listOf(BackupReplaced("plain-out", "t2", "MATCHED")), new.replaced)
+        // a fresh phone given the backups in either order has the transfer only
+        for (order in listOf(listOf(old, new), listOf(new, old))) {
+            val fresh = Device("fresh" + System.nanoTime()).also {
+                it.ledger.saveAccount(Account(AccountId("main"), "Main 1234", AccountType.BANK, it.inr)); it.ledger.saveAccount(Account(AccountId("save"), "Savings 5678", AccountType.BANK, it.inr))
+            }
+            order.forEach { fresh.backup.restore(it) }
+            assertEquals(listOf("t2"), fresh.db.schemaQueries.recentEntries(50).executeAsList().map { it.id })
+        }
+        transfers.undoReplace(r)
+        assertNull(d.ledger.replaced.by("plain-out"), "Undo: the expense is live again, so it is not a replaced entry")
+        assertEquals(emptyList(), d.backup.export().replaced)
+    }
+
+    @Test
     fun theEarlierIncomeCanBeTheFirstHalfToo() {
         item("in", "CREDIT", "5678", 1_000, inText); addedPlain("in", outgoing = false, account = "save", at = 1_000)
         item("out", "DEBIT", "1234", 30_000, outText)

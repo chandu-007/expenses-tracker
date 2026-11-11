@@ -2,7 +2,7 @@
 # Builds the iPhone app: the shared Kotlin framework (Compose UI + view model, module :shared), the Xcode project, then one of:
 #   tools/ios_build.sh test      unit tests (backup format) and UI tests on the iPhone 17 simulator; screenshots of failures stay in /tmp/ios-results.xcresult
 #   tools/ios_build.sh unit      framework, XcodeGen project, then ONLY the unit tests (ExpensesTests), signed ad hoc as the Keychain tests need; run it under /tmp/ios.lock
-#   tools/ios_build.sh interop   the backup files the iPhone tests wrote (/tmp/ios-made.expbak, the two with photos and files /tmp/ios-made-v2*.expbak, the protected automatic copies /tmp/ios-auto-v3*.expbak) read back by the Java reference of the Android format
+#   tools/ios_build.sh interop   the backup files the iPhone tests wrote (/tmp/ios-made.expbak, the two with photos, files and one replaced record /tmp/ios-made-v2*.expbak, the protected automatic copies /tmp/ios-auto-v3*.expbak) and the replaced-entry fixtures, read back by the Java reference of the Android format
 #   tools/ios_build.sh ipa       signed Release build for the registered iPhone, packaged as ~/Desktop/Expenses-iOS-<version>-test.ipa
 #   tools/ios_build.sh build     only the framework and the project (device and simulator)
 #   tools/ios_build.sh native    no app build: the core/domain and core/parsers unit tests as an OPTIMISED (release) Kotlin/Native binary on the simulator, to catch crashes only the release framework shows
@@ -47,8 +47,11 @@ case "$mode" in
   interop)
     java tools/backup_interop/Interop.java check "correct horse battery" /tmp/ios-made.expbak iosApp/Tests/Fixtures/plain.txt
     # backups with photos and files (version 2): the sealed and the plain file the iPhone test wrote, opened by the reference, every file's checksum and the sample bytes checked
-    java tools/backup_interop/Interop.java verify2 "correct horse battery" /tmp/ios-made-v2.expbak pattern
-    java tools/backup_interop/Interop.java verify2 - /tmp/ios-made-v2-plain.expbak pattern
+    java tools/backup_interop/Interop.java verify2 "correct horse battery" /tmp/ios-made-v2.expbak pattern replaced=1
+    java tools/backup_interop/Interop.java verify2 - /tmp/ios-made-v2-plain.expbak pattern replaced=1
+    # the type-change fixtures (an expense made a transfer): the old file has no replaced record, the new one has one
+    java tools/backup_interop/Interop.java verify2 - iosApp/Tests/Fixtures/reference-replaced-new.expbak replaced=1
+    java tools/backup_interop/Interop.java verify2 - iosApp/Tests/Fixtures/reference-replaced-old.expbak replaced=0
     # an automatic copy that carries a file (written into the folder in pieces)
     java tools/backup_interop/Interop.java verify2 - /tmp/ios-auto-v2.expbak
     # protected automatic copies (EXPENC3, written from the Keychain key): without and with a file, opened by the reference with the passphrase alone

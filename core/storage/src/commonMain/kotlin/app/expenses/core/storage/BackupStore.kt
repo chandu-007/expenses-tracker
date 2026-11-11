@@ -36,8 +36,12 @@ import kotlinx.datetime.LocalDate
 /** How many of each kind of thing, for a restore preview or result. */
 data class BackupCounts(val accounts: Int = 0, val categories: Int = 0, val entries: Int = 0, val templates: Int = 0, val budgets: Int = 0, val recurring: Int = 0, val attachments: Int = 0)
 
-/** What a restore does: [added] is new to this device, [alreadyHere] is left exactly as it is. [attached] are the ids of the files that were recorded as attachments by a restore. */
-data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts, val attached: Set<String> = emptySet())
+/**
+ * What a restore does: [added] is new to this device, [alreadyHere] is left exactly as it is. [attached] are the ids of the files that were recorded as attachments by a restore.
+ * [replacedNotRestored] entries of the file were left out because a type change had replaced them (an expense made a transfer, say; a refund of such an expense goes with it), and
+ * [replacedRemoved] entries that are on this phone and live were taken away because the backup says a type change replaced them and what replaced them is here or arrives with it.
+ */
+data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts, val attached: Set<String> = emptySet(), val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0)
 
 /**
  * Which files of a backup a restore would take ([wanted], by the ids this phone keeps) and how many it would leave alone, by reason: attached here already,
@@ -117,25 +121,32 @@ class BackupStore(
                 val id = row.key.removePrefix(BalanceFixLog.PREFIX)
                 if (q.accountById(id).executeAsOneOrNull()?.deleted != 0L) emptyList() else BalanceFixLog.parse(row.value_).map { BackupBalanceFix(id, it.atMillis, it.beforeMinor, it.afterMinor) }
             },
-            settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
+            replaced = q.exportReplaced().executeAsList().map { BackupReplaced(it.entry_id, it.replaced_by, it.reason) },
+            settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id } +
+                q.settingsWithPrefix(app.expenses.core.domain.PayeeAliases.PREFIX).executeAsList().map { it.key }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
 
     /** What [restore] would do, without writing anything. */
-    fun preview(data: BackupData): RestoreReport {
+    fun preview(data: BackupData): RestoreReport = report(data, ReplacementPlan.of(q, data))
+
+    private fun report(data: BackupData, plan: ReplacementPlan): RestoreReport {
         val present = BackupCounts(
             accounts = data.accounts.count { q.accountById(it.id).executeAsOneOrNull() != null },
             categories = data.categories.count { q.categoryById(it.id).executeAsOneOrNull() != null },
-            entries = data.entries.count { entryHere(it) },
+            entries = data.entries.count { it.id !in plan.skipped && (it.id in plan.held || entryHere(it, plan)) },
             templates = data.templates.count { q.templateById(it.id).executeAsOneOrNull() != null },
             budgets = data.budgets.count { q.budgetByScope(it.scope).executeAsOneOrNull() != null },
             recurring = data.recurring.count { q.recurringById(it.id).executeAsOneOrNull() != null },
         )
+        val replacedOut = data.entries.count { it.id in plan.skipped }
         val total = BackupCounts(data.accounts.size, data.categories.size, data.entries.size, data.templates.size, data.budgets.size, data.recurring.size)
-        val files = attachmentsPlan(data)
+        val files = attachmentsPlan(data, plan)
         return RestoreReport(
-            added = BackupCounts(total.accounts - present.accounts, total.categories - present.categories, total.entries - present.entries, total.templates - present.templates, total.budgets - present.budgets, total.recurring - present.recurring, files.wanted.size),
+            added = BackupCounts(total.accounts - present.accounts, total.categories - present.categories, total.entries - present.entries - replacedOut, total.templates - present.templates, total.budgets - present.budgets, total.recurring - present.recurring, files.wanted.size),
             alreadyHere = present.copy(attachments = files.alreadyHere),
+            replacedNotRestored = replacedOut,
+            replacedRemoved = plan.removed.size,
         )
     }
 
@@ -147,9 +158,12 @@ class BackupStore(
      * is the first with its id (a repeated id is left alone, whatever its bytes), is not attached here already, belongs to an entry that is (or, from this same
      * backup, will be) here and not deleted, has room under the limit per entry, and was not removed by the person since. A restore never brings back what was deleted.
      */
-    fun attachmentsPlan(data: BackupData): AttachmentPlan {
+    fun attachmentsPlan(data: BackupData): AttachmentPlan = if (data.attachments.isEmpty()) AttachmentPlan() else attachmentsPlan(data, ReplacementPlan.of(q, data))
+
+    private fun attachmentsPlan(data: BackupData, plan: ReplacementPlan): AttachmentPlan {
         if (data.attachments.isEmpty()) return AttachmentPlan()
-        val incoming = data.entries.mapTo(HashSet()) { it.id }
+        // an entry of the file that this restore will not add (a type change replaced it) takes no files either
+        val incoming = data.entries.asSequence().filter { it.id !in plan.skipped && it.id !in plan.held }.mapTo(HashSet()) { it.id }
         val perEntry = HashMap<String, Int>()
         val seen = HashSet<String>()
         val wanted = LinkedHashSet<String>()
@@ -179,7 +193,8 @@ class BackupStore(
      * [RestoreReport.attached] says which were, so the caller can remove any stored file that was not.
      */
     fun restore(data: BackupData, storedFiles: Set<String> = emptySet()): RestoreReport = db.transactionWithResult {
-        val report = preview(data)
+        val plan = ReplacementPlan.of(q, data)
+        val report = report(data, plan)
         val digits = (data.currencies.associate { it.code to it.digits } + q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() })
         fun currency(code: String) = Currency(code, digits[code] ?: error("The backup does not say how many decimal places $code has"))
         data.currencies.forEach { q.insertCurrency(it.code, it.digits.toLong()) }
@@ -228,9 +243,26 @@ class BackupStore(
         // a bill still waiting (FOUND) is not restored: it was never added, and its message is not in the file; a restore keeps what the person acted on
         for (b in data.bills.filter { it.status != BillStatus.FOUND.name }) q.insertBill(b.id, "backup", "", b.issuer, b.kind, b.title, b.amountMinor, b.minDueMinor, b.currency, b.dueDate, b.accountLast4, b.reference, if (b.autoDebit) 1L else 0L, b.receivedAt, null, b.status, null, b.paidAt, b.dedupeKey)
         val addedEntries = HashSet<String>()
+        // An entry on this phone that a type change replaced (the backup says so, and what replaced it is here or arrives with it) is taken away first, by the ordinary delete, so the two are never
+        // both live: the amount would be counted twice. Its bank reference goes to the arriving replacement below, as it does when the type is changed.
+        for (id in plan.removed) ledger.delete(EntryId(id))
+        // An entry of the file that a type change replaced (the backup, or this phone, has a record of it) is not added: its replacement is the entry, or was deleted since.
         // An entry whose bank reference another entry here already holds (live or deleted) is that same transaction: the type of an entry may have been changed since this backup, and the
         // reference passed to the entry that replaced it. It is left out like one whose id is here, and never makes the restore fail on the unique index.
-        for (e in data.entries) if (!entryHere(e)) { ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags)); addedEntries += e.id }
+        for (e in data.entries) if (e.id !in plan.skipped && e.id !in plan.held && !entryHere(e, plan)) {
+            plan.releases[e.id]?.let { ledger.setSourceRef(EntryId(it), null) }
+            ledger.save(toDomain(e, ::currency), EntryDetails(e.merchant, e.note, e.source, e.sourceRef, e.tags))
+            addedEntries += e.id
+        }
+        // What a removed entry carried that its replacement can hold (photos and files) goes to the replacement, as a type change moves them; the records of replaced entries are kept.
+        for (id in plan.removed) {
+            val files = q.attachmentsOf(id).executeAsList()
+            val to = plan.firstLiveAfter(id) { q.entryById(it).executeAsOneOrNull()?.deleted == 0L } ?: continue
+            if (files.isEmpty() || q.attachmentsOf(to).executeAsList().size + files.size > AttachmentRules.MAX_PER_ENTRY) continue
+            for (a in files) q.insertOp(clock.now(nowMillis()).encode(), "attachment", a.id, "entry_id", to)
+            q.moveAttachments(to, id)
+        }
+        for (r in plan.adopt) ledger.replaced.adopt(r.entryId, r.replacedBy, r.reason.trim().take(MAX_REASON).ifEmpty { ReplacedEntries.CHANGED })
         // "expecting this back" comes with an expense this restore added (one already here keeps whatever the person decided about it); a person who is not here is dropped, the free text stays
         for (x in data.expects) if (x.entryId in addedEntries && x.expectedMinor > 0 && q.entryById(x.entryId).executeAsOneOrNull()?.kind == "EXPENSE") {
             q.insertExpectRaw(x.entryId, x.from?.trim()?.takeIf { it.isNotEmpty() }?.take(ExpectStore.MAX_FROM), x.personId?.takeIf { q.personById(it).executeAsOneOrNull() != null }, x.expectedMinor, if (x.closed) 1L else 0L)
@@ -261,6 +293,15 @@ class BackupStore(
             if (network != null || tier != null || digits != null) q.upsertAccountLook(l.accountId, network, tier, digits)
         }
         for ((k, v) in data.settings) if ((k in SETTINGS || k.startsWith(CARD_LIMIT_PREFIX) || k.startsWith(RATE_PREFIX)) && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
+        // The names the person joined as one shop ("same shop as", `payee_alias:<key>`) come back like learned choices do: only for a name this phone has no alias for, only when they make no cycle with the
+        // aliases that are here (read in the file's key order, so the same file always gives the same result), each re-written clean, and at most MAX_ALIASES. An app that has no aliases ignores the keys.
+        var aliasesHere = CaptureRuleStore(db).aliases()
+        for ((k, v) in data.settings.entries.filter { it.key.startsWith(app.expenses.core.domain.PayeeAliases.PREFIX) }.sortedBy { it.key }.take(MAX_ALIASES)) {
+            if (q.settingValue(k).executeAsOneOrNull() != null) continue
+            val a = app.expenses.core.domain.PayeeAliases.decode(k, v) ?: continue
+            if (aliasesHere.problemFor(a.from, a.to, a.fromLabel, a.toLabel) != null) continue
+            q.putSetting(k, app.expenses.core.domain.PayeeAliases.encode(a)); aliasesHere = aliasesHere.with(a)
+        }
         // Files last, once their entries are here. Each is checked again inside this transaction: it may have been taken, or its entry may be deleted here.
         val attached = LinkedHashSet<String>()
         for (a in data.attachments) {
@@ -276,9 +317,12 @@ class BackupStore(
         report.copy(added = report.added.copy(attachments = attached.size), attached = attached)
     }
 
-    /** Whether the phone already has [e]: an entry with its id (live or deleted), or one holding its bank reference. */
-    private fun entryHere(e: BackupEntry): Boolean =
-        q.entryById(e.id).executeAsOneOrNull() != null || e.sourceRef != null && q.entryBySourceRef(e.source, e.sourceRef).executeAsOneOrNull() != null
+    /**
+     * Whether the phone already has [e]: an entry with its id (live or deleted), or one holding its bank reference. The entry holding it, when [plan] removes that entry for [e] (a type change
+     * replaced it), does not count: its reference passes to [e].
+     */
+    private fun entryHere(e: BackupEntry, plan: ReplacementPlan = ReplacementPlan.NONE): Boolean =
+        q.entryById(e.id).executeAsOneOrNull() != null || e.sourceRef != null && q.entryBySourceRef(e.source, e.sourceRef).executeAsOneOrNull()?.let { plan.releases[e.id] != it.id } == true
 
     private fun isUntouchedDefault(row: app.expenses.core.storage.db.Category): Boolean {
         val index = CategoryStore.DEFAULTS.indexOf(row.id)
@@ -353,6 +397,12 @@ class BackupStore(
 
         /** The accounts the app makes by itself on its first start (see AppContainer): `cash` and `bank`. */
         val FIRST_START_ACCOUNTS = setOf("cash", "bank")
+
+        /** The longest `reason` kept of a record of a replaced entry (a newer app may write a reason this one does not know; it is kept as it is, cut to this). */
+        const val MAX_REASON = 24
+
+        /** The most "same shop as" aliases a restore takes from one file. */
+        const val MAX_ALIASES = 2_000
 
         /** A card's credit limit is kept as `card_limit:<account id>`; a backup carries one for each card that has billing dates. */
         const val CARD_LIMIT_PREFIX = "card_limit:"
