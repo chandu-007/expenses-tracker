@@ -74,7 +74,8 @@ class SearchDatesUiTest {
         tap("search_date_ok"); waitGone("search_date_ok")
     }
 
-    private fun openSearch() { scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add"); tap("open_search"); waitFor("search_text") }
+    /** Search is opened and its Filters panel too: the days are chosen in it (the results change behind it as each one is set). */
+    private fun openSearch() { scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add"); tap("open_search"); waitFor("search_text"); tap("search_filters_button"); waitFor("filters_apply") }
 
     @Test
     fun pickingFromAndToLimitsTheResultsToThoseDaysWholeAndEitherEndMayBeLeftOpen() {
@@ -107,9 +108,9 @@ class SearchDatesUiTest {
         spend("a", "OnThird", 3); spend("b", "OnTenth", 10); spend("c", "OnTwentieth", 20)
         openSearch()
         pick("search_date_from", 10); pick("search_date_to", 10); waitFor("result_b")
-        tap("save_search"); type("saved_name", "Tenth"); tap("saved_ok"); waitFor("saved_Tenth")
+        tap("save_search"); type("saved_name", "Tenth"); tap("saved_ok"); waitFor("filters_saved_Tenth")
         tap("search_date_from_clear"); tap("search_date_to_clear"); waitGone("search_date_summary")
-        tap("saved_Tenth")
-        waitFor("search_date_summary"); waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c"))
+        tap("filters_saved_Tenth") // applying it closes the panel; the days are then a chip under the box
+        waitFor("search_active_chip_dates"); waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c"))
     }
 }

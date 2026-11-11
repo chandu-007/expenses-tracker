@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -74,6 +75,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -117,6 +122,8 @@ fun SearchScreen(
     var savingProblem by remember { mutableStateOf<String?>(null) }
     var deletingSaved by remember { mutableStateOf<app.expenses.SavedSearchUi?>(null) }
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // the Filters panel (SearchFilters.kt) is open
+    var filtersOpen by rememberSaveable { mutableStateOf(false) }
     PlatformBackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     val focusManager = LocalFocusManager.current
     // measurement builds only (see Platform.trace): when the page is first composed, when anything the search is made of changes, and when results are shown
@@ -137,7 +144,8 @@ fun SearchScreen(
         if (selected.isNotEmpty()) { val listed = state.results.mapTo(HashSet()) { it.id }; if (selected.any { it !in listed }) selected = selected.filter { it in listed } }
     }
     // choosing entries is done with the keyboard out of the way
-    LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) { keyboard?.hide(); focusManager.clearFocus() } }
+    LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) { keyboard?.hide(); focusManager.clearFocus(); filtersOpen = false } }
+    PlatformBackHandler(enabled = filtersOpen) { filtersOpen = false }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     var min by rememberSaveable { mutableStateOf("") }
     var max by rememberSaveable { mutableStateOf("") }
@@ -151,8 +159,6 @@ fun SearchScreen(
     var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
     var pickingDay by rememberSaveable { mutableStateOf<String?>(null) }
     val dateProblem = SearchDates.problem(fromDay, toDay)
-    var tagMenu by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     // Search from the tab starts with the cursor in the box. Opened from an account the list of that account is already there to read, and a keyboard over it hid more than half of it: the box is one tap away.
     // Coming back from an entry opened out of the results (the search is still running) is the same: the results are what is wanted, not the keyboard.
@@ -204,7 +210,19 @@ fun SearchScreen(
             dismissButton = { TextButton(onClick = { deletingSaved = null }) { Text("Keep") } },
         )
     }
+    val input = SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)
+    val wide = rememberIsWide()
+    val rows = state.results
+    val showResults = dateProblem == null && state.problem == null && state.hasConditions && !state.searching && rows.isNotEmpty()
+    val listedIds = remember(rows) { rows.map { it.id } }
+    val allSelected = listedIds.isNotEmpty() && selected.size >= listedIds.size && selected.toHashSet().containsAll(listedIds)
+    val spentMinor = remember(rows) { rows.filter { it.kind == "EXPENSE" }.sumOf { it.minor } }
+    // rows under a heading for their day, like the home list
+    val listItems = remember(rows) { buildList<Any> { var last = Long.MIN_VALUE; rows.forEach { r -> if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
+        modifier = Modifier.semantics { if (filtersOpen) hideFromAccessibility() },
         bottomBar = {
             if (selected.isNotEmpty()) BulkBar(
                 selected.size, categories, accounts,
@@ -226,134 +244,69 @@ fun SearchScreen(
                 navigationIcon = { IconButton(onClick = { selected = emptyList() }, modifier = Modifier.testTag("search_selection_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Stop choosing") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             )
-            else TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("search_back")) { Text("Back") } })
+            else TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp).testTag("search_back")) { Text("Back") } })
         }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // one rounded bar: a magnifier, what is typed, and a way to clear it
-            OutlinedTextField(
-                value = text, onValueChange = { changed(t = it, typing = true) }, singleLine = true,
-                placeholder = { Text("Merchant or note") },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                trailingIcon = { if (text.isNotEmpty()) IconButton(onClick = { changed(t = "", typing = true) }, modifier = Modifier.testTag("search_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the search") } },
-                shape = RoundedCornerShape(28.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.Transparent,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { onRemember(text); dismissKeyboard() }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).focusRequester(focus).testTag("search_text"),
-            )
-            // The saved searches, the filters, the dates and the amounts: the first thing of the page that scrolls, so the keyboard goes away as soon as the page is dragged and
-            // the results can come up under the search box (with the keyboard up, a typed search brings them up by itself, see below).
-            val filters: @Composable () -> Unit = {
-            if (saved.isNotEmpty()) ChipRow(Modifier.padding(vertical = 4.dp)) {
-                saved.forEach { s ->
-                    LongPressChip(label = s.name, onClick = { changedAll(s.input) }, onLongClick = { deletingSaved = s }, leading = Icons.Outlined.Star, modifier = Modifier.testTag("saved_${s.name}"))
-                }
-            }
-            // wraps, so every chip (every account too) is in sight: a row that scrolled sideways left the account chips beyond the edge with nothing to say so
-            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(0.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    FilterChip(selected = categoryId != null, onClick = { menu = true }, label = { Text(categories.firstOrNull { it.id == categoryId }?.let { displayName(categories, it) } ?: "Any category") }, trailingIcon = { Icon(if (categoryId != null) Icons.Outlined.Close else Icons.Outlined.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) }, modifier = Modifier.testTag("search_category"))
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Any category") }, onClick = { menu = false; changed(c = null) }, modifier = Modifier.testTag("search_cat_any"))
-                        categories.forEach { c -> DropdownMenuItem(text = { Text(displayName(categories, c)) }, onClick = { menu = false; changed(c = c.id) }, modifier = Modifier.testTag("search_cat_${c.id}")) }
-                    }
-                }
-                if (tags.isNotEmpty() || tag != null) Box {
-                    FilterChip(selected = tag != null, onClick = { tagMenu = true }, label = { Text(tag?.let { "Tag: $it" } ?: "Any tag") }, trailingIcon = { Icon(if (tag != null) Icons.Outlined.Close else Icons.Outlined.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) }, modifier = Modifier.testTag("search_tag"))
-                    DropdownMenu(expanded = tagMenu, onDismissRequest = { tagMenu = false }) {
-                        DropdownMenuItem(text = { Text("Any tag") }, onClick = { tagMenu = false; changed(g = null) }, modifier = Modifier.testTag("search_tag_any"))
-                        tags.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { tagMenu = false; changed(g = t) }, modifier = Modifier.testTag("search_tag_$t")) }
-                    }
-                }
-                FilterChip(selected = kind == SearchKind.EXPENSE, onClick = { changed(k = if (kind == SearchKind.EXPENSE) SearchKind.ANY else SearchKind.EXPENSE) }, label = { Text("Expenses") }, modifier = Modifier.testTag("search_kind_expense"))
-                FilterChip(selected = kind == SearchKind.INCOME, onClick = { changed(k = if (kind == SearchKind.INCOME) SearchKind.ANY else SearchKind.INCOME) }, label = { Text("Income") }, modifier = Modifier.testTag("search_kind_income"))
-                // one account (what was paid from it and what was moved into it), or any
-                if (accounts.size > 1 || accountId != null) {
-                    FilterChip(selected = accountId == null, onClick = { changed(ac = null) }, label = { Text("Any account") }, modifier = Modifier.testTag("search_account_any"))
-                    accounts.forEach { a -> FilterChip(selected = accountId == a.id, onClick = { changed(ac = if (accountId == a.id) null else a.id) }, label = { Text(a.name) }, modifier = Modifier.testTag("search_account_${a.name}")) }
-                }
-            }
-            // a row that scrolls sideways fades out at the edge that has more behind it
-            ChipRow(Modifier.padding(vertical = 4.dp)) {
-                if (state.hasConditions && state.problem == null) androidx.compose.material3.AssistChip(
-                    onClick = { savingName = "" }, label = { Text("Save this search") }, leadingIcon = { Icon(Icons.Outlined.StarBorder, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    modifier = Modifier.testTag("save_search"),
+            // What stays in place (it does not scroll away): the box and the Filters button, the one row of filters, and the summary line. Under them only the results move.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // one rounded bar: a magnifier, what is typed, and a way to clear it
+                OutlinedTextField(
+                    value = text, onValueChange = { changed(t = it, typing = true) }, singleLine = true,
+                    placeholder = { Text("Search entries", maxLines = 1) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    trailingIcon = { if (text.isNotEmpty()) IconButton(onClick = { changed(t = "", typing = true) }, modifier = Modifier.testTag("search_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the search") } },
+                    shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.Transparent,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { onRemember(text); dismissKeyboard() }),
+                    modifier = Modifier.weight(1f).focusRequester(focus).testTag("search_text"),
                 )
-                listOf(SearchRange.LAST_30_DAYS to "Last 30 days", SearchRange.THIS_PERIOD to "This period", SearchRange.THIS_YEAR to "This year").forEach { (r, label) ->
-                    FilterChip(selected = range == r, onClick = { changed(r = if (range == r) SearchRange.ANY else r, fd = null, td = null) }, label = { Text(label) }, trailingIcon = if (range == r) ({ Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null, modifier = Modifier.testTag("search_range_${r.name}"))
-                }
-                // specific days: either end may be left open; the first and the last day are both included
-                DayField("From", fromDay, onPick = { dismissKeyboard(); pickingDay = "from" }, onClear = { changed(fd = null) }, tag = "search_date_from")
-                DayField("To", toDay, onPick = { dismissKeyboard(); pickingDay = "to" }, onClear = { changed(td = null) }, tag = "search_date_to")
+                FiltersButton(input.filterCount(), onClick = { dismissKeyboard(); filtersOpen = true })
             }
-            if (dateProblem != null) Text(dateProblem, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp).testTag("search_date_problem"))
-            else SearchDates.summary(fromDay, toDay)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("search_date_summary")) }
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = min, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(lo = v, typing = true) }, label = { Text("From ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_min"))
-                OutlinedTextField(value = max, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) changed(hi = v, typing = true) }, label = { Text("To ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { dismissKeyboard() }), modifier = Modifier.weight(1f).testTag("search_max"))
-            }
-            HorizontalDivider(Modifier.padding(top = 4.dp))
-            }
-            // One list for everything under the search box (the filters are its first item), so the page keeps its place from one keystroke to the next
-            // (while the next search runs the results give way to "Searching…" for a moment; the foot below keeps the page where it was).
-            val rows = state.results
-            val showResults = dateProblem == null && state.problem == null && state.hasConditions && !state.searching && rows.isNotEmpty()
-            val listedIds = remember(rows) { rows.map { it.id } }
-            val allSelected = listedIds.isNotEmpty() && selected.size >= listedIds.size && selected.toHashSet().containsAll(listedIds)
-            val spentMinor = remember(rows) { rows.filter { it.kind == "EXPENSE" }.sumOf { it.minor } }
-            // rows under a heading for their day, like the home list
-            val listItems = remember(rows) { buildList<Any> { var last = Long.MIN_VALUE; rows.forEach { r -> if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            // Typing with the keyboard up: the filters would fill the room the keyboard leaves and hide the results behind it, so the page moves up to the results (the search box stays
-            // where it is, and a drag down brings the filters back, with the keyboard put away). Each time results show while the keyboard is up and the page is at its top.
-            val keyboardOpen = rememberKeyboardOpen()
-            LaunchedEffect(keyboardOpen, showResults, text) {
-                if (keyboardOpen && showResults && text.isNotBlank() && listState.firstVisibleItemIndex == 0) listState.animateScrollToItem(1)
-            }
-            // what a bulk change just did, and its Undo, are the first thing under the filters: with the page moved up for the keyboard (and then the room under it taken back) they
-            // were left above the screen
-            LaunchedEffect(state.notice) { if (state.notice != null && showResults) listState.animateScrollToItem(1) }
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-            // with the keyboard up the list gets a foot as tall as the room left, so a short list of results can still be moved up under the box
-            LazyColumn(Modifier.fillMaxSize().nestedScroll(hideOnScroll).testTag("search_results"), state = listState, contentPadding = PaddingValues(bottom = if (keyboardOpen) maxHeight else 24.dp)) {
-                item(key = "search_filters", contentType = "filters") { Column { filters() } }
+            FilterStrip(input, categories, accounts, onEdit = { changedAll(it) }, modifier = Modifier.padding(bottom = 2.dp))
+            if (dateProblem != null || state.problem != null || state.searching || (state.hasConditions && rows.isNotEmpty())) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp).testTag("search_summary"), verticalAlignment = Alignment.CenterVertically) {
                 when {
-                    dateProblem != null -> {} // the message under the dates says it
-                    state.problem != null -> item(key = "search_problem", contentType = "message") { Text(state.problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp).testTag("search_problem")) }
+                    dateProblem != null || state.problem != null -> Text(dateProblem ?: state.problem.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("search_problem"))
+                    state.searching -> Text("Searching…", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).testTag("search_working"))
+                    else -> {
+                        Text(
+                            "${rows.size} ${if (rows.size == 1) "result" else "results"}" +
+                                if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) " · ${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
+                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }.testTag("search_count"),
+                        )
+                        // every listed result, not only the ones composed on screen
+                        if (listedIds.isNotEmpty()) TextButton(
+                            onClick = { selected = if (allSelected) emptyList() else listedIds },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("search_select_all"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
+                    }
+                }
+            }
+            // what a bulk change just did, and its Undo
+            state.notice?.let { n ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(n, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("search_notice"))
+                    state.undo?.let { u -> TextButton(onClick = { onUndo(u) }, modifier = Modifier.heightIn(min = 48.dp).testTag("search_undo")) { Text("Undo") } }
+                }
+            }
+            HorizontalDivider()
+            // the results (or, before anything is asked, the start page): the only part that scrolls; a drag puts the keyboard away
+            LazyColumn(Modifier.fillMaxSize().nestedScroll(hideOnScroll).testTag("search_results"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+                when {
+                    dateProblem != null || state.problem != null -> {} // the summary line says it
                     !state.hasConditions -> item(key = "search_start", contentType = "start") {
                         SearchStart(
-                            recent = recent, categories = categories,
+                            recent = recent, categories = categories, saved = saved,
                             onPick = { t -> changed(t = t) }, onForget = onForgetRecent, onClearRecent = onClearRecent,
                             onTry = { i -> changedAll(i.copy(accountId = accountId)) },
+                            onUseSaved = { i -> changedAll(i) }, onRemoveSaved = { deletingSaved = it },
                         )
                     }
                     showResults -> {
-                        if (state.notice != null) item(key = "search_notice", contentType = "notice") {
-                            state.notice?.let { n ->
-                                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(n, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("search_notice"))
-                                    state.undo?.let { u -> TextButton(onClick = { onUndo(u) }, modifier = Modifier.testTag("search_undo")) { Text("Undo") } }
-                                }
-                            }
-                        }
-                        item(key = "search_summary", contentType = "summary") {
-                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "${rows.size} ${if (rows.size == 1) "result" else "results"}" +
-                                        if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) " · ${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
-                                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(1f).testTag("search_count"),
-                                )
-                                // every listed result, not only the ones composed on screen
-                                if (listedIds.isNotEmpty()) TextButton(
-                                    onClick = { selected = if (allSelected) emptyList() else listedIds },
-                                    modifier = Modifier.testTag("search_select_all"),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                ) { Text(if (allSelected) "Clear selection" else "Select all ${listedIds.size}") }
-                            }
-                        }
                         itemsIndexed(listItems, key = { i, it -> if (it is RowUi) it.seq else "day$i" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
                         if (item !is RowUi) { DayHeader(item as Long); return@itemsIndexed }
                         val row = item
@@ -375,12 +328,24 @@ fun SearchScreen(
                         }
                     }
                     }
-                    state.searching -> item(key = "search_working", contentType = "message") { Text("Searching…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("search_working")) }
-                    else -> item(key = "search_empty", contentType = "message") { SearchEmpty("No entries match. Try fewer words, or remove a filter.", "search_none", onClear = { changedAll(SearchInput()) }) }
+                    state.searching -> {} // "Searching…" is in the summary line
+                    else -> item(key = "search_empty", contentType = "message") {
+                        SearchEmpty(
+                            filters = input.filterCount() > 0, words = text.isNotBlank(),
+                            onClearFilters = { changedAll(input.withoutFilters()) }, onClearAll = { changedAll(SearchInput()) },
+                        )
+                    }
                 }
             }
-            }
         }
+    }
+    if (filtersOpen) FiltersPanel(
+        wide = wide, input = input, state = state, dateProblem = dateProblem, canSave = state.hasConditions && state.problem == null,
+        categories = categories, tags = tags, accounts = accounts, saved = saved,
+        onEdit = { i, typing -> changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId, typing = typing) },
+        onUseSaved = { i -> filtersOpen = false; changedAll(i) }, onRemoveSaved = { deletingSaved = it }, onSave = { savingName = "" },
+        onPickDay = { which -> dismissKeyboard(); pickingDay = which }, onDone = { dismissKeyboard() }, onClose = { filtersOpen = false },
+    )
     }
 }
 
@@ -389,8 +354,10 @@ fun SearchScreen(
  * scroll and not something that is simply missing.
  */
 @Composable
-private fun ChipRow(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+internal fun ChipRow(modifier: Modifier = Modifier, resetKey: Any? = null, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     val scroll = rememberScrollState()
+    // back to the first chip when [resetKey] changes (a filter came or went), so what is on is in sight
+    LaunchedEffect(resetKey) { if (scroll.value != 0) scroll.animateScrollTo(0) }
     val fade = 36.dp
     Row(
         modifier.fillMaxWidth()
@@ -406,24 +373,25 @@ private fun ChipRow(modifier: Modifier = Modifier, content: @Composable androidx
     )
 }
 
-/** One end of the chosen days: a button showing the day (or "From"/"To" while open) that opens the picker, and a way to clear it. */
-@Composable
-private fun DayField(label: String, day: Long?, onPick: () -> Unit, onClear: () -> Unit, tag: String) {
-    OutlinedButton(onClick = onPick, modifier = Modifier.testTag(tag)) {
-        Text(if (day == null) "$label date" else "$label ${SearchDates.summary(day, day)}")
-    }
-    if (day != null) IconButton(onClick = onClear, modifier = Modifier.testTag(tag + "_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the $label date") }
-}
-
 /** What shows before anything is typed: the hint, the words searched for lately, and a few searches to start from. */
 @Composable
-private fun SearchStart(recent: List<String>, categories: List<CategoryUi>, onPick: (String) -> Unit, onForget: (String) -> Unit, onClearRecent: () -> Unit, onTry: (SearchInput) -> Unit) {
+private fun SearchStart(
+    recent: List<String>, categories: List<CategoryUi>, saved: List<app.expenses.SavedSearchUi>, onPick: (String) -> Unit, onForget: (String) -> Unit, onClearRecent: () -> Unit, onTry: (SearchInput) -> Unit,
+    onUseSaved: (SearchInput) -> Unit, onRemoveSaved: (app.expenses.SavedSearchUi) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Type a merchant or note, or choose an amount, category or dates.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("search_hint"))
+        Text("Type a merchant or note, or open Filters to choose dates, an account, a category or an amount.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("search_hint"))
+        // the searches kept by name: one tap runs one (the same ones are under Filters, where they are made and removed; their tags there begin with filters_)
+        if (saved.isNotEmpty()) {
+            Text("SAVED SEARCHES", style = MaterialTheme.typography.labelSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                saved.forEach { s -> LongPressChip(label = s.name, onClick = { onUseSaved(s.input) }, onLongClick = { onRemoveSaved(s) }, leading = Icons.Outlined.Star, modifier = Modifier.heightIn(min = 48.dp).testTag("saved_${s.name}")) }
+            }
+        }
         if (recent.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("RECENT SEARCHES", style = MaterialTheme.typography.labelSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClearRecent, modifier = Modifier.testTag("recent_clear")) { Text("Clear") }
+                TextButton(onClick = onClearRecent, modifier = Modifier.heightIn(min = 48.dp).testTag("recent_clear")) { Text("Clear") }
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
                 recent.forEach { r ->
@@ -456,12 +424,21 @@ private fun TryCard(title: String, line: String, icon: androidx.compose.ui.graph
     }
 }
 
-/** The "nothing found" line under a small picture; scrolls if the keyboard leaves little room, so the text is always reachable. */
+/**
+ * The "nothing found" page under a small picture: what to do next is one tap. With filters on, "Clear filters" takes them off and keeps the words; with words as well, "Clear the search" takes
+ * everything off (with only words typed, that is the one button).
+ */
 @Composable
-private fun SearchEmpty(text: String, tag: String, onClear: () -> Unit) {
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+private fun SearchEmpty(filters: Boolean, words: Boolean, onClearFilters: () -> Unit, onClearAll: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         EmptyArt(EmptyKind.SEARCH, Modifier.padding(top = 16.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag(tag))
-        OutlinedButton(onClick = onClear, modifier = Modifier.testTag("search_none_clear")) { Text("Clear the search") }
+        Text("No entries match", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp).testTag("search_none"))
+        Text(
+            if (filters) "Try fewer words, or take a filter off." else "Try fewer words or a different spelling.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp),
+        )
+        if (filters) androidx.compose.material3.Button(onClick = onClearFilters, modifier = Modifier.heightIn(min = 48.dp).testTag(if (words) "search_none_clear_filters" else "search_none_clear")) { Text("Clear filters") }
+        if (words && filters) TextButton(onClick = onClearAll, modifier = Modifier.heightIn(min = 48.dp).testTag("search_none_clear")) { Text("Clear the search") }
+        else if (words) OutlinedButton(onClick = onClearAll, modifier = Modifier.heightIn(min = 48.dp).testTag("search_none_clear")) { Text("Clear the search") }
     }
 }

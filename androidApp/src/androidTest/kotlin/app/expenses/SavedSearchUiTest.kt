@@ -80,15 +80,17 @@ class SavedSearchUiTest {
         ok.store.save(Expense(EntryId(id), t++, AccountId("cash"), Money(minor, Currency.INR), listOf(CategorySplit(CategoryId(cat), Money(minor, Currency.INR)))), EntryDetails(merchant = merchant, tags = tags))
     }
     private fun openSearch() { launch(); tap("open_search"); waitFor("search_text") }
+    /** Saving, the saved searches' list and the category and tag are in the Filters panel. */
+    private fun panel() { tap("search_filters_button"); waitFor("filters_apply") }
 
     @Test
     fun aSearchSavedWithItsFiltersComesBackWithAllOfThemAfterARestart() {
         expense("a", "Uber ride", 50_000, "Transport"); expense("b", "Uber eats", 80_000, "Food", listOf("Work")); expense("c", "Zomato", 90_000, "Food"); expense("d", "Uber lunch", 70_000, "Food")
         openSearch()
-        type("search_text", "uber"); tap("search_kind_expense"); tapUntil("search_category", "search_cat_Food"); tap("search_cat_Food"); tapUntil("search_tag", "search_tag_Work"); tap("search_tag_Work")
+        type("search_text", "uber"); tap("search_kind_expense"); panel(); tapUntil("search_category", "search_cat_Food"); tap("search_cat_Food"); tapUntil("search_tag", "search_tag_Work"); tap("search_tag_Work")
         waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c") && !has("result_d"))
-        tap("save_search"); type("saved_name", "Uber food"); tap("saved_ok"); show("saved_Uber food")
-        launch(); tap("open_search"); waitFor("saved_Uber food")
+        tap("save_search"); type("saved_name", "Uber food"); tap("saved_ok"); waitFor("filters_saved_Uber food")
+        launch(); tap("open_search"); waitFor("saved_Uber food") // the start page lists them too
         tap("saved_Uber food")
         waitFor("result_b"); assertTrue(!has("result_a") && !has("result_c") && !has("result_d"), "the same conditions (text, kind, category and tag) apply again")
         compose.onNodeWithTag("search_text").assertTextContains("uber")
@@ -96,26 +98,26 @@ class SavedSearchUiTest {
 
     @Test
     fun aSavedSearchRunsAgainstTodaysEntriesNotTheOnesThatExistedWhenItWasSaved() {
-        openSearch(); type("search_text", "latte"); tap("save_search"); type("saved_name", "Coffee"); tap("saved_ok"); waitFor("saved_Coffee")
+        openSearch(); type("search_text", "latte"); panel(); tap("save_search"); type("saved_name", "Coffee"); tap("saved_ok"); waitFor("filters_saved_Coffee")
         expense("n", "Latte new", 30_000, "Food")
-        tap("search_back"); waitFor("add"); tap("open_search"); tap("saved_Coffee")
+        tap("filters_close"); tap("search_back"); waitFor("add"); tap("open_search"); tap("saved_Coffee")
         waitFor("result_n")
     }
 
     @Test
     fun aDuplicateNameIsRefusedWithAReasonAndTheDialogStaysOpenAndLongPressRemovesOne() {
-        openSearch(); type("search_text", "x"); tap("save_search"); type("saved_name", "Cabs"); tap("saved_ok"); waitFor("saved_Cabs")
+        openSearch(); type("search_text", "x"); panel(); tap("save_search"); type("saved_name", "Cabs"); tap("saved_ok"); waitFor("filters_saved_Cabs")
         tap("save_search"); type("saved_name", "cabs"); tap("saved_ok"); waitFor("saved_problem"); waitText("already have a saved search")
         type("saved_name", ""); tap("saved_ok"); waitText("Give the search a name")
-        type("saved_name", "Taxis"); tap("saved_ok"); waitFor("saved_Taxis"); waitGone("saved_name")
-        hold("saved_Taxis"); tap("saved_delete_ok"); waitGone("saved_Taxis")
-        hold("saved_Cabs"); tap("saved_delete_ok"); waitGone("saved_Cabs")
+        type("saved_name", "Taxis"); tap("saved_ok"); waitFor("filters_saved_Taxis"); waitGone("saved_name")
+        hold("filters_saved_Taxis"); tap("saved_delete_ok"); waitGone("filters_saved_Taxis")
+        hold("filters_saved_Cabs"); tap("saved_delete_ok"); waitGone("filters_saved_Cabs")
         assertEquals(emptyList(), db { it.savedSearches.list().map { s -> s.name } }, "both were removed, and only the searches: no entries")
     }
 
     @Test
     fun theSaveButtonIsOnlyOfferedOnceThereIsSomethingToSave() {
-        openSearch(); assertTrue(!has("save_search"))
+        openSearch(); panel(); assertTrue(!has("save_search"))
         type("search_text", "ab"); waitFor("save_search")
     }
 

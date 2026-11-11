@@ -83,7 +83,7 @@ class TagsUiTest {
     fun searchingByTagFindsOnlyTaggedEntriesAndCombinesWithText() {
         expense("a", "Alpha Cafe", listOf("Trip")); expense("b", "Beta Cafe"); expense("c", "Gamma", listOf("Trip"))
         launch(); tap("open_search"); waitFor("search_text")
-        tap("search_tag"); tap("search_tag_Trip")
+        tap("search_filters_button"); tap("search_tag"); tap("search_tag_Trip"); tap("filters_apply") // the tag is chosen in the Filters panel
         waitFor("result_a"); waitFor("result_c"); assertEquals(false, has("result_b"))
         compose.onNodeWithTag("search_text").performTextInput("Cafe")
         waitFor("result_a"); waitGone("result_c") // results settle on the one tagged entry that also matches the text

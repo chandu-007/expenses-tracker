@@ -81,6 +81,8 @@ class AccountPeriodUiTest {
         // it is scrolled into view. Whether the keyboard is already up when the results arrive decided if this passed (it failed about 1 run in 3); scrolling to the row asks for what the test means.
         compose.onNodeWithTag("search_results", useUnmergedTree = true).performScrollToNode(hasTestTag("result_o")); waitFor("result_o")
         assertTrue(!has("result_b"), "only the cash account is searched")
+        waitFor("search_active_chip_account") // the account searched in is a chip under the box; the others are in the Filters panel
+        tap("search_filters_button"); waitFor("filters_apply")
         tap("search_account_Bank"); waitFor("result_b"); waitGone("result_n")
         tap("search_account_any"); waitFor("search_hint") // nothing else is chosen, so the search is back at its start
         assertTrue(!has("result_n") && !has("result_b"))

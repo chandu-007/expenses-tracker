@@ -158,7 +158,9 @@ class UxPolishUiTest {
         bare("a", System.currentTimeMillis() - 1_000, "CashNow", "cash"); bare("b", System.currentTimeMillis() - 2_000, "BankNow", "bank")
         launch(); tap("balance_chip_Cash"); tap("account_search")
         waitFor("search_text"); waitFor("result_a")
-        listOf("search_account_any", "search_account_Bank", "search_account_Cash", "search_account_Wallet").forEach { compose.onNodeWithTag(it, useUnmergedTree = true).assertIsDisplayed() }
+        compose.onNodeWithTag("search_active_chip_account", useUnmergedTree = true).assertIsDisplayed() // the account searched in is a chip under the box
+        tap("search_filters_button"); waitFor("filters_apply") // every account is a choice in the Filters panel
+        listOf("search_account_any", "search_account_Bank", "search_account_Cash", "search_account_Wallet").forEach { compose.onNodeWithTag(it, useUnmergedTree = true).assertExists() }
         assertFalse(androidx.core.view.ViewCompat.getRootWindowInsets(scenarioView())?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true, "the keyboard is not up over the account's list")
     }
 

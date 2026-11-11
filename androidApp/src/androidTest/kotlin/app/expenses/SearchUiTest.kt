@@ -2,7 +2,6 @@ package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -70,6 +69,9 @@ class SearchUiTest {
     private fun resultCount() = compose.onAllNodes(hasTestTag("search_results"), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.children?.size ?: 0
 
     private fun type(tag: String, text: String) = compose.onNodeWithTag(tag).performTextInput(text)
+    /** The amounts, dates, account, category and tag are chosen in the Filters panel. */
+    private fun openFilters() { waitFor("search_filters_button"); compose.onNodeWithTag("search_filters_button", useUnmergedTree = true).performClick(); waitFor("filters_apply") }
+    private fun closeFilters() { compose.onNodeWithTag("filters_apply", useUnmergedTree = true).performClick(); waitGone("filters_apply") }
 
     @Test
     fun typingFindsMatchesAsYouGoAndSaysWhenThereAreNone() {
@@ -101,7 +103,7 @@ class SearchUiTest {
     @Test
     fun anAmountRangeIsInclusiveAndBadAmountsAreExplained() {
         spend("a", 100, "Food", "Cafe"); spend("b", 250, "Food", "Cafe"); spend("c", 400, "Food", "Cafe")
-        open()
+        open(); openFilters()
         type("search_min", "100"); type("search_max", "250")
         waitFor("result_a"); waitFor("result_b"); waitGone("result_c")
         compose.onNodeWithTag("search_min").performTextClearance(); type("search_min", "250.01")
@@ -119,9 +121,10 @@ class SearchUiTest {
         val cafe = runBlocking { container.write { it.categories.create("Cafe", parentId = "Food").id } }!!
         spend("food", 100, "Food", "Biryani"); spend("cafe", 50, cafe, "Chai"); spend("fun", 70, "Fun", "Movie")
         runBlocking { container.write { it.store.save(Income(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), Money(500_000, inr), CategoryId("Food")), EntryDetails(merchant = "Refund from restaurant")) } }
-        open()
+        open(); openFilters()
         compose.onNodeWithTag("search_category").performClick()
         waitFor("search_cat_Food"); compose.onNodeWithTag("search_cat_Food").performClick()
+        closeFilters()
         waitFor("result_food"); waitFor("result_cafe"); waitFor("result_pay"); waitGone("result_fun")
         compose.onNodeWithTag("search_kind_income").performClick()
         waitFor("result_pay"); waitGone("result_food"); waitGone("result_cafe")
@@ -136,11 +139,10 @@ class SearchUiTest {
         open()
         type("search_text", "cafe")
         waitFor("result_new"); waitFor("result_old")
-        // typing with the keyboard up moved the page up to the results: the chips are above them, one scroll back
-        fun chip() = compose.onNodeWithTag("search_range_LAST_30_DAYS").also { compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("search_range_LAST_30_DAYS")) }
-        chip().performClick()
-        waitFor("result_new"); waitGone("result_old")
-        chip().performClick() // choosing it again clears it
+        // the chip is in the Filters panel; once on, it is also a chip under the box that takes it off
+        openFilters(); compose.onNodeWithTag("search_range_LAST_30_DAYS").performClick(); closeFilters()
+        waitFor("result_new"); waitGone("result_old"); waitFor("search_active_chip_range")
+        compose.onNodeWithTag("search_active_chip_range", useUnmergedTree = true).performClick() // taking it off
         waitFor("result_old")
     }
 
