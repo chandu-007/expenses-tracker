@@ -37,6 +37,11 @@ Settings, Display, Font size and Display size at their largest.
 - [ ] Table-top (half open, crease running across): the app fills the half above the crease, nothing below it.
 - [ ] Split screen (app next to another app): the half is a phone layout unless it is still 600 dp wide; pop-up view and DeX windows follow their size while you drag the edge.
 - [ ] With a keyboard (a Fold with a keyboard case, DeX, a tablet): Ctrl+N opens the add screen and Ctrl+F opens Search from Home, Search or Reports (nothing happens on other pages or during the tour); Meta + / lists both.
+- [ ] Search, unfolded: the results are on the left (about 340 to 480 dp), "Select an entry" on the right; tap a result and its editor opens on the right with the results, the words and the scroll position as they were; Save empties the pane and the line shows the new amount; Back closes the entry first and Search second. Filters opens as a sheet over the left side only; the open entry stays in sight.
+- [ ] Search, unfolded: touch and hold a result to choose, then tap others: they are ticked (the editor does not open); the bar at the bottom works as on a phone.
+- [ ] Search with words, a filter, a ticked entry and an open entry, then fold: one screen (the open entry, with what was typed); unfold: all of it is back; fold and press Back: the results with the words, the filter and the ticks.
+- [ ] Keyboard (a case, DeX): Tab leaves the search box and goes through the Filters button to the first result, the arrow keys move between results, Enter opens it beside the list; Ctrl+F in Search puts the cursor in the box; Ctrl+N leaves Search and opens the add screen.
+- [ ] Text at 1.3 and 2.0 in Search, unfolded: a result's name and its second line wrap on two lines in the left pane, nothing is cut short.
 - [ ] Settings, Display, Screen zoom at the smallest and the largest: two panes while the window is 600 dp wide or more; at the largest zoom an upright Fold inner screen can fall below 600 dp and shows the phone layout (expected).
 - [ ] Settings, Apps screen ratio / "Fit to app screen" does not letterbox the app on the inner screen.
 

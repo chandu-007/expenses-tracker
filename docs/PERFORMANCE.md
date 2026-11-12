@@ -40,8 +40,39 @@ The Play bundle of 0.10.6 (`bundlePlaySms`) is 35,182,606 bytes; the same bundle
 
 ## Suggestions that were NOT done (no measurement could show a gain here), ranked
 
-1. **A baseline profile for the app's own code** (generated with Macrobenchmark on a phone: start, scroll Home, open an entry, Search, Reports). Expected: the biggest cold-start gain on a real phone (typical 15 to 30% for a Compose app); risk low (a profile file, +100 to 300 KB); effort a day with a phone. Needs a phone: this emulator cannot show it.
+1. **A baseline profile for the app's own code.** Generated and tried in Slice 111 (see "Baseline profile" below): the file is easy to make and safe to build, but the gain could not be shown on a loaded Mac with an emulator, so it is NOT shipped. The measurement on a phone, or on a quiet host, is what is missing; the steps are in `tools/baseline_profile_drive.py`.
 2. **`Modifier.sharedContainer` on every Home row** (`Screens.kt:501`) is a `composed {}` modifier (it reads three composition locals and remembers a shared-content state per row). On a long list it costs allocation per row as it scrolls in. Giving the shared key only to the row that was tapped would remove it; it touches the motion code (`MotionUiTest`), so it needs a scroll measurement on a phone first. Effort small, risk medium (the grow-out-of-the-row motion).
 3. **The hourly notification check and the twelve-hourly auto-export** (`NotificationWork`, `AutoExportWorker`) and five widgets at `updatePeriodMillis` 1 h: each wake opens the encrypted database. Battery cost is small; a `setRequiresBatteryNotLow` constraint would cut it on a low battery but delays bill reminders then. Not changed: it is a product decision.
 4. **Drag and drop** of an entry out of the list (a share target for another app) and **an edge-to-edge detail pane** with the amount keypad beside the form on 8-inch screens: large-screen guidelines suggest both; neither is trivial.
-5. **Two panes for Search** (results on the left, the entry on the right): today an entry opened from Search covers it, full width up to 960 dp. A natural next step on a Fold; it moves the one-pane rule of every screen but Home, so it needs its own slice.
+5. ~~Two panes for Search~~: done in Slice 111.
+
+## Baseline profile (Slice 111): made, measured, NOT shipped
+
+What the owner asked: no new library or permission. Nothing new is needed at run time: `androidx.profileinstaller` 1.4.0 is already in the app (Compose and Glance bring it; it is why the release APK already holds a 10 KB `assets/dexopt/baseline.prof` made of the libraries' own profiles), and AGP 9.3.1 merges a file `androidApp/src/main/baseline-prof.txt` with them and has R8 rewrite its names to the shipped ones. No Gradle change is needed to ship it, and no Macrobenchmark or profile plugin was added: the profile was collected from a throwaway build type in a throwaway worktree (never merged) by driving the app with `adb` (`tools/baseline_profile_drive.py`, steps in its header): 6 cold starts, the first-run tour, Home scrolling, an entry, adding an expense, Search with Filters and an opened result, Reports in its modes, and More with its pages. API 34 emulator, 3,000 seeded entries, commit bda2bc2.
+
+| What | Number |
+|---|---|
+| ART's own profile after the run (`primary.prof`) | 38.8 KB binary; `profman --dump-classes-and-methods`: 34,074 lines (3.8 MB), of which 5,519 are the app's own methods and classes |
+| After dropping the test and seeding code and the libraries that ship their own profile (androidx compose, activity, lifecycle, collection) | 11,672 lines, 1.08 MB: the candidate `baseline-prof.txt` |
+| What AGP and R8 made of it (`profgen dumpProfile` of the built APK, with the R8 mapping) | entries 9,749 -> 12,784; the app's own 464 -> 1,326 (R8 inlines and merges, so most of the 5,519 source methods have no entry of their own any more) |
+| `assets/dexopt/baseline.prof` in the APK | 10,056 -> 15,589 bytes |
+| Size | benchmark APK +16,384 bytes (57,175,645 -> 57,192,029); Play bundle (`bundlePlaySms`) +3,331 bytes (35,641,715 -> 35,645,046); the release APK has the same size to the byte |
+| `tools/check_release_keeps.py` on the release APK with the profile | PASS (9,569 classes) |
+
+Measured, the same release code with and without the profile, `adb install -r` of each in turn, 24 cold starts each per pass, API 34, the Mac **never quiet** (its 1-minute load was 14 to 138 during these, another job was building and testing all the time):
+
+| Pass | What was compared | Cold start `am start -W` | Data composed | CPU time of the process 3 s after the start (user + system) |
+|---|---|---|---|---|
+| 1 | both left as `adb install` leaves them (compile filter `verify`: no ahead-of-time code for either, the profile is not used) | without 683 ms, with 496 ms | 1,472 / 1,060 ms | not measured |
+| 2 | after the app ran once (it installs the profile itself a few seconds after starting) and `cmd package compile -f -m speed-profile` | without 456 ms, with 545 ms | 996 / 1,178 ms | not measured |
+| 3 | the same | without 449, with 422 | 1,025 / 929 | 1,910 / 1,695 ms |
+| 4 (with first) | the same | with 574, without 718 | 1,202 / 1,300 | 2,065 / 2,420 ms |
+| 5 | the same | without 606, with 586 | 1,201 / 1,190 | 2,260 / 2,190 ms |
+
+Pass 1 compared two builds in the SAME state and still differed by 30%, which is the size of the noise. In the four passes that did use the profile the cold start was lower in three and 20% higher in one; the CPU time was lower in all three passes that measured it (3% to 15%). Idle memory after the compile (PSS, 3 alternating pairs): without 71.6, 72.1, 72.7 MB; with 63.6 (an outlier), 73.3, 73.5 MB: about 1% higher in two of three, the compiled code being mapped from the file. The rule for this work is "keep it only if the numbers are equal or better", and these are mixed, so **nothing is shipped**; no gain is claimed.
+
+To decide it properly, on a quiet host or a phone: build the two Play-style bundles (without and with `baseline-prof.txt` made by the steps in `tools/baseline_profile_drive.py`), install each with `bundletool` or from an internal Play track (so the install compiles with the profile as Play does), force `cmd package compile -f -m speed-profile app.expenses` on both, and take 30 cold starts each alternating (`tools/measure_perf.py` or the script in the header of this file), the CPU time as above, and the PSS; ship the file when the start is lower and the PSS is not higher. Removing it again is deleting one file.
+
+## Two-pane Search (Slice 111): cost
+
+Search now draws its whole page in the list pane on a two-pane window, and `SearchFields` (a new class that keeps the words, filters, ticks, panel state and scroll position outside the page) lives in the app root. The timing gate (`PerformanceBudgetTest` + `RefreshBudgetTest`, API 26, cold-booted per run, order base, new, new, base, base, new, against 648a179) is in the Slice 111 notes of `docs/PHASE2_PROGRESS.md`.
