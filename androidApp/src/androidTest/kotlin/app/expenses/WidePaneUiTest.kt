@@ -49,7 +49,7 @@ class WidePaneUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before fun fresh() { runBlocking { container.startFresh() } }
-    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; runBlocking { container.startFresh() } }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); SystemDialogs.dismissAppErrorDialog(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) {
@@ -236,9 +236,12 @@ class WidePaneUiTest {
         shell("settings put secure show_ime_with_hard_keyboard 1")
         launch(null); waitFor("row_Cafe"); Thread.sleep(600); waitWide(true, "unfolded on its side")
         compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick(); waitFor("amount")
-        compose.onNodeWithTag("amount").performClick()
         var shown = false
-        compose.waitUntil(10_000) { scenario!!.onActivity { shown = androidx.core.view.ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true }; shown }
+        fun imeUp() = scenario!!.onActivity { shown = androidx.core.view.ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true }.let { shown }
+        // the tap is repeated until the keyboard is up; the emulator's own keyboard app may have crashed on the way (see SystemDialogs) and left its dialog on the window focus: that is closed and the field tapped again
+        var tries = 0
+        while (!shown && tries++ < 4) { compose.onNodeWithTag("amount").performClick(); runCatching { compose.waitUntil(5_000) { imeUp() } }; if (!shown) SystemDialogs.dismissAppErrorDialog() }
+        compose.waitUntil(10_000) { imeUp() }
         Thread.sleep(1_200)
         assertTrue(has("wide_list_pane") && has("wide_detail_pane") && has("amount"), "still two panes with the keyboard up")
     }

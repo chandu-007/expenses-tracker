@@ -51,7 +51,7 @@ class TripModeSizesUiTest {
     @Before fun fresh() { shell("settings put system font_scale 1.0"); runBlocking { container.startFresh() } }
     @After fun cleanUp() {
         compose.waitForIdle(); scenario?.close()
-        shell("settings put system font_scale 1.0"); shell("wm size reset"); shell("wm density reset")
+        shell("settings put system font_scale 1.0"); shell("wm size reset"); shell("wm density reset"); SystemDialogs.dismissAppErrorDialog()
         runBlocking { container.startFresh() }
     }
 

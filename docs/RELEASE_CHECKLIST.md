@@ -42,7 +42,7 @@ Why this exists: R8 once broke ML Kit text recognition only in the release build
 instrumented test passed. Only a run of the release build can see that kind of bug. Run it after ANY change to `androidApp/proguard-rules.pro`, to a library, or to the
 Android Gradle plugin or Kotlin version. It takes the shared emulator lock (`/tmp/emu.lock`), so it waits for other users of the emulator; the AVDs are `API26` and `API34`
 (start with `emulator -avd API26 -no-snapshot -no-audio -no-boot-anim`, then run `tools/emulator_setup.sh`: it waits for the boot, sets the three animation scales to 1 and disables the Google app
-(`com.google.android.googlequicksearchbox`), whose "has stopped" popup otherwise closes dialogs at random). **Animation scales must be 1**: a re-created AVD can come up with them at 0, and then
+(`com.google.android.googlequicksearchbox`), whose "has stopped" popup otherwise closes dialogs at random; the API 26 image's own keyboard also crashes in the fold-size tests, and the tests that set the display close its dialog themselves: `SystemDialogs`, see Slice 111 in `docs/PHASE2_PROGRESS.md`). **Animation scales must be 1**: a re-created AVD can come up with them at 0, and then
 `MotionUiTest`, which measures that screens really move, fails on a clean tree. **Cold-boot the emulator before every long run, and again halfway through the full device suite**: after about
 an hour the Android 8 emulator's own "System UI isn't responding" dialog appears, and every test after it times out (seen in the 0.10.5 run: 20 failures in the classes at the end of the alphabet, all
 passing on a freshly booted emulator). A class that fails in a long run is judged by running it alone on a cold-booted emulator, twice.

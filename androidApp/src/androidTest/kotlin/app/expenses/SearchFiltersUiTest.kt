@@ -47,7 +47,7 @@ class SearchFiltersUiTest {
     @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } } }
     @After fun cleanUp() {
         compose.waitForIdle(); scenario?.close()
-        shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0")
+        shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0"); SystemDialogs.dismissAppErrorDialog()
         runBlocking { container.startFresh() }
     }
 
