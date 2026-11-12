@@ -284,13 +284,12 @@ ON CONFLICT(id) DO UPDATE SET name = excluded.name, tag = excluded.tag, start_da
 deleteTrip:
 DELETE FROM trip WHERE id = :id;
 
--- Your spending on a trip: every spend line (refunds are negative) in the window of entries that carry the trip's tag; a refund counts with the expense it reverses, as in every tag report.
--- Walks the lines of the window (the report index), then looks each tag up by its key, so a tag with many entries elsewhere costs nothing.
+-- Your spending on a trip: every spend line (refunds are negative) of the entries that carry the trip's tag, on ANY date, so the figure is always what Search by that tag lists; a refund counts with the
+-- expense it reverses, as in every tag report. Walks the tag's own entries by key.
 tripLines:
 SELECT s.entry_id AS entry_id, s.occurred_at AS occurred_at, s.category_id AS category_id, s.mine_minor AS mine_minor
 FROM spend_line s JOIN entry e ON e.id = s.entry_id
-WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
-  AND EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id) AND t.tag = :tag)
+WHERE e.id IN (SELECT t.entry_id FROM entry_tag t WHERE t.tag = :tag UNION SELECT r.id FROM entry r JOIN entry_tag t ON t.entry_id = r.refunds_entry WHERE t.tag = :tag) AND s.currency = :currency AND e.deleted = 0
 ORDER BY s.occurred_at DESC, s.entry_id, s.line
 LIMIT :limit;
 
@@ -298,8 +297,7 @@ LIMIT :limit;
 tripTotals:
 SELECT COALESCE(SUM(s.mine_minor), 0) AS mine, COUNT(DISTINCT s.entry_id) AS entries
 FROM spend_line s JOIN entry e ON e.id = s.entry_id
-WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
-  AND EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id) AND t.tag = :tag);
+WHERE e.id IN (SELECT t.entry_id FROM entry_tag t WHERE t.tag = :tag UNION SELECT r.id FROM entry r JOIN entry_tag t ON t.entry_id = r.refunds_entry WHERE t.tag = :tag) AND s.currency = :currency AND e.deleted = 0;
 
 -- The expenses in a window that do not carry a tag (ignoring case): what "Tag earlier entries" offers. Walks the date index.
 untaggedExpensesBetween:
@@ -307,6 +305,9 @@ SELECT e.id FROM entry e
 WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND e.occurred_at >= :fromMillis AND e.occurred_at < :untilMillis
   AND NOT EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = e.id AND t.tag = :tag)
 ORDER BY e.occurred_at, e.seq;
+
+tagUseCount:
+SELECT COUNT(*) FROM entry_tag t JOIN entry e ON e.id = t.entry_id WHERE t.tag = :tag AND e.deleted = 0;
 
 deleteTag:
 DELETE FROM entry_tag WHERE entry_id = :entryId AND tag = :tag;

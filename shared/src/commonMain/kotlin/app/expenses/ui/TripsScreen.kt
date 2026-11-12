@@ -65,7 +65,7 @@ import app.expenses.core.domain.symbolOrCode
 import app.expenses.todayLocal
 
 /** What the form hands the view model: a trip as typed (the rules in [TripRules.build] decide whether it can be kept). */
-typealias TripSave = (id: String?, name: String, tag: String, startDay: Long?, endDay: Long?, budget: String, enabled: Boolean, done: (TripSaveOutcome) -> Unit) -> Unit
+typealias TripSave = (id: String?, name: String, tag: String, startDay: Long?, endDay: Long?, budget: String, enabled: Boolean, confirmUsedTag: Boolean, done: (TripSaveOutcome) -> Unit) -> Unit
 
 /**
  * Travel mode: the trips (on now, coming up, past), and the form that makes or changes one. While a trip is on, a new expense dated inside it gets the trip's tag by itself; the person can take the tag off any
@@ -194,6 +194,12 @@ private fun TripForm(row: TripRowUi?, key: String, tags: List<String>, onSave: T
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
     var problem by remember { mutableStateOf<TripProblem?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var usedBy by remember { mutableStateOf<Long?>(null) }
+    fun submit(confirm: Boolean) {
+        if (saving) return
+        saving = true
+        onSave(row?.id, name, tag, start, end, budget, enabled, confirm) { outcome -> saving = false; usedBy = outcome.tagUsedBy; if (outcome.problem == null && outcome.tagUsedBy == null) onClose() else problem = outcome.problem }
+    }
     val suggestion = TripRules.suggestedTag(name)
     fun problemFor(vararg fields: TripField) = problem?.takeIf { it.field in fields }
 
@@ -264,13 +270,17 @@ private fun TripForm(row: TripRowUi?, key: String, tags: List<String>, onSave: T
                 Switch(checked = enabled, onCheckedChange = null, modifier = Modifier.testTag("trip_enabled"))
             }
 
+            usedBy?.let { n ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The tag \"${(app.expenses.core.domain.TagRules.normalize(tag).orEmpty())}\" is already on $n ${if (n == 1L) "entry" else "entries"}. They will count in this trip's total.", color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.testTag("trip_tag_used"))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { usedBy = null; submit(true) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_tag_use_anyway")) { Text("Use it anyway") }
+                        TextButton(onClick = { usedBy = null }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_tag_choose_other")) { Text("Choose another tag") }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
-                    onClick = {
-                        if (saving) return@Button
-                        saving = true
-                        onSave(row?.id, name, tag, start, end, budget, enabled) { outcome -> saving = false; if (outcome.problem == null) onClose() else problem = outcome.problem }
-                    },
+                Button(onClick = { submit(false) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("trip_save"),
                 ) { Text("Save trip") }
                 TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_cancel")) { Text("Cancel") }

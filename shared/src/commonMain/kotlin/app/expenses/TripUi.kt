@@ -41,6 +41,8 @@ data class TripSummaryUi(
     val bars: List<TripBarUi>, val categories: List<TripCategoryUi>,
     /** "Daily budget ₹1,000 · ₹3,000 for the 3 days so far", and how that compares ("₹800 under"); null without a budget or before the trip. */
     val budgetLine: String?, val budgetStatus: String?, val budgetOver: Boolean,
+    /** "Outside the trip days ₹900.00 · 2 entries": tagged for the trip but dated before or after its days; null when there is none. */
+    val outsideText: String?,
     /** Expenses on its days that do not carry the tag: what "Tag N earlier entries" would tag. */
     val untaggedCount: Int,
     val canEndToday: Boolean,
@@ -51,8 +53,8 @@ data class TripSummaryUi(
 /** "Tag N earlier entries" waiting for the person's answer: asked after a trip is saved, for the days it gained. [days] null means all of the trip's days. */
 data class TripOfferUi(val tripId: String, val tripName: String, val tag: String, val count: Int, val days: List<LongRange>?)
 
-/** What saving a trip came to: a [problem] in words, or the saved trip with the [offer] to tag earlier entries (null when none lie in its days). */
-data class TripSaveOutcome(val problem: TripProblem?, val offer: TripOfferUi?)
+/** What saving a trip came to: a [problem] in words, or [tagUsedBy] (the tag is already on that many entries, which would count in the trip: nothing is saved until the person confirms), or the saved trip with the [offer] to tag earlier entries (null when none lie in its days). */
+data class TripSaveOutcome(val problem: TripProblem?, val offer: TripOfferUi?, val tagUsedBy: Long? = null)
 
 internal object TripUiBuilder {
     private fun plural(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
@@ -96,7 +98,8 @@ internal object TripUiBuilder {
         return TripSummaryUi(
             trip.id, trip.name, trip.tag, SearchDates.summary(trip.startDay, trip.endDay).orEmpty(), statusText(trip, today), trip.enabled, trip.startDay, trip.endDay,
             money(s.totalMinor), s.totalMinor, s.entryCount, daysText, s.averagePerDayMinor?.let { money(it) },
-            bars, cats, budgetLine, status, budget != null && budget.differenceMinor < 0, untagged, s.phase == TripPhase.ACTIVE && trip.endDay > today, s.capped,
+            bars, cats, budgetLine, status, budget != null && budget.differenceMinor < 0,
+            if (s.outsideCount > 0 || s.outsideMinor != 0L) "Outside the trip days ${money(s.outsideMinor)} · ${plural(s.outsideCount, "entry", "entries")}" else null, untagged, s.phase == TripPhase.ACTIVE && trip.endDay > today, s.capped,
         )
     }
 }

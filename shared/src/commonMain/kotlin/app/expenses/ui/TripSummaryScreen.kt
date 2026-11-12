@@ -66,7 +66,7 @@ fun TripSummaryScreen(
     state: TripSummaryUi?,
     undo: ScreenUndo?,
     onBack: () -> Unit,
-    onSeeAll: (tag: String, startDay: Long, endDay: Long) -> Unit,
+    onSeeAll: (tag: String) -> Unit,
     onTagEarlier: (id: String) -> Unit,
     onEndToday: (id: String) -> Unit,
     onUndo: (String) -> Unit,
@@ -119,11 +119,12 @@ fun TripSummaryScreen(
                 }
             }
             Text(
-                "Expenses tagged \"${state.tag}\" on these days. A refund counts with the purchase it reverses.",
+                "Everything tagged \"${state.tag}\", with refunds subtracted (the same entries as See all entries; Search's \"spent\" line does not subtract refunds, so it can show more). A refund counts with the purchase it reverses.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_summary_note"),
             )
             if (state.capped) Text("Showing the newest part of a very long trip.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_capped"))
 
+            state.outsideText?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_outside")); Text("Tagged \"${state.tag}\" but dated before or after the trip's days: a booking paid earlier, a refund that came later, or entries that already had this tag. They are in the total above, not in the bars, the average or the budget.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_outside_note")) }
             // each day
             if (state.bars.isNotEmpty()) {
                 Text(if (state.endDay - state.startDay + 1 > TripSummaryMath.DAILY_BARS_UP_TO) "Each week" else "Each day", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
@@ -142,7 +143,7 @@ fun TripSummaryScreen(
 
             // what to do next
             FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onSeeAll(state.tag, state.startDay, state.endDay) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_see_all")) { Text("See all entries") }
+                Button(onClick = { onSeeAll(state.tag) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_see_all")) { Text("See all entries") }
                 if (state.untaggedCount > 0) OutlinedButton(onClick = { confirmTag = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_tag_earlier")) { Text("Tag ${state.untaggedCount} earlier ${if (state.untaggedCount == 1) "entry" else "entries"}") }
                 if (state.canEndToday) OutlinedButton(onClick = { confirmEnd = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_end_today")) { Text("End trip today") }
             }

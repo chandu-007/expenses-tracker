@@ -262,16 +262,17 @@ class TripModeUiTest {
         spend("f2", "Thali", at(-1), 600, "Food", tripTag = true); spend("f3", "Chai", at(0), 200, "Food", tripTag = true)
         db { ok -> ok.store.save(Refund(EntryId("r1"), at(0, 15), AccountId("cash"), Money(50_000, inr), EntryId("s1")), EntryDetails(merchant = "Cab refund", tripTag = true)) }
         spend("other", "Not this trip", at(0), 777, "Food") // inside the days but not tagged
-        spend("far", "Old", at(-40), 888, "Food", tripTag = true) // outside the days
+        spend("far", "Old", at(-40), 888, "Food", tripTag = true) // tagged, dated outside the days: in the total, shown apart
         launch(); openTrips(); tap("trip_open_Goa"); waitFor("trip_total")
-        compose.onNodeWithTag("trip_total", useUnmergedTree = true).assertTextEquals(Money(370_000, inr).formatted())
+        compose.onNodeWithTag("trip_total", useUnmergedTree = true).assertTextEquals(Money(458_800, inr).formatted())
+        compose.onNodeWithTag("trip_outside", useUnmergedTree = true).assertTextEquals("Outside the trip days ${Money(88_800, inr).formatted()} · 1 entry")
         compose.onNodeWithTag("trip_days", useUnmergedTree = true).assertTextContains("Day 3 of 5", substring = true)
         compose.onNodeWithTag("trip_average", useUnmergedTree = true).assertTextContains("Average ${Money(123_333, inr).formatted()} a day", substring = true)
-        compose.onNodeWithTag("trip_average", useUnmergedTree = true).assertTextContains("5 entries", substring = true)
+        compose.onNodeWithTag("trip_average", useUnmergedTree = true).assertTextContains("6 entries", substring = true)
         compose.onNodeWithTag("trip_budget_line", useUnmergedTree = true).assertTextContains("Daily budget ${Money(100_000, inr).formatted()}", substring = true)
         compose.onNodeWithTag("trip_budget_status", useUnmergedTree = true).assertTextEquals("${Money(70_000, inr).formatted()} over")
         assertTrue(mergedText("trip_cat_Transport").contains(Money(250_000, inr).formatted()), mergedText("trip_cat_Transport"))
-        assertTrue(mergedText("trip_cat_Food").contains(Money(120_000, inr).formatted()), mergedText("trip_cat_Food"))
+        assertTrue(mergedText("trip_cat_Food").contains(Money(208_800, inr).formatted()), mergedText("trip_cat_Food"))
         for (i in 0 until 5) waitFor("trip_bar_$i")
         assertTrue(!has("trip_bar_5"))
         tap("trip_bar_0"); compose.waitUntil(10_000) { textOf("trip_bar_readout").contains(Money(340_000, inr).formatted()) } // the first day: 400 and 3,000
@@ -279,14 +280,15 @@ class TripModeUiTest {
     }
 
     @Test
-    fun seeAllEntriesOpensSearchWithTheTripsTagAndDaysAlreadyChosenAndBackReturnsToTheSummary() {
+    fun seeAllEntriesOpensSearchWithTheTripsTagAndBackReturnsToTheSummary() {
         trip("Goa", -2, 2)
         spend("in1", "Tagged lunch", at(0), 100, tripTag = true); spend("in2", "Tagged boat", at(-1), 200, tripTag = true)
         spend("untagged", "Untagged shop", at(0), 300); spend("far", "Tagged but far", at(-40), 400, "Food", false, "Trip: Goa")
         launch(); openTrips(); tap("trip_open_Goa"); waitFor("trip_see_all"); tap("trip_see_all")
-        waitFor("search_text"); waitFor("search_active_chip_tag"); waitFor("search_active_chip_dates")
-        waitFor("result_in1"); waitFor("result_in2")
-        assertTrue(!has("result_untagged") && !has("result_far"), "only what carries the tag, on the trip's days")
+        waitFor("search_text"); waitFor("search_active_chip_tag")
+        assertTrue(!has("search_active_chip_dates"), "the tag alone: the same entries as the page's total")
+        waitFor("result_in1"); waitFor("result_in2"); waitFor("result_far")
+        assertTrue(!has("result_untagged"), "only what carries the tag")
         tap("search_back"); waitFor("trip_summary")
     }
 
@@ -395,5 +397,30 @@ class TripModeUiTest {
         val rows = db { ok -> ok.db.schemaQueries.recentEntries(10).executeAsList() }
         assertEquals(listOf("Trip: Goa"), tagsOf(rows.first { it.amount_minor == 10_000L }.id))
         assertTrue(tagsOf(rows.first { it.amount_minor == 20_000L }.id).isEmpty())
+    }
+
+    @Test
+    fun aTagCannotBelongToTwoTripsAndTheFormNamesTheOtherOne() {
+        trip("Goa", -20, -15) // past
+        launch(); openTrips(); tap("trip_new")
+        type("trip_name", "Goa again"); type("trip_tag", " trip: GOA "); pick("trip_start", 10); pick("trip_end", 12)
+        tap("trip_save"); waitFor("trip_problem_tag")
+        assertTrue(textOf("trip_problem_tag").startsWith("The tag \"Trip: Goa\" already belongs to your trip \"Goa\""), textOf("trip_problem_tag"))
+        assertEquals(1, db { it.trips.count() })
+    }
+
+    @Test
+    fun aTagThatIsAlreadyOnEntriesIsSaidBeforeTheTripIsKeptAndSavedOnlyOnUseItAnyway() {
+        spend("old1", "Earlier one", at(-50), 100, "Food", false, "Holiday"); spend("old2", "Earlier two", at(-60), 100, "Food", false, "holiday")
+        launch(); openTrips(); tap("trip_new")
+        type("trip_name", "Holiday"); type("trip_tag", "Holiday"); pick("trip_start", 10); pick("trip_end", 12)
+        tap("trip_save"); waitFor("trip_tag_used")
+        assertEquals("The tag \"Holiday\" is already on 2 entries. They will count in this trip's total.", textOf("trip_tag_used"))
+        assertEquals(0, db { it.trips.count() }, "nothing is kept until the person confirms")
+        tap("trip_tag_choose_other"); waitGone("trip_tag_used"); assertEquals(0, db { it.trips.count() })
+        tap("trip_save"); waitFor("trip_tag_used"); tap("trip_tag_use_anyway"); waitFor("trip_row_Holiday")
+        assertEquals("Holiday", db { it.trips.all().single().tag })
+        tap("trip_open_Holiday"); waitFor("trip_outside")
+        compose.onNodeWithTag("trip_outside", useUnmergedTree = true).assertTextEquals("Outside the trip days ${Money(20_000, inr).formatted()} · 2 entries")
     }
 }

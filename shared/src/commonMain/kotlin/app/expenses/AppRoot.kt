@@ -599,8 +599,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BackHandler { closeSummary() }
                         app.expenses.ui.TripSummaryScreen(
                             summary, tripUndo, onBack = closeSummary,
-                            // Search opens with the trip's tag and days already chosen (Back returns to this page: it is still open underneath)
-                            onSeeAll = { tag, from, to -> searchAccount = null; searchTag = tag; searchFrom = from; searchTo = to; searching = true },
+                            // Search opens with the trip's tag already chosen (all dates: the same entries as the page's total) (Back returns to this page: it is still open underneath)
+                            onSeeAll = { tag -> searchAccount = null; searchTag = tag; searchFrom = null; searchTo = null; searching = true },
                             onTagEarlier = { id -> viewModel.tagEarlier(id, null) }, onEndToday = viewModel::endTripToday,
                             onUndo = viewModel::undoTripTagging, onUndoGone = viewModel::tripUndoGone,
                         )

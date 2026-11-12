@@ -28,6 +28,9 @@ class TripStore(private val db: ExpensesDb, private val clock: HlcClock, private
 
     fun get(id: String): Trip? = q.tripById(id).executeAsOneOrNull()?.let(::of)
 
+    /** How many live entries carry [tag] (ignoring capitals): what a trip with that tag would count in its total. */
+    fun tagUses(tag: String): Long = q.tagUseCount(tag).executeAsOne()
+
     fun count(): Int = q.tripCount().executeAsOne().toInt()
 
     /** The trip that tags a new expense made at [occurredAt]: the enabled trip whose days include the day of [occurredAt] in the phone's calendar, or null (the usual answer: there are no trips). */
@@ -69,19 +72,17 @@ class TripStore(private val db: ExpensesDb, private val clock: HlcClock, private
         }
     }
 
-    /** What was spent on [trip]: the lines of its tagged entries inside its days, newest first, at most [LINE_LIMIT]; [capped] says there were more (the figures are then of the newest part). */
+    /** What was spent on [trip]: the lines of ALL entries carrying its tag (any date: a prepaid flight, a late refund), newest first, at most [LINE_LIMIT]; [capped] says there were more (the figures are then of the newest part). */
     class Lines(val lines: List<TripLine>, val capped: Boolean)
 
     fun lines(trip: Trip, currency: Currency, limit: Int = LINE_LIMIT): Lines {
-        val z = zone()
-        val rows = q.tripLines(currency.code, TripRules.fromMillis(trip, z), TripRules.untilMillis(trip, z), trip.tag, limit + 1L).executeAsList()
+        val rows = q.tripLines(trip.tag, currency.code, limit + 1L).executeAsList()
         return Lines(rows.take(limit).map { TripLine(it.entry_id, it.occurred_at, it.category_id, it.mine_minor) }, rows.size > limit)
     }
 
     /** What was spent on [trip] and on how many entries: two numbers in one read, for the Home card. */
     fun totals(trip: Trip, currency: Currency): Pair<Long, Int> {
-        val z = zone()
-        val r = q.tripTotals(currency.code, TripRules.fromMillis(trip, z), TripRules.untilMillis(trip, z), trip.tag).executeAsOne()
+        val r = q.tripTotals(trip.tag, currency.code).executeAsOne()
         return (r.mine ?: 0L) to r.entries.toInt()
     }
 
@@ -104,7 +105,7 @@ class TripStore(private val db: ExpensesDb, private val clock: HlcClock, private
             if (here.size >= TripRules.MAX_TRIPS) break
             val t = TripRules.fromFile(b.id, b.name, b.tag, b.startDay, b.endDay, b.enabled, b.dailyBudgetMinor) ?: continue
             if (here.any { it.id == t.id }) continue
-            val kept = if (TripRules.overlapping(t, here) != null) t.copy(enabled = false) else t
+            val kept = if (TripRules.overlapping(t, here) != null || TripRules.tagTaken(t, here) != null) t.copy(enabled = false) else t
             q.upsertTrip(kept.id, kept.name, kept.tag, kept.startDay, kept.endDay, if (kept.enabled) 1L else 0L, kept.dailyBudgetMinor)
             q.insertOp(clock.now(nowMillis()).encode(), "trip", kept.id, "name", kept.name)
             here += kept; added++

@@ -216,12 +216,12 @@ class TripStoreTest {
         assertEquals(listOf("Trip: Goa"), tags("back"), "its own day is far outside the trip: it counts with the purchase it reverses")
         trips.save(goa)
         val s = trips.lines(goa, inr)
-        assertEquals(500_000L, s.lines.sumOf { it.mineMinor }, "the refund of 28 November is outside the trip's days")
+        assertEquals(380_000L, s.lines.sumOf { it.mineMinor }, "the refund of 28 November is outside the trip's days but carries the tag: it is in the total")
         // a refund inside the days nets the trip total out
         create(refund("early", "hotel", 80_000, at(2026, 11, 8)))
         assertEquals(listOf("Trip: Goa"), tags("early"))
-        assertEquals(420_000L to 2, trips.totals(goa, inr), "spending 5,000.00 less the refund of 800.00, on two entries (the hotel and the refund)")
-        assertEquals(420_000L, trips.lines(goa, inr).lines.sumOf { it.mineMinor })
+        assertEquals(300_000L to 3, trips.totals(goa, inr), "5,000.00 less both refunds (1,200.00 and 800.00), on three entries")
+        assertEquals(300_000L, trips.lines(goa, inr).lines.sumOf { it.mineMinor })
     }
 
     @Test
@@ -402,7 +402,7 @@ class TripStoreTest {
     // ---- the figures ----
 
     @Test
-    fun theTripsFiguresAreTheTaggedLinesInsideItsDaysInItsCurrencyAndNotTheDeletedOnes() {
+    fun theTripsFiguresAreEveryTaggedLineAnyDateInItsCurrencyAndNotTheDeletedOnes() {
         trips.save(goa)
         create(expense("a", at(2026, 11, 3, 0, 0), amt = 10_000, cat = "Food"))
         create(expense("b", at(2026, 11, 9, 23, 59, 59, 999_000_000), amt = 20_000, cat = "Stay"))
@@ -411,8 +411,8 @@ class TripStoreTest {
         create(expense("gone", at(2026, 11, 5), amt = 7_000)); ledger.delete(EntryId("gone"))
         val lines = trips.lines(goa, inr)
         assertFalse(lines.capped)
-        assertEquals(setOf("a", "b"), lines.lines.map { it.entryId }.toSet())
-        assertEquals(30_000L to 2, trips.totals(goa, inr))
+        assertEquals(setOf("a", "b", "c"), lines.lines.map { it.entryId }.toSet(), "c is tagged but a day too late: every entry that carries the tag counts")
+        assertEquals(129_000L to 3, trips.totals(goa, inr))
         assertEquals(0L to 0, trips.totals(goa, Currency.USD), "another currency is not added in")
         assertEquals(30_000L, ledger.spendByCategory(inr, from = TripRules.fromMillis(goa, ist), until = TripRules.untilMillis(goa, ist)).values.sumOf { it.minorUnits } - 5_000L, "agrees with the report's spend lines, less the other-tag expense")
     }
@@ -448,4 +448,20 @@ class TripStoreTest {
         ledger.zone = { TimeZone.UTC }
         assertNotNull(trips.tripAt(instant), "18:00 UTC on 3 November")
     }
+
+    @Test
+    fun aTagBelongsToOneTripOnlyOnAnyOtherTripOnOrOffPastOrComing() {
+        trips.save(goa)
+        trips.save(Trip("past", "Pune", "Trip: Pune", day(2020, 1, 1), day(2020, 1, 3), enabled = false))
+        for (t in listOf(Trip("x", "Again", " trip: GOA ", day(2027, 1, 1), day(2027, 1, 2)), Trip("y", "Again", "Trip: Pune", day(2027, 2, 1), day(2027, 2, 2), enabled = false))) {
+            val e = assertFailsWith<IllegalArgumentException> { trips.save(t.copy(tag = TagNorm(t.tag))) }
+            assertTrue("already belongs to your trip" in e.message!!, e.message)
+        }
+        assertEquals(2, trips.count())
+        trips.save(goa.copy(name = "Goa again")) // its own tag
+        create(expense("a", at(2026, 11, 4)), "Trip: Goa", trip = false); ledger.save(expense("d", at(2026, 11, 4)), EntryDetails(merchant = "d", tags = listOf("trip: goa"))); ledger.delete(EntryId("d"))
+        assertEquals(1L, trips.tagUses("TRIP: GOA"), "live entries only, ignoring capitals")
+    }
+
+    private fun TagNorm(t: String) = app.expenses.core.domain.TagRules.normalize(t)!!
 }

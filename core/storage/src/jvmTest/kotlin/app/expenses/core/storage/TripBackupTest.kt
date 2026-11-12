@@ -104,6 +104,21 @@ class TripBackupTest {
     }
 
     @Test
+    fun twoTripsWithTheSameTagAreKeptButTheLaterOneIsSwitchedOffAndOneAlreadyHereWinsOverTheFile() {
+        val file = BackupData(trips = listOf(
+            BackupTrip("a", "First", "Trip: X", day(2026, 3, 1), day(2026, 3, 3)),
+            BackupTrip("b", "Second", " trip: x ", day(2026, 6, 1), day(2026, 6, 3)), // no overlap, same tag
+            BackupTrip("c", "Third", "Trip: Y", day(2026, 9, 1), day(2026, 9, 3)),
+        ))
+        val d = Device("b"); d.backup.restore(file)
+        assertEquals(listOf(true, false, true), listOf("a", "b", "c").map { d.ledger.trips.get(it)!!.enabled }, "kept, nothing lost, but only one trip owns the tag")
+        // a phone that already has a trip with the tag: the file's trip with it comes in off
+        val e = Device("e"); e.ledger.trips.save(Trip("mine", "Mine", "Trip: Y", day(2028, 1, 1), day(2028, 1, 2)))
+        e.backup.restore(file)
+        assertEquals(false, e.ledger.trips.get("c")!!.enabled); assertEquals(true, e.ledger.trips.get("a")!!.enabled)
+    }
+
+    @Test
     fun aHostileListIsMadeSafeAtMostTwoHundredTripsEveryOneValidAndNoTwoThatAreOnShareADay() {
         val rnd = Random(20261112)
         val junk = (0 until 5_000).map { i ->

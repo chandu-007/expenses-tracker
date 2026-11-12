@@ -3938,7 +3938,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
      * Saves a trip ([id] null: a new one). [onDone] (on the main thread) gets the reason in plain words when it was refused (nothing is changed), or the offer to tag the earlier entries that lie in the days the
      * trip gained (also kept in [tripOffer]); creating a trip or growing its dates never tags anything by itself.
      */
-    fun saveTrip(id: String?, name: String, tag: String, startDay: Long?, endDay: Long?, budgetText: String, enabled: Boolean, onDone: (TripSaveOutcome) -> Unit) {
+    fun saveTrip(id: String?, name: String, tag: String, startDay: Long?, endDay: Long?, budgetText: String, enabled: Boolean, confirmUsedTag: Boolean, onDone: (TripSaveOutcome) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
             val outcome = container.write { ok ->
                 val before = id?.let { ok.trips.get(it) }
@@ -3946,6 +3946,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 when (val r = TripRules.build(tripId, name, tag, startDay, endDay, budgetText, enabled, ok.trips.all(), inr)) {
                     is TripResult.Problem -> TripSaveOutcome(r.problem, null)
                     is TripResult.Ok -> try {
+                        // a tag that is already on entries would count them in this trip's total: said, and saved only after the person confirms
+                        val uses = if (confirmUsedTag || before?.tag.equals(r.trip.tag, ignoreCase = true)) 0L else ok.trips.tagUses(r.trip.tag)
+                        if (uses > 0L) return@write TripSaveOutcome(null, null, tagUsedBy = uses)
                         ok.trips.save(r.trip)
                         val days = TripRules.newlyCovered(before, r.trip)
                         val count = if (days.isEmpty()) 0 else ok.tripTagging.offer(r.trip, days).count

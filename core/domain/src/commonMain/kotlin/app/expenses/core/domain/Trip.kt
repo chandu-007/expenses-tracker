@@ -82,6 +82,14 @@ object TripRules {
     fun overlapping(trip: Trip, others: List<Trip>): Trip? =
         if (!trip.enabled) null else others.firstOrNull { it.id != trip.id && it.enabled && it.startDay <= trip.endDay && trip.startDay <= it.endDay }
 
+    /** Another trip (on or off, past or coming) that already has [trip]'s tag, compared as the tag system compares tags: tidied and ignoring capitals. A tag belongs to one trip only, so a trip's figures are exactly what that tag lists. */
+    fun tagTaken(trip: Trip, others: List<Trip>): Trip? {
+        val mine = TagRules.normalize(trip.tag)?.lowercase() ?: return null
+        return others.firstOrNull { it.id != trip.id && TagRules.normalize(it.tag)?.lowercase() == mine }
+    }
+
+    private fun tagText(other: Trip) = "The tag \"${other.tag}\" already belongs to your trip \"${other.name}\" (${SearchDates.summary(other.startDay, other.endDay)}). A tag can belong to one trip only. Choose another tag."
+
     private fun overlapText(other: Trip) = "These dates overlap your trip \"${other.name}\" (${SearchDates.summary(other.startDay, other.endDay)}), which is on. Change the dates, or turn that trip off."
 
     /**
@@ -106,6 +114,7 @@ object TripRules {
             money.minorUnits
         }
         val trip = Trip(id, name, tag, startDay, endDay, enabled, budget)
+        tagTaken(trip, others)?.let { return no(TripField.TAG, tagText(it)) }
         overlapping(trip, others)?.let { return no(TripField.DATES, overlapText(it)) }
         return TripResult.Ok(trip)
     }
@@ -120,6 +129,7 @@ object TripRules {
         if (trip.startDay < FIRST_DAY || trip.endDay > LAST_DAY) return "Choose days between 2000 and 2099."
         if (trip.endDay - trip.startDay + 1 > MAX_DAYS) return "A trip can last up to $MAX_DAYS days. For a longer stay, make two trips."
         if (trip.dailyBudgetMinor != null && (trip.dailyBudgetMinor <= 0L || trip.dailyBudgetMinor > MAX_BUDGET_MINOR)) return "The daily budget must be more than zero, or leave it empty."
+        tagTaken(trip, others)?.let { return tagText(it) }
         return overlapping(trip, others)?.let(::overlapText)
     }
 
@@ -167,6 +177,9 @@ data class TripSummary(
     /** Net spending by category id (null: no category), without zero rows. */
     val byCategory: Map<String?, Long>,
     val budget: TripBudgetStatus?,
+    /** What carries the trip's tag but is dated outside its days (a booking paid earlier, a refund that came later, older entries): in [totalMinor] and [entryCount], not in the bars, the average or the budget. */
+    val outsideMinor: Long,
+    val outsideCount: Int,
     /** True when there were more lines than were read: the figures are then of the newest part. */
     val capped: Boolean,
 )
@@ -179,16 +192,17 @@ object TripSummaryMath {
         val phase = TripRules.phase(trip, today)
         val daysTotal = trip.length
         val daysElapsed = when (phase) { TripPhase.UPCOMING -> 0; TripPhase.ACTIVE -> (today - trip.startDay + 1).toInt(); TripPhase.PAST -> daysTotal }
-        var total = 0L
+        var total = 0L; var inside = 0L; var outside = 0L
         val perDay = LongArray(daysTotal)
         val byCategory = LinkedHashMap<String?, Long>()
-        val entries = HashSet<String>()
+        val entries = HashSet<String>(); val outsideEntries = HashSet<String>()
         for (l in lines) {
             total += l.mineMinor
             entries += l.entryId
             byCategory[l.categoryId] = (byCategory[l.categoryId] ?: 0L) + l.mineMinor
-            val day = dateOf(l.occurredAt, zone).toEpochDays().toLong().coerceIn(trip.startDay, trip.endDay)
-            perDay[(day - trip.startDay).toInt()] += l.mineMinor
+            val day = dateOf(l.occurredAt, zone).toEpochDays().toLong()
+            if (day < trip.startDay || day > trip.endDay) { outside += l.mineMinor; outsideEntries += l.entryId }
+            else { inside += l.mineMinor; perDay[(day - trip.startDay).toInt()] += l.mineMinor }
         }
         val bars = ArrayList<TripBar>()
         val step = if (daysTotal <= DAILY_BARS_UP_TO) 1 else 7
@@ -201,9 +215,9 @@ object TripSummaryMath {
             bars += TripBar(a, b, sum, isToday = today in a..b, isFuture = a > today)
             i += step
         }
-        val average = if (daysElapsed == 0) null else if (total >= 0) (total + daysElapsed / 2) / daysElapsed else -((-total + daysElapsed / 2) / daysElapsed)
-        val budget = trip.dailyBudgetMinor?.takeIf { daysElapsed > 0 }?.let { TripBudgetStatus(it, daysElapsed, it * daysElapsed, total) }
-        return TripSummary(trip, phase, total, entries.size, daysElapsed, daysTotal, average, bars, byCategory.filterValues { it != 0L }, budget, capped)
+        val average = if (daysElapsed == 0) null else if (inside >= 0) (inside + daysElapsed / 2) / daysElapsed else -((-inside + daysElapsed / 2) / daysElapsed)
+        val budget = trip.dailyBudgetMinor?.takeIf { daysElapsed > 0 }?.let { TripBudgetStatus(it, daysElapsed, it * daysElapsed, inside) }
+        return TripSummary(trip, phase, total, entries.size, daysElapsed, daysTotal, average, bars, byCategory.filterValues { it != 0L }, budget, outside, outsideEntries.size, capped)
     }
 
     /** The label of a bar: the day of the month for a day, "3 Nov" for a week's first day. */

@@ -192,8 +192,8 @@ class TripRulesTest {
         assertNotNull(TripRules.problemOf(goa().copy(tag = "a,b"), emptyList()))
         assertNotNull(TripRules.problemOf(goa().copy(dailyBudgetMinor = 0), emptyList()))
         assertNotNull(TripRules.problemOf(goa().copy(id = ""), emptyList()))
-        assertNotNull(TripRules.problemOf(goa(), listOf(goa().copy(id = "x", name = "Other"))))
-        assertNull(TripRules.problemOf(goa(enabled = false), listOf(goa().copy(id = "x", name = "Other"))))
+        assertNotNull(TripRules.problemOf(goa(), listOf(goa().copy(id = "x", name = "Other", tag = "Trip: Other"))))
+        assertNull(TripRules.problemOf(goa(enabled = false), listOf(goa().copy(id = "x", name = "Other", tag = "Trip: Other"))))
     }
 
     // ---- what a trip's figures say ----
@@ -277,5 +277,31 @@ class TripRulesTest {
         val midnight = at(2026, 11, 4, 0, 0, ist)
         val s = TripSummaryMath.of(t, listOf(TripLine("a", justBeforeMidnight, null, 100), TripLine("b", midnight, null, 10)), ist, today = day(2026, 11, 4))
         assertEquals(listOf(100L, 10L), s.bars.map { it.minor })
+    }
+
+    @Test fun aTagBelongsToOneTripOnlyComparedAsTagsAreAndWhateverTheOtherTripsStateIs() {
+        val a = goa()
+        for (other in listOf(a.copy(id = "x", name = "Again", startDay = day(2027, 1, 1), endDay = day(2027, 1, 3)), a.copy(id = "y", name = "Off", enabled = false), a.copy(id = "z", name = "Past", startDay = day(2020, 1, 1), endDay = day(2020, 1, 2)))) {
+            for (typed in listOf("Trip: Goa", "  #trip:   GOA ", "TRIP: goa,")) {
+                val r = TripRules.build("new", "New", typed, day(2030, 1, 1), day(2030, 1, 2), "", true, listOf(other), inr) as TripResult.Problem
+                assertEquals(TripField.TAG, r.problem.field)
+                assertEquals("The tag \"Trip: Goa\" already belongs to your trip \"${other.name}\" (${SearchDates.summary(other.startDay, other.endDay)}). A tag can belong to one trip only. Choose another tag.", r.problem.message, typed)
+            }
+        }
+        assertTrue(TripRules.build("goa", "Goa", "Trip: Goa", a.startDay, a.endDay, "", true, listOf(a), inr) is TripResult.Ok, "a trip keeps its own tag when edited")
+        assertNotNull(TripRules.problemOf(a.copy(id = "n"), listOf(a)))
+        assertNull(TripRules.tagTaken(a, listOf(a.copy(id = "q", tag = "Trip: Goas"))))
+    }
+
+    @Test fun whatIsTaggedButDatedOutsideTheTripIsInTheTotalAndShownApartNotInTheBarsAverageOrBudget() {
+        val t = goa(day(2026, 11, 3), day(2026, 11, 5)).copy(dailyBudgetMinor = 100_000)
+        val d0 = day(2026, 11, 3)
+        val lines = listOf(line("in", d0, 10, 300_000), line("flight", d0 - 20, 10, 800_000), line("late", d0 + 10, 10, -50_000), line("flight2", d0 - 20, 11, 100_000))
+        val s = TripSummaryMath.of(t, lines, utc, today = d0 + 2)
+        assertEquals(1_150_000L, s.totalMinor); assertEquals(4, s.entryCount)
+        assertEquals(850_000L, s.outsideMinor); assertEquals(3, s.outsideCount)
+        assertEquals(listOf(300_000L, 0L, 0L), s.bars.map { it.minor })
+        assertEquals(100_000L, s.averagePerDayMinor); assertEquals(TripBudgetStatus(100_000, 3, 300_000, 300_000), s.budget)
+        assertEquals(0L, TripSummaryMath.of(t, listOf(line("in", d0, 10, 5)), utc, d0).outsideMinor)
     }
 }
