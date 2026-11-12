@@ -262,7 +262,7 @@ class TripModeUiTest {
         spend("f2", "Thali", at(-1), 600, "Food", tripTag = true); spend("f3", "Chai", at(0), 200, "Food", tripTag = true)
         db { ok -> ok.store.save(Refund(EntryId("r1"), at(0, 15), AccountId("cash"), Money(50_000, inr), EntryId("s1")), EntryDetails(merchant = "Cab refund", tripTag = true)) }
         spend("other", "Not this trip", at(0), 777, "Food") // inside the days but not tagged
-        spend("far", "Old", at(-40), 888, "Food", tripTag = true) // tagged, dated outside the days: in the total, shown apart
+        spend("far", "Old", at(-40), 888, "Food", false, "Trip: Goa") // tagged, dated outside the days: in the total, shown apart
         launch(); openTrips(); tap("trip_open_Goa"); waitFor("trip_total")
         compose.onNodeWithTag("trip_total", useUnmergedTree = true).assertTextEquals(Money(458_800, inr).formatted())
         compose.onNodeWithTag("trip_outside", useUnmergedTree = true).assertTextEquals("Outside the trip days ${Money(88_800, inr).formatted()} · 1 entry")
