@@ -162,6 +162,23 @@ Use your own real credit texts (salary, interest, a refund, money from a friend)
 - [ ] Largest text size (Settings, Display, Font size) and, on a tablet or an unfolded foldable, the same three pages: nothing is cut off, every button can be reached by scrolling.
 - [ ] iPhone: the same page shows "No message has reached the app yet" until an automation delivers one, then the checklist of three Shortcuts lines you tick, and "Check a message" with Paste. (Not verified on a phone.)
 
+### Travel mode (More, Travel mode; Slice 110; use a real trip or invented dates, and your own amounts)
+Only an emulator was used. Make a trip whose days include today (More, Travel mode, New trip: name "Goa", first day yesterday, last day in three days, a daily budget).
+- [ ] The tag box fills itself with "Trip: Goa" as you type the name; typing in it stops that. The days show "5 days, both the first and the last included".
+- [ ] Add an expense: **Tagged for Goa trip** with a cross is under the date; Save; open the entry in the editor: the tag "Trip: Goa" is on it. Take the tag off in the editor, change the note, save: the tag does not come back.
+- [ ] Add another and tap the cross on the chip first: it is saved without the tag; the chip said "Tag it for Goa trip" and brought it back when tapped again. Change the date to a day outside the trip: the chip goes.
+- [ ] A quick entry on Home and the widget's chip inside the days are tagged; one dated outside the days is not (the iPhone widget replays its taps with their own time).
+- [ ] A bank text (or notification) of today confirmed in To review (Add, and Add all) is tagged; one dated earlier than the trip is not. A refund of a tagged expense is tagged.
+- [ ] Home: one line "Trip: Goa · day 2 of 5 · ₹… spent" right under the month card, one tap opens the page; with a To review nudge waiting the nudge still shows once with "Also waiting" and the trip line is above it. The line is gone after the last day, and when the trip is switched off.
+- [ ] The trip's page: total, "Day 2 of 5", average a day, the budget "₹… under/over", a bar for each day (tap one: its amount; today marked), categories. **See all entries** opens Search with the tag and the days chosen; Back returns to the page.
+- [ ] Make a trip for days that already have expenses: "Tag N earlier entries from these dates?" shows the right N; Not now tags nothing; Yes then Undo puts everything back exactly. Widening the days asks only about the new days.
+- [ ] Two trips with the same days: the second is refused with a sentence that names the first. Delete a trip: the tags stay on the entries.
+- [ ] Hide amounts: the Home line, the page and the bars show no amount. App lock: the page is behind the lock like every screen.
+- [ ] TalkBack: the chip says "Tagged for Goa trip with the tag Trip: Goa. Double tap to take the tag off this entry"; each bar says its day and amount; the Home line reads as one button.
+- [ ] Largest text size and (if you have one) a tablet or unfolded foldable: the Home line wraps, the form and the page scroll, nothing is cut off, buttons are easy to hit.
+- [ ] A backup of a ledger with a trip, restored on another phone (or after Start fresh): the trip and the tags are back; the message says "1 trip was added."
+- [ ] A phone that changes time zone (flight mode, a trip abroad): entries made after landing are dated in the new zone; say what you saw.
+
 ## iPhone
 
 ### Install
@@ -185,6 +202,9 @@ Settings, Accessibility, VoiceOver. Swipe right through each screen.
 - [ ] Automatic copies to a Files folder write a new file when due.
 - [ ] With "Protect copies with a passphrase" on (Your data): a copy is made while the phone is locked (after the first unlock since a restart) and is a sealed `.expbak` (opens only through Restore with the passphrase, on this phone and on a second one); after a restart and before the first unlock no copy is written, and never a plain one; turning it off makes plain copies again.
 - [ ] Notification buttons (Mark paid, Later today, Tomorrow) work from the lock screen.
+
+### Travel mode (Slice 110, same screens as Android; shared code)
+- [ ] The checklist above, on the iPhone: the date picker, the chip in the add form, Home's line and the page; the Shortcuts "add expense" inside a trip's days is tagged.
 
 ### Larger text and iPad (if you have one)
 - [ ] Dynamic Type at the largest size: Home and the Shortcuts screen stay usable.

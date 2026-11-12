@@ -13,11 +13,13 @@ import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
+import java.io.File
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** Trips in backups: an optional key, absent when there are none, read by older readers as nothing, restored as a merge, made safe against a file made by someone else; sealed files carry it like everything. Invented data. */
@@ -175,5 +177,40 @@ class TripBackupTest {
             assertEquals(a.ledger.trips.all(), b.ledger.trips.all(), label)
         }
         assertTrue("trips" in plain.decodeToString() && "trips" !in sealed2.toString(Charsets.ISO_8859_1) && "trips" !in sealed3.toString(Charsets.ISO_8859_1))
+    }
+
+    @Test
+    fun theJavaReferenceReadsTheTripsAndRefusesFilesThatBreakTheDocumentedRules() {
+        val javaBin = File(System.getProperty("java.home"), "bin/java").path
+        val interop = listOf(File("../../tools/backup_interop/Interop.java"), File("tools/backup_interop/Interop.java")).first { it.exists() }.path
+        fun run(data: BackupData, vararg args: String): Pair<Int, String> {
+            val file = File.createTempFile("kotlin-trips", ".expbak")
+            try {
+                file.writeBytes(BackupFile.encode(data, 1L))
+                val proc = ProcessBuilder(listOf(javaBin, interop, "verify2", "-", file.path) + args).redirectErrorStream(true).start()
+                val out = proc.inputStream.bufferedReader().readText()
+                return proc.waitFor() to out
+            } finally { file.delete() }
+        }
+        val data = deviceWithTrips().backup.export()
+        val (code, out) = run(data, "trips=3")
+        assertEquals(0, code, out); assertTrue("3 trips" in out, out)
+        assertNotEquals(0, run(data, "trips=2").first, "a wrong expected count fails")
+        assertEquals(0, run(BackupData(), "trips=0").first, "a file with no trips has none")
+        val ok = data.trips
+        val bad = listOf(
+            "overlap of two that are on" to ok + BackupTrip("clash", "Clash", "c", goa.startDay + 1, goa.endDay + 1),
+            "last day before the first" to ok + BackupTrip("neg", "N", "t", goa.endDay, goa.startDay),
+            "days outside 2000 to 2099" to ok + BackupTrip("old", "Old", "t", 100, 105),
+            "longer than 366 days" to ok + BackupTrip("long", "Long", "t", day(2030, 1, 1), day(2031, 1, 2)),
+            "a name with a line break" to ok + BackupTrip("nl", "Two\nlines", "t", day(2028, 1, 1), day(2028, 1, 2)),
+            "a tag with a comma" to ok + BackupTrip("comma", "C", "a,b", day(2028, 1, 1), day(2028, 1, 2)),
+            "a name of 41 characters" to ok + BackupTrip("wide", "x".repeat(41), "t", day(2028, 1, 1), day(2028, 1, 2)),
+            "a budget of zero" to ok + BackupTrip("zero", "Z", "t", day(2028, 1, 1), day(2028, 1, 2), true, 0L),
+            "the same id twice" to ok + ok.first(),
+        )
+        for ((what, trips) in bad) assertNotEquals(0, run(data.copy(trips = trips)).first, what)
+        // two that are on may not share a day, but one that is off may
+        assertEquals(0, run(data.copy(trips = ok + BackupTrip("off", "Off", "t", goa.startDay, goa.endDay, false))).first)
     }
 }

@@ -29,7 +29,7 @@ import javax.crypto.spec.SecretKeySpec;
  *   java tools/backup_interop/Interop.java make3   <passphrase> <out.expbak>   the same sample, sealed as EXPENC3 (an automatic copy, docs/BACKUP_FORMAT.md "Automatic copies") with fixed salts
  *   java tools/backup_interop/Interop.java verify2 <passphrase or -> <in.expbak> [pattern] [replaced=N]   opens a version 1 or 2 file (plain, EXPENC1, EXPENC2 or EXPENC3): payload length and sha256, every file's sha256, no bytes left over;
  *                                                                                           with "pattern" also that file k (1, 2, ...) holds byte i = (i*31 + k*7) mod 256, which is what the apps' sample writer produces; the "replaced" list (if any) is checked
- *                                                                                           and with "replaced=N" must hold exactly N records; exit 1 on any mismatch
+ *                                                                                           and with "replaced=N" must hold exactly N records, with "trips=N" exactly N trips (Travel mode: each fit as docs/BACKUP_FORMAT.md says, none that are on sharing a day); exit 1 on any mismatch
  *   java tools/backup_interop/Interop.java make-replaced <passphrase or -> <outPrefix>   writes <outPrefix>-old.expbak and <outPrefix>-new.expbak, two plain version 1 files of a type change (an expense made a transfer; the new one carries one replaced record); both are verified
  */
 public class Interop {
@@ -210,10 +210,10 @@ public class Interop {
     static void fail(String why) { System.err.println("FAIL: " + why); System.exit(1); }
 
     @SuppressWarnings("unchecked")
-    static void verify2(String pass, byte[] bytes, boolean checkPattern) throws Exception { verify2(pass, bytes, checkPattern, -1); }
+    static void verify2(String pass, byte[] bytes, boolean checkPattern) throws Exception { verify2(pass, bytes, checkPattern, -1, -1); }
 
     @SuppressWarnings("unchecked")
-    static void verify2(String pass, byte[] bytes, boolean checkPattern, int expectReplaced) throws Exception {
+    static void verify2(String pass, byte[] bytes, boolean checkPattern, int expectReplaced, int expectTrips) throws Exception {
         byte[] plain;
         if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC2)) plain = open2(bytes, pass);
         else if (Arrays.equals(Arrays.copyOf(bytes, 8), MAGIC3)) plain = open3(bytes, pass);
@@ -253,6 +253,35 @@ public class Interop {
             }
         }
         if (expectReplaced >= 0 && replacedCount != expectReplaced) fail("expected " + expectReplaced + " replaced records, found " + replacedCount);
+        // Travel mode (Slice 110): an optional list of trips, read independently of the app's own rules (docs/BACKUP_FORMAT.md, section "trips")
+        int tripCount = 0;
+        if (data.containsKey("trips")) {
+            if (!(data.get("trips") instanceof List)) fail("trips is not a list");
+            Set<String> tripIds = new HashSet<>();
+            List<long[]> on = new ArrayList<>();
+            for (Object o : (List<Object>) data.get("trips")) {
+                if (!(o instanceof Map)) fail("a trip is not an object");
+                Map<String, Object> t = (Map<String, Object>) o;
+                Object id = t.get("id"), name = t.get("name"), tag = t.get("tag"), start = t.get("startDay"), end = t.get("endDay"), enabled = t.get("enabled"), budget = t.get("dailyBudgetMinor");
+                if (!(id instanceof String) || ((String) id).isEmpty() || ((String) id).length() > 64) fail("a trip has no usable id");
+                if (!tripIds.add((String) id)) fail("trip " + id + " is listed twice");
+                if (!(name instanceof String) || ((String) name).trim().isEmpty() || ((String) name).length() > 40 || ((String) name).matches("(?s).*[\\r\\n\\t].*")) fail("trip " + id + " has a name that is not 1 to 40 characters of one line");
+                if (!(tag instanceof String) || ((String) tag).trim().isEmpty() || ((String) tag).length() > 30 || ((String) tag).contains(",")) fail("trip " + id + " has a tag that is not 1 to 30 characters without commas");
+                if (!(start instanceof Long) || !(end instanceof Long)) fail("trip " + id + " has no days");
+                long s0 = (Long) start, e0 = (Long) end;
+                if (e0 < s0) fail("trip " + id + " ends before it starts");
+                if (s0 < 10957L || e0 > 47481L) fail("trip " + id + " has days outside 2000 to 2099");
+                if (e0 - s0 + 1 > 366) fail("trip " + id + " lasts more than 366 days");
+                if (enabled != null && !(enabled instanceof Boolean)) fail("trip " + id + " has an enabled that is not true or false");
+                if (budget != null && (!(budget instanceof Long) || (Long) budget < 1L || (Long) budget > 100_000_000_000L)) fail("trip " + id + " has a daily budget outside 1 to 100,000,000,000");
+                if (enabled == null || (Boolean) enabled) {
+                    for (long[] other : on) if (other[0] <= e0 && s0 <= other[1]) fail("trip " + id + " is on and shares a day with another trip that is on");
+                    on.add(new long[] { s0, e0 });
+                }
+                tripCount++;
+            }
+        }
+        if (expectTrips >= 0 && tripCount != expectTrips) fail("expected " + expectTrips + " trips, found " + tripCount);
         List<Object> list = version >= 2 && data.get("attachments") != null ? (List<Object>) data.get("attachments") : new ArrayList<>();
         int pos = p1; long total = 0; int k = 0;
         for (Object o : list) {
@@ -267,7 +296,7 @@ public class Interop {
         }
         if (version == 1) { for (int i = p1; i < plain.length; i++) if (plain[i] != '\n' && plain[i] != '\r' && plain[i] != ' ') fail("version 1 file has data after the payload"); }
         else if (pos != plain.length) fail((plain.length - pos) + " bytes left after the last file");
-        System.out.println("ok: version " + version + ", payload " + payloadBytes + " bytes (sha256 verified), " + list.size() + " files verified (" + total + " bytes)" + (checkPattern ? ", sample pattern matches" : "") + ", " + replacedCount + " replaced records");
+        System.out.println("ok: version " + version + ", payload " + payloadBytes + " bytes (sha256 verified), " + list.size() + " files verified (" + total + " bytes)" + (checkPattern ? ", sample pattern matches" : "") + ", " + replacedCount + " replaced records, " + tripCount + " trips");
     }
 
     static byte[] plainV1(String payloadText) throws Exception {
@@ -288,8 +317,8 @@ public class Interop {
         byte[] now = plainV1(head + "\"entries\":[" + keep + "," + moved + "],\"settings\":{},\"replaced\":[{\"entryId\":\"orig\",\"replacedBy\":\"moved\",\"reason\":\"CHANGED\"}]}");
         Files.write(Path.of(prefix + "-old.expbak"), old);
         Files.write(Path.of(prefix + "-new.expbak"), now);
-        verify2("", old, false, 0);
-        verify2("", now, false, 1);
+        verify2("", old, false, 0, -1);
+        verify2("", now, false, 1, -1);
         System.out.println("wrote " + prefix + "-old.expbak and " + prefix + "-new.expbak");
     }
 
@@ -307,9 +336,9 @@ public class Interop {
             return;
         }
         if (mode.equals("verify2")) {
-            int want = -1; boolean pat = false;
-            for (int i = 3; i < a.length; i++) { if (a[i].equals("pattern")) pat = true; else if (a[i].startsWith("replaced=")) want = Integer.parseInt(a[i].substring(9)); }
-            verify2(pass.equals("-") ? "" : pass, Files.readAllBytes(Path.of(a[2])), pat, want);
+            int want = -1, wantTrips = -1; boolean pat = false;
+            for (int i = 3; i < a.length; i++) { if (a[i].equals("pattern")) pat = true; else if (a[i].startsWith("replaced=")) want = Integer.parseInt(a[i].substring(9)); else if (a[i].startsWith("trips=")) wantTrips = Integer.parseInt(a[i].substring(6)); }
+            verify2(pass.equals("-") ? "" : pass, Files.readAllBytes(Path.of(a[2])), pat, want, wantTrips);
             return;
         }
         if (mode.equals("make-replaced")) {

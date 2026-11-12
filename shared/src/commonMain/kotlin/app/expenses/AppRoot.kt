@@ -594,6 +594,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val summary by viewModel.tripSummary.collectAsStateWithLifecycle(context = MAIN)
                         val tripUndo by viewModel.tripUndo.collectAsStateWithLifecycle(context = MAIN)
                         val closeSummary = { tripSummaryOf = null; viewModel.closeTripSummary() }
+                        // the page is rebuilt from the store, also after the app's process was recreated with the page open
+                        LaunchedEffect(tripSummaryOf) { tripSummaryOf?.let { viewModel.openTripSummary(it) } }
                         BackHandler { closeSummary() }
                         app.expenses.ui.TripSummaryScreen(
                             summary, tripUndo, onBack = closeSummary,
@@ -608,6 +610,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val tripOffer by viewModel.tripOffer.collectAsStateWithLifecycle(context = MAIN)
                         val tripUndo by viewModel.tripUndo.collectAsStateWithLifecycle(context = MAIN)
                         val closeTrips = { tripsOpen = false; viewModel.closeTrips() }
+                        LaunchedEffect(Unit) { if (tripList == null) viewModel.openTrips() }
                         BackHandler { closeTrips() }
                         app.expenses.ui.TripsScreen(
                             tripList, tags = s.tags, offer = tripOffer, undo = tripUndo, onBack = closeTrips,

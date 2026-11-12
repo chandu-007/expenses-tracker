@@ -76,7 +76,9 @@ class TripModeUiTest {
     }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
-    private fun textOf(tag: String): String = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text }
+    private fun textOf(tag: String): String = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c ->
+        (c.getOrNull(SemanticsProperties.EditableText)?.text ?: c.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text })
+    }
     /** The text of a control whose label is a child (a chip, a button): read from the merged tree. */
     private fun mergedText(tag: String): String = compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString(" ") { it.text }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
@@ -156,7 +158,7 @@ class TripModeUiTest {
         assertEquals(1, db { it.trips.count() })
         // turned off, the new trip may share the days
         tap("trip_enabled_row"); tap("trip_save"); waitFor("trip_row_Mumbai")
-        assertEquals(false, db { it.trips.get("mumbai")!!.enabled })
+        assertEquals(false, db { ok -> ok.trips.all().single { it.name == "Mumbai" }.enabled })
     }
 
     // ---- the add form and the tag that stays removed ----
@@ -171,11 +173,11 @@ class TripModeUiTest {
         assertEquals(listOf("Trip: Goa"), tagsOf(id))
 
         // an edit of the note leaves the tag; the tag taken off in the editor stays off through the next edits
-        tap("row_Lunch"); waitFor("note"); type("note", "Lunch at the beach"); tap("save"); waitFor("add")
+        tapUntil("row_Lunch") { has("note") }; type("note", "Lunch at the beach"); tap("save"); waitFor("add")
         assertEquals(listOf("Trip: Goa"), tagsOf(id))
-        tap("row_Lunch at the beach"); waitFor("tag_chip_Trip: Goa"); tap("tag_chip_Trip: Goa"); tap("save"); waitFor("add")
+        tapUntil("row_Lunch at the beach") { has("tag_chip_Trip: Goa") }; tapUntil("tag_chip_Trip: Goa") { !has("tag_chip_Trip: Goa") }; tap("save"); waitFor("add")
         assertTrue(tagsOf(id).isEmpty(), "taken off")
-        tap("row_Lunch at the beach"); waitFor("note"); type("note", "Beach lunch"); tap("save"); waitFor("add")
+        tapUntil("row_Lunch at the beach") { has("note") }; type("note", "Beach lunch"); tap("save"); waitFor("add")
         assertTrue(tagsOf(id).isEmpty(), "and it stays off after the note is edited: the tag is added once, when the entry is made")
         assertTrue(!has("trip_chip"), "the editor of an entry that exists does not offer it")
     }
@@ -255,7 +257,7 @@ class TripModeUiTest {
 
     @Test
     fun theSummaryAddsUpTheTripsDaysCategoriesAverageAndBudgetAndAReadoutPerBar() {
-        trip("Goa", -2, 2, budget = 1_000)
+        trip("Goa", -2, 2, budget = 100_000)
         spend("f1", "Cafe", at(-2), 400, "Food", tripTag = true); spend("s1", "Cab", at(-2), 3_000, "Transport", tripTag = true)
         spend("f2", "Thali", at(-1), 600, "Food", tripTag = true); spend("f3", "Chai", at(0), 200, "Food", tripTag = true)
         db { ok -> ok.store.save(Refund(EntryId("r1"), at(0, 15), AccountId("cash"), Money(50_000, inr), EntryId("s1")), EntryDetails(merchant = "Cab refund", tripTag = true)) }

@@ -131,7 +131,7 @@ fun TripsScreen(
         val now = rows.filter { it.phase == TripPhase.ACTIVE }
         val next = rows.filter { it.phase == TripPhase.UPCOMING }.sortedBy { it.startDay }
         val past = rows.filter { it.phase == TripPhase.PAST }
-        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("trips_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("trips_list"), contentPadding = PaddingValues(bottom = if (undo != null) 96.dp else 24.dp)) { // room under the last row for the Undo bar, so it never covers a button
             item {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (rows.isEmpty()) {
@@ -168,7 +168,7 @@ private fun TripRow(r: TripRowUi, onOpen: (String) -> Unit, onEdit: (String) -> 
             Text(r.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(r.datesText, style = MaterialTheme.typography.bodyMedium)
             Text(r.statusText, style = MaterialTheme.typography.bodyMedium, color = if (r.phase == TripPhase.ACTIVE && r.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("trip_status_${r.name}"))
-            Text("Tag: ${r.tag}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Tag \"${r.tag}\"", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("trip_tag_${r.name}"))
         }
         Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = { onEdit(r.id) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_edit_${r.name}")) { Text("Edit") }

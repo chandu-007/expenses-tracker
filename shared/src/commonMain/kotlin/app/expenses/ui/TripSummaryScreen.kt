@@ -101,7 +101,7 @@ fun TripSummaryScreen(
             Text("This trip is no longer there.", modifier = Modifier.padding(padding).padding(16.dp).testTag("trip_summary_gone"))
             return@Scaffold
         }
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 24.dp).testTag("trip_summary"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = if (undo != null) 96.dp else 24.dp).testTag("trip_summary"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // the figures
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Spent on this trip", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
