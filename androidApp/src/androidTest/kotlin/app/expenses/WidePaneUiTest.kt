@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
@@ -380,10 +381,15 @@ class WidePaneUiTest {
         compose.onNodeWithTag("search_text").performTextInput("cab"); waitFor("result_m30")
         compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("result_m5")); waitFor("result_m5")
         compose.onNodeWithTag("result_m5", useUnmergedTree = true).performTouchInput { longClick() }; waitFor("search_selection_clear")
-        shell("wm size 1812x2176"); waitWide(true, "unfolded"); Thread.sleep(600)
+        // which result rows are on the screen (a window of another size shows more or fewer, so the sets are compared, not each row)
+        fun listed(): Set<String> = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)
+            .fetchSemanticsNodes().mapNotNull { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) }.toSet()
+        val before = listed()
+        assertTrue(before.isNotEmpty() && "result_m30" !in before, "scrolled down before the unfold: $before")
+        shell("wm size 1812x2176"); waitWide(true, "unfolded"); Thread.sleep(800)
         assertTrue(has("search_selection_clear"), "still choosing after the unfold")
-        assertTrue(has("result_m5"), "the ticked row is still on the screen after the unfold"); assertTrue(!has("result_m30"), "still scrolled down after the unfold")
-        shell("wm size 904x2316"); waitWide(false, "folded"); Thread.sleep(600)
-        assertTrue(has("search_selection_clear") && has("result_m5") && !has("result_m30"), "and after folding again")
+        val wide = listed(); assertTrue(wide.intersect(before).size >= 2 && "result_m30" !in wide, "still scrolled to the same place after the unfold: $before then $wide")
+        shell("wm size 904x2316"); waitWide(false, "folded"); Thread.sleep(800)
+        val narrow = listed(); assertTrue(has("search_selection_clear") && narrow.intersect(before).size >= 2 && "result_m30" !in narrow, "and after folding again: $before then $narrow")
     }
 }
