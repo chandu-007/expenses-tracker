@@ -309,6 +309,15 @@ def step_see_in_list():
     wait_for("the saved expense (₹123.00) in the list", text="₹123.00", contains=True, timeout=20)
 
 
+def wait_home_top():
+    """Back to Home: it keeps its scroll position, and a first-run Home is taller than the screen (the setup card, the budget card), so scroll to the top before looking for the first card."""
+    time.sleep(1)
+    for _ in range(3):
+        sh("input", "swipe", "540", "600", "540", "1900", "250")
+        time.sleep(0.4)
+    wait_for("Home again", text="Spent this month", timeout=20)
+
+
 def step_search():
     tap("the Search tab", text="Search")
     field = wait_for("the search field", cls="EditText", timeout=20)
@@ -320,7 +329,7 @@ def step_search():
         raise StepFailed("Search shows the expense and also 'Nothing found.'")
     # back to Home for the next step
     tap("Back", text="Back")
-    wait_for("Home again", text="Spent this month", timeout=20)
+    wait_home_top()
 
 
 def step_bill_photo():
@@ -551,7 +560,7 @@ def place_widget(label_text, drop_y=0.34, drop_x=0.5, check_text="Spent this mon
             drag_out(w // 2, label.bounds[1] - 230, int(w * drop_x), int(h * drop_y))
             time.sleep(3)
             # the launcher shows a resize frame after a drop and `uiautomator dump` sees nothing while it animates: tap an empty spot first (it leaves the frame), then read
-            tap_xy(w // 2, int(h * 0.85))
+            tap_xy(w // 2, int(h * 0.66))  # empty on every launcher layout seen; 0.85 is where the launcher puts its predicted apps (a tap there once opened Files and hid the widget)
             time.sleep(2)
             wait_for("the widget on the home screen", text=check_text, contains=True, timeout=15)
             return
@@ -592,7 +601,7 @@ def search_count(term, amount):
     screen.refresh()
     count = sum(1 for t in screen.texts() if amount in t)
     tap("Back", text="Back")
-    wait_for("Home again", text="Spent this month", timeout=20)
+    wait_home_top()
     return count
 
 

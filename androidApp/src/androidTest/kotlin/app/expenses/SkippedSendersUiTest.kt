@@ -93,7 +93,8 @@ class SkippedSendersUiTest {
         val box = compose.onNodeWithTag("capture_headers", useUnmergedTree = true)
         runCatching { box.performScrollTo() }
         box.performTextInput("mycoop")
-        tap("capture_headers_save")
+        // Save can be lost while the keyboard moves the page: press it again until the name is a chip (saving the same name twice changes nothing)
+        repeat(4) { if (!has("sender_chip_MYCOOP")) { runCatching { tap("capture_headers_save") }; compose.waitForIdle(); Thread.sleep(500) } }
         waitFor("sender_chip_MYCOOP"); gone("skipped_sender_MYCOOP")
         compose.waitUntil(10_000) { stored() == "MYCOOP" }
     }
