@@ -121,13 +121,21 @@ fun SearchScreen(
     initialTag: String? = null,
     initialFromDay: Long? = null,
     initialToDay: Long? = null,
+    /**
+     * What the person has typed and chosen here (the words, the filters, the entries ticked, whether the Filters panel is open, the scroll position). Kept by the caller, outside the screen, so that
+     * a window that changes size (a foldable folded or unfolded: the open entry then goes beside the results or over them) takes the screen down and brings it back as it was. By default
+     * the screen keeps its own, saved with the page.
+     */
+    fields: SearchFields = rememberSaveable(saver = SearchFields.Saver) { SearchFields(initialAccountId, initialTag, initialFromDay, initialToDay) },
+    /** The box takes the focus when this changes while the page is showing (Ctrl+F from a hardware keyboard while Search is already open). */
+    focusTick: Int = 0,
 ) {
     var savingName by rememberSaveable { mutableStateOf<String?>(null) }
     var savingProblem by remember { mutableStateOf<String?>(null) }
     var deletingSaved by remember { mutableStateOf<app.expenses.SavedSearchUi?>(null) }
-    var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var selected by fields.selected
     // the Filters panel (SearchFilters.kt) is open
-    var filtersOpen by rememberSaveable { mutableStateOf(false) }
+    var filtersOpen by fields.filtersOpen
     PlatformBackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     val focusManager = LocalFocusManager.current
     // measurement builds only (see Platform.trace): when the page is first composed, when anything the search is made of changes, and when results are shown
@@ -136,7 +144,7 @@ fun SearchScreen(
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     // Done on the keyboard, choosing entries and scrolling the results all put the keyboard away, so the results can be seen
     val dismissKeyboard = { focusManager.clearFocus(); keyboard?.hide() }
-    var text by rememberSaveable { mutableStateOf("") }
+    var text by fields.text
     val hideOnScroll = remember(keyboard) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset { if (available.y != 0f) { keyboard?.hide(); focusManager.clearFocus() }; return androidx.compose.ui.geometry.Offset.Zero }
@@ -151,22 +159,24 @@ fun SearchScreen(
     LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) { keyboard?.hide(); focusManager.clearFocus(); filtersOpen = false } }
     PlatformBackHandler(enabled = filtersOpen) { filtersOpen = false }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
-    var min by rememberSaveable { mutableStateOf("") }
-    var max by rememberSaveable { mutableStateOf("") }
-    var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
-    var kind by rememberSaveable { mutableStateOf(SearchKind.ANY) }
-    var range by rememberSaveable { mutableStateOf(SearchRange.ANY) }
-    var tag by rememberSaveable { mutableStateOf(initialTag) }
+    var min by fields.min
+    var max by fields.max
+    var categoryId by fields.categoryId
+    var kind by fields.kind
+    var range by fields.range
+    var tag by fields.tag
     // chosen days (since 1970-01-01, both included, either may be open) and the one account searched in
-    var fromDay by rememberSaveable { mutableStateOf(initialFromDay) }
-    var toDay by rememberSaveable { mutableStateOf(initialToDay) }
-    var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
+    var fromDay by fields.fromDay
+    var toDay by fields.toDay
+    var accountId by fields.accountId
     var pickingDay by rememberSaveable { mutableStateOf<String?>(null) }
     val dateProblem = SearchDates.problem(fromDay, toDay)
     val focus = remember { FocusRequester() }
     // Search from the tab starts with the cursor in the box. Opened from an account the list of that account is already there to read, and a keyboard over it hid more than half of it: the box is one tap away.
     // Coming back from an entry opened out of the results (the search is still running) is the same: the results are what is wanted, not the keyboard.
     LaunchedEffect(Unit) { if (initialAccountId == null && initialTag == null && !state.hasConditions) focus.requestFocus() }
+    val firstTick = remember { focusTick }
+    LaunchedEffect(focusTick) { if (focusTick != firstTick) focus.requestFocus() }
     /** [typing]: the change is the text or an amount being typed, so the keyboard stays; any other change (a chip, a day, a saved search) is the person looking at results, so the keyboard goes. */
     fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag, fd: Long? = fromDay, td: Long? = toDay, ac: String? = accountId, typing: Boolean = false) {
         if (!typing) dismissKeyboard()
@@ -215,7 +225,6 @@ fun SearchScreen(
         )
     }
     val input = SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)
-    val wide = rememberIsWide()
     val rows = state.results
     val showResults = dateProblem == null && state.problem == null && state.hasConditions && !state.searching && rows.isNotEmpty()
     val listedIds = remember(rows) { rows.map { it.id } }
@@ -223,7 +232,10 @@ fun SearchScreen(
     val spentMinor = remember(rows) { rows.filter { it.kind == "EXPENSE" }.sumOf { it.minor } }
     // rows under a heading for their day, like the home list
     val listItems = remember(rows) { buildList<Any> { var last = Long.MIN_VALUE; rows.forEach { r -> if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = fields.listState
+    // On a two-pane window the results are in a list pane only 340 to 480 dp wide (Search used to have up to 960 dp there): with larger text a row says what it is on two lines instead of cutting the
+    // name short. A phone's one pane is as it was.
+    val resultLines = if (rememberIsWide() && androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f) 2 else 1
     Box(Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.semantics { if (filtersOpen) hideFromAccessibility() },
@@ -324,8 +336,8 @@ fun SearchScreen(
                         ) {
                             if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = 14.dp))
                             Column(Modifier.weight(1f)) {
-                                MatchText(row.title, text, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                                MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                MatchText(row.title, text, style = MaterialTheme.typography.bodyLarge, maxLines = resultLines)
+                                MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)
                             }
                             val flow = flowOf(row.kind, row.inflow)
                             Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, color = amountColor(flow))
@@ -344,7 +356,7 @@ fun SearchScreen(
         }
     }
     if (filtersOpen) FiltersPanel(
-        wide = wide, input = input, state = state, dateProblem = dateProblem, canSave = state.hasConditions && state.problem == null,
+        input = input, state = state, dateProblem = dateProblem, canSave = state.hasConditions && state.problem == null,
         categories = categories, tags = tags, accounts = accounts, saved = saved,
         onEdit = { i, typing -> changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId, typing = typing) },
         onUseSaved = { i -> filtersOpen = false; changedAll(i) }, onRemoveSaved = { deletingSaved = it }, onSave = { savingName = "" },

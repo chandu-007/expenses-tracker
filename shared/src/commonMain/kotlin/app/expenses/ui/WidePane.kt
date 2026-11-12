@@ -121,6 +121,7 @@ private class HeldEditable(var value: Editable?)
  * - not [wide]: [content] as it is, in the same place of the composition as when wide (only modifiers differ, so a window that changes size does not rebuild the screen);
  * - [wide], on Home: [content] (Home) in a list-sized pane, and the entry editor, or a placeholder, in the pane beside it; while the More page is
  *   showing ([moreOpen]) and no entry is open, there is nothing to put beside it, so it takes the window as one centred page, at most [WIDE_SCREEN_MAX_WIDTH] wide;
+ * - [wide], on Search: the same as Home: the results in the list pane, the entry (or the placeholder) beside them;
  * - [wide], any other screen: [content] centred, at most [WIDE_SCREEN_MAX_WIDTH] wide.
  */
 @Composable
@@ -128,20 +129,21 @@ fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (
     // [content] sits in the SAME place of the composition whether the window is wide or not (the first Box of the same Row, or the inner Box of the same two Boxes): only
     // modifiers change. So when the window changes size (a foldable unfolded or folded, a split screen resized) the screen is not rebuilt: its scroll position, typed text and
     // selection stay. (Moving it between different places would start it again, and Compose's own "movable content" crashed with a focused text field.)
-    if (key != ScreenKeys.HOME) {
+    // Home and Search are the two screens that have an entry beside them; every other screen is one centred page
+    if (key != ScreenKeys.HOME && key != ScreenKeys.SEARCH) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Box(if (wide) Modifier.widthIn(max = WIDE_SCREEN_MAX_WIDTH).fillMaxWidth().fillMaxHeight() else Modifier.fillMaxSize()) { content() }
         }
         return
     }
     // the More page with no entry open: one centred page, not a list-sized strip beside an empty "Select an entry". [content] stays the first child of the
-    // Row in every case, so Home keeps its scroll position and selection when More is opened and closed.
-    val alone = wide && moreOpen && editing == null
+    // Row in every case, so Home keeps its scroll position and selection when More is opened and closed. (More belongs to Home: Search has no such page.)
+    val alone = wide && key == ScreenKeys.HOME && moreOpen && editing == null
     val hinge = currentHinge()?.takeIf { it.vertical }
     Row(Modifier.fillMaxSize(), horizontalArrangement = if (wide) Arrangement.Center else Arrangement.Start) {
         Box(Modifier.then(if (wide) Modifier.listPaneWidth(alone, hinge).testTag("wide_list_pane") else Modifier.fillMaxWidth()).fillMaxHeight()) { content() }
         if (wide && !alone) {
-            // a fold between the panes (half open like a book): Home on one side, the entry on the other, nothing drawn across it
+            // a fold between the panes (half open like a book): the list on one side, the entry on the other, nothing drawn across it
             if (hinge != null && hinge.widthDp > 0f) androidx.compose.foundation.layout.Spacer(Modifier.width(hinge.widthDp.dp))
             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Box(Modifier.weight(1f).fillMaxHeight().testTag("wide_detail_pane")) { DetailPane(editing, editor) }

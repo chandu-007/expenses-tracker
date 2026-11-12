@@ -237,14 +237,15 @@ private fun PickerField(value: String, tag: String, on: Boolean, content: @Compo
 }
 
 /**
- * The Filters panel: over the page (not a window, so the keyboard and taps behave as on the page): a sheet from the bottom on a phone, a card at the side (at most 480 dp) on a wide window.
+ * The Filters panel: over the page (not a window, so the keyboard and taps behave as on the page): a sheet from the bottom. On a two-pane window the page is the list pane (340 to 480 dp wide), so the sheet
+ * covers only that pane and the entry open beside it stays in sight.
  * [input] is the search as it is now; every change goes to [onEdit] (`typing`: an amount is being typed, keep the keyboard) and the search runs at once, so the button shows the real
  * number of results. Back, the cross, the dimmed page and Apply all close it, keeping what is chosen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FiltersPanel(
-    wide: Boolean, input: SearchInput, state: SearchUi, dateProblem: String?, canSave: Boolean,
+    input: SearchInput, state: SearchUi, dateProblem: String?, canSave: Boolean,
     categories: List<CategoryUi>, tags: List<String>, accounts: List<AccountUi>, saved: List<SavedSearchUi>,
     onEdit: (SearchInput, Boolean) -> Unit, onUseSaved: (SearchInput) -> Unit, onRemoveSaved: (SavedSearchUi) -> Unit, onSave: () -> Unit,
     onPickDay: (String) -> Unit, onDone: () -> Unit, onClose: () -> Unit,
@@ -262,12 +263,11 @@ internal fun FiltersPanel(
     }
     fun edit(i: SearchInput) = onEdit(i, false)
     BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = "Filters"; isTraversalGroup = true }) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (wide) 0.20f else 0.40f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"))
-        val place = if (wide) Modifier.align(Alignment.TopEnd).padding(16.dp).fillMaxWidth(0.62f).widthIn(max = 480.dp).heightIn(max = maxHeight - 32.dp)
-        else Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxHeight * 0.9f)
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"))
+        val place = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxHeight * 0.9f)
         Surface(
             place.pointerInput(Unit) { detectTapGestures { } }.testTag("filters_panel"),
-            shape = if (wide) RoundedCornerShape(28.dp) else RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, shadowElevation = 12.dp,
         ) {
             Column(Modifier.fillMaxWidth()) {

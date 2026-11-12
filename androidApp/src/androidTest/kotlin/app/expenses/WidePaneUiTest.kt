@@ -1,7 +1,11 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,12 +31,14 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * The two-pane layout. The test display cannot be resized from inside a test, so [WideLayoutTestHook] stands in for the window width: the decision to use
  * two panes follows the forced width, and the panes are laid out inside the real (narrow) window, squeezed but complete. What this proves is the wiring
- * (placeholder, editor beside the list, Back, save, the narrow window unchanged); it does not prove how the panes look on a real tablet.
+ * (placeholder, editor beside the list, Back, save, the narrow window unchanged); it does not prove how the panes look on a real tablet. The tests that set the real display (`wm size`) do
+ * prove the live switch (a fold or unfold under an open screen); Search has the same two panes as Home.
  */
 @RunWith(AndroidJUnit4::class)
 class WidePaneUiTest {
@@ -45,7 +51,13 @@ class WidePaneUiTest {
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-    private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
+    private fun waitFor(tag: String) {
+        try { compose.waitUntil(10_000) { has(tag) } } catch (e: Throwable) {
+            // a picture of what was on the screen when the wait gave up, kept with the test's files (read it with `adb pull`)
+            runCatching { val dir = java.io.File(context.getExternalFilesDir(null), "failures").also { it.mkdirs() }; java.io.File(dir, "waiting_for_$tag.png").outputStream().use { o -> InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, o) } }
+            throw e
+        }
+    }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
     private fun back() { scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() } }
 
@@ -231,19 +243,6 @@ class WidePaneUiTest {
     }
 
     @Test
-    fun anEntryOpenedFromSearchOnAWideWindowIsShownAndBackComesBackToTheResults() {
-        seed("e1", "Cafe", 10_000)
-        launch(1000); waitFor("row_Cafe")
-        compose.onNodeWithTag("open_search").performClick(); waitFor("search_text")
-        compose.onNodeWithTag("search_text").performTextInput("caf")
-        waitFor("result_e1")
-        compose.onNodeWithTag("result_e1", useUnmergedTree = true).performClick()
-        waitFor("amount")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00")
-        back(); waitGone("amount"); waitFor("result_e1")
-    }
-
-    @Test
     fun aHalfOpenFoldPutsHomeAndTheEntryEitherSideOfTheHingeAndTableTopKeepsTheAppAboveIt() {
         seed("e1", "Cafe", 10_000)
         shell("wm size 1812x2176"); shell("wm density 420") // a Z Fold 5 unfolded: 690 x 829 dp
@@ -262,5 +261,129 @@ class WidePaneUiTest {
         assertTrue(compose.onNodeWithTag("add").fetchSemanticsNode().boundsInRoot.bottom <= 345f * d + 1f, "nothing below the fold")
         WideLayoutTestHook.hinge = null
         waitWide(true, "flat again")
+    }
+
+    // ---- Search on a two-pane window: the results in the list pane, the entry beside them ----
+
+    private fun editable(tag: String): String = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c ->
+        if (c.contains(SemanticsProperties.EditableText)) c[SemanticsProperties.EditableText].text else "" }
+    private fun waitEditable(tag: String, expected: String, why: String) {
+        val ok = runCatching { compose.waitUntil(10_000) { has(tag) && editable(tag) == expected } }.isSuccess
+        if (!ok) throw AssertionError("$why: $tag should hold \"$expected\" but holds \"${if (has(tag)) editable(tag) else "(absent)"}\"")
+    }
+    private fun seedCafes() { seed("e1", "Cafe", 10_000); seed("e2", "Cafe Noir", 25_000); seed("e3", "Dosa", 4_000); seed("e4", "Cafe Roma", 12_000) }
+    private fun openSearchAndType(q: String) {
+        compose.onNodeWithTag("open_search").performClick(); waitFor("search_text")
+        compose.onNodeWithTag("search_text").performTextInput(q); waitFor("result_e1")
+    }
+    private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performClick() }
+
+    @Test
+    fun searchOnAWideWindowHasTheResultsInTheListPaneAndAPlaceholderBesideThem() {
+        seedCafes(); launch(1000); waitFor("row_Cafe Roma")
+        openSearchAndType("caf"); waitFor("wide_placeholder")
+        assertTrue(has("wide_list_pane") && has("wide_detail_pane"), "two panes on Search")
+        assertTrue(right("wide_list_pane") <= left("wide_detail_pane") + 1f && right("result_e1") <= right("wide_list_pane") + 1f, "the results are in the list pane")
+        assertTrue(has("search_text") && has("search_results"), "the whole page is in the pane")
+    }
+
+    @Test
+    fun anEntryOpenedFromSearchIsBesideTheResultsAndTheQueryTheResultsAndTheScrollStayThroughEditSaveAndBack() {
+        seedCafes(); launch(1000); waitFor("row_Cafe Roma")
+        openSearchAndType("caf")
+        tap("result_e2"); waitFor("amount"); waitGone("wide_placeholder")
+        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "250.00")
+        assertTrue(left("amount") >= right("result_e1") - 1f, "the editor is to the right of the results, not over them")
+        assertEquals("caf", editable("search_text"), "the typed words are still in the box")
+        assertTrue(has("result_e1") && has("result_e4") && !has("result_e3"), "the same results are listed")
+        // another result replaces the entry (a new editor, not the old one's typed text)
+        tap("result_e1"); compose.waitUntil(10_000) { editable("amount") == "100.00" || runCatching { compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00") }.isSuccess }
+        // edit and save: the pane empties, the results stay, the line shows the new amount
+        compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("150.5"); tap("save")
+        waitGone("amount"); waitFor("wide_placeholder")
+        assertEquals("caf", editable("search_text"), "the words survive a save")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("150.50", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // Back closes the entry first, the search second
+        tap("result_e4"); waitFor("amount"); back(); waitGone("amount"); waitFor("result_e4")
+        assertEquals("caf", editable("search_text")); back(); waitGone("search_text"); waitFor("wide_placeholder")
+    }
+
+    @Test
+    fun tickingEntriesInSearchOnAWideWindowStillSelectsOnTapAndNeverOpensThePane() {
+        seedCafes(); launch(1000); waitFor("row_Cafe Roma")
+        openSearchAndType("caf")
+        compose.onNodeWithTag("result_e1", useUnmergedTree = true).performTouchInput { longClick() }
+        waitFor("search_selection_clear")
+        tap("result_e2"); Thread.sleep(500)
+        assertTrue(!has("amount") && has("wide_placeholder"), "a tap while choosing ticks, it does not open the entry")
+        assertTrue(has("search_selection_clear"), "still choosing")
+        tap("search_selection_clear"); waitGone("search_selection_clear")
+        tap("result_e2"); waitFor("amount")
+    }
+
+    @Test
+    fun theFiltersPanelCoversOnlyTheListPaneAndTheOpenEntryStaysInSight() {
+        seedCafes(); launch(1000); waitFor("row_Cafe Roma")
+        openSearchAndType("caf"); tap("result_e1"); waitFor("amount")
+        tap("search_filters_button"); waitFor("filters_apply")
+        assertTrue(right("filters_panel") <= right("wide_list_pane") + 1f, "the panel stays inside the list pane")
+        assertTrue(has("amount") && left("amount") >= right("filters_panel") - 1f, "the entry is still beside it, untouched")
+        tap("filters_apply"); waitGone("filters_apply"); assertTrue(has("amount"))
+    }
+
+    @Test
+    fun onANarrowWindowSearchIsUnchangedTheEntryCoversTheResultsAndBackBringsThemBackWithTheWordsKept() {
+        seedCafes(); launch(500); waitFor("row_Cafe Roma")
+        openSearchAndType("caf")
+        assertTrue(!has("wide_list_pane") && !has("wide_placeholder"), "one pane")
+        tap("result_e2"); waitFor("amount"); waitGone("result_e1")
+        back(); waitFor("result_e1")
+        assertEquals("caf", editable("search_text"), "back from an entry brings the words back with the results")
+    }
+
+    @Test
+    fun foldingAndUnfoldingUnderAnOpenSearchKeepsTheWordsTheFiltersTheOpenEntryAndItsTypedText() {
+        seedCafes()
+        shell("wm size 1812x2176"); shell("wm density 420") // a Z Fold 5 unfolded: 690 x 829 dp
+        launch(null); waitFor("row_Cafe Roma"); waitWide(true, "unfolded")
+        openSearchAndType("caf")
+        tap("search_kind_expense")
+        waitFor("search_filters_badge") // the filter is on before anything is folded
+        tap("result_e2"); waitFor("amount")
+        waitEditable("amount", "250.00", "the entry opened from the results")
+        compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("77.5")
+        waitEditable("amount", "77.5", "typed in the pane")
+        var before: MainActivity? = null; scenario!!.onActivity { before = it }
+        // fold: one pane, the entry over the results, with what was typed
+        shell("wm size 904x2316"); waitWide(false, "folded")
+        waitFor("amount"); assertTrue(!has("result_e1"), "the entry is the whole screen now")
+        val seenAmounts = StringBuilder()
+        val got = runCatching { compose.waitUntil(5_000) { val v = if (has("amount")) editable("amount") else "(absent)"; if (!seenAmounts.endsWith("[$v] ")) seenAmounts.append("[$v] "); v == "77.5" } }.isSuccess
+        assertTrue(got, "after the fold the amount held, in order: $seenAmounts")
+        var after: MainActivity? = null; scenario!!.onActivity { after = it }; assertTrue(before === after, "the activity was not rebuilt")
+        // unfold again: beside the results again, still with the typed amount, the words and the filter
+        shell("wm size 1812x2176"); waitWide(true, "unfolded again")
+        waitFor("amount"); waitFor("result_e1"); compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        assertEquals("caf", editable("search_text")); assertTrue(has("search_filters_badge"), "the filter is still on")
+        // fold, then Back: the results with the words and the filter, no entry
+        shell("wm size 904x2316"); waitWide(false, "folded for the last time"); waitFor("amount")
+        back(); waitGone("amount"); waitFor("result_e1")
+        assertEquals("caf", editable("search_text")); assertTrue(has("search_filters_badge"))
+    }
+
+    @Test
+    fun foldingAndUnfoldingKeepsTheEntriesTickedInSearchAndWhereTheListWasScrolledTo() {
+        for (i in 1..30) seed("m$i", "Cab %02d".format(i), 1_000L + i)
+        shell("wm size 904x2316"); shell("wm density 420")
+        launch(null); waitFor("row_Cab 30")
+        compose.onNodeWithTag("open_search").performClick(); waitFor("search_text")
+        compose.onNodeWithTag("search_text").performTextInput("cab"); waitFor("result_m30")
+        compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("result_m5")); waitFor("result_m5")
+        compose.onNodeWithTag("result_m5", useUnmergedTree = true).performTouchInput { longClick() }; waitFor("search_selection_clear")
+        shell("wm size 1812x2176"); waitWide(true, "unfolded"); Thread.sleep(600)
+        assertTrue(has("search_selection_clear"), "still choosing after the unfold")
+        assertTrue(has("result_m5"), "the ticked row is still on the screen after the unfold"); assertTrue(!has("result_m30"), "still scrolled down after the unfold")
+        shell("wm size 904x2316"); waitWide(false, "folded"); Thread.sleep(600)
+        assertTrue(has("search_selection_clear") && has("result_m5") && !has("result_m30"), "and after folding again")
     }
 }

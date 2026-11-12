@@ -430,9 +430,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
                     checkupOpen, setupOpen, earlierOpen, tripSummaryOf != null, tripsOpen,
                 )
-                // The entry editor is the pane beside Home on a wide window, but only while Home is what is showing: opened from Search, the calendar or another screen it is a full screen over that
-                // screen on a wide window too (there is no Home beside it to put it next to), and Back returns to that screen.
-                val editorFull = !wide || screens.any { it }
+                // The entry editor is the pane beside the list on a wide window, but only while Home or Search (the two screens with a list to put it beside) is what is showing: opened from the calendar,
+                // a report or another screen it is a full screen over that screen on a wide window too, and Back returns to that screen.
+                val searchAlone = searching && screens.count { it } == 1
+                val editorFull = !wide || (screens.any { it } && !searchAlone)
                 val screenKey = when {
                     history != null -> 0
                     editing is Editable.Form && editorFull -> 1
@@ -440,6 +441,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     else -> screens.indexOf(true)
                 }
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
+                // what is typed and chosen on Search, kept here (a new, clean one for each visit): the page goes away and comes back when the window changes size under an open entry
+                val searchFields = rememberSaveable(searching, searchAccount, searchTag, searchFrom, searchTo, saver = app.expenses.ui.SearchFields.Saver) { app.expenses.ui.SearchFields(searchAccount, searchTag, searchFrom, searchTo) }
+                var searchFocus by rememberSaveable { mutableIntStateOf(0) }
                 val heldHistory = androidx.compose.runtime.remember { Held(history) }; if (history != null) heldHistory.value = history
                 val heldEditing = androidx.compose.runtime.remember { Held(editing) }; if (editing != null) heldEditing.value = editing
                 // the bar along the bottom is shown by Home, Search and Reports alike; its glass indicator glides between them as one bar
@@ -464,8 +468,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     handledShortcut = r.n
                     if (guide != null || adding || screenKey !in listOf(app.expenses.ui.ScreenKeys.HOME, 14, 16)) return@LaunchedEffect
                     when (r.shortcut) {
-                        Shortcut.ADD -> { prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
-                        Shortcut.SEARCH -> goTab("Search")
+                        // the add screen is drawn over Home only: from Search or Reports the page is left first (what was typed there is not kept), or the add screen would wait unseen behind it
+                        Shortcut.ADD -> {
+                            if (searching) { searching = false; searchAccount = null; viewModel.closeSearch() }
+                            if (reporting) { reporting = false; viewModel.closeReports() }
+                            prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true
+                        }
+                        Shortcut.SEARCH -> if (searching) searchFocus++ else goTab("Search")
                     }
                 }
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
@@ -690,7 +699,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             state = found, categories = s.categories,
                             onChange = viewModel::search,
                             onBack = { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() },
-                            initialAccountId = searchAccount, initialTag = searchTag, initialFromDay = searchFrom, initialToDay = searchTo,
+                            initialAccountId = searchAccount, initialTag = searchTag, initialFromDay = searchFrom, initialToDay = searchTo, fields = searchFields, focusTick = searchFocus,
                             onOpen = { viewModel.openEditor(it.id) },
                             accounts = s.accounts,
                             onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete, onBulkTransfer = viewModel::bulkMakeTransfers,

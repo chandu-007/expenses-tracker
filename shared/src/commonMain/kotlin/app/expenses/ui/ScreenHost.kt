@@ -28,11 +28,13 @@ val LocalLeavingScreen = androidx.compose.runtime.compositionLocalOf { false }
 @Composable
 fun BackHandler(enabled: Boolean = true, onBack: () -> Unit) = PlatformBackHandler(enabled && !LocalLeavingScreen.current, onBack)
 
-private val TABS = setOf(ScreenKeys.HOME, 14, 16)
+private val TABS = setOf(ScreenKeys.HOME, ScreenKeys.SEARCH, 16)
 
 /** The keys of the screens the host treats specially; every other screen is an ordinary push. */
 object ScreenKeys {
     const val HOME = -1
+    /** Search: on a two-pane window the results are in the list pane and the entry opened from them beside it, as on Home. */
+    const val SEARCH = 14
     /** The edit form: it grows out of the row that was tapped. */
     const val EDIT_FORM = 1
     /** The add form: it rises over home like a sheet. */

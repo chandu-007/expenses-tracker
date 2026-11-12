@@ -179,17 +179,18 @@ class SearchFiltersUiTest {
     }
 
     @Test
-    fun onATwoPaneWindowTheFiltersAreACardAtTheSideNoWiderThan480dp() {
+    fun onATwoPaneWindowTheFiltersAreASheetOverTheListPaneOnlyNoWiderThanThePane() {
         seed(); shell("wm size 1812x2176"); shell("wm density 420") // a Z Fold 5 unfolded: 690 x 829 dp
         openSearch(); tap("search_kind_expense"); waitFor("result_a")
+        waitFor("wide_list_pane"); tap("result_a"); waitFor("amount") // an entry open beside the results
         openPanel()
         val d = 420 / 160f
         val panel = bounds("filters_panel")
         assertTrue(panel.width <= 480f * d + 2f, "at most 480 dp wide, was ${panel.width / d} dp")
         assertTrue(panel.width >= 300f * d, "and not a sliver, was ${panel.width / d} dp")
-        assertTrue(panel.left > 100f * d, "it sits at the side: the page's results stay to be seen")
-        assertTrue(has("result_a"), "the results are still there behind it")
+        assertTrue(panel.right <= bounds("wide_list_pane").right + 1f, "it stays inside the list pane")
+        assertTrue(has("amount") && bounds("amount").left >= panel.right - 1f, "the open entry is beside it, not under it")
         tap("search_category"); tap("search_cat_Food"); waitTextOf("filters_count", "Show 3 results")
-        closePanel(); waitGone("filters_panel"); waitFor("search_active_chip_category")
+        closePanel(); waitGone("filters_panel"); waitFor("search_active_chip_category"); assertTrue(has("amount"))
     }
 }
