@@ -26,6 +26,12 @@ data class EntryDetails(
     val sourceRef: String? = null,
     /** The entry's tags. Null leaves its tags as they are (an import or restore that knows nothing about tags must not wipe them); empty clears them. */
     val tags: List<String>? = null,
+    /**
+     * Travel mode: this entry is NEW money the person is recording now (typed, captured, imported), so the tag of the trip its own date falls in is added when it is CREATED: an expense dated inside
+     * an enabled trip gets the trip's tag, a refund of a tagged trip expense gets that tag too. Never applied to an entry that already exists (an edit, an Undo, a restore), so a tag the person took off
+     * stays off; false for every path that must not tag (backup restore, type change, repeating items, bill payments). See [TripStore] and docs/TRAVEL_MODE.md.
+     */
+    val tripTag: Boolean = false,
 )
 
 /** Column values for one entry row, plus its split and share lists. */

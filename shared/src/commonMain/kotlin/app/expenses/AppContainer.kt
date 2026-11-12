@@ -76,6 +76,10 @@ class AppContainer(private val platform: Platform) {
 
             /** "Fix this balance": what the bank app says moves an account's opening balance by the difference, with one line of history and an exact Undo. No entry is made. */
             val balanceFixes: app.expenses.core.storage.BalanceFixes = app.expenses.core.storage.BalanceFixes(db, store)
+
+            /** Travel mode: the trips (the table is owned by [store], which tags new expenses by their date) and the counted "Tag N earlier entries" with its exact Undo. */
+            val trips: app.expenses.core.storage.TripStore get() = store.trips
+            val tripTagging: app.expenses.core.storage.TripTagging = app.expenses.core.storage.TripTagging(store)
         }
 
         /** The database exists but its key is gone. Nothing is created or deleted until the user chooses. */

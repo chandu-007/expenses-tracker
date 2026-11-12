@@ -25,6 +25,7 @@ class SchemaUpgradeTest {
         d.execute(null, "DROP TABLE entry_tag", 0)
         d.execute(null, "DROP TABLE saved_search", 0)
         d.execute(null, "DROP TABLE entry_replaced", 0)
+        d.execute(null, "DROP TABLE trip", 0)
         d.execute(null, "DROP TABLE attachment", 0)
         d.execute(null, "ALTER TABLE recurring DROP COLUMN kind", 0)
         d.execute(null, "ALTER TABLE recurring DROP COLUMN to_account_id", 0)
@@ -49,14 +50,17 @@ class SchemaUpgradeTest {
         SavedSearchStore(db, clock) { 2L }.let { it.save(SavedSearch("s", "Cabs", "uber")); assertEquals(listOf("Cabs"), it.list().map { s -> s.name }) }
         assertEquals(emptyList(), app.expenses.core.storage.RecurringStore(db, clock, { 1L }, ledger).list(), "the repeating-item table has its new columns")
         ledger.replaced.mark("old", "e", "CHANGED"); assertEquals("e", ledger.replaced.by("old")); assertEquals(listOf("old"), db.schemaQueries.allReplaced().executeAsList().map { it.entry_id }, "the table of replaced entries exists after the upgrade")
+        ledger.trips.save(app.expenses.core.domain.Trip("goa", "Goa", "Trip: Goa", 20_400, 20_406)); assertEquals(listOf("goa"), ledger.trips.all().map { it.id }, "the table of trips exists after the upgrade")
+        SchemaUpgrade.ensureLatest(d); assertEquals(listOf("goa"), ledger.trips.all().map { it.id }, "a second run keeps the trips")
     }
 
     @Test
     fun runningItOnACurrentDatabaseOrTwiceChangesNothing() {
         val d = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { ExpensesDb.Schema.create(it) }
         val db = ExpensesDb(d)
-        LedgerStore(db, HlcClock("n")) { 1L }.saveAccount(Account(AccountId("a"), "A", AccountType.BANK, Currency.INR, 500, true))
+        LedgerStore(db, HlcClock("n")) { 1L }.also { it.saveAccount(Account(AccountId("a"), "A", AccountType.BANK, Currency.INR, 500, true)); it.trips.save(app.expenses.core.domain.Trip("goa", "Goa", "Trip: Goa", 20_400, 20_406, true, 5_000)) }
         SchemaUpgrade.ensureLatest(d); SchemaUpgrade.ensureLatest(d)
+        assertEquals(listOf(app.expenses.core.domain.Trip("goa", "Goa", "Trip: Goa", 20_400, 20_406, true, 5_000)), LedgerStore(db, HlcClock("n")) { 1L }.trips.all(), "running it again leaves the trips as they were")
         val a = db.schemaQueries.selectAccounts().executeAsList().single()
         assertEquals(500L, a.opening_minor); assertEquals(1L, a.archived)
     }

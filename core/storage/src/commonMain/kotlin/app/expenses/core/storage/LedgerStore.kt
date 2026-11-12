@@ -45,6 +45,14 @@ class LedgerStore(
     /** Which entries another entry took the place of (type changes). Brought back to life, an entry loses its record: see [restore]. */
     val replaced = ReplacedEntries(db, clock, nowMillis)
 
+    /**
+     * The calendar the days of a trip are read in: the phone's current zone. A test sets it to check a zone, or the edge between two days.
+     */
+    var zone: () -> kotlinx.datetime.TimeZone = { kotlinx.datetime.TimeZone.currentSystemDefault() }
+
+    /** The trips of Travel mode, and the check [save] makes when it creates an entry with [EntryDetails.tripTag]. */
+    val trips = TripStore(db, clock, nowMillis) { zone() }
+
     // ---- accounts ----
 
     fun saveAccount(account: Account) {
@@ -97,6 +105,34 @@ class LedgerStore(
             .take(limit.toInt()).toList()
     }
 
+    /** What [addTag] did. */
+    enum class TagAdd { ADDED, ALREADY, FULL, GONE }
+
+    /**
+     * Adds one tag to an entry that already exists, without an edit of anything else (the history shows it as a change of tags). [GONE] when the entry is not there, is deleted or, with [expenseOnly], is not an
+     * expense; [ALREADY] when it has the tag (ignoring case); [FULL] when it already holds the most tags an entry may. Call inside [atomically] when doing several.
+     */
+    fun addTag(id: EntryId, tag: String, expenseOnly: Boolean = false): TagAdd {
+        val n = TagRules.normalize(tag) ?: return TagAdd.GONE
+        val row = q.entryById(id.value).executeAsOneOrNull()
+        if (row == null || row.deleted == 1L || expenseOnly && row.kind != "EXPENSE") return TagAdd.GONE
+        val before = q.tagsOf(id.value).executeAsList()
+        if (before.any { it.equals(n, ignoreCase = true) }) return TagAdd.ALREADY
+        if (before.size >= TagRules.MAX_PER_ENTRY) return TagAdd.FULL
+        q.insertTag(id.value, q.tagSpelling(n).executeAsOneOrNull() ?: n)
+        logChanges("entry", id.value, mapOf("tags" to TagRules.joined(before).ifEmpty { null }), mapOf("tags" to TagRules.joined(q.tagsOf(id.value).executeAsList()).ifEmpty { null }))
+        return TagAdd.ADDED
+    }
+
+    /** Takes one tag (ignoring case) off an entry, logged like [addTag]. False when the entry did not have it. */
+    fun removeTag(id: EntryId, tag: String): Boolean {
+        val before = q.tagsOf(id.value).executeAsList()
+        val held = before.firstOrNull { it.equals(tag, ignoreCase = true) } ?: return false
+        q.deleteTag(id.value, held)
+        logChanges("entry", id.value, mapOf("tags" to TagRules.joined(before).ifEmpty { null }), mapOf("tags" to TagRules.joined(q.tagsOf(id.value).executeAsList()).ifEmpty { null }))
+        return true
+    }
+
     /** Runs [block] as one all-or-nothing change: if anything in it throws, none of it is kept. */
     fun <T> atomically(block: () -> T): T = db.transactionWithResult { block() }
 
@@ -113,6 +149,8 @@ class LedgerStore(
             require(before == null || before.kind == cols.kind) { "The type of an entry cannot be changed here." }
             validate(entry)
             val beforeFields = before?.let { EntryMapping.fields(it, splitsOf(it), sharesOf(it)) }
+            // Travel mode: only a NEW entry is ever tagged for a trip, by its own date; an edit never re-adds a tag the person took off.
+            val tripTag = if (before == null && details.tripTag) tripTagFor(entry) else null
 
             q.upsertEntryFull(
                 cols.id, cols.kind, cols.occurredAt, cols.accountId, cols.counterAccountId, cols.amountMinor, cols.currency,
@@ -127,8 +165,9 @@ class LedgerStore(
             val row = q.entryById(cols.id).executeAsOne()
             val fieldsAfter = LinkedHashMap(EntryMapping.fields(row, splitsOf(row), sharesOf(row)))
             val tagsBefore = q.tagsOf(cols.id).executeAsList()
-            if (details.tags != null) {
-                val wanted = TagRules.clean(details.tags).map { q.tagSpelling(it).executeAsOneOrNull() ?: it }
+            if (details.tags != null || tripTag != null) {
+                // the trip's tag goes last: an entry that already holds ten tags is left as it is (the person's own tags come first)
+                val wanted = TagRules.clean((details.tags ?: tagsBefore) + listOfNotNull(tripTag)).map { q.tagSpelling(it).executeAsOneOrNull() ?: it }
                 q.deleteTags(cols.id)
                 wanted.forEach { q.insertTag(cols.id, it) }
             }
@@ -218,6 +257,20 @@ class LedgerStore(
             .mapValues { Money(it.value, currency) }
 
     // ---- internals ----
+
+    /**
+     * The tag a NEW entry gets for Travel mode, or null. An expense dated inside a trip that is on gets the trip's tag; a refund gets the trip tag its expense carries (the trip that covered the expense's day,
+     * on or off), so the refund shows with the trip in Search as it already does in the reports. Nothing else is tagged: income, transfers, loans and friends' payments never.
+     */
+    private fun tripTagFor(entry: DomainEntry): String? = when (entry) {
+        is Expense -> trips.tripAt(entry.occurredAt)?.tag
+        is Refund -> {
+            val expense = q.entryById(entry.refundsEntry.value).executeAsOneOrNull()
+            val held = if (expense == null) emptyList() else q.tagsOf(expense.id).executeAsList()
+            if (held.isEmpty()) null else trips.tripsCovering(expense!!.occurred_at).firstNotNullOfOrNull { t -> held.firstOrNull { it.equals(t.tag, ignoreCase = true) } }
+        }
+        else -> null
+    }
 
     /** Points any category that was merged into another at its target, so nothing is ever stored against a removed category. */
     private fun redirectMergedCategories(entry: DomainEntry): DomainEntry {

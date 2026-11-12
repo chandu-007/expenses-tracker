@@ -54,6 +54,9 @@ class ReportStore(private val db: ExpensesDb, private val ledger: LedgerStore) {
         Category(it.id, it.name, it.parent_id, it.color, it.position.toInt(), it.hidden == 1L)
     }
 
+    /** The category rows of spending that is already added up ([spent]: net spending by category id, null for none), subcategories nested; every category counts, deleted ones too, so old spending keeps its name. */
+    fun breakdownOf(spent: Map<String?, Money>, currency: Currency): List<CategoryRow> = ReportMath.breakdown(spent, categories(), currency)
+
     fun breakdown(period: DatePeriod, zone: TimeZone, currency: Currency): List<CategoryRow> =
         ReportMath.breakdown(spentByCategory(period, zone, currency), categories(), currency)
 

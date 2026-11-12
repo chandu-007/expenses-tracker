@@ -131,8 +131,8 @@ class StatementImporter(private val db: ExpensesDb, private val ledger: LedgerSt
             }
             val at = dayStart + NOON_MILLIS
             val money = Money(t.minor, currency)
-            // labels only when the file had some: null leaves an entry's labels alone, which for a new entry is none
-            val details = EntryDetails(merchant = t.description.ifBlank { null }, note = t.note, source = SOURCE, sourceRef = hash, tags = t.tags.takeIf { it.isNotEmpty() })
+            // labels only when the file had some: null leaves an entry's labels alone, which for a new entry is none; tripTag: an expense dated inside a trip that is on is tagged for it (Travel mode), by its own date
+            val details = EntryDetails(merchant = t.description.ifBlank { null }, note = t.note, source = SOURCE, sourceRef = hash, tags = t.tags.takeIf { it.isNotEmpty() }, tripTag = true)
             val category = t.categoryId?.let(::CategoryId)
             when {
                 counter != null -> {

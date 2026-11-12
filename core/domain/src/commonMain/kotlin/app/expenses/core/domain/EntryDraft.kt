@@ -61,6 +61,8 @@ data class EntryDraft(
     val expectFrom: String = "",
     val expectPersonId: String = "",
     val expectAmount: String = "",
+    /** For a new expense: the person took off the Travel mode tag the form offered for its date ("Tagged for Goa trip", x), so saving does not add it. Has no effect on an entry that already exists. */
+    val noTripTag: Boolean = false,
 )
 
 /** Sharing one bill equally between you and some friends. */

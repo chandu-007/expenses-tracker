@@ -156,10 +156,10 @@ internal fun kindChangeNote(from: DraftKind, to: DraftKind, wasSplit: Boolean, c
 typealias DraftSave = (draft: EntryDraft, saveAsTemplate: Boolean) -> Unit
 
 private val DraftSaver = listSaver<EntryDraft, Any?>(
-    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith, d.foreignCode, d.foreignAmount, d.foreignRate, d.splitAmounts, d.paidBy, d.expectBack, d.expectFrom, d.expectPersonId, d.expectAmount) },
+    save = { d -> listOf(d.id, d.kind.name, d.amountText, d.category, d.accountId, d.toAccountId, d.note, d.occurredAt, d.refundsEntry, d.refundableMinor, d.splits.flatMap { listOf(it.category, it.amountText) }, d.tags, d.personId, d.gave, d.splitWith, d.foreignCode, d.foreignAmount, d.foreignRate, d.splitAmounts, d.paidBy, d.expectBack, d.expectFrom, d.expectPersonId, d.expectAmount, d.noTripTag) },
     restore = { l ->
         @Suppress("UNCHECKED_CAST") val parts = (l[10] as List<String>).chunked(2).map { SplitDraft(it[0], it[1]) }
-        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>), l[15] as String, l[16] as String, l[17] as String, @Suppress("UNCHECKED_CAST") (l[18] as List<String>), l[19] as String, l[20] as Boolean, l[21] as String, l[22] as String, l[23] as String)
+        EntryDraft(l[0] as String?, DraftKind.valueOf(l[1] as String), l[2] as String, l[3] as String, parts, l[4] as String, l[5] as String, l[6] as String, l[7] as Long, l[8] as String?, l[9] as Long, @Suppress("UNCHECKED_CAST") (l[11] as List<String>), l[12] as String, l[13] as Boolean, @Suppress("UNCHECKED_CAST") (l[14] as List<String>), l[15] as String, l[16] as String, l[17] as String, @Suppress("UNCHECKED_CAST") (l[18] as List<String>), l[19] as String, l[20] as Boolean, l[21] as String, l[22] as String, l[23] as String, l[24] as Boolean)
     },
 )
 
@@ -209,6 +209,8 @@ fun EntryFormScreen(
     restored: EntryDraft? = null,
     /** Told of every change of the draft, so [restored] can be given to the next instance. */
     onDraft: ((EntryDraft) -> Unit)? = null,
+    /** Travel mode: the trips that are on. A new expense dated inside one shows "Tagged for Goa trip" (the tag is added when it is saved) with a cross that takes it off for this entry. */
+    tripWindows: List<app.expenses.TripWindowUi> = emptyList(),
 ) {
     var draft by rememberSaveable(stateSaver = DraftSaver) { mutableStateOf(restored ?: start) }
     // a SideEffect, not a LaunchedEffect: it runs in the frame that drew the change, before anything that follows it (a fold) can take this form out of the composition
@@ -359,6 +361,11 @@ fun EntryFormScreen(
                 }
             }
             OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.testTag("date")) { Text(dateLabel) }
+            if (start.id == null && draft.kind == DraftKind.EXPENSE) {
+                // the trip is found by the entry's own date, which the person may change: the chip follows it
+                val day = dateOfMillis(draft.occurredAt, zone).toEpochDays().toLong()
+                tripWindows.firstOrNull { day >= it.startDay && day <= it.endDay }?.let { t -> TripTagChip(t, on = !draft.noTripTag) { draft = draft.copy(noTripTag = !draft.noTripTag) } }
+            }
 
             if (draft.kind == DraftKind.LOAN) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

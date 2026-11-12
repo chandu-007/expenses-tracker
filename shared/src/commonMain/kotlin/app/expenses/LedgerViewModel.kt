@@ -3,6 +3,11 @@ package app.expenses
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.expenses.core.domain.BudgetPeriod
+import app.expenses.core.domain.TripField
+import app.expenses.core.domain.TripProblem
+import app.expenses.core.domain.TripResult
+import app.expenses.core.domain.TripRules
+import app.expenses.core.domain.TripSummaryMath
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.HomeNudge
@@ -747,6 +752,10 @@ sealed interface UiState {
         val nudgeSnoozes: Map<HomeNudge, NudgeSnooze> = emptyMap(),
         /** The person turned on putting yearly bills aside month by month (it is taken off safe to spend). */
         val sinkingFunds: Boolean = false,
+        /** Travel mode: the trip that is on today, for the card under Home's summary (informational, not a nudge: docs/HOME_NUDGES.md); null when none is. */
+        val tripCard: TripCardUi? = null,
+        /** The trips that are on, for the add form's "Tagged for Goa trip" chip: a new expense whose date falls inside one gets its tag. Almost always empty or one. */
+        val tripWindows: List<TripWindowUi> = emptyList(),
         val message: String? = null,
         val undo: UndoUi? = null,
     ) : UiState
@@ -2294,7 +2303,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         val billsCategory = ok.categories.list().firstOrNull { it.parentId == null && !it.hidden && it.name.equals("Bills", ignoreCase = true) }?.id.orEmpty()
                         val draft = if (isCard) EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, b.title, nowMillis())
                         else EntryDraft(null, DraftKind.EXPENSE, amountText, billsCategory, emptyList(), payFromId, "", b.title, nowMillis())
-                        entryId = try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
+                        // a bill paid is not spending on a trip: no Travel mode tag
+                        entryId = try { ok.store.atomically { EntryActions(ok).save(draft, tripTag = false) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
                     }
                     // the bill's words are cleared once it is paid, so an entry recorded from it keeps them first
                     if (entryId != null) b.body?.let { ok.origins.put(entryId, app.expenses.core.storage.OriginStore.kindOf(b.source, b.sender), b.sender, it, b.receivedAt) }
@@ -2808,7 +2818,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val (sourceRef, refused) = sourceRefFor(ok, i)
                     if (refused != null) return@write refused
                     ok.store.atomically {
-                        ok.store.save(entry, EntryDetails(merchant = title, note = null, source = "sms", sourceRef = sourceRef))
+                        // a text added from To review is new money recorded by its own date: an expense inside a trip that is on is tagged for it (Travel mode)
+                        ok.store.save(entry, EntryDetails(merchant = title, note = null, source = "sms", sourceRef = sourceRef, tripTag = true))
                         i.body?.let { ok.origins.put(entry.id.value, app.expenses.core.storage.OriginStore.kindOf(i.source, i.sender), i.sender, it, i.receivedAt) }
                         ok.inbox.confirm(id, entry.id.value)
                     }
@@ -3882,6 +3893,107 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     private fun loadRates(ok: AppContainer.Opened.Ok) { _rates.value = CurrencyChoices.ALL.mapNotNull { c -> ok.templates.setting("rate_${c.code}")?.takeIf { it.isNotBlank() }?.let { c.code to it } }.toMap() }
 
+    // ---- travel mode ----
+
+    private val _trips = MutableStateFlow<TripsUi?>(null)
+    val trips: StateFlow<TripsUi?> get() = _trips
+
+    private val _tripSummary = MutableStateFlow<TripSummaryUi?>(null)
+    val tripSummary: StateFlow<TripSummaryUi?> get() = _tripSummary
+    private var tripSummaryId: String? = null
+
+    /** "Tag N earlier entries?" waiting for the person's answer after a trip was saved; kept here so a turn of the phone does not lose the question. */
+    private val _tripOffer = MutableStateFlow<TripOfferUi?>(null)
+    val tripOffer: StateFlow<TripOfferUi?> get() = _tripOffer
+
+    private val _tripUndo = MutableStateFlow<ScreenUndo?>(null)
+    val tripUndo: StateFlow<ScreenUndo?> get() = _tripUndo
+
+    /** What the last "Tag earlier entries" tagged, held (in memory, like every screen Undo) while its Undo bar is offered. */
+    private var heldTagging: app.expenses.core.storage.TripTagging.Applied? = null
+
+    private fun tripsUi(ok: AppContainer.Opened.Ok): TripsUi = TripsUi(TripUiBuilder.rows(ok.trips.all(), todayLocal().toEpochDays().toLong(), inr))
+
+    private fun tripSummaryUi(ok: AppContainer.Opened.Ok, id: String): TripSummaryUi? {
+        val trip = ok.trips.get(id) ?: return null
+        val today = todayLocal().toEpochDays().toLong()
+        val lines = ok.trips.lines(trip, inr)
+        val s = TripSummaryMath.of(trip, lines.lines, systemZone(), today, lines.capped)
+        val rows = ok.reports.breakdownOf(s.byCategory.mapValues { Money(it.value, inr) }, inr)
+        return TripUiBuilder.summary(trip, s, today, inr, rows, ok.categories.list().associate { it.id to it.colorArgb }, ok.tripTagging.offer(trip).count)
+    }
+
+    /** An open trip page is kept in step with whatever changed (an entry saved or deleted, a trip edited, an Undo). Costs nothing while neither is open. */
+    private fun refreshTripPages(ok: AppContainer.Opened.Ok) {
+        if (_trips.value != null) _trips.value = tripsUi(ok)
+        tripSummaryId?.let { id -> _tripSummary.value = tripSummaryUi(ok, id) }
+    }
+
+    fun openTrips() = withStore { ok -> _trips.value = tripsUi(ok) }
+    fun closeTrips() { _trips.value = null; _tripOffer.value = null; if (tripSummaryId == null) { _tripUndo.value = null; heldTagging = null } }
+    fun openTripSummary(id: String) { tripSummaryId = id; withStore { ok -> _tripSummary.value = tripSummaryUi(ok, id) } }
+    fun closeTripSummary() { tripSummaryId = null; _tripSummary.value = null; if (_trips.value == null) { _tripUndo.value = null; heldTagging = null } }
+
+    /**
+     * Saves a trip ([id] null: a new one). [onDone] (on the main thread) gets the reason in plain words when it was refused (nothing is changed), or the offer to tag the earlier entries that lie in the days the
+     * trip gained (also kept in [tripOffer]); creating a trip or growing its dates never tags anything by itself.
+     */
+    fun saveTrip(id: String?, name: String, tag: String, startDay: Long?, endDay: Long?, budgetText: String, enabled: Boolean, onDone: (TripSaveOutcome) -> Unit) {
+        viewModelScope.launch(BACKGROUND) {
+            val outcome = container.write { ok ->
+                val before = id?.let { ok.trips.get(it) }
+                val tripId = id ?: Uuid.random().toString()
+                when (val r = TripRules.build(tripId, name, tag, startDay, endDay, budgetText, enabled, ok.trips.all(), inr)) {
+                    is TripResult.Problem -> TripSaveOutcome(r.problem, null)
+                    is TripResult.Ok -> try {
+                        ok.trips.save(r.trip)
+                        val days = TripRules.newlyCovered(before, r.trip)
+                        val count = if (days.isEmpty()) 0 else ok.tripTagging.offer(r.trip, days).count
+                        val offer = if (count > 0) TripOfferUi(r.trip.id, r.trip.name, r.trip.tag, count, days) else null
+                        _tripOffer.value = offer
+                        refresh(ok)
+                        TripSaveOutcome(null, offer)
+                    } catch (e: IllegalArgumentException) { TripSaveOutcome(TripProblem(TripField.DATES, e.message ?: "That trip could not be saved."), null) }
+                }
+            } ?: TripSaveOutcome(TripProblem(TripField.NAME, "Expenses could not open its data."), null)
+            withContext(Dispatchers.Main) { onDone(outcome) }
+        }
+    }
+
+    /** Deletes a trip. The tag it put on entries stays: it is an ordinary tag. */
+    fun deleteTrip(id: String) = withStore { ok -> ok.trips.delete(id); refresh(ok) }
+
+    /** "End trip today": the last day becomes today (only while the trip is on and has days left). */
+    fun endTripToday(id: String) = withStore { ok ->
+        val t = ok.trips.get(id) ?: return@withStore
+        val today = todayLocal().toEpochDays().toLong()
+        if (!t.covers(today) || today >= t.endDay) return@withStore
+        ok.trips.save(t.copy(endDay = today)); refresh(ok)
+    }
+
+    fun dismissTripOffer() { _tripOffer.value = null }
+
+    /** "Tag N earlier entries": puts the trip's tag on the expenses of [days] (null: all of the trip's days) that do not have it, in one step with an Undo bar. */
+    fun tagEarlier(tripId: String, days: List<LongRange>?) = withStore { ok ->
+        _tripOffer.value = null
+        val trip = ok.trips.get(tripId) ?: return@withStore
+        val done = ok.tripTagging.apply(ok.tripTagging.offer(trip, days))
+        if (done.tagged.isEmpty()) { refresh(ok); return@withStore }
+        heldTagging = done
+        val n = done.tagged.size
+        _tripUndo.value = ScreenUndo(tripId, "Tagged $n ${if (n == 1) "entry" else "entries"} \"${trip.tag}\"" + if (done.full > 0) ". ${done.full} already ${if (done.full == 1) "has" else "have"} ten tags and ${if (done.full == 1) "was" else "were"} left out" else "")
+        refresh(ok)
+    }
+
+    /** Undo of the last "Tag earlier entries": the tag comes off exactly the entries it was put on. */
+    fun undoTripTagging(id: String) {
+        val held = heldTagging?.takeIf { it.tripId == id } ?: return
+        heldTagging = null; _tripUndo.value = null // taken now: the bar reports itself gone right after the tap
+        withStore { ok -> ok.tripTagging.undo(held); refresh(ok) }
+    }
+
+    fun tripUndoGone(id: String) { if (_tripUndo.value?.id == id) { _tripUndo.value = null; heldTagging = null } }
+
     // ---- savings goals ----
 
     private val _goals = MutableStateFlow<GoalsUi?>(null)
@@ -4312,7 +4424,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 _data.update { it.copy(pending = null) }
                 container.write { ok -> refresh(ok) }
                 loadBackupFiles()
-                "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are." + replacedEntriesText(report.replacedNotRestored, report.replacedRemoved) + (restored.files?.let { restoredFilesText(it, report.added.attachments, restored.skipped) } ?: "")
+                "Restored: ${report.added.entries} entries added, ${report.alreadyHere.entries} were already here and were left as they are." + replacedEntriesText(report.replacedNotRestored, report.replacedRemoved) + tripsRestoredText(report.tripsAdded) + (restored.files?.let { restoredFilesText(it, report.added.attachments, restored.skipped) } ?: "")
             } finally {
                 restoreFlight.leave()
             }
@@ -4544,6 +4656,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val lastAccount = ok.templates.setting(LAST_ACCOUNT)?.takeIf { id -> active.any { it.id == id } } ?: active.firstOrNull()?.id ?: "cash"
         val layout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT))
         balancesVisible = HomeSection.BALANCES in layout.visible()
+        // Travel mode: the few trips that are on (one small read); only while one is on today is anything summed, and then from its own days
+        val tripsOn = ok.trips.enabled()
+        val tripToday = today.toEpochDays().toLong()
+        val tripCard = TripRules.activeOn(tripsOn, tripToday)?.let { t -> TripUiBuilder.card(t, tripToday, ok.trips.totals(t, inr).first, inr) }
+        refreshTripPages(ok)
         scheduleSlowFigures()
         seenSignature = container.dataSignature(ok) // read inside the write lock, after everything this rebuild wrote: anything that moves it later happened without this screen
         refreshCount++
@@ -4593,6 +4710,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             categoriseNudge = categoriseCache,
             nudgeSnoozes = nudgeSnoozes(ok),
             sinkingFunds = ok.templates.setting(SETTING_SINKING_FUNDS) == "1",
+            tripCard = tripCard,
+            tripWindows = tripsOn.map { TripWindowUi(it.id, it.name, it.tag, it.startDay, it.endDay) },
             undo = undo,
         )
     }

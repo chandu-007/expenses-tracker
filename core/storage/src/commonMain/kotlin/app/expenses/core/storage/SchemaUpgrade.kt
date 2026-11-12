@@ -51,6 +51,8 @@ object SchemaUpgrade {
         run(driver, "CREATE TABLE IF NOT EXISTS entry_origin (entry_id TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, sender TEXT, text TEXT NOT NULL, received_at INTEGER)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_expect (entry_id TEXT NOT NULL PRIMARY KEY, from_text TEXT, person_id TEXT, expected_minor INTEGER NOT NULL, closed INTEGER NOT NULL DEFAULT 0)")
         run(driver, "CREATE TABLE IF NOT EXISTS entry_replaced (entry_id TEXT NOT NULL PRIMARY KEY, replaced_by TEXT NOT NULL, reason TEXT NOT NULL)")
+        run(driver, "CREATE TABLE IF NOT EXISTS trip (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, tag TEXT NOT NULL, start_day INTEGER NOT NULL, end_day INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, daily_budget_minor INTEGER)")
+        run(driver, "CREATE INDEX IF NOT EXISTS trip_days ON trip(start_day, end_day)")
     }
 
     private fun run(driver: SqlDriver, sql: String) { driver.execute(null, sql, 0) }

@@ -347,6 +347,35 @@ class AccessibilityUiTest {
         check("More", "more_page")
     }
 
+    /** Travel mode: a trip that is on today, with one tagged expense. */
+    private fun seedTrip() {
+        val today = java.time.LocalDate.now().toEpochDay()
+        runBlocking {
+            container.write { ok ->
+                ok.trips.save(app.expenses.core.domain.Trip("a11y-goa", "Goa", "Trip: Goa", today - 1, today + 2, true, 100_000))
+                ok.store.save(
+                    Expense(EntryId("a11yt1"), System.currentTimeMillis() - 3_600_000L, AccountId("cash"), Money(45_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(45_000, inr)))),
+                    EntryDetails(merchant = "Beach shack", tripTag = true),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun travelModeList() { seedTrip(); launch(); compose.openMore(); tap("open_trips"); check("Travel mode: the trips", "trips_list") }
+
+    @Test
+    fun travelModeForm() { seedTrip(); launch(); compose.openMore(); tap("open_trips"); waitFor("trips_list"); tap("trip_new"); check("Travel mode: new trip", "trip_form") }
+
+    @Test
+    fun travelModeSummary() { seedTrip(); launch(); compose.openMore(); tap("open_trips"); waitFor("trips_list"); tap("trip_open_Goa"); check("Travel mode: a trip's summary", "trip_summary") }
+
+    @Test
+    fun homeWithTheTripCard() { seedHome(); seedTrip(); launch(); check("Home with the trip card", "home_trip_card") }
+
+    @Test
+    fun theAddFormsTripChip() { seedTrip(); launch(); tap("add"); waitFor("amount"); check("Add form with the trip chip", "trip_chip") }
+
     companion object {
         /** Every finding seen in this process, by screen, check, type and element (the same finding is reported again on every action). */
         private val found = java.util.concurrent.ConcurrentHashMap<String, Finding>()

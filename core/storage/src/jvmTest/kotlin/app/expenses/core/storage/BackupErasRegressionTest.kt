@@ -54,7 +54,7 @@ class BackupErasRegressionTest {
         for (era in eras) {
             val data = read(era)
             assertEquals(era.entryCount, data.entries.size, era.version)
-            assertTrue(data.replaced.isEmpty() && data.balanceFixes.isEmpty(), era.version)
+            assertTrue(data.replaced.isEmpty() && data.balanceFixes.isEmpty() && data.trips.isEmpty(), era.version)
             val phone = Device("fresh_" + era.version)
             val report = phone.backup.restore(data)
             assertEquals(era.liveIds, phone.liveIds(), era.version)
@@ -131,6 +131,7 @@ class BackupErasRegressionTest {
             val payload = text.substringAfter('\n')
             assertFalse("\"replaced\"" in payload, era.version)
             assertFalse("\"balanceFixes\"" in payload, era.version)
+            assertFalse("\"trips\"" in payload, era.version)
             assertFalse("\"replaced\"" in text.substringBefore('\n'), era.version)
             // and what it wrote restores into another fresh phone to the same ledger
             val other = Device("export2_" + era.version)

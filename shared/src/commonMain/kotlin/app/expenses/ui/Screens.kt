@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -156,6 +157,9 @@ fun EntryListScreen(
     onOpenSubscriptions: () -> Unit = {},
     onOpenTransferCandidates: () -> Unit = {},
     onOpenGoals: () -> Unit = {},
+    /** Travel mode: the trips page (More), and the summary of the trip that is on (Home's card). */
+    onOpenTrips: () -> Unit = {},
+    onOpenTrip: (String) -> Unit = {},
     onOpenLoans: () -> Unit,
     onOpenBills: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
@@ -332,6 +336,7 @@ fun EntryListScreen(
                         MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
                         MoreRow("open_calendar", Icons.Outlined.CalendarMonth, "Calendar", "Spending day by day", onClick = onOpenCalendar),
                         MoreRow("open_goals", Icons.Outlined.Flag, "Savings goals", "Save up for a trip or a laptop", onClick = onOpenGoals),
+                        MoreRow("open_trips", Icons.Outlined.Flight, "Travel mode", state.tripCard?.let { "${it.title} \u00B7 ${it.dayText}" } ?: "Tag everything you spend on a trip", onClick = onOpenTrips),
                         MoreRow("open_subscriptions", Icons.Outlined.Autorenew, "Subscriptions", "Charges that keep coming, and what they cost a year", onClick = onOpenSubscriptions),
                         MoreRow("open_earlier_spending", Icons.Outlined.History, "Bring in earlier spending", "Started after you had already spent? Import a statement, add old entries, set balances", onClick = onOpenEarlier),
                         MoreRow("open_transfer_candidates", Icons.Outlined.CompareArrows, "Transfer candidates", "Cash withdrawals and moves between your accounts that are counted as spending", onClick = onOpenTransferCandidates),
@@ -384,6 +389,8 @@ fun EntryListScreen(
                             if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp))
                         }
                     }
+                    // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
+                    state.tripCard?.let { TripHomeCard(it) { onOpenTrip(it.id) } }
                     // One card at a time, the first of HomeNudges' order that is not put off; what else is waiting is one line under it (see docs/HOME_NUDGES.md)
                     val bills = state.billPeek
                     val nudgeCounts = homeNudgeCounts(state)

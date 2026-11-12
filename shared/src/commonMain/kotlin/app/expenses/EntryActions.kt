@@ -72,7 +72,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
     fun recordExpense(amount: Money, category: String, note: String?, accountId: String, occurredAt: Long = now(), id: String = Uuid.random().toString()): String {
         ok.store.save(
             Expense(EntryId(id), occurredAt, AccountId(accountId), amount, listOf(CategorySplit(CategoryId(category), amount))),
-            EntryDetails(merchant = note),
+            EntryDetails(merchant = note, tripTag = true), // a quick add is a new expense by its own date: tagged for the trip it falls in (Travel mode)
         )
         ok.templates.putSettingIfChanged(LAST_CATEGORY, category)
         ok.templates.putSettingIfChanged(LAST_ACCOUNT, accountId)
@@ -218,8 +218,11 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
      * Saves a draft as a new entry ([EntryDraft.id] null) or over an existing one. When editing, the note, source and source reference
      * already stored with the entry are kept, so editing an expense captured from an SMS does not lose where it came from.
      * Throws [IllegalArgumentException] with a reason the user can read.
+     *
+     * Travel mode: a NEW expense (or the refund of a tagged trip expense) is given the tag of the trip its own date falls in, in the same save, unless the person took that tag off in the form
+     * ([EntryDraft.noTripTag]) or the caller says it is not spending on a trip ([tripTag] false: a bill paid). An entry that already exists is never tagged here.
      */
-    fun save(draft: EntryDraft, teach: Boolean = true): String {
+    fun save(draft: EntryDraft, teach: Boolean = true, tripTag: Boolean = true): String {
         val existing = draft.id?.let { ok.db.schemaQueries.entryById(it).executeAsOneOrNull()?.takeIf { r -> r.deleted == 0L } ?: throw IllegalArgumentException("This entry no longer exists") }
         val id = draft.id ?: Uuid.random().toString()
         val entry = when (val r = EntryDrafts.build(draft, EntryId(id), BaseCurrency.current)) {
@@ -232,7 +235,7 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         val typed = draft.note.trim().ifEmpty { null }
         // read before the save replaces it: the category this captured entry was in
         val categoryBefore = if (existing?.source == "sms") (if (existing.kind == "INCOME") existing.category_id else ok.db.schemaQueries.splitsOf(id).executeAsList().singleOrNull()?.category_id) else null
-        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = if (loan) typed else existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, note = if (loan) typed else null, tags = draft.tags))
+        ok.store.save(entry, if (existing != null) EntryDetails(merchant = text, note = if (loan) typed else existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags) else EntryDetails(merchant = text, note = if (loan) typed else null, tags = draft.tags, tripTag = tripTag && !draft.noTripTag))
         // Correcting a captured entry later (in the editor, or by a bulk change of category), teaches the same lesson as choosing in the inbox: next time that payee starts there. Only a changed
         // category teaches (saving the same entry for another reason does not count as a choice), and the payee is read from the original text so that it is the key To review looks up (the
         // entry's own title may be a name the person gave it).

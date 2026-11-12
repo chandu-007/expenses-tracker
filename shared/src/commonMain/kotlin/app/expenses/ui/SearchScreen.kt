@@ -117,6 +117,10 @@ fun SearchScreen(
     onClearRecent: () -> Unit = {},
     /** An account to search inside from the start (Home's "Search this account"); the person may change it. */
     initialAccountId: String? = null,
+    /** A tag and days to search with from the start (a trip's "See all entries"); the person may change them. */
+    initialTag: String? = null,
+    initialFromDay: Long? = null,
+    initialToDay: Long? = null,
 ) {
     var savingName by rememberSaveable { mutableStateOf<String?>(null) }
     var savingProblem by remember { mutableStateOf<String?>(null) }
@@ -152,17 +156,17 @@ fun SearchScreen(
     var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
     var kind by rememberSaveable { mutableStateOf(SearchKind.ANY) }
     var range by rememberSaveable { mutableStateOf(SearchRange.ANY) }
-    var tag by rememberSaveable { mutableStateOf<String?>(null) }
+    var tag by rememberSaveable { mutableStateOf(initialTag) }
     // chosen days (since 1970-01-01, both included, either may be open) and the one account searched in
-    var fromDay by rememberSaveable { mutableStateOf<Long?>(null) }
-    var toDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var fromDay by rememberSaveable { mutableStateOf(initialFromDay) }
+    var toDay by rememberSaveable { mutableStateOf(initialToDay) }
     var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
     var pickingDay by rememberSaveable { mutableStateOf<String?>(null) }
     val dateProblem = SearchDates.problem(fromDay, toDay)
     val focus = remember { FocusRequester() }
     // Search from the tab starts with the cursor in the box. Opened from an account the list of that account is already there to read, and a keyboard over it hid more than half of it: the box is one tap away.
     // Coming back from an entry opened out of the results (the search is still running) is the same: the results are what is wanted, not the keyboard.
-    LaunchedEffect(Unit) { if (initialAccountId == null && !state.hasConditions) focus.requestFocus() }
+    LaunchedEffect(Unit) { if (initialAccountId == null && initialTag == null && !state.hasConditions) focus.requestFocus() }
     /** [typing]: the change is the text or an amount being typed, so the keyboard stays; any other change (a chip, a day, a saved search) is the person looking at results, so the keyboard goes. */
     fun changed(t: String = text, lo: String = min, hi: String = max, c: String? = categoryId, k: SearchKind = kind, r: SearchRange = range, g: String? = tag, fd: Long? = fromDay, td: Long? = toDay, ac: String? = accountId, typing: Boolean = false) {
         if (!typing) dismissKeyboard()

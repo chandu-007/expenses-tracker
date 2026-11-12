@@ -251,6 +251,66 @@ SELECT * FROM entry_replaced ORDER BY entry_id;
 exportReplaced:
 SELECT r.* FROM entry_replaced r LEFT JOIN entry e ON e.id = r.entry_id WHERE e.id IS NULL OR e.deleted = 1 ORDER BY r.entry_id;
 
+-- Travel mode (Slice 110): a trip is a name, the ONE tag its expenses get, the first and last day (epoch days, both included), whether it is on, and an optional daily budget in minor units.
+-- While a trip is on, a new expense dated inside it is tagged when it is created (LedgerStore.save, EntryDetails.tripTag). Deleting a trip leaves the tags on the entries. Written through TripStore, which logs each change.
+CREATE TABLE trip (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    start_day INTEGER NOT NULL,
+    end_day INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    daily_budget_minor INTEGER
+);
+
+CREATE INDEX trip_days ON trip(start_day, end_day);
+
+allTrips:
+SELECT * FROM trip ORDER BY start_day DESC, id;
+
+enabledTrips:
+SELECT * FROM trip WHERE enabled = 1 ORDER BY start_day, id;
+
+tripById:
+SELECT * FROM trip WHERE id = :id;
+
+tripCount:
+SELECT COUNT(*) FROM trip;
+
+upsertTrip:
+INSERT INTO trip(id, name, tag, start_day, end_day, enabled, daily_budget_minor) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, tag = excluded.tag, start_day = excluded.start_day, end_day = excluded.end_day, enabled = excluded.enabled, daily_budget_minor = excluded.daily_budget_minor;
+
+deleteTrip:
+DELETE FROM trip WHERE id = :id;
+
+-- Your spending on a trip: every spend line (refunds are negative) in the window of entries that carry the trip's tag; a refund counts with the expense it reverses, as in every tag report.
+-- Walks the lines of the window (the report index), then looks each tag up by its key, so a tag with many entries elsewhere costs nothing.
+tripLines:
+SELECT s.entry_id AS entry_id, s.occurred_at AS occurred_at, s.category_id AS category_id, s.mine_minor AS mine_minor
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+  AND EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id) AND t.tag = :tag)
+ORDER BY s.occurred_at DESC, s.entry_id, s.line
+LIMIT :limit;
+
+-- The same figures as one row, for the Home card: what was spent and how many entries.
+tripTotals:
+SELECT COALESCE(SUM(s.mine_minor), 0) AS mine, COUNT(DISTINCT s.entry_id) AS entries
+FROM spend_line s JOIN entry e ON e.id = s.entry_id
+WHERE s.currency = :currency AND s.occurred_at >= :fromMillis AND s.occurred_at < :untilMillis AND e.deleted = 0
+  AND EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = COALESCE(e.refunds_entry, e.id) AND t.tag = :tag);
+
+-- The expenses in a window that do not carry a tag (ignoring case): what "Tag earlier entries" offers. Walks the date index.
+untaggedExpensesBetween:
+SELECT e.id FROM entry e
+WHERE e.deleted = 0 AND e.kind = 'EXPENSE' AND e.occurred_at >= :fromMillis AND e.occurred_at < :untilMillis
+  AND NOT EXISTS (SELECT 1 FROM entry_tag t WHERE t.entry_id = e.id AND t.tag = :tag)
+ORDER BY e.occurred_at, e.seq;
+
+deleteTag:
+DELETE FROM entry_tag WHERE entry_id = :entryId AND tag = :tag;
+
 -- Someone the person lends to, borrows from or settles with. An entry refers to one by [id] (entry.person_id); the name lives only here.
 CREATE TABLE person (
     id TEXT NOT NULL PRIMARY KEY,

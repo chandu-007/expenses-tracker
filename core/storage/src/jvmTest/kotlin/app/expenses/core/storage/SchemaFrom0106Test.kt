@@ -12,8 +12,8 @@ import kotlin.test.assertTrue
 
 /**
  * A database made by 0.10.6 (the commit before the work of Slice 104; its CREATE statements are `schema-0.10.6.sql`, taken from that commit) opens with the current code, keeps every row it had, and works
- * with the new queries and with the move of a bill made from a payment's confirmation. The one schema change since is additive: the small table `entry_replaced` (the record of entries a type change
- * replaced, Slice 109), which `SchemaUpgrade.ensureLatest` creates; no table, column or index changed. Rows, texts and amounts are invented.
+ * with the new queries and with the move of a bill made from a payment's confirmation. The schema changes since are additive: the small table `entry_replaced` (the record of entries a type change
+ * replaced, Slice 109) and the small table `trip` with its one index (Travel mode, Slice 110), which `SchemaUpgrade.ensureLatest` creates; no other table, column or index changed. Rows, texts and amounts are invented.
  */
 class SchemaFrom0106Test {
     private val statements = checkNotNull(javaClass.classLoader.getResourceAsStream("schema-0.10.6.sql")).readBytes().decodeToString().split("-- @@").drop(1).map { it.trim() }.filter { it.isNotEmpty() }
@@ -44,11 +44,14 @@ class SchemaFrom0106Test {
     private fun exec(c: Connection, sql: String) = c.createStatement().use { it.execute(sql) }
 
     @Test
-    fun the0106DatabaseDiffersFromTheCurrentSchemaOnlyByTheTableOfReplacedEntriesAndTheUpgradeStepAddsExactlyThat() {
+    fun the0106DatabaseDiffersFromTheCurrentSchemaOnlyByTheTablesOfReplacedEntriesAndOfTripsAndTheUpgradeStepAddsExactlyThat() {
         val old = baseline(); val now = fresh()
         assertTrue(shape(old).size > 200, "the baseline was read: ${shape(old).size} objects and columns")
         val replaced = { s: String -> s.startsWith("table entry_replaced") || s.startsWith("entry_replaced.") }
-        assertEquals(shape(now).filterNot(replaced), shape(old), "no other table, column, index or trigger changed since 0.10.6")
+        val trip = { s: String -> s.startsWith("table trip") || s.startsWith("trip.") || s == "index trip_days" }
+        assertEquals(shape(now).filterNot(replaced).filterNot(trip), shape(old), "no other table, column, index or trigger changed since 0.10.6")
+        assertEquals(listOf("table trip", "trip.id TEXT notnull=1 pk=1", "trip.name TEXT notnull=1 pk=0", "trip.tag TEXT notnull=1 pk=0", "trip.start_day INTEGER notnull=1 pk=0", "trip.end_day INTEGER notnull=1 pk=0", "trip.enabled INTEGER notnull=1 pk=0", "trip.daily_budget_minor INTEGER notnull=0 pk=0"), shape(now).filter { it.startsWith("table trip") || it.startsWith("trip.") }, "Travel mode is one small table")
+        assertTrue("index trip_days" in shape(now))
         assertEquals(listOf("table entry_replaced", "entry_replaced.entry_id TEXT notnull=1 pk=1", "entry_replaced.replaced_by TEXT notnull=1 pk=0", "entry_replaced.reason TEXT notnull=1 pk=0"), shape(now).filter(replaced), "the record of replaced entries is one small table")
         val d = JdbcSqliteDriver("jdbc:sqlite:${old.path}")
         SchemaUpgrade.ensureLatest(d); SchemaUpgrade.ensureLatest(d); d.close()

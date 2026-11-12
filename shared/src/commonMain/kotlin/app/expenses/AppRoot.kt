@@ -257,6 +257,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var searching by rememberSaveable { mutableStateOf(false) }
             // the account Search opens inside (from Home's account bar); null searches every account
             var searchAccount by rememberSaveable { mutableStateOf<String?>(null) }
+            // a tag and days Search opens with (a trip's "See all entries"); null for every other way in
+            var searchTag by rememberSaveable { mutableStateOf<String?>(null) }
+            var searchFrom by rememberSaveable { mutableStateOf<Long?>(null) }
+            var searchTo by rememberSaveable { mutableStateOf<Long?>(null) }
+            // Travel mode: the trips page (from More) and the summary of one trip (from the page, or from Home's card)
+            var tripsOpen by rememberSaveable { mutableStateOf(false) }
+            var tripSummaryOf by rememberSaveable { mutableStateOf<String?>(null) }
             var securing by rememberSaveable { mutableStateOf(false) }
             val lock = host.lock
             val locked by lock.locked.collectAsStateWithLifecycle(context = MAIN)
@@ -311,6 +318,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     privacyOpen = false; securing = false; yourData = false; appearing = false; customisingHome = false; currencyOpen = false; categorising = false; viewModel.closeCategorise()
                     viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeTransferCandidates(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
+                    tripsOpen = false; tripSummaryOf = null; viewModel.closeTrips(); viewModel.closeTripSummary()
                 }
                 // the guided setup opens at the step the person left it on (the first step when it was never begun or is finished)
                 val openSetup = {
@@ -420,7 +428,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val screens = listOf(
                     history != null, false, false, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                     customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
-                    checkupOpen, setupOpen, earlierOpen,
+                    checkupOpen, setupOpen, earlierOpen, tripSummaryOf != null, tripsOpen,
                 )
                 // The entry editor is the pane beside Home on a wide window, but only while Home is what is showing: opened from Search, the calendar or another screen it is a full screen over that
                 // screen on a wide window too (there is no Home beside it to put it next to), and Back returns to that screen.
@@ -439,10 +447,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 // the More page is open: kept here, above the screens, so Back from a screen opened from More comes back to More
                 var moreOpen by rememberSaveable { mutableStateOf(false) }
                 val goTab: (String) -> Unit = { t ->
-                    if (searching && t != "Search") { searching = false; searchAccount = null; viewModel.closeSearch() }
+                    if (searching && t != "Search") { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
                     if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
                     when {
-                        t == "Search" && !searching -> { platform.trace("search: tapped"); searchAccount = null; searching = true }
+                        t == "Search" && !searching -> { platform.trace("search: tapped"); searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; searching = true }
                         t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
                         t == "More" -> wantMore = true
                     }
@@ -582,6 +590,33 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             ),
                         )
                     }
+                    k == 31 -> {
+                        val summary by viewModel.tripSummary.collectAsStateWithLifecycle(context = MAIN)
+                        val tripUndo by viewModel.tripUndo.collectAsStateWithLifecycle(context = MAIN)
+                        val closeSummary = { tripSummaryOf = null; viewModel.closeTripSummary() }
+                        BackHandler { closeSummary() }
+                        app.expenses.ui.TripSummaryScreen(
+                            summary, tripUndo, onBack = closeSummary,
+                            // Search opens with the trip's tag and days already chosen (Back returns to this page: it is still open underneath)
+                            onSeeAll = { tag, from, to -> searchAccount = null; searchTag = tag; searchFrom = from; searchTo = to; searching = true },
+                            onTagEarlier = { id -> viewModel.tagEarlier(id, null) }, onEndToday = viewModel::endTripToday,
+                            onUndo = viewModel::undoTripTagging, onUndoGone = viewModel::tripUndoGone,
+                        )
+                    }
+                    k == 32 -> {
+                        val tripList by viewModel.trips.collectAsStateWithLifecycle(context = MAIN)
+                        val tripOffer by viewModel.tripOffer.collectAsStateWithLifecycle(context = MAIN)
+                        val tripUndo by viewModel.tripUndo.collectAsStateWithLifecycle(context = MAIN)
+                        val closeTrips = { tripsOpen = false; viewModel.closeTrips() }
+                        BackHandler { closeTrips() }
+                        app.expenses.ui.TripsScreen(
+                            tripList, tags = s.tags, offer = tripOffer, undo = tripUndo, onBack = closeTrips,
+                            onSave = viewModel::saveTrip, onDelete = viewModel::deleteTrip,
+                            onOpen = { id -> tripSummaryOf = id; viewModel.openTripSummary(id) },
+                            onAcceptOffer = { o -> viewModel.tagEarlier(o.tripId, o.days) }, onDismissOffer = viewModel::dismissTripOffer,
+                            onUndo = viewModel::undoTripTagging, onUndoGone = viewModel::tripUndoGone,
+                        )
+                    }
                     k == 30 -> {
                         BackHandler { earlierOpen = false }
                         val pickers = app.expenses.ui.rememberFilePickers()
@@ -646,13 +681,13 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 14 -> {
                         val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { searching = false; searchAccount = null; viewModel.closeSearch() }
+                        BackHandler { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
                         SearchScreen(
                             tabBar = { tabBar("Search") },
                             state = found, categories = s.categories,
                             onChange = viewModel::search,
-                            onBack = { searching = false; searchAccount = null; viewModel.closeSearch() },
-                            initialAccountId = searchAccount,
+                            onBack = { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() },
+                            initialAccountId = searchAccount, initialTag = searchTag, initialFromDay = searchFrom, initialToDay = searchTo,
                             onOpen = { viewModel.openEditor(it.id) },
                             accounts = s.accounts,
                             onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete, onBulkTransfer = viewModel::bulkMakeTransfers,
@@ -787,6 +822,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             allTags = s.tags,
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
                             lastRates = foreignRates,
+                            tripWindows = s.tripWindows,
                             onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
                             onSaveEach = { drafts, photo -> viewModel.saveEntries(drafts, photo); adding = false; prefillLoan = null; prefillTransfer = null },
                             onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
@@ -842,6 +878,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenSubscriptions = { subscribing = true; viewModel.openSubscriptions() },
                         onOpenTransferCandidates = { transferring = true; viewModel.openTransferCandidates() },
                         onOpenGoals = { goaling = true; viewModel.openGoals() },
+                        onOpenTrips = { tripsOpen = true; viewModel.openTrips() },
+                        onOpenTrip = { id -> tripSummaryOf = id; viewModel.openTripSummary(id) },
                         onOpenLoans = { loansOpen = true; viewModel.watchLoans(true) },
                         onOpenBills = { billsOpen = true; viewModel.watchBills(true) },
                         onOpenGuide = viewModel::openGuide,
@@ -850,8 +888,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         moreOpen = moreOpen, onMoreChange = { moreOpen = it },
                         onCustomiseHome = { customisingHome = true },
                         onOpenAppearance = { appearing = true },
-                        onOpenSearch = { searchAccount = null; searching = true },
-                        onSearchAccount = { id -> searchAccount = id; searching = true },
+                        onOpenSearch = { searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; searching = true },
+                        onSearchAccount = { id -> searchAccount = id; searchTag = null; searchFrom = null; searchTo = null; searching = true },
                         onSetHomePeriod = viewModel::setHomePeriod,
                         onOpenSecurity = { securing = true },
                         onDismissWelcome = viewModel::dismissWelcome,

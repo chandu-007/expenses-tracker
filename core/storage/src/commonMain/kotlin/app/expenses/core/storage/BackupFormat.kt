@@ -113,6 +113,12 @@ private val MIME_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9!#&^_.+-]{0,126}/[A-Za-z0
  */
 @Serializable data class BackupReplaced(val entryId: String, val replacedBy: String, val reason: String = ReplacedEntries.CHANGED)
 
+/**
+ * A trip of Travel mode: [startDay] and [endDay] are calendar days counted since 1970-01-01 (both included), [tag] the one tag its expenses get, [dailyBudgetMinor] an optional budget for each day. A restore makes each
+ * one fit ([app.expenses.core.domain.TripRules.fromFile]) and keeps a trip that would overlap one that is on here switched off.
+ */
+@Serializable data class BackupTrip(val id: String, val name: String, val tag: String, val startDay: Long, val endDay: Long, val enabled: Boolean = true, val dailyBudgetMinor: Long? = null)
+
 @Serializable data class BackupDone(val recurringId: String, val day: Long, val outcome: String, val entryId: String? = null)
 
 /** Everything a backup holds. Deleted entries are not included; a deleted category that was merged is, so a late edit still finds its target. */
@@ -150,6 +156,8 @@ data class BackupData(
      * when there are none, so a backup of a ledger without any is exactly as it was before this existed; an older reader ignores the key (and then restores like an older app: see docs/BACKUP_FORMAT.md).
      */
     @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val replaced: List<BackupReplaced> = emptyList(),
+    /** The trips of Travel mode. Left out of the JSON when there are none, so a backup of a ledger without any is exactly as it was before this existed; an older reader ignores the key. */
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val trips: List<BackupTrip> = emptyList(),
     val settings: Map<String, String> = emptyMap(),
 )
 

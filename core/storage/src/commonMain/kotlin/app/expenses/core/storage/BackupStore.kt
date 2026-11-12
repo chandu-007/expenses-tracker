@@ -41,7 +41,7 @@ data class BackupCounts(val accounts: Int = 0, val categories: Int = 0, val entr
  * [replacedNotRestored] entries of the file were left out because a type change had replaced them (an expense made a transfer, say; a refund of such an expense goes with it), and
  * [replacedRemoved] entries that are on this phone and live were taken away because the backup says a type change replaced them and what replaced them is here or arrives with it.
  */
-data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts, val attached: Set<String> = emptySet(), val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0)
+data class RestoreReport(val added: BackupCounts, val alreadyHere: BackupCounts, val attached: Set<String> = emptySet(), val replacedNotRestored: Int = 0, val replacedRemoved: Int = 0, val tripsAdded: Int = 0)
 
 /**
  * Which files of a backup a restore would take ([wanted], by the ids this phone keeps) and how many it would leave alone, by reason: attached here already,
@@ -122,6 +122,7 @@ class BackupStore(
                 if (q.accountById(id).executeAsOneOrNull()?.deleted != 0L) emptyList() else BalanceFixLog.parse(row.value_).map { BackupBalanceFix(id, it.atMillis, it.beforeMinor, it.afterMinor) }
             },
             replaced = q.exportReplaced().executeAsList().map { BackupReplaced(it.entry_id, it.replaced_by, it.reason) },
+            trips = ledger.trips.all().sortedWith(compareBy({ it.startDay }, { it.id })).map { BackupTrip(it.id, it.name, it.tag, it.startDay, it.endDay, it.enabled, it.dailyBudgetMinor) },
             settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id } +
                 q.settingsWithPrefix(app.expenses.core.domain.PayeeAliases.PREFIX).executeAsList().map { it.key }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
@@ -193,6 +194,7 @@ class BackupStore(
      * [RestoreReport.attached] says which were, so the caller can remove any stored file that was not.
      */
     fun restore(data: BackupData, storedFiles: Set<String> = emptySet()): RestoreReport = db.transactionWithResult {
+        var tripsAdded = 0
         val plan = ReplacementPlan.of(q, data)
         val report = report(data, plan)
         val digits = (data.currencies.associate { it.code to it.digits } + q.selectCurrencies().executeAsList().associate { it.code to it.digits.toInt() })
@@ -278,6 +280,8 @@ class BackupStore(
         for (d in data.recurringDone) if (q.doneRow(d.recurringId, d.day).executeAsOneOrNull() == null) q.putDone(d.recurringId, d.day, d.outcome, d.entryId)
         // Added as they are (a search with the same name as one here is kept too, rather than the restore refusing).
         for (s in data.savedSearches) if (q.savedSearchById(s.id).executeAsOneOrNull() == null) q.upsertSavedSearch(s.id, s.name, s.text, s.minRupees, s.maxRupees, s.categoryId, s.kind, s.range, s.tag, s.fromDay, s.toDay, s.accountId)
+        // Trips: added where this phone has none with the same id, made fit, one that would overlap a trip that is on here is kept switched off. The tags of entries come with the entries, not with the trips.
+        tripsAdded = ledger.trips.restore(data.trips)
         // Rules and learned payees are added as they are where this phone has none with the same id or key (a restore never overrides a choice made here).
         val haveRules = q.allCaptureRules().executeAsList().map { it.id }.toSet()
         for (r in data.captureRules) if (r.id !in haveRules && q.categoryById(r.categoryId).executeAsOneOrNull() != null) q.upsertCaptureRule(r.id, r.position.toLong(), r.pattern, r.categoryId)
@@ -314,7 +318,7 @@ class BackupStore(
             q.insertOp(clock.now(nowMillis()).encode(), "attachment", id, "entry_id", a.entryId)
             attached += id
         }
-        report.copy(added = report.added.copy(attachments = attached.size), attached = attached)
+        report.copy(added = report.added.copy(attachments = attached.size), attached = attached, tripsAdded = tripsAdded)
     }
 
     /**
