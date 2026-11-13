@@ -1,6 +1,7 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -165,7 +166,11 @@ class GuidedSetupUiTest {
         // a day later it is back
         put("nudge_snoozed:setup", "${System.currentTimeMillis() - 25 * 3_600_000L}|1")
         launch(); waitFor("setup_nudge")
-        tap("setup_nudge_hide"); gone("setup_nudge")
+        // the card has ONE close button (Not now: a day); hiding for good is offered in the bar that says "Hidden for today"
+        tap("nudge_notnow_setup"); gone("setup_nudge")
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Hide for good")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Hide for good").performClick()
+        compose.waitUntil(10_000) { setting("capture_setup") == "HIDDEN:PERMISSION" }
         assertEquals("HIDDEN:PERMISSION", setting("capture_setup"))
         launch(); waitFor("add"); compose.waitForIdle(); assertFalse(has("setup_nudge"))
         compose.openMore(); tap("more_capture_setup"); waitFor("setup_screen"); step("permission")

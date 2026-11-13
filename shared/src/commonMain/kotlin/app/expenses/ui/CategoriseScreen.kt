@@ -37,23 +37,16 @@ import app.expenses.ScreenUndo
 import app.expenses.core.domain.UncategorisedNudge
 
 /**
- * The calm card on Home: how many expenses have no category, a Review button and "Not now" (quiet for a week). It holds a count and no amounts, so Hide amounts has nothing to hide in it.
- * Shown only when [UncategorisedNudge] says so; the count is worked out with Home's other slow figures, never on the save path.
+ * The calm card on Home: how many expenses have no category, a Review button and the close ("Not now", quiet for a week). It holds a count and no amounts, so Hide amounts has nothing to hide in it.
+ * Shown only when [UncategorisedNudge] says so; the count is worked out with Home's other slow figures, never on the save path. The look is every nudge's ([NudgeCard]).
  */
 @Composable
 fun CategoriseNudgeCard(count: Int, onReview: () -> Unit, onNotNow: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp).testTag("categorise_nudge"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(UncategorisedNudge.text(count), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("categorise_nudge_text"))
-            Text("Sort them one at a time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-        }
-        Button(onClick = onReview, modifier = Modifier.testTag("categorise_nudge_review")) { Text("Review") }
-        TextButton(onClick = onNotNow, modifier = Modifier.testTag("categorise_nudge_later")) { Text("Not now") }
-    }
+    NudgeCard(
+        tag = "categorise_nudge", title = UncategorisedNudge.text(count), titleTag = "categorise_nudge_text", line = "Sort them one at a time.", lineTag = null,
+        actionLabel = "Review", actionTag = "categorise_nudge_review", onAction = onReview,
+        dismissTag = "categorise_nudge_later", dismissLabel = "Not now: hide for a week", onDismiss = onNotNow,
+    )
 }
 
 /**

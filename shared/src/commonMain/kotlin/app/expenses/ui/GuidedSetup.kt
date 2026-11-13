@@ -249,24 +249,14 @@ private fun Body(text: String) = Text(text, style = MaterialTheme.typography.bod
 private fun Small(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 /**
- * The Home card for the guided setup (see [CaptureSetup.nudgeCount]): where the person is, one button to start or carry on, and two quiet ways out: "Not now" (a day) and "Hide" (for good; the setup stays
- * in More, Capture).
+ * The Home card for the guided setup (see [CaptureSetup.nudgeCount]): where the person is, one button to start or carry on, and the close, which puts it off for a day. Hiding it for good is offered by the
+ * caller right after the close ("Hidden for today. Hide for good"): the setup stays in More, Capture. The look is every nudge's ([NudgeCard]).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SetupNudgeCard(state: SetupState, onOpen: () -> Unit, onNotNow: () -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
-    Card(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("setup_nudge"), shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Set up reading bank texts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }.testTag("setup_nudge_title"))
-            Text(CaptureSetup.cardLine(state), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("setup_nudge_line"))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp).testTag("setup_nudge_open")) { Text(CaptureSetup.cardButton(state)) }
-                TextButton(onClick = onNotNow, modifier = Modifier.heightIn(min = 48.dp).testTag("nudge_notnow_setup")) { Text("Not now") }
-                TextButton(onClick = onHide, modifier = Modifier.heightIn(min = 48.dp).testTag("setup_nudge_hide")) { Text("Hide") }
-            }
-        }
-    }
+fun SetupNudgeCard(state: SetupState, onOpen: () -> Unit, onNotNow: () -> Unit, modifier: Modifier = Modifier) {
+    NudgeCard(
+        tag = "setup_nudge", title = "Set up reading bank texts", titleTag = "setup_nudge_title", line = CaptureSetup.cardLine(state), lineTag = "setup_nudge_line",
+        actionLabel = CaptureSetup.cardButton(state), actionTag = "setup_nudge_open", onAction = onOpen,
+        dismissTag = "nudge_notnow_setup", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, modifier = modifier,
+    )
 }

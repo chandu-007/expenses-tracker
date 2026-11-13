@@ -47,7 +47,7 @@ class GuideUiTest {
 
     /** A tag that only the real screen a stop is about has. */
     private fun screenTag(t: GuideTarget?) = when (t) {
-        null -> "add" // home: the Add button
+        null -> "month_spend" // home: the month card (the Add button is in the bar, which the More page has too)
         GuideTarget.ADD -> "amount"; GuideTarget.SEARCH -> "search_back"; GuideTarget.REPORTS -> "reports_back"; GuideTarget.CALENDAR -> "calendar_back"
         GuideTarget.CAPTURE -> "capture_back"; GuideTarget.INBOX -> "inbox_back"; GuideTarget.BILLS -> "bills_back"; GuideTarget.ACCOUNTS -> "back"
         GuideTarget.CATEGORIES -> "categories_back"; GuideTarget.BUDGET -> "budget_back"; GuideTarget.RECURRING -> "recurring_back"; GuideTarget.LOANS -> "loans_back"
@@ -55,7 +55,7 @@ class GuideUiTest {
         GuideTarget.SUBSCRIPTIONS -> "subscriptions_back"; GuideTarget.GOALS -> "goals_back"
         GuideTarget.MORE -> "open_data" // the More page
     }
-    private val everyScreenTag get() = (GuideTarget.entries.map { screenTag(it) } + "add").toSet()
+    private val everyScreenTag get() = (GuideTarget.entries.map { screenTag(it) } + "month_spend").toSet()
 
     @Test
     fun theTourOpensTheRealScreenForEveryStopAndOnlyThatOneAndHighlightsWhatItPointsAt() {
@@ -75,7 +75,7 @@ class GuideUiTest {
         assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN)); assertNull(setting(GuideSettings.OFF))
         // a tour gone through to its end leads into the guided capture setup (which is skippable at once and leaves a card on Home)
         waitFor("setup_screen"); tap("setup_close")
-        waitFor("add"); assertTrue(everyScreenTag.minus("add").none { has(it) }, "finishing leaves the app on the home screen")
+        waitFor("month_spend"); assertTrue(everyScreenTag.minus("month_spend").none { has(it) }, "finishing leaves the app on the home screen")
         assertEquals("OFFERED:PERMISSION", setting("capture_setup"))
         launch(); waitFor("add"); assertTrue(!has("guide"), "finished: it does not come back")
     }
@@ -143,7 +143,7 @@ class GuideUiTest {
     fun moreOffersTheTourAnytimeStartingFromHomeWithoutTheUpdateChoiceAndClosingItChangesNothingStored() {
         put(GuideSettings.SEEN, "0"); put(GuideSettings.OFF, "1") // an old version seen, and updates switched off: nothing is shown on its own
         launch(); waitFor("add"); assertTrue(!has("guide")); compose.openMore(); tap("open_guide"); waitFor("guide")
-        waitFor("add") // the More page was closed: the tour starts on the home screen, where the Add button is
+        waitFor("month_spend") // the More page was closed: the tour starts on the home screen, where the month card is (the Add button is in the bar of the More page too)
         assertTrue(!has("guide_never"), "no update choice when it was asked for")
         tap("guide_skip"); gone("guide")
         assertEquals("0", setting(GuideSettings.SEEN), "looking at the tour by choice records nothing"); assertEquals("1", setting(GuideSettings.OFF))

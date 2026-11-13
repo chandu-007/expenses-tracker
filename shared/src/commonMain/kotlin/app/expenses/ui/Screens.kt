@@ -51,6 +51,9 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.outlined.Close
 import app.expenses.core.domain.HomeNudge
 import app.expenses.core.domain.HomeNudges
+import app.expenses.core.domain.DayEntry
+import app.expenses.core.domain.DayTotals
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -210,6 +213,7 @@ fun EntryListScreen(
     val listState = rememberLazyListState()
     val feel = rememberFeel()
     val snackbar = remember { SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     // the Undo bar of an entry just saved would sit over the foot of the More page: opening another page lets it go
     androidx.compose.runtime.LaunchedEffect(moreOpen) { if (moreOpen) snackbar.currentSnackbarData?.dismiss() }
     var removing by remember { mutableStateOf<TemplateUi?>(null) }
@@ -293,15 +297,9 @@ fun EntryListScreen(
                 selected = if (moreOpen) "More" else "Home",
                 onHome = { onMoreChange(false) }, onSearch = { onMoreChange(false); onOpenSearch() }, onReports = { onMoreChange(false); onOpenReports() },
                 onMore = { onMoreChange(!moreOpen) }, moreBadge = state.showBackupNudge,
+                // the Add button sits in the middle of the bar (it used to float over the list); the More page has it too
+                onAdd = { onMoreChange(false); onAdd() }, addTag = "add",
             )
-        },
-        floatingActionButton = {
-            // not over the bar that appears while entries are chosen
-            if (!moreOpen && selected.isEmpty()) {
-            // shrinks to a round button as soon as the page is scrolled (the whole page is the list, so its first item is the top of Home, not an entry), and opens up again at the top
-            val expanded by remember { derivedStateOf { !listState.canScrollBackward } }
-            androidx.compose.material3.ExtendedFloatingActionButton(onClick = onAdd, expanded = expanded, icon = { Text("+", style = MaterialTheme.typography.headlineMedium) }, text = { Text("Add") }, modifier = Modifier.testTag("add"))
-            }
         },
     ) { padding ->
         if (moreOpen) {
@@ -370,23 +368,32 @@ fun EntryListScreen(
         }
         LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)
         val onHero = MaterialTheme.colorScheme.onPrimary
+        val large = isLargeText()
+        // the money spent on each complete day, for the day headings: worked out from the rows already here (the last day loaded waits for the next page), no query
+        val dayTotals = remember(state.rows, state.endReached, state.baseCurrency) {
+            DayTotals.of(state.rows.map { DayEntry(it.day, it.kind, it.minor, it.currency) }, state.baseCurrency.code, state.endReached)
+        }
         // The whole page is one list: the month card, the banners, the cards and the account bar are its first item and scroll away with the entries, so a small
         // screen is not left with a few rows under a fixed top. The empty states are items of the same list.
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding).testTag("list"), contentPadding = PaddingValues(bottom = 88.dp)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding).testTag("list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "home_top", contentType = "top") {
-                Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().testTag("home_top")) {
                     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
                         if (supportsBlur) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures
-                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 22.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = if (large) 18.dp else 22.dp)) {
                             Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
-                            RollingAmount(
-                                state.periodSpend, state.periodSpendMinor,
-                                modifier = Modifier.padding(top = 4.dp).testTag("month_spend"),
-                                color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            )
+                            // the big figure stops growing at 150% text: at 200% a seven-figure amount would not fit the card
+                            CappedFontScale(LARGE_TEXT_SCALE) {
+                                RollingAmount(
+                                    state.periodSpend, state.periodSpendMinor,
+                                    modifier = Modifier.padding(top = 4.dp).testTag("month_spend"),
+                                    color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                )
+                            }
                             if (state.spark.compare.isNotEmpty()) Text(state.spark.compare, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 4.dp).testTag("month_compare"))
-                            if (state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
-                            if (!state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp))
+                            // at large text the extras (the comparison's second line, the graph) drop out
+                            if (!large && state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
+                            if (!large && !state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 12.dp))
                         }
                     }
                     // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
@@ -397,21 +404,27 @@ fun EntryListScreen(
                     val shownNudges = HomeNudges.visible(nudgeCounts, state.nudgeSnoozes, app.expenses.nowMillis())
                     val card = HomeNudges.card(shownNudges)
                     fun notNow(n: HomeNudge) = { onSnoozeNudge(n, nudgeCounts[n] ?: 0) }
+                    // every nudge has the same look and ONE close button (NudgeCard); what the close does is the nudge's own: a day for most, a week for "No category", for good for "Getting started"
                     when (card) {
                         HomeNudge.BILLS_DUE, HomeNudge.BILLS_NEW -> BillsBanner(bills, onOpenBills, notNow(card))
                         HomeNudge.INBOX -> InboxBanner(state, onOpenInbox, notNow(card))
                         HomeNudge.WAITING -> WaitingBanner(state.waiting, onOpenLoans, notNow(card))
                         HomeNudge.CATEGORISE -> CategoriseNudgeCard(state.categoriseNudge, onReview = onOpenCategorise, onNotNow = onSnoozeCategorise)
-                        HomeNudge.SETUP -> state.setupCard?.let { SetupNudgeCard(it, onOpen = onOpenSetup, onNotNow = notNow(card), onHide = onHideSetup) }
+                        // the close puts it off for a day; the way to hide it for good is offered once, in the bar that says so (the setup stays in More, Capture)
+                        HomeNudge.SETUP -> state.setupCard?.let { SetupNudgeCard(it, onOpen = onOpenSetup, onNotNow = {
+                            onSnoozeNudge(HomeNudge.SETUP, 1)
+                            scope.launch { if (snackbar.showSnackbar("Hidden for today", actionLabel = "Hide for good", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onHideSetup() }
+                        }) }
                         HomeNudge.FIRST_WEEK -> FirstWeekCard(state.firstWeek, onCheckup = if (state.firstWeek.any { it.step == FirstWeekStep.CAPTURE && !it.done }) onOpenCheckup else null, onEarlier = onOpenEarlier, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
                         null -> {}
                     }
-                    val alsoWaiting = HomeNudges.alsoWaiting(shownNudges)
-                    if (alsoWaiting.isNotEmpty()) Text(
-                        "Also waiting: " + alsoWaiting.joinToString(", ") { it.label } + ". See More",
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
-                    )
+                    HomeNudges.alsoWaitingLine(shownNudges, nudgeCounts)?.let { line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
+                        )
+                    }
                     state.homeLayout.visible().forEach { section ->
                         when (section) {
                             HomeSection.BUDGET -> {
@@ -421,7 +434,7 @@ fun EntryListScreen(
                             }
                             HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                             // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
-                            HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) })
+                            HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) }, onOpenAccounts = onManageAccounts)
                             HomeSection.QUICK_ENTRIES -> {
                                 if (state.templates.isNotEmpty()) {
                                     LazyRow(
@@ -479,7 +492,7 @@ fun EntryListScreen(
                         Box(Modifier.fillParentMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 EmptyArt(EmptyKind.HOME, Modifier.size(140.dp))
-                                Text("No expenses yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("No expenses yet. Tap Add to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -490,7 +503,7 @@ fun EntryListScreen(
                         item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
                         onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
                         modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
-                    ) else DayHeader(item as Long)
+                    ) else (item as Long).let { day -> DayHeader(day, dayTotals[day]?.let { signedAmount(Money(it, state.baseCurrency).formatted(), Flow3.OUT) }) }
                 }
             }
         }
@@ -519,6 +532,13 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         },
         modifier = modifier.entryCardClip(pos).sharedContainer("entry:${row.id}").testTag("row_${row.title}"),
     ) {
+        val large = isLargeText()
+        val flow = flowOf(row.kind, row.inflow)
+        // Home's headings say the day: the row says the account and the category (a row with neither keeps its date)
+        val detail = row.detail.ifEmpty { row.subtitle }
+        val amount: @Composable () -> Unit = {
+            Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
+        }
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
@@ -526,13 +546,21 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = 14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = if (large) 10.dp else 14.dp), size = if (large) 32.dp else 40.dp)
+            if (!large) {
+                Column(Modifier.weight(1f)) {
+                    Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                amount()
+            } else {
+                // at large text the amount goes under the words, so the title is not squeezed into a few letters: the title and the detail take two lines each
+                Column(Modifier.weight(1f)) {
+                    Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                    amount()
+                }
             }
-            val flow = flowOf(row.kind, row.inflow)
-            Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
         }
     }
 }
@@ -579,93 +607,43 @@ fun KeyLostScreen(message: String, onStartFresh: () -> Unit) {
 }
 
 /**
- * What is waiting in To review, at a glance: how many, how much goes out and comes in, the first few by name, and one button. The whole card opens the list.
+ * What is waiting in To review, at a glance: how many and how much goes out and comes in. One slim card (see [NudgeCard]); the whole card opens the list, where the items are.
  */
 @Composable
 private fun InboxBanner(state: UiState.Ready, onOpen: () -> Unit, onNotNow: () -> Unit) {
     val peek = state.inboxPeek
-    androidx.compose.material3.Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("inbox_banner"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("${state.inboxPending} to review", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("inbox_banner_title"))
-                    if (peek.outText.isNotEmpty()) Text("${peek.outText} out · ${peek.inText} in, found in your texts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("Review", color = MaterialTheme.colorScheme.onTertiary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.tertiary).padding(horizontal = 16.dp, vertical = 8.dp))
-                NudgeNotNow(onNotNow, Modifier.testTag("nudge_notnow_inbox"))
-            }
-            peek.rows.forEach { r ->
-                val flow = if (r.credit) Flow3.IN else Flow3.OUT
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CategoryAvatar(r.title, r.title, Modifier.padding(end = 10.dp), size = 28.dp)
-                    Text(r.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-            if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+    NudgeCard(
+        tag = "inbox_banner", title = "${state.inboxPending} to review", titleTag = "inbox_banner_title",
+        line = if (peek.outText.isNotEmpty()) "${peek.outText} out · ${peek.inText} in, found in your texts" else null, lineTag = null,
+        actionLabel = "Review", actionTag = "inbox_banner_open", onAction = onOpen,
+        dismissTag = "nudge_notnow_inbox", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, wholeCardOpens = true,
+    )
 }
 
 /** Money expected back for expenses, at a glance: how many are waiting and what they add up to. The whole card opens the list (on the Lent and borrowed page). */
 @Composable
 private fun WaitingBanner(waiting: app.expenses.WaitingUi, onOpen: () -> Unit, onNotNow: () -> Unit) {
-    androidx.compose.material3.Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("waiting_banner"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(if (waiting.count == 1) "1 expense waiting to come back" else "${waiting.count} expenses waiting to come back", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("waiting_banner_title"))
-                Text(if (waiting.totalText.isNotEmpty()) "${waiting.totalText} to get back" else "Money you expect back", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_banner_total"))
-            }
-            Text("Open", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 8.dp))
-            NudgeNotNow(onNotNow, Modifier.testTag("nudge_notnow_waiting"))
-        }
-    }
+    NudgeCard(
+        tag = "waiting_banner", title = if (waiting.count == 1) "1 expense waiting to come back" else "${waiting.count} expenses waiting to come back", titleTag = "waiting_banner_title",
+        line = if (waiting.totalText.isNotEmpty()) "${waiting.totalText} to get back" else "Money you expect back", lineTag = "waiting_banner_total",
+        actionLabel = "Open", actionTag = "waiting_banner_open", onAction = onOpen,
+        dismissTag = "nudge_notnow_waiting", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, wholeCardOpens = true,
+    )
 }
 
-/** Bills at a glance: how many are new, and the first few with when they are due. The whole card opens the bills page. */
+/** Bills at a glance: how many are new or due, and what they come to. One slim card; the whole card opens the bills page, where each bill is. */
 @Composable
 private fun BillsBanner(peek: app.expenses.BillPeekUi, onOpen: () -> Unit, onNotNow: () -> Unit) {
-    androidx.compose.material3.Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable(onClick = onOpen).testTag("bills_banner"),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else if (peek.dueThisWeek > 0) (if (peek.dueThisWeek == 1) "1 bill due this week" else "${peek.dueThisWeek} bills due this week") else "Bills coming up", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("bills_banner_title"))
-                    Text(if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) (if (peek.weekTotal.isNotEmpty()) "${peek.weekTotal} in all. Overdue ones are included" else "Overdue ones are included") else "Due in the next two weeks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(if (peek.newCount > 0) "Add" else "Open", color = MaterialTheme.colorScheme.onSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondary).padding(horizontal = 16.dp, vertical = 8.dp))
-                NudgeNotNow(onNotNow, Modifier.testTag("nudge_notnow_bills"))
-            }
-            peek.rows.forEach { r ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("bills_banner_row_${r.id}")) {
-                    CategoryAvatar(r.title, r.title, Modifier.padding(end = 10.dp), size = 28.dp)
-                    Column(Modifier.weight(1f)) {
-                        Text(r.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        if (r.dueIn.isNotEmpty()) Text("Due ${r.dueIn}", style = MaterialTheme.typography.bodySmall, color = if (r.overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(r.amountText, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-            if (peek.more > 0) Text("and ${peek.more} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-/** The small "Not now" on a Home card that can be put off: a 48 dp close button. The card comes back after a day, or at once when more is waiting. */
-@Composable
-private fun NudgeNotNow(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    androidx.compose.material3.IconButton(onClick = onClick, modifier = modifier) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Close, contentDescription = "Not now: hide for today") }
+    val overdue = peek.rows.any { it.overdue }
+    NudgeCard(
+        tag = "bills_banner",
+        title = if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else if (peek.dueThisWeek > 0) (if (peek.dueThisWeek == 1) "1 bill due this week" else "${peek.dueThisWeek} bills due this week") else "Bills coming up",
+        titleTag = "bills_banner_title",
+        line = if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) listOfNotNull(peek.weekTotal.takeIf { it.isNotEmpty() }?.let { "$it in all" }, "Overdue ones are included".takeIf { overdue }).joinToString(". ").ifEmpty { null } else "Due in the next two weeks",
+        lineTag = "bills_banner_line",
+        actionLabel = if (peek.newCount > 0) "Add" else "Open", actionTag = "bills_banner_open", onAction = onOpen,
+        dismissTag = "nudge_notnow_bills", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, wholeCardOpens = true,
+    )
 }
 
 /** What each Home nudge is about now, as a number: the nudges that are not here have nothing to say (see [HomeNudges.visible]). Used by Home's card and by the More page's cards. */

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,19 +52,17 @@ fun FirstWeekCard(
     // Folded to one line until opened: the card must not push the entry just added below the fold of a small screen.
     var folded by rememberSaveable { mutableStateOf(true) }
     val done = items.count { it.done }
-    Card(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("first_week_card"), shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { folded = !folded }.padding(vertical = 6.dp).testTag("first_week_toggle")) {
-                    Text("Getting started", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("$done of ${items.size} done" + if (folded) " · tap to open" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("first_week_progress"))
-                }
-                TextButton(onClick = onDismiss, modifier = Modifier.testTag("first_week_dismiss")) { Text("Hide") }
+    // the same surface and the same close button as every other nudge (NudgeCard); the close hides the checklist for good, as "Hide" did
+    NudgeSurface("first_week_card", modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { folded = !folded }.padding(vertical = 6.dp).wrapContentHeight(Alignment.CenterVertically).testTag("first_week_toggle")) {
+                Text("Getting started", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("$done of ${items.size} done" + if (folded) " · tap to open" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("first_week_progress"))
             }
-            if (!folded) items.forEach { item ->
+            NudgeClose("first_week_dismiss", "Hide Getting started for good", onDismiss)
+        }
+        if (!folded) Column(Modifier.padding(end = 12.dp)) {
+            items.forEach { item ->
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(item.step) }.padding(vertical = 8.dp, horizontal = 2.dp).testTag("first_week_item_${item.step.name}"), // 48 dp: a finished step has no second line and was 44
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -75,10 +74,8 @@ fun FirstWeekCard(
                     }
                 }
             }
-            if (!folded) {
-                onCheckup?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_checkup")) { Text("Why isn't capture working?") } }
-                onEarlier?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_earlier")) { Text("Bring in earlier spending") } }
-            }
+            onCheckup?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_checkup")) { Text("Why isn't capture working?") } }
+            onEarlier?.let { TextButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp).testTag("first_week_earlier")) { Text("Bring in earlier spending") } }
         }
     }
 }

@@ -51,18 +51,3 @@ fun HomeLayoutScreen(layout: HomeLayout, onChange: (HomeLayout) -> Unit, onBack:
         }
     }
 }
-
-/** Every active account with its balance in one scrolling line; a card or loan shows what is owed. Tapping one narrows Home's list to it (tap again for all); the chosen one has an outline. */
-@Composable
-fun BalancesStrip(accounts: List<AccountRowUi>, selectedId: String? = null, onSelect: (String) -> Unit) {
-    if (accounts.isEmpty()) return
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp).testTag("balances"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        accounts.forEach { a ->
-            val chosen = a.id == selectedId
-            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(196.dp).height(100.dp).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) else Modifier))
-        }
-    }
-}

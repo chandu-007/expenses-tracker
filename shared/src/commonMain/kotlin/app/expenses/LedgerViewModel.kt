@@ -172,6 +172,10 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val kind: String = "",
     /** The amount in minor units (paise, cents), to total a list of results. */
     val minor: Long = 0,
+    /** The currency [minor] is in (its code), so a day's total never adds across currencies. Empty when not known. */
+    val currency: String = "",
+    /** The subtitle without the date: Home's headings say the day, so its rows say only the account and the category (the subtitle keeps the date for Search). Empty: use the subtitle. */
+    val detail: String = "",
 )
 data class AccountUi(val id: String, val name: String, val type: String = "")
 
@@ -4854,21 +4858,26 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         if (shown != null && e.kind == "TRANSFER") row.copy(kind = if (e.counter_account_id == shown) "TRANSFER_IN" else "TRANSFER_OUT") else row
     }
 
-    private fun toRowPlain(e: Entry, firstCategory: Map<String, String>): RowUi = RowUi(
-        seq = e.seq,
-        id = e.id,
-        title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
-        subtitle = dateFormat.format(e.occurred_at) +
-            (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
+    private fun toRowPlain(e: Entry, firstCategory: Map<String, String>): RowUi {
+        // everything after the date: the account, the category (or Gave / Got) and the original amount of a foreign one
+        val rest = (e.account_id?.let { accountNames[it] }?.let { " · $it" } ?: "") +
             (if (e.kind == "SETTLEMENT") " · " + (if (e.direction == "PAID_TO_PERSON") "Gave" else "Got") else ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }?.let { " · $it" } ?: "")) +
-            (e.original_amount_minor?.let { minor -> e.original_currency?.let { code -> " · " + Money(minor, Currency(code, currencyDigits[code] ?: CurrencyChoices.byCode(code).minorUnitDigits)).formatted() } }.orEmpty()),
-        amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
-        inflow = e.kind == "INCOME" || e.kind == "REFUND" || (e.kind == "SETTLEMENT" && e.direction == "RECEIVED_FROM_PERSON"),
-        day = dateOfMillis(e.occurred_at).epochDay(),
-        category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
-        kind = e.kind,
-        minor = e.amount_minor,
-    )
+            (e.original_amount_minor?.let { minor -> e.original_currency?.let { code -> " · " + Money(minor, Currency(code, currencyDigits[code] ?: CurrencyChoices.byCode(code).minorUnitDigits)).formatted() } }.orEmpty())
+        return RowUi(
+            seq = e.seq,
+            id = e.id,
+            title = e.merchant ?: e.note ?: e.kind.lowercase().replaceFirstChar { it.uppercase() },
+            subtitle = dateFormat.format(e.occurred_at) + rest,
+            amount = Money(e.amount_minor, Currency(e.currency, currencyDigits[e.currency] ?: 2)).formatted(),
+            inflow = e.kind == "INCOME" || e.kind == "REFUND" || (e.kind == "SETTLEMENT" && e.direction == "RECEIVED_FROM_PERSON"),
+            day = dateOfMillis(e.occurred_at).epochDay(),
+            category = ((firstCategory[e.id] ?: e.category_id)?.let { categoryNames[it] }).orEmpty(),
+            kind = e.kind,
+            minor = e.amount_minor,
+            currency = e.currency,
+            detail = rest.removePrefix(" · "),
+        )
+    }
 
     // Last on purpose. This starts work on another thread that reads the properties above and below it; declared earlier in the class it
     // could run before they were initialised (a date formatter below it was still null on about 3% of starts, and the load died silently,

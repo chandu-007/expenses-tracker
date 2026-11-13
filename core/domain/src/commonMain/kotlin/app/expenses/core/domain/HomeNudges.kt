@@ -72,6 +72,16 @@ object HomeNudges {
     /** The line under the card: what else is waiting, by name, in order; empty when nothing else is. */
     fun alsoWaiting(visible: List<HomeNudge>): List<HomeNudge> = visible.drop(1)
 
+    /** The nudges whose count says how much is waiting (a checklist or the capture setup has no such count). */
+    private val COUNTED = setOf(HomeNudge.BILLS_DUE, HomeNudge.INBOX, HomeNudge.BILLS_NEW, HomeNudge.WAITING, HomeNudge.CATEGORISE)
+
+    /** "Also waiting: To review (3), Expenses with no category (5). See More", or null when nothing else is. Counted names carry their count so the line says how much waits. */
+    fun alsoWaitingLine(visible: List<HomeNudge>, counts: Map<HomeNudge, Int>): String? {
+        val rest = alsoWaiting(visible)
+        if (rest.isEmpty()) return null
+        return "Also waiting: " + rest.joinToString(", ") { n -> if (n in COUNTED && (counts[n] ?: 0) > 0) "${n.label} (${counts[n]})" else n.label } + ". See More"
+    }
+
     /** On the More page one notice at a time: the iPhone build's expiry warning outranks the backup reminder (a build that stops opening makes a backup moot). */
     enum class MoreNotice { SIGNING, BACKUP }
 

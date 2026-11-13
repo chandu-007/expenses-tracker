@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.semantics.heading
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Search
@@ -94,9 +97,19 @@ fun CategoryAvatar(name: String, fallback: String, modifier: Modifier = Modifier
 
 private val AVATAR_TINTS = listOf(Color(0xFFBFE3D0), Color(0xFFC9DAF8), Color(0xFFF4D9B5), Color(0xFFE5CFF0), Color(0xFFF6C9CF), Color(0xFFD7E6A8), Color(0xFFB9E2E8), Color(0xFFE8DDB5))
 
+/**
+ * The heading above each day's entries: the day, and at the right what was spent that day ([total], already signed, null when the day is not complete yet or had no spending). The pair reads as one heading
+ * to a screen reader ("Today, -₹1,112.00"). The total is drawn with [Text], so Hide amounts masks it.
+ */
 @Composable
-fun DayHeader(epochDay: Long) {
-    Text(dayLabel(epochDay), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 4.dp))
+fun DayHeader(epochDay: Long, total: String? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() }.testTag("day_header_$epochDay"),
+        verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(dayLabel(epochDay), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        if (total != null) Text(total, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = 12.dp).testTag("day_total_$epochDay"))
+    }
 }
 
 /** A short rise-and-fade when a screen opens (not for the home list, whose [key] is negative). Respects the phone's remove-animations setting. */
@@ -124,16 +137,21 @@ fun BoxScope.HeroGlow(color: Color) {
 /** Where the glass indicator of the bottom bar last rested, so a bar that appears on another screen starts there and glides on, as one bar would. */
 private object TabMemory { var index = 0f }
 
-private val TABS = listOf("Home", "Search", "Reports", "More")
+/** The five places along the bar, left to right: the Add button is the middle one and is never the current place, so the glass never rests on it. */
+private val TABS = listOf("Home", "Search", "Add", "Reports", "More")
+
+/** The most the bar's labels grow with the phone's text size (130%): at 200% a label of 24 sp made "Search" and "Reports" touch and "Home" wider than its pill. */
+private const val BAR_MAX_FONT_SCALE = 1.3f
 
 /**
- * The bar along the bottom: Home, Search, Reports and More, equal in width so they fit any screen, each label on one line (it shrinks rather than wrap).
+ * The bar along the bottom: Home, Search, a round Add button in the middle, Reports and More, equal in width so they fit any screen, each label on one line (it shrinks rather than wrap).
  * [selected] names the tab that is current. A pane of glass (a lit, see-through pill) glides under the current tab on a spring and stretches a little while it
  * travels, then settles; the pane starts where it last rested, so moving between screens looks like one bar moving. [moreBadge] puts a small dot on More
- * (something there wants attention). The tags are the ones the actions had before.
+ * (something there wants attention). [onAdd] is the Add button (null leaves the middle empty); its test tag is [addTag] (Home's is `add`, the tag the button had when it floated).
+ * The other tags are the ones the actions had before. The labels grow with the text size only up to [BAR_MAX_FONT_SCALE].
  */
 @Composable
-fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false) {
+fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add") {
     val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
     val reduce = LocalReduceMotion.current
     val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
@@ -149,11 +167,12 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
         Column {
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
+            CappedFontScale(BAR_MAX_FONT_SCALE) {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp)) {
                 Box(
                     Modifier.matchParentSize().drawBehind {
                         val gap = 4.dp.toPx()
-                        val w = (size.width - gap * 3) / 4f
+                        val w = (size.width - gap * (TABS.size - 1)) / TABS.size
                         val stretch = 1f + 0.10f * kotlin.math.abs(target - pos.value).coerceAtMost(3f)
                         val pw = w * stretch
                         val cx = pos.value * (w + gap) + w / 2f
@@ -169,9 +188,11 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
                     BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"))
+                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f).testTag(addTag)) else Spacer(Modifier.weight(1f))
                     BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"))
                     BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge)
                 }
+            }
             }
         }
     }
@@ -191,9 +212,26 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
             if (badge) Box(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-1).dp).size(9.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error).testTag("more_badge"))
         }
         androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
-            // the label shrinks to fit its quarter of the bar (a narrow screen or a big system font) instead of being cut or wrapped
+            // the label shrinks to fit its fifth of the bar (a narrow screen or a big system font) instead of being cut or wrapped
             label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
             color = tint, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        )
+    }
+}
+
+/** The Add button in the middle of the bar: a filled pill with a plus, the word "Add" under it. 56 dp high like the other places, so the touch area is well over 48 dp. */
+@Composable
+private fun AddItem(onClick: () -> Unit, modifier: Modifier) {
+    Column(
+        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Button },
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Box(Modifier.size(width = 56.dp, height = 32.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+        }
+        androidx.compose.material3.Text(
+            "Add", maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
         )
     }
 }

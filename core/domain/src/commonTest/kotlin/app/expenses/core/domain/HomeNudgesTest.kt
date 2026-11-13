@@ -30,6 +30,15 @@ class HomeNudgesTest {
     }
 
     @Test
+    fun theAlsoWaitingLineCarriesTheCountsOfTheCountedNudgesAndNothingForTheOthers() {
+        val counts = mapOf(HomeNudge.INBOX to 2, HomeNudge.CATEGORISE to 12, HomeNudge.SETUP to 1, HomeNudge.FIRST_WEEK to 5)
+        val v = visible(counts)
+        assertEquals("Also waiting: Expenses with no category (12), Set up reading bank texts, Getting started. See More", HomeNudges.alsoWaitingLine(v, counts))
+        assertNull(HomeNudges.alsoWaitingLine(visible(mapOf(HomeNudge.INBOX to 2)), mapOf(HomeNudge.INBOX to 2)), "one card and nothing else: no line")
+        assertNull(HomeNudges.alsoWaitingLine(emptyList(), emptyMap()))
+    }
+
+    @Test
     fun aBillDueThisWeekOutranksTextsWaitingAndANewBillDoesNot() {
         assertEquals(HomeNudge.BILLS_DUE, HomeNudges.card(visible(mapOf(HomeNudge.INBOX to 9, HomeNudge.BILLS_DUE to 1))))
         assertEquals(HomeNudge.INBOX, HomeNudges.card(visible(mapOf(HomeNudge.INBOX to 1, HomeNudge.BILLS_NEW to 4))))

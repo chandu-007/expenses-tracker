@@ -477,10 +477,17 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         Shortcut.SEARCH -> if (searching) searchFocus++ else goTab("Search")
                     }
                 }
+                // the Add button in the middle of the bar works from Search and Reports too, as Ctrl+N does: the page is left first (what was typed there is not kept), or the add screen would wait unseen behind it
+                val addFromBar: () -> Unit = {
+                    platform.trace("add: tapped")
+                    if (searching) { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
+                    if (reporting) { reporting = false; viewModel.closeReports() }
+                    prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true
+                }
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                     // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
                     if (!app.expenses.ui.rememberKeyboardOpen()) {
-                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge)
+                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge, onAdd = addFromBar, addTag = "bar_add")
                     }
                 }
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
