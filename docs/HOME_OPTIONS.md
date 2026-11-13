@@ -163,4 +163,6 @@ Method: a throw-away instrumented test (not committed) seeds the audit's states 
 | Hide amounts before | 715 | 1128 | 720 | 1156 | 723 |
 | Hide amounts after | 471 | 928 | 468 | 956 | 471 |
 
+Screenshots read for this slice (outside the repository, `~/Documents/personal/expenses_builds/home_built/key/` and `raw/before|after/`): 393 and 360 dp, light and dark, 100%, 150% and 200% text, a fold window (864 and 840 dp), for typical, empty, heavy, trip, nudges, Hide amounts.
+
 So the first entry at 393 dp, 100% text (typical with one nudge) moves from about 717 dp to about 577 dp (140 dp, 20%), and with the bill nudge put away from about 515 dp [INFERENCE: the nudge row is 62 dp + its gap; not measured separately], close to B's 522 dp. The mock-ups used no decimals in tiles and a lighter nudge; the reflowed text under whole rupees is the same size. At 200% text the page is still longer than a screen (1021 dp): each block is one full-width line or two, by design.

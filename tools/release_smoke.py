@@ -338,11 +338,11 @@ def step_bill_photo():
     adb("push", FIXTURE, DEVICE_FIXTURE)
     sh("am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", "file://" + DEVICE_FIXTURE)
     time.sleep(2)
-    # the Add button on Home shows "+ Add", or only "+" once the list has been scrolled
+    # the Add button is the middle place of the bottom bar ("Add" under a plus), whatever the scroll (Slice 112: it no longer floats and shrinks to a "+")
     end = time.time() + 20
     while True:
         screen.refresh()
-        fab = screen.find(text="Add") or screen.find(text="+")
+        fab = screen.find(text="Add")  # the bar's middle place
         if fab:
             tap_xy(*fab.centre)
             time.sleep(1)
@@ -452,7 +452,7 @@ def open_add_form():
     end = time.time() + 20
     while True:
         screen.refresh()
-        fab = screen.find(text="Add") or screen.find(text="+")
+        fab = screen.find(text="Add")  # the bar's middle place
         if fab:
             tap_xy(*fab.centre)
             time.sleep(1.2)
