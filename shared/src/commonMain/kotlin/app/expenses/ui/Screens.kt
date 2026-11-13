@@ -207,6 +207,9 @@ fun EntryListScreen(
     onBulkRemoveTag: (List<String>, String) -> Unit,
     onBulkTransfer: ((List<String>, String) -> Unit)? = null,
 ) {
+    // asked before anything that returns early (the More page): a call after that return shifted the screen's state and broke Back from a place opened in More
+    // the graph and the small lines go in a two-pane list pane: it is narrow and the entries should start on its first screen
+    val wide = rememberIsWide()
     var selected by rememberSaveable { mutableStateOf(listOf<String>()) }
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
     var askingFor by remember { mutableStateOf<DueUi?>(null) }
@@ -372,8 +375,7 @@ fun EntryListScreen(
         LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)
         val onHero = MaterialTheme.colorScheme.onPrimary
         val large = isLargeText()
-        // the graph and the small lines also go in a two-pane list pane: it is narrow and the entries should start on its first screen
-        val dense = large || rememberIsWide()
+        val dense = large || wide
         // the money spent on each complete day, for the day headings: worked out from the rows already here (the last day loaded waits for the next page), no query
         val dayTotals = remember(state.rows, state.endReached, state.baseCurrency) {
             DayTotals.of(state.rows.map { DayEntry(it.day, it.kind, it.minor, it.currency) }, state.baseCurrency.code, state.endReached)
