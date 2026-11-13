@@ -432,7 +432,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 )
                 // The entry editor is the pane beside the list on a wide window, but only while Home or Search (the two screens with a list to put it beside) is what is showing: opened from the calendar,
                 // a report or another screen it is a full screen over that screen on a wide window too, and Back returns to that screen.
-                val searchAlone = searching && screens.count { it } == 1
+                // a trip's "See all entries" opens Search over the trip's own page: the trip pages do not count as a second screen, or an entry opened from those results would cover them instead of sitting beside them
+                val searchAlone = searching && screens.count { it } - (if (tripSummaryOf != null) 1 else 0) - (if (tripsOpen) 1 else 0) == 1
                 val editorFull = !wide || (screens.any { it } && !searchAlone)
                 val screenKey = when {
                     history != null -> 0
@@ -450,14 +451,28 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 var wantMore by rememberSaveable { mutableStateOf(false) }
                 // the More page is open: kept here, above the screens, so Back from a screen opened from More comes back to More
                 var moreOpen by rememberSaveable { mutableStateOf(false) }
+                // a trip's "See all entries" opens Search over the trip's page: any other tab, and Add, leave the trip pages too, or Home would show the summary again
+                val leaveTrips = { if (tripsOpen || tripSummaryOf != null) { tripsOpen = false; tripSummaryOf = null; viewModel.closeTrips(); viewModel.closeTripSummary() } }
                 val goTab: (String) -> Unit = { t ->
                     if (searching && t != "Search") { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
                     if (reporting && t != "Reports") { reporting = false; viewModel.closeReports() }
+                    if (t != "Search") leaveTrips()
                     when {
                         t == "Search" && !searching -> { platform.trace("search: tapped"); searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; searching = true }
-                        t == "Reports" && !reporting -> { reporting = true; viewModel.openReports() }
+                        // on a wide window an entry open beside the results would be drawn full screen over the reports (the editor's key is tested first): it is closed, as Back would
+                        t == "Reports" && !reporting -> { if (editing != null) viewModel.closeEditor(); reporting = true; viewModel.openReports() }
                         t == "More" -> wantMore = true
                     }
+                }
+                // the Add button in the middle of the bar works from Search and Reports too, as Ctrl+N does: the page is left first (what was typed there is not kept), or the add screen would wait unseen behind it;
+                // on a wide window an entry open beside the list is closed too (its key is tested before the add screen's: it would be drawn full screen over it)
+                val addFromBar: () -> Unit = {
+                    platform.trace("add: tapped")
+                    if (searching) { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
+                    if (reporting) { reporting = false; viewModel.closeReports() }
+                    leaveTrips()
+                    if (editing != null) viewModel.closeEditor()
+                    prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true
                 }
                 // a shortcut from a hardware keyboard acts only where the bar along the bottom is (Home, Search, Reports), with no tour and no add screen up: elsewhere it would open a screen that stays hidden behind the one showing
                 val shortcut by host.shortcutRequests.collectAsState()
@@ -469,20 +484,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     if (guide != null || adding || screenKey !in listOf(app.expenses.ui.ScreenKeys.HOME, 14, 16)) return@LaunchedEffect
                     when (r.shortcut) {
                         // the add screen is drawn over Home only: from Search or Reports the page is left first (what was typed there is not kept), or the add screen would wait unseen behind it
-                        Shortcut.ADD -> {
-                            if (searching) { searching = false; searchAccount = null; viewModel.closeSearch() }
-                            if (reporting) { reporting = false; viewModel.closeReports() }
-                            prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true
-                        }
+                        Shortcut.ADD -> addFromBar()
                         Shortcut.SEARCH -> if (searching) searchFocus++ else goTab("Search")
                     }
-                }
-                // the Add button in the middle of the bar works from Search and Reports too, as Ctrl+N does: the page is left first (what was typed there is not kept), or the add screen would wait unseen behind it
-                val addFromBar: () -> Unit = {
-                    platform.trace("add: tapped")
-                    if (searching) { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
-                    if (reporting) { reporting = false; viewModel.closeReports() }
-                    prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true
                 }
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                     // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
@@ -701,6 +705,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 14 -> {
                         val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
                         BackHandler { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
+                        // a change made to the entry that is open beside the results (two panes): its form would Save the old version over the change, or fail for a deleted entry, so the entry is closed first
+                        val settle = { ids: List<String> -> val open = (editing as? Editable.Form)?.draft?.id ?: (editing as? Editable.ReadOnly)?.id; if (open != null && open in ids) viewModel.closeEditor() }
                         SearchScreen(
                             tabBar = { tabBar("Search") },
                             state = found, categories = s.categories,
@@ -709,8 +715,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             initialAccountId = searchAccount, initialTag = searchTag, initialFromDay = searchFrom, initialToDay = searchTo, fields = searchFields, focusTick = searchFocus,
                             onOpen = { viewModel.openEditor(it.id) },
                             accounts = s.accounts,
-                            onBulkCategory = viewModel::bulkSetCategory, onBulkAccount = viewModel::bulkSetAccount, onBulkDelete = viewModel::bulkDelete, onBulkTransfer = viewModel::bulkMakeTransfers,
-                            tags = s.tags, onBulkAddTag = viewModel::bulkAddTag, onBulkRemoveTag = viewModel::bulkRemoveTag,
+                            onBulkCategory = { ids, c -> settle(ids); viewModel.bulkSetCategory(ids, c) }, onBulkAccount = { ids, a -> settle(ids); viewModel.bulkSetAccount(ids, a) },
+                            onBulkDelete = { ids -> settle(ids); viewModel.bulkDelete(ids) }, onBulkTransfer = { ids, a -> settle(ids); viewModel.bulkMakeTransfers(ids, a) },
+                            tags = s.tags, onBulkAddTag = { ids, t -> settle(ids); viewModel.bulkAddTag(ids, t) }, onBulkRemoveTag = { ids, t -> settle(ids); viewModel.bulkRemoveTag(ids, t) },
                             onUndo = viewModel::undo,
                             saved = s.savedSearches, onSaveSearch = viewModel::saveSearch, onDeleteSaved = viewModel::deleteSavedSearch,
                             recent = s.recentSearches, onRemember = viewModel::rememberSearch, onForgetRecent = viewModel::forgetSearch, onClearRecent = viewModel::clearRecentSearches,
@@ -873,7 +880,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     else -> EntryListScreen(
                         state = s,
-                        onAdd = { platform.trace("add: tapped"); prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
+                        onAdd = { platform.trace("add: tapped"); if (editing != null) viewModel.closeEditor(); prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true },
                         onLoadMore = viewModel::loadMore,
                         onMessageShown = viewModel::dismissMessage,
                         onTemplate = { t ->

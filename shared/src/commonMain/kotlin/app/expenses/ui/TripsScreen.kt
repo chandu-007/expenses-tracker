@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -94,7 +95,13 @@ fun TripsScreen(
     BackHandler(enabled = editing != null) { editing = null }
     val e = editing
     if (e != null) {
-        TripForm(row = rows.firstOrNull { it.id == e }, key = e, tags = tags, onSave = onSave, onClose = { editing = null })
+        // an id kept from before the process was recreated: wait for the list, and close the form when that trip is gone (a form with no row is the form of a NEW trip, and Save would make one)
+        val row = rows.firstOrNull { it.id == e }
+        if (e.isNotEmpty() && row == null) {
+            androidx.compose.runtime.LaunchedEffect(state) { if (state != null) editing = null }
+            return
+        }
+        TripForm(row = row, key = e, tags = tags, onSave = onSave, onClose = { editing = null })
         return
     }
     deleting?.let { id ->
@@ -171,8 +178,8 @@ private fun TripRow(r: TripRowUi, onOpen: (String) -> Unit, onEdit: (String) -> 
             Text("Tag \"${r.tag}\"", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("trip_tag_${r.name}"))
         }
         Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { onEdit(r.id) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_edit_${r.name}")) { Text("Edit") }
-            TextButton(onClick = { onDelete(r.id) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_delete_${r.name}")) { Text("Delete") }
+            TextButton(onClick = { onEdit(r.id) }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Edit ${r.name}" }.testTag("trip_edit_${r.name}")) { Text("Edit") }
+            TextButton(onClick = { onDelete(r.id) }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Delete ${r.name}" }.testTag("trip_delete_${r.name}")) { Text("Delete") }
         }
     }
 }

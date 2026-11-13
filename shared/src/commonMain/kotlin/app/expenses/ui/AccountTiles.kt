@@ -73,8 +73,9 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
     val isCard = a.type == "CREDIT_CARD"
     val pad = if (compact) 14.dp else 20.dp
     val tag = if (compact) "balance_chip_${a.name}" else "account_${a.name}"
-    // what the small chip reads out and what the tests read: masked like every other amount while Hide amounts is on
-    val label = privately(a.name + (if (a.owed) " · owed" else "") + " " + a.balanceText)
+    // what the small chip reads out and what the tests read: masked like every other amount while Hide amounts is on; a card's due words ("due in 6 d") are drawn on the tile, so they are read too
+    val due = if (compact) a.card?.dueShort?.takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty() else ""
+    val label = privately(a.name + (if (a.owed) " · owed" else "") + " " + a.balanceText + due)
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val reduce = LocalReduceMotion.current

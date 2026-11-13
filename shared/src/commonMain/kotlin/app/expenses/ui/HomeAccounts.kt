@@ -43,13 +43,16 @@ import app.expenses.core.domain.wholeAmounts
 fun BalancesStrip(accounts: List<AccountRowUi>, selectedId: String? = null, onSelect: (String) -> Unit, onOpenAccounts: () -> Unit = {}) {
     if (accounts.isEmpty()) return
     if (isLargeText()) { LargeAccounts(accounts, selectedId, onSelect, onOpenAccounts); return }
+    // the tile's three lines (name, balance, "owed · due in 6 d") are about 52 sp of line heights and 17 dp of padding: 76 dp holds them at normal text, and the height grows with the text size below the cut-down
+    // layout, or the last line is cut in half at 130% (seen on a screenshot of the card tile)
+    val tileHeight = (52f * androidx.compose.ui.platform.LocalDensity.current.fontScale + 24f).coerceAtLeast(76f).dp
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp).testTag("balances"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         accounts.forEach { a ->
             val chosen = a.id == selectedId
-            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(112.dp).height(76.dp).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier))
+            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(112.dp).height(tileHeight).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier))
         }
     }
 }

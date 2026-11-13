@@ -147,15 +147,18 @@ object TripRules {
     /** A trip read from a file made by someone else: made fit (name and tag tidied, a budget outside the limits dropped), or null when it cannot be a trip at all (no id, days outside 2000 to 2099, last day before the first, longer than [MAX_DAYS]). */
     fun fromFile(id: String, name: String, tag: String, startDay: Long, endDay: Long, enabled: Boolean, dailyBudgetMinor: Long?): Trip? {
         val n = cleanName(name)?.take(MAX_NAME)?.trim()?.ifEmpty { null } ?: return null
-        val t = TagRules.normalize(tag) ?: return null
+        val t = TagRules.normalize(tag)?.takeIf { TagRules.normalize(it) == it } ?: return null // "# #a" tidies to "#a", which tidies again to "a": a tag that is not stable would never match the entries tagged under it
         if (id.isBlank() || id.length > 64 || endDay < startDay || startDay < FIRST_DAY || endDay > LAST_DAY || endDay - startDay + 1 > MAX_DAYS) return null
         return Trip(id, n, t, startDay, endDay, enabled, dailyBudgetMinor?.takeIf { it in 1..MAX_BUDGET_MINOR })
     }
 
-    /** The days that [trip] covers and [before] did not, as inclusive ranges: all of [trip] when [before] is null or was off, the added days at either end when its dates grew. Used so a changed trip offers to tag only what is newly inside it. */
+    /**
+     * The days that [trip] covers and [before] did not, as inclusive ranges: all of [trip] when [before] is null, was off, or had another tag (the entries tagged with the old tag are not counted under the new one, so they are offered
+     * the new tag), the added days at either end when its dates grew. Used so a changed trip offers to tag only what is newly inside it.
+     */
     fun newlyCovered(before: Trip?, trip: Trip): List<LongRange> {
         if (!trip.enabled) return emptyList()
-        if (before == null || !before.enabled) return listOf(trip.startDay..trip.endDay)
+        if (before == null || !before.enabled || !before.tag.equals(trip.tag, ignoreCase = true)) return listOf(trip.startDay..trip.endDay)
         val out = ArrayList<LongRange>(2)
         if (trip.startDay < before.startDay) out += trip.startDay..minOf(trip.endDay, before.startDay - 1)
         if (trip.endDay > before.endDay) out += maxOf(trip.startDay, before.endDay + 1)..trip.endDay

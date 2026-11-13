@@ -136,7 +136,9 @@ fun SearchScreen(
     var selected by fields.selected
     // the Filters panel (SearchFilters.kt) is open
     var filtersOpen by fields.filtersOpen
-    PlatformBackHandler(enabled = selected.isNotEmpty()) { selected = emptyList() }
+    // registered only while they apply: a back handler is called in the order its owner was first composed, not by what is enabled, so one registered at the start would sit under the entry open beside the results
+    // (two panes) and Back would close that entry before the selection or the Filters panel
+    if (selected.isNotEmpty()) PlatformBackHandler(enabled = true) { selected = emptyList() }
     val focusManager = LocalFocusManager.current
     // measurement builds only (see Platform.trace): when the page is first composed, when anything the search is made of changes, and when results are shown
     val platform = LocalPlatform.current
@@ -157,7 +159,7 @@ fun SearchScreen(
     }
     // choosing entries is done with the keyboard out of the way
     LaunchedEffect(selected.isNotEmpty()) { if (selected.isNotEmpty()) { keyboard?.hide(); focusManager.clearFocus(); filtersOpen = false } }
-    PlatformBackHandler(enabled = filtersOpen) { filtersOpen = false }
+    if (filtersOpen) PlatformBackHandler(enabled = true) { filtersOpen = false }
     // whatever made the results change (an Undo, a bulk change, a refresh), a selection never holds an entry that is not listed
     var min by fields.min
     var max by fields.max
@@ -186,8 +188,9 @@ fun SearchScreen(
         onChange(SearchInput(t, lo, hi, c, k, r, g, fd, td, ac))
     }
     fun changedAll(i: SearchInput) = changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId)
-    // The screen may be re-created (rotation) with its inputs restored: search again so the results match what is shown.
-    LaunchedEffect(Unit) { if (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null || fromDay != null || toDay != null || accountId != null) onChange(SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)) }
+    // The screen may be re-created (rotation, back from an entry, a fold) with its inputs restored: search again only when the view model has lost the results (the process was recreated), so a result list that is
+    // still held is not blanked and the "Searching…" line does not flash.
+    LaunchedEffect(Unit) { if (!state.hasConditions && (text.isNotEmpty() || min.isNotEmpty() || max.isNotEmpty() || categoryId != null || kind != SearchKind.ANY || range != SearchRange.ANY || tag != null || fromDay != null || toDay != null || accountId != null)) onChange(SearchInput(text, min, max, categoryId, kind, range, tag, fromDay, toDay, accountId)) }
 
     pickingDay?.let { which ->
         // the date picker counts days as UTC midnights

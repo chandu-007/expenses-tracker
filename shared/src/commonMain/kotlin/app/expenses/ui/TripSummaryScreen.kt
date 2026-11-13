@@ -93,12 +93,15 @@ fun TripSummaryScreen(
         confirmButton = { TextButton(onClick = { confirmEnd = false; onEndToday(state.id) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_end_ok")) { Text("End trip") } },
         dismissButton = { TextButton(onClick = { confirmEnd = false }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_end_cancel")) { Text("Keep going") } },
     )
+    // the first frame after the page opens has no summary yet (it is read from the store): the words about a missing trip wait until the read has had time to answer, so they are never drawn (or read out) for a trip that is there
+    var waited by androidx.compose.runtime.remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(1_000); waited = true }
     Scaffold(
         topBar = { AreaTopBar(state?.name ?: "Trip", Area.MONEY, Icons.Outlined.Flight, onBack, "trip_summary_back") },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (state == null) {
-            Text("This trip is no longer there.", modifier = Modifier.padding(padding).padding(16.dp).testTag("trip_summary_gone"))
+            if (waited) Text("This trip is no longer there.", modifier = Modifier.padding(padding).padding(16.dp).testTag("trip_summary_gone"))
             return@Scaffold
         }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = if (undo != null) 96.dp else 24.dp).testTag("trip_summary"), verticalArrangement = Arrangement.spacedBy(12.dp)) {

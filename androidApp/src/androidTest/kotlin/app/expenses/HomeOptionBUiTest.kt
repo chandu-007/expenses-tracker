@@ -110,6 +110,12 @@ class HomeOptionBUiTest {
         db { ok -> ok.store.save(Income(EntryId("sal"), at(-2), AccountId("bank"), Money(18_500_000, inr), CategoryId("Other")), EntryDetails(merchant = "Employer")) }
     }
 
+    /** A statement of the card that closed 9 days ago with a purchase in it, due in 6 days: the small tile then says "owed · due in 6 d" (day numbers are kept to 28, as the card form keeps them). */
+    private fun cardDueSoon() {
+        db { ok -> ok.cards.save(app.expenses.core.domain.CardTerms("hdfc", statementDay = LocalDate.now().plusDays(-9).dayOfMonth.coerceAtMost(28), dueDay = LocalDate.now().plusDays(6).dayOfMonth.coerceAtMost(28))) }
+        entry("billed", -12, "Billed card spend", 50_000, "Food", "hdfc")
+    }
+
     private fun waitTiles() { waitFor("budget_summary"); waitFor("home_safe_to_spend_line"); Thread.sleep(2_000) }
 
     @Test
@@ -164,13 +170,33 @@ class HomeOptionBUiTest {
 
     @Test
     fun accountTilesAreSmallAndTheCardTileSaysOwedAndWhenItIsDue() {
-        seedTypical(); launch(); waitFor("balance_chip_HDFC Regalia"); Thread.sleep(2_000)
+        seedTypical(); cardDueSoon(); launch(); waitFor("balance_chip_HDFC Regalia"); Thread.sleep(2_000)
         val t = bounds("balance_chip_HDFC Regalia")
         assertTrue(t.width <= 120f * density() && t.height <= 80f * density(), "a small tile: ${t.width / density()} x ${t.height / density()} dp")
         assertTrue(bounds("balance_chip_Bank").height <= 80f * density())
         assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("owed", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "the card says owed")
+        assertTrue(textOf("balance_chip_HDFC Regalia").contains("due in"), "the tile reads out when the card is due too: ${textOf("balance_chip_HDFC Regalia")}")
         tap("balance_chip_Bank"); waitFor("account_filter_note")
     }
+
+    /** The tile's three lines (name, balance, "owed · due in 6 d") must be drawn whole at the text sizes below the cut-down layout (150%): the owed line's text layout must not overflow the height it was given (a clamped node has in-bounds bounds even when its text is cut, as seen at 130% on a screenshot). */
+    private fun tileKeepsItsLinesInsideAtFontScale(scale: String) {
+        seedTypical(); cardDueSoon(); shell("settings put system font_scale $scale")
+        launch(); waitFor("balance_chip_HDFC Regalia"); Thread.sleep(2_000)
+        val tile = bounds("balance_chip_HDFC Regalia")
+        val node = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("the owed line") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("owed") } }, useUnmergedTree = true).fetchSemanticsNodes()
+            .firstOrNull { it.boundsInRoot.left >= tile.left - 1f && it.boundsInRoot.right <= tile.right + 1f && it.boundsInRoot.top >= tile.top - 1f && it.boundsInRoot.top <= tile.bottom }
+        assertNotNull(node, "the card tile draws its owed line")
+        val layouts = ArrayList<androidx.compose.ui.text.TextLayoutResult>()
+        node.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+        assertTrue(layouts.isNotEmpty() && node.size.height >= layouts[0].multiParagraph.height.toInt() - 1, "at font $scale the owed line is cut: node ${node.size.height} px high, text ${layouts.firstOrNull()?.multiParagraph?.height} px, tile ${tile.height / density()} dp")
+        val bar = 3f * density()
+        assertTrue(node.boundsInRoot.bottom <= tile.bottom - bar + 1f, "at font $scale the owed line ends at ${(node.boundsInRoot.bottom - tile.top) / density()} dp of a ${tile.height / density()} dp tile (the limit bar takes the last 3 dp)")
+        assertTrue(bounds("balance_chip_Bank").height <= tile.height + 1f)
+    }
+
+    @Test fun theCardTileKeepsItsLinesInsideAt130Percent() = tileKeepsItsLinesInsideAtFontScale("1.3")
+    @Test fun theCardTileKeepsItsLinesInsideAt149Percent() = tileKeepsItsLinesInsideAtFontScale("1.49")
 
     @Test
     fun theFirstEntryStartsHighOnAPhoneWithATypicalMonth() {

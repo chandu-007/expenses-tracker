@@ -168,6 +168,13 @@ class TripRulesTest {
         assertEquals(listOf(day(2026, 11, 20)..day(2026, 11, 25)), TripRules.newlyCovered(t, t.copy(startDay = day(2026, 11, 20), endDay = day(2026, 11, 25))), "moved clear of the old days: all the new ones")
     }
 
+    @Test fun changingOnlyTheTagOffersAllTheDaysSoTheEntriesTaggedUnderTheOldTagAreNotLeftOut() {
+        val t = goa(day(2026, 11, 3), day(2026, 11, 9))
+        assertEquals(listOf(day(2026, 11, 3)..day(2026, 11, 9)), TripRules.newlyCovered(t, t.copy(tag = "Goa 2026")), "a new tag: every day is offered the new tag")
+        assertEquals(emptyList(), TripRules.newlyCovered(t, t.copy(tag = "trip: goa")), "the same tag in other letters is the same tag")
+        assertEquals(emptyList(), TripRules.newlyCovered(t, t.copy(tag = "Goa 2026", enabled = false)), "off: nothing")
+    }
+
     // ---- a file made by someone else ----
 
     @Test fun aTripFromAFileIsMadeFitOrDropped() {
@@ -184,6 +191,11 @@ class TripRulesTest {
         assertNull(TripRules.fromFile("a", "n", "t", Long.MIN_VALUE, Long.MAX_VALUE, true, null))
         assertNull(TripRules.fromFile("a", "n", "t", day(1900, 1, 1), day(1900, 1, 5), true, null))
         assertNull(TripRules.fromFile("a", "n", "t", day(2026, 1, 1), day(2027, 1, 2), true, null), "367 days")
+    }
+
+    @Test fun aTagThatTidiesDifferentlyTheSecondTimeIsRefusedInAFile() {
+        assertNull(TripRules.fromFile("a", "n", "# #a", day(2026, 11, 3), day(2026, 11, 9), true, null), "\"# #a\" tidies to \"#a\" and then to \"a\"")
+        assertEquals("a", TripRules.fromFile("a", "n", "#a", day(2026, 11, 3), day(2026, 11, 9), true, null)!!.tag)
     }
 
     @Test fun theStoreRulesAreTheFormRulesOnABuiltTrip() {
