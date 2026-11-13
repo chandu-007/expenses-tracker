@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
@@ -158,7 +159,8 @@ class HomeBaseUiTest {
 
     @Test
     fun addIsInTheBarOnSearchAndReportsToo() {
-        launch(); tap("open_search"); waitFor("search_text"); tap("bar_add"); waitFor("amount")
+        // the box takes the focus and the keyboard comes up on an emulator boot that has one; the bar is hidden while it is up, so Done closes it first
+        launch(); tap("open_search"); waitFor("search_text"); runCatching { compose.onNodeWithTag("search_text", useUnmergedTree = true).performImeAction() }; tap("bar_add"); waitFor("amount")
         tap("cancel"); waitFor("add")
         tap("open_reports"); waitFor("bar_add"); tap("bar_add"); waitFor("amount")
     }
