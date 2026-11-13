@@ -15,7 +15,13 @@ import app.expenses.core.domain.Currency
 data class TripWindowUi(val id: String, val name: String, val tag: String, val startDay: Long, val endDay: Long)
 
 /** Home's card while a trip is on: "Trip: Goa · day 3 of 7 · ₹4,500 spent". Informational, not a nudge (docs/HOME_NUDGES.md). */
-data class TripCardUi(val id: String, val title: String, val dayText: String, val spentText: String, val spentMinor: Long) {
+data class TripCardUi(
+    val id: String, val title: String, val dayText: String, val spentText: String, val spentMinor: Long,
+    /** Day [dayNumber] of [length]: the card's progress bar when the trip has no budget. */
+    val dayNumber: Int = 0, val length: Int = 0,
+    /** Percent of the whole trip budget (the daily budget times the days) spent so far, and that budget as text; null / empty without a daily budget. Arithmetic on the total the card already has. */
+    val budgetPercent: Int? = null, val budgetText: String = "",
+) {
     /** The one line the card shows, and the words a screen reader reads. */
     val line: String get() = "$title · $dayText · $spentText"
 }
@@ -75,7 +81,11 @@ internal object TripUiBuilder {
     /** The card for the trip that is on today, or null. [spent] is what its tagged entries on its days add up to. */
     fun card(trip: Trip, today: Long, spentMinor: Long, currency: Currency): TripCardUi {
         val title = if (trip.name.startsWith("trip", ignoreCase = true)) trip.name else "Trip: ${trip.name}"
-        return TripCardUi(trip.id, title, "day ${today - trip.startDay + 1} of ${trip.length}", Money(spentMinor, currency).formatted() + " spent", spentMinor)
+        return TripCardUi(
+            trip.id, title, "day ${today - trip.startDay + 1} of ${trip.length}", Money(spentMinor, currency).formatted() + " spent", spentMinor,
+            dayNumber = (today - trip.startDay + 1).toInt(), length = trip.length,
+            budgetPercent = TripRules.budgetPercent(trip, spentMinor), budgetText = TripRules.totalBudgetMinor(trip)?.let { Money(it, currency).formatted() }.orEmpty(),
+        )
     }
 
     /** How the top of the category list reads: at most [LIMIT] rows, the rest added into "Everything else". */

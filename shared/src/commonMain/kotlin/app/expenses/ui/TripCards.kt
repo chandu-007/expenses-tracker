@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,21 +33,36 @@ import app.expenses.TripCardUi
 import app.expenses.TripWindowUi
 
 /**
- * Home's card while a trip is on: "Trip: Goa · day 3 of 7 · ₹4,500 spent". It is information, not a request, so it is not one of the nudges (docs/HOME_NUDGES.md): it sits right under the month card, is
- * never put off, and does not count in "Also waiting". The whole card opens the trip's summary. Amounts are hidden while Hide amounts is on (this package's [Text]).
+ * Home's card while a trip is on: "Trip: Goa · day 3 of 7 · ₹4,500 spent" with a progress bar under it (Option B). With a daily budget the bar is how much of the whole trip budget is spent and a small line says it
+ * ("58% of ₹18,000 trip budget"; the bar turns red past the budget); without one it is how far through the days the trip is. It is information, not a request, so it is not one of the nudges (docs/HOME_NUDGES.md):
+ * it is never put off and does not count in "Also waiting". The whole card opens the trip's summary. Amounts are hidden while Hide amounts is on (this package's [Text]), and so are the bar and the percent (they would show the figure).
  */
 @Composable
 fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
-    Row(
+    val hide = LocalHideAmounts.current
+    val over = (card.budgetPercent ?: 0) > 100
+    val fraction = card.budgetPercent?.let { (it / 100f).coerceIn(0f, 1f) } ?: if (card.length > 0) (card.dayNumber.toFloat() / card.length).coerceIn(0f, 1f) else 0f
+    Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
             .clickable(onClickLabel = "Open the trip summary", role = Role.Button, onClick = onOpen)
             .heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp).testTag("home_trip_card"),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Outlined.Flight, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(10.dp))
-        Text(card.line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_line"))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Flight, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(card.line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_line"))
+        }
+        if (!hide) {
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).testTag("home_trip_progress"),
+                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f),
+            )
+            if (card.budgetPercent != null && card.budgetText.isNotEmpty()) {
+                Text("${card.budgetPercent}% of ${card.budgetText} trip budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_budget"))
+            }
+        }
     }
 }
 

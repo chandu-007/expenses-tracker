@@ -73,4 +73,14 @@ class CardSummaryTest {
         assertEquals("R1000 left to pay · minimum about R50 · was due 5 Apr (3 days overdue)", CardSummaryText.due(summary(100_000, 100_000, 0, null, d(2026, 4, 8)), ::money))
         assertEquals("R1000 left to pay · was due 5 Apr (1 day overdue)", CardSummaryText.due(CardSummaries.of(CardBilling.standing(cycle, 100_000, 0, terms.copy(minDuePercent = 0)), 100_000, 100_000, null, d(2026, 4, 6)), ::money))
     }
+
+    @Test
+    fun theShortDueWordsForASmallTileAreEmptyWhenNothingIsLeftToPay() {
+        assertEquals("due in 16 d", CardSummaryText.dueShort(summary(100_000, 100_000, 0, null)))
+        assertEquals("due today", CardSummaryText.dueShort(summary(100_000, 100_000, 0, null, d(2026, 4, 5))))
+        assertEquals("due tomorrow", CardSummaryText.dueShort(summary(100_000, 100_000, 0, null, d(2026, 4, 4))))
+        assertEquals("overdue 3 d", CardSummaryText.dueShort(summary(100_000, 100_000, 0, null, d(2026, 4, 8))))
+        assertEquals("", CardSummaryText.dueShort(summary(100_000, 20_000, 100_000, null)), "the statement is paid")
+        assertEquals("", CardSummaryText.dueShort(summary(0, 5_000, 0, null)), "nothing was owed")
+    }
 }

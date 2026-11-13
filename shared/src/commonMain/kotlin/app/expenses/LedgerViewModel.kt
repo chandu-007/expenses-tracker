@@ -294,7 +294,8 @@ data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int
 data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
 
 /** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
-data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point, or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
+data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point ("₹250.00 more than last month so far"), or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "",
+    /** The chip beside the month total: "▲ +25%" or "▼ −30%"; empty when there is nothing to compare with or nothing changed. */ val comparePill: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
@@ -404,7 +405,8 @@ data class GoalsUi(val rows: List<GoalRowUi> = emptyList(), val accounts: List<A
 
 data class CardRowUi(val statementDay: Int, val dueDay: Int, val minDuePercent: Int, val remindDaysBefore: Int, val termsText: String, val statusText: String, /** The credit limit as typed (plain rupees), or empty. */ val creditLimit: String = "",
     /** The card summary (worked out in [app.expenses.core.domain.CardSummaries]): charges since the statement, the limit use (empty without a limit; [limitFraction] is then 0) and what is left to pay with its due date. */
-    val cycleText: String = "", val limitText: String = "", val limitFraction: Float = 0f, val dueLineText: String = "")
+    val cycleText: String = "", val limitText: String = "", val limitFraction: Float = 0f, val dueLineText: String = "",
+    /** The few words for the small Home tile: "due in 6 d", "overdue 2 d"; empty when nothing is left to pay ([CardSummaryText.dueShort]). */ val dueShort: String = "")
 
 val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLET" to "Wallet", "CREDIT_CARD" to "Credit card", "LOAN" to "Loan")
 
@@ -1455,6 +1457,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val dayFmt = DatePattern("d MMM")
         // this period against the last one at the same point in it
         val budgetPeriod = ok.budgets.period()
+        var comparePill = ""
         val compare = PeriodCompare.lastName(budgetPeriod)?.let { last ->
             val cur = budgetPeriod.containing(today)
             val before = budgetPeriod.containing(cur.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
@@ -1462,7 +1465,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val comparableEnd = minOf(before.start.plus(daysIn, kotlinx.datetime.DateTimeUnit.DAY), before.endExclusive)
             val now = ok.reports.spent(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).minorUnits
             val earlier = ok.reports.spent(DatePeriod(before.start, comparableEnd), zone, inr).minorUnits
-            PeriodCompare.describe(now, earlier, last) { Money(it, inr).formatted() }
+            // the same two figures give the sentence and the chip beside the total ("▲ +158%")
+            comparePill = PeriodCompare.pill(now, earlier).orEmpty()
+            PeriodCompare.sentence(now, earlier, last) { Money(it, inr).formatted() }
         }.orEmpty()
         // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
         val insight = PeriodCompare.lastName(budgetPeriod)?.let {
@@ -1480,7 +1485,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
             val minor = perDay[d.toEpochDays()] ?: 0L
             SparkDayUi(d.toEpochDays(), minor, dayFmt.format(localDateOfEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
-        }, compare, insight)
+        }, compare, insight, comparePill)
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>, balances: Map<AccountId, Money>): List<AccountRowUi> {
@@ -1504,7 +1509,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     // the summary carries the statement's standing (the same figures standing() reads), so it is not worked out a second time
                     CardRowUi(t.statementDay, t.dueDay, t.minDuePercent, t.remindDaysBefore, CardText.terms(t), summary?.standing?.let { CardText.status(it, today) { m -> Money(m, inr).formatted() } }.orEmpty(), ok.cards.creditLimit(a.id)?.let { Money(it, inr).toPlainString() }.orEmpty(),
                         summary?.let { CardSummaryText.cycle(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.let { CardSummaryText.limit(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.limitFraction ?: 0f,
-                        summary?.let { CardSummaryText.due(it) { m -> Money(m, inr).formatted() } }.orEmpty())
+                        summary?.let { CardSummaryText.due(it) { m -> Money(m, inr).formatted() } }.orEmpty(), summary?.let { CardSummaryText.dueShort(it) }.orEmpty())
                 },
                 looks[a.id]?.network?.name, looks[a.id]?.tier?.name, looks[a.id]?.last4,
                 fixHint = type == AccountType.CREDIT_CARD && a.archived == 0L && bal.minorUnits > 0 && a.id !in dismissed,

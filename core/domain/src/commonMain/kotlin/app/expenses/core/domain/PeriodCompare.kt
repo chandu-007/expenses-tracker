@@ -17,6 +17,23 @@ object PeriodCompare {
         return if (diff > 0) "▲ ${format(diff)} more than $last so far (+$percent%)" else "▼ ${format(-diff)} less than $last so far (−$percent%)"
     }
 
+    /** The sentence of [describe] without its arrow and percent (the percent is [pill]): "₹250 more than last month so far". Null when there is nothing to compare with. */
+    fun sentence(current: Long, previous: Long, last: String, format: (Long) -> String): String? {
+        if (previous <= 0) return null
+        val diff = current - previous
+        if (diff == 0L) return "Same as $last so far"
+        return if (diff > 0) "${format(diff)} more than $last so far" else "${format(-diff)} less than $last so far"
+    }
+
+    /** The small chip beside the figure: "▲ +25%" or "▼ −30%" (capped at 999%). Null when there is nothing to compare with or nothing changed. */
+    fun pill(current: Long, previous: Long): String? {
+        if (previous <= 0) return null
+        val diff = current - previous
+        if (diff == 0L) return null
+        val percent = (kotlin.math.abs(diff) * 100 / previous).coerceAtMost(999)
+        return if (diff > 0) "▲ +$percent%" else "▼ −$percent%"
+    }
+
     /** How the earlier period is named for each kind of budget period; null for a yearly period, which is too long to compare "so far" usefully. */
     fun lastName(period: BudgetPeriod): String? = when (period) {
         is BudgetPeriod.Weekly -> "last week"

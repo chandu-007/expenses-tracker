@@ -177,7 +177,9 @@ class AlertsUiTest {
         spendAt("later", millisOf(today.withDayOfMonth(1).minusMonths(1).withDayOfMonth(28)), 900_000) // the 28th may be beyond the point reached, and must not count when it is
         launch(); waitFor("month_compare")
         val t = textOf("month_compare")
-        if (today.dayOfMonth < 28) assertEquals("▲ ₹1,500.00 more than last month so far (+150%)", t) else assertTrue(t.startsWith("▼") || t.startsWith("▲"), t)
+        // Option B: the sentence (exact to a screen reader) and a chip beside the figure with the arrow and the percent
+        val pill = textOf("month_compare_pill")
+        if (today.dayOfMonth < 28) { assertEquals("₹1,500.00 more than last month so far", t); assertEquals("▲ +150%", pill) } else assertTrue(pill.startsWith("▼") || pill.startsWith("▲"), pill)
     }
 
     @Test

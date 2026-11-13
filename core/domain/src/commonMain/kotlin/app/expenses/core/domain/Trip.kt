@@ -52,6 +52,17 @@ object TripRules {
     /** The tag suggested for a trip called [name] ("Trip: Goa"), cut to what a tag may hold; null when the name is empty. */
     fun suggestedTag(name: String): String? = cleanName(name)?.let { TagRules.normalize("Trip: $it") }
 
+    /** The whole trip's budget in minor units (the daily budget times the days of the trip); null without a daily budget. */
+    fun totalBudgetMinor(trip: Trip): Long? = trip.dailyBudgetMinor?.takeIf { it > 0 }?.let { it * trip.length }
+
+    /**
+     * How much of the trip's budget is spent, in whole percent (it can pass 100); null without a budget. Pure arithmetic on the trip total the Home card already has: nothing is read for it.
+     */
+    fun budgetPercent(trip: Trip, spentMinor: Long): Int? {
+        val total = totalBudgetMinor(trip)?.takeIf { it > 0 } ?: return null
+        return (spentMinor.coerceAtLeast(0) * 100 / total).coerceAtMost(999).toInt()
+    }
+
     /** A name as it is kept: runs of spaces made one, nothing at the ends, no line breaks; null when nothing is left. */
     fun cleanName(text: String): String? = text.replace(Regex("\\s+"), " ").trim().ifEmpty { null }
 

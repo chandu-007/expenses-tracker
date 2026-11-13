@@ -126,3 +126,41 @@ B, built in two steps. Step 1 is common to all options and fixes findings 3 to 1
 10. Fold: show the summary cards in the empty entry pane (C's fold image)?
 11. Category tile: keep the first letter, or use an icon or colour per category?
 12. First run: should the 0.00 month card and "Set a budget" show above Welcome at all?
+
+## 8. Decisions taken (Slice 112: Option B built in two steps)
+The owner approved building B and answered Q4 ("follow the mock-ups: whole rupees on the headline figures"); the other eleven were answered by the builder with the doc's recommendations, conservatively. Anything risky stayed off.
+
+| # | Question | Decision and why |
+|---|---|---|
+| 1 | Add button | In the middle of the bottom bar (tag `add` on Home; `bar_add` on Search and Reports, where it leaves the page first, as Ctrl+N does). The floating button covered the Lunch chip, the Cash tile and the amount of the row under it. |
+| 2 | Two "a day" figures | Both stay, side by side as two tiles, each saying its source: "about ₹1,698 a day from your budget" and "about ₹8,003 a day from your balances". Safe to spend is the feature people may use most; hiding it would have been a loss. |
+| 3 | Graph | A small one (40 dp) stays at normal text. It goes at 150% text and up, in a two-pane list pane (the entries must start on its first screen), and while Hide amounts is on. |
+| 4 | Whole rupees | Owner's answer: yes on the Home SUMMARY headline figures and tiles only: month spent, budget left and its limit and a-day figure, safe to spend and its a-day figure, the account tiles' balances, the "more than last month" sentence. Exact paise stay in list rows, the day totals, the entry, Search, reports, the trip line, every edit field and in the trip budget line. Rules (`WholeAmounts`, host-tested): half up on the size of the amount; an amount that would read zero but is not zero keeps its paise; compact figures and non-amounts are untouched; only the drawn text is rounded. The exact amount is what a screen reader says and what the tests read (the node's text), so rounding can never be the only thing the app says. |
+| 5 | Day total | Money SPENT that day only: expenses, in the ledger's currency, complete days only (the oldest loaded day waits for the next page). Income, refunds, transfers, settlements and other currencies are not in it. |
+| 6 | Hide amounts and bars | Hides them too: the budget bar, the trip bar and its percent, the graph, the change chip, the card limit bar. A bar's length is the figure. Every figure is masked as before. |
+| 7 | Accounts | Smaller tiles (112 x 76 dp, whole units, a card says "owed · due in 6 d" and has a thin limit bar when a limit was entered) at normal text; one "Accounts" row that opens into 48 dp rows at 150% text and up. Tapping an account still narrows Home to it. |
+| 8 | Where it went / Coming up | Not on Home (Reports and Bills keep them). That is option C. |
+| 9 | Drop the graph and small lines at 150%+ | Yes: no graph, no insight line, no card limit bar, nudge buttons under the words, the big figure stops growing, rows put the amount under the title. |
+| 10 | Fold: summary cards in the empty detail pane | No. The fold's "empty left list" was the consequence of a 717 dp top block in a 654 dp pane, not a layout bug: the top block is now about 490 dp there (no graph in the list pane), so the first entry is on the first screen. |
+| 11 | Category tile | Unchanged: the category's first letter. |
+| 12 | First run | Unchanged: the month card and the "Set a budget" card show above Welcome. Changing it touches a first-run path many tests use; it can come later. The "Start here" checklist of B's empty state was not built. |
+
+Also decided: the setup nudge's close puts it off for a day and a bar then offers "Hide for good" (the owner accepted this as the one-close-button design); Getting started's close hides it for good, as its Hide did. B's budget/safe tiles come right under the month card while Budget is the first block of the person's Customise-home layout (the default); moved lower, they stay where the person put them.
+
+### Measured: where the first entry starts (dp from the top of the list; the screen shows 711 dp at 393, 644 at 360, 654 in the fold pane)
+Method: a throw-away instrumented test (not committed) seeds the audit's states and reads the unclipped height of the Home top block (the tag `home_top`); the first entry row is that plus the day heading (about 40 dp). Debug build, API 34 arm64 emulator, invented data; "before" is origin/main 19f2582, "after" is this slice. The "typical" state has one card bill due (one nudge), like the audit's. Top block height:
+
+| State | 393, 100% | 393, 200% | 360, 100% | 360, 200% | Fold 864 |
+|---|---|---|---|---|---|
+| Typical (bill due) before | 677 | 1090 | 690 | 1150 | 677 |
+| Typical after | 537 | 1021 | 534 | 1017 | 489 |
+| Bill due (2 bills) before | 723 | 1234 | 736 | 1262 | 723 |
+| Bill due after | 537 | 1021 | 534 | 1017 | 489 |
+| Trip + bill + 3 to review before | 827 | 1397 | 840 | 1424 | 827 |
+| Trip + bill + 3 to review after | 664 | 1234 | 660 | 1261 | 616 |
+| Four things waiting before | 771 | 1330 | 784 | 1358 | 771 |
+| Four things waiting after | 585 | 1117 | 582 | 1113 | 537 |
+| Hide amounts before | 715 | 1128 | 720 | 1156 | 723 |
+| Hide amounts after | 471 | 928 | 468 | 956 | 471 |
+
+So the first entry at 393 dp, 100% text (typical with one nudge) moves from about 717 dp to about 577 dp (140 dp, 20%), and with the bill nudge put away from about 515 dp [INFERENCE: the nudge row is 62 dp + its gap; not measured separately], close to B's 522 dp. The mock-ups used no decimals in tiles and a lighter nudge; the reflowed text under whole rupees is the same size. At 200% text the page is still longer than a screen (1021 dp): each block is one full-width line or two, by design.

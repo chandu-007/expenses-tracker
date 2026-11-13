@@ -288,3 +288,12 @@ fun FadeIn(content: @Composable () -> Unit) {
 
 /** The widest the app is drawn: wider screens (tablets, unfolded foldables) get margins either side, so lines of text and rows stay a readable length. */
 val MAX_CONTENT_WIDTH = 720.dp
+
+/** The change against last month as a small chip on the month card ("▲ +158%"): drawn on the card's own colour, so it reads in light and dark. The words are the sentence under the figure; the chip is the short form. */
+@Composable
+fun ComparePill(text: String, onHero: Color, modifier: Modifier = Modifier) {
+    androidx.compose.material3.Text(
+        text, style = MaterialTheme.typography.labelMedium, color = onHero, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        modifier = modifier.clip(RoundedCornerShape(50)).background(onHero.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("month_compare_pill"),
+    )
+}

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.expenses.AccountRowUi
+import app.expenses.core.domain.wholeAmounts
 
 /**
  * Every active account with its balance in one scrolling line; a card or loan shows what is owed. Tapping one narrows Home's list to it (tap again for all); the chosen one has an outline.
@@ -48,7 +49,7 @@ fun BalancesStrip(accounts: List<AccountRowUi>, selectedId: String? = null, onSe
     ) {
         accounts.forEach { a ->
             val chosen = a.id == selectedId
-            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(196.dp).height(100.dp).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier))
+            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(112.dp).height(76.dp).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier))
         }
     }
 }
@@ -60,7 +61,7 @@ fun BalancesStrip(accounts: List<AccountRowUi>, selectedId: String? = null, onSe
 @Composable
 private fun LargeAccounts(accounts: List<AccountRowUi>, selectedId: String?, onSelect: (String) -> Unit, onOpenAccounts: () -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
-    val summary = accounts.joinToString(" · ") { a -> a.name + " " + (if (a.owed) "owed " else "") + a.balanceText }
+    val summary = accounts.joinToString(" · ") { a -> a.name + " " + (if (a.owed) "owed " else "") + a.balanceText.wholeAmounts() }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).testTag("balances"),
     ) {
@@ -85,7 +86,7 @@ private fun LargeAccounts(accounts: List<AccountRowUi>, selectedId: String?, onS
                         .clearAndSetSemantics { text = AnnotatedString(label); this.selected = chosen },
                 ) {
                     Text(a.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
-                    Text((if (a.owed) "owed " else "") + a.balanceText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    Text((if (a.owed) "owed " else "") + a.balanceText.wholeAmounts(), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                 }
             }
             TextButton(onClick = onOpenAccounts, modifier = Modifier.heightIn(min = 48.dp).padding(start = 4.dp).testTag("balances_manage")) { Text("All accounts") }

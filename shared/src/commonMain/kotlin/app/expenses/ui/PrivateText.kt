@@ -35,10 +35,12 @@ fun Text(
     overflow: TextOverflow = TextOverflow.Clip,
     maxLines: Int = Int.MAX_VALUE,
     style: TextStyle = LocalTextStyle.current,
+    /** Shrink the text to fit in its space instead of wrapping or cutting it (a figure in a small tile). */
+    autoSize: androidx.compose.foundation.text.TextAutoSize? = null,
 ) {
     androidx.compose.material3.Text(
         text = privately(text), modifier = modifier, color = color, fontSize = fontSize, fontWeight = fontWeight, textAlign = textAlign,
-        overflow = overflow, maxLines = maxLines, style = style,
+        overflow = overflow, maxLines = maxLines, style = style, autoSize = autoSize,
     )
 }
 

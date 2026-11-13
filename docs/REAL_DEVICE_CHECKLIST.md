@@ -223,3 +223,15 @@ Settings, Accessibility, VoiceOver. Swipe right through each screen.
 
 ## What to send back
 For anything that fails: the screen, what you tapped, what you expected, and the version from More. The Send feedback button writes that down for you.
+
+## Home, Option B (Slice 112)
+- [ ] Home with your real data: the month card is short, the figure is in whole rupees, the chip ("▲ +12%") and the sentence agree with Reports; Budget left and Safe to spend sit side by side and each a-day figure says where it comes from.
+- [ ] Tap the month figure with TalkBack or VoiceOver on: it reads the exact amount with paise, not the rounded one. Same for Budget left, Safe to spend and an account tile.
+- [ ] One nudge at a time, always the same look, one cross to close it. Close "Set up reading bank texts": a bar offers "Hide for good". Close "Getting started": it is gone for good.
+- [ ] Add is in the middle of the bottom bar on Home, Search, Reports and More, never over the list; Ctrl+N (keyboard) still works.
+- [ ] Each day heading shows what you spent that day (income and transfers are not in it); the last day on the screen has no total until you scroll and more loads.
+- [ ] Hide amounts: no budget bar, no trip bar, no graph, no chip; every figure shows dots.
+- [ ] Text size 150% and 200% (and the largest the phone offers): no card runs off the edge, the account row opens, entry titles show whole, the nudge button is under the words.
+- [ ] A credit card tile says "owed" and when it is due; with a limit entered a thin bar shows how much is used.
+- [ ] Fold / tablet: the list pane shows the first entries without scrolling; "Select an entry" on the right.
+- [ ] iPhone: the same page; the bottom bar has Add in the middle; the shortcut and share-sheet paths still open Add.

@@ -304,4 +304,21 @@ class TripRulesTest {
         assertEquals(100_000L, s.averagePerDayMinor); assertEquals(TripBudgetStatus(100_000, 3, 300_000, 300_000), s.budget)
         assertEquals(0L, TripSummaryMath.of(t, listOf(line("in", d0, 10, 5)), utc, d0).outsideMinor)
     }
+
+    // ---- the Home card's progress (arithmetic on the trip total the card already has) ----
+
+    @Test fun theBudgetPercentIsTheSpentShareOfTheDailyBudgetTimesTheDays() {
+        val t = Trip("goa", "Goa", "Trip: Goa", day(2026, 11, 3), day(2026, 11, 8), true, 300_000) // 6 days of 3,000 = 18,000
+        assertEquals(1_800_000L, TripRules.totalBudgetMinor(t))
+        assertEquals(50, TripRules.budgetPercent(t, 900_000))
+        assertEquals(0, TripRules.budgetPercent(t, 0))
+        assertEquals(100, TripRules.budgetPercent(t, 1_800_000))
+        assertEquals(133, TripRules.budgetPercent(t, 2_400_000), "past the budget it goes over 100")
+        assertEquals(0, TripRules.budgetPercent(t, -500), "a refund larger than the spending does not show a negative bar")
+        assertEquals(999, TripRules.budgetPercent(t, 900_000_000), "capped")
+    }
+
+    @Test fun noDailyBudgetMeansNoBudgetPercent() {
+        assertNull(TripRules.totalBudgetMinor(goa())); assertNull(TripRules.budgetPercent(goa(), 100_000))
+    }
 }

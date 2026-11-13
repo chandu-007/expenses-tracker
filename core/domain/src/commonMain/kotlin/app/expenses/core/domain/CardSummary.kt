@@ -98,4 +98,16 @@ object CardSummaryText {
             }.joinToString(" · ")
         }
     }
+
+    /** The few words for a small tile: "due in 6 d", "due tomorrow", "due today", "overdue 2 d"; empty when nothing is left to pay on the latest statement (nothing was owed, or it is paid). */
+    fun dueShort(s: CardSummary): String {
+        val st = s.standing
+        if (st.statementBalance == 0L || st.remaining == 0L) return ""
+        return when {
+            s.daysToDue == 0 -> "due today"
+            s.daysToDue == 1 -> "due tomorrow"
+            s.daysToDue > 1 -> "due in ${s.daysToDue} d"
+            else -> "overdue ${-s.daysToDue} d"
+        }
+    }
 }

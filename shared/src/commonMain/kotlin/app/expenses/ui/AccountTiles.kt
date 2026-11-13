@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.expenses.AccountRowUi
+import app.expenses.core.domain.wholeAmounts
 import app.expenses.core.domain.CardDesign
 import app.expenses.core.domain.CardDesigns
 import app.expenses.core.domain.CardNetwork
@@ -96,6 +97,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
             Text(a.name + (a.last4?.let { "  ••$it" } ?: ""), color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text((if (a.owed) "owed " else "") + a.balanceText, color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
         }
+        if (compact) CompactTileBody(a, ink, isCard) else
         Column(Modifier.fillMaxSize().padding(pad).graphicsLayer { alpha = 1f - stripAmount }, verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(a.name, color = ink, style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -114,6 +116,31 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
                     Text(a.balanceText, color = ink, style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1, modifier = if (compact) Modifier else Modifier.testTag("balance_${a.name}"))
                 }
                 if (isCard && network != null) NetworkMark(network, accent, ink, compact)
+            }
+        }
+    }
+}
+
+/**
+ * The small tile of Home's strip (Option B): the name, the balance in whole units (exact to a screen reader: the tile's own label says the exact text), and for a card what is owed and when it is due ("owed · due in 6 d"),
+ * with a thin bar for how much of the credit limit is used (when a limit was entered and amounts are not hidden: the bar's length would show the figure). Nothing here asks for a new figure: the due words and the
+ * limit fraction are part of the card's summary the balances pass already makes.
+ */
+@Composable
+private fun CompactTileBody(a: AccountRowUi, ink: Color, isCard: Boolean) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 9.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Text(a.name, color = ink, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column {
+                Text(a.balanceText.wholeAmounts(), color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 14.sp, stepSize = 0.5.sp))
+                val sub = listOfNotNull("owed".takeIf { a.owed }, a.card?.dueShort?.takeIf { it.isNotEmpty() }).joinToString(" · ")
+                if (sub.isNotEmpty()) Text(sub, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        val card = a.card
+        if (isCard && card != null && card.limitText.isNotEmpty() && !LocalHideAmounts.current) {
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(ink.copy(alpha = 0.25f)).testTag("tile_limit_bar_${a.name}")) {
+                Box(Modifier.fillMaxWidth(card.limitFraction.coerceIn(0f, 1f)).fillMaxSize().background(ink.copy(alpha = 0.9f)))
             }
         }
     }

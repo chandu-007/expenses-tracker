@@ -23,6 +23,19 @@ class PeriodCompareTest {
     }
 
     @Test
+    fun theSentenceAndTheChipSplitWhatDescribeSaysInOne() {
+        assertEquals("₹250 more than last month so far", PeriodCompare.sentence(125_000, 100_000, "last month", rupees))
+        assertEquals("▲ +25%", PeriodCompare.pill(125_000, 100_000))
+        assertEquals("₹300 less than last month so far", PeriodCompare.sentence(70_000, 100_000, "last month", rupees))
+        assertEquals("▼ −30%", PeriodCompare.pill(70_000, 100_000))
+        assertEquals("Same as last month so far", PeriodCompare.sentence(100_000, 100_000, "last month", rupees))
+        assertNull(PeriodCompare.pill(100_000, 100_000), "no change: no chip")
+        assertNull(PeriodCompare.sentence(50_000, 0, "last month", rupees)); assertNull(PeriodCompare.pill(50_000, 0))
+        assertEquals("▲ +999%", PeriodCompare.pill(10_000_000, 100))
+        assertEquals("▼ −100%", PeriodCompare.pill(0, 100_000))
+    }
+
+    @Test
     fun everyKindOfPeriodHasANameExceptTheYear() {
         assertEquals("last month", PeriodCompare.lastName(BudgetPeriod.Monthly(1)))
         assertEquals("the last cycle", PeriodCompare.lastName(BudgetPeriod.Monthly(15)))

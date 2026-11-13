@@ -50,6 +50,7 @@ import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BudgetState
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.formatted
+import app.expenses.core.domain.wholeAmounts
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -65,6 +66,8 @@ fun RollingAmount(
     color: Color = Color.Unspecified,
     style: TextStyle = MaterialTheme.typography.displaySmall,
     fontWeight: FontWeight? = null,
+    /** Draw whole units ("₹31,822") while the semantics keep the exact [finalText] ("₹31,822.40"): what a screen reader says and what tests read is never rounded. */
+    whole: Boolean = false,
 ) {
     val reduce = LocalReduceMotion.current
     val roll = remember { Animatable(minor.toFloat()) }
@@ -73,7 +76,7 @@ fun RollingAmount(
         else roll.animateTo(minor.toFloat(), tween(Motion.EMPHASIZED, easing = Motion.EaseOut))
     }
     val shown = roll.value.roundToLong().takeIf { roll.value != minor.toFloat() }
-        ?.let { Money(it, BaseCurrency.current).formatted() } ?: finalText
+        ?.let { Money(it, BaseCurrency.current).formatted() }.let { rolled -> (rolled ?: finalText).let { if (whole) it.wholeAmounts() else it } }
     val announced = privately(finalText)
     Text(
         shown,
@@ -87,7 +90,7 @@ fun RollingAmount(
  * dragged sideways over it shows a guide, a dot and a pill with that day's amount. Takes no height when there is nothing to show.
  */
 @Composable
-fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier) {
+fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 56.dp) {
     if (spark.isEmpty) return
     val reduce = LocalReduceMotion.current
     val feel = rememberFeel()
@@ -116,7 +119,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier) {
 
     val description = privately("Spending over the last ${n} days")
     Box(
-        modifier.fillMaxWidth().height(56.dp).testTag("home_spark").semantics { contentDescription = description }
+        modifier.fillMaxWidth().height(height).testTag("home_spark").semantics { contentDescription = description }
             .pointerInput(n) {
                 fun indexAt(x: Float): Int = if (n <= 1 || size.width <= 0) 0 else ((x / size.width) * (n - 1)).roundToInt().coerceIn(0, n - 1)
                 fun move(x: Float) {

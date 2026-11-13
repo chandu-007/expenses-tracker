@@ -45,6 +45,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import app.expenses.core.domain.wholeAmounts
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -77,18 +80,24 @@ fun BudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
     )
 }
 
-/** The budget as a card under the spending total. Tapping it opens the budget screen. */
+/**
+ * The budget on Home. With a limit it is a TILE (Option B: it sits beside the safe-to-spend tile, see [HomeMoneyTiles]): what is left in whole units over a small "of the limit", the bar, and what that
+ * allows a day, labelled "from your budget" (the safe-to-spend tile's a-day figure is a different thing: "from your balances"). Without a limit it is the old "Set a budget" prompt. Tapping it opens the
+ * budget screen. The figures are drawn in whole units; the node with the tag `budget_overall_note` says the exact sentence ("₹4,000.00 left of ₹5,000.00") to a screen reader and to the tests. While Hide
+ * amounts is on every figure is masked and the bar, whose length would show the figure, is not drawn.
+ */
 @Composable
-fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit) {
+fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
     val overall = budget.overall
     val tint = if (overall.limit == null) MaterialTheme.colorScheme.primary else stateColor(overall.state)
+    val hide = LocalHideAmounts.current
     androidx.compose.material3.Card(
         onClick = onOpen,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("budget_summary"),
+        modifier = modifier.testTag("budget_summary"),
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (overall.limit == null) {
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Set a budget for ${budget.periodName}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).testTag("budget_set_prompt"))
@@ -96,17 +105,21 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit) {
                 }
                 Text("Pick a limit and see what is left, and what you can spend a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text(
-                    overall.note + " of " + overall.limit,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag("budget_overall_note"),
-                )
-                AnimatedBudgetBar(overall, Modifier.height(10.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
+                val exact = privately(overall.note + " of " + overall.limit)
+                // one node says the exact sentence; what is drawn is the whole-unit figure over "of the limit" (both lines masked by Text)
+                Column(Modifier.testTag("budget_overall_note").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exact) }) {
+                    Text(
+                        overall.note.wholeAmounts(), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text("of " + overall.limit.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (!hide) AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
                 if (budget.perDay != null && !budget.billsUseItAll) {
-                    Text("about ${budget.perDay} a day", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day"))
+                    val perDayExact = privately("about ${budget.perDay} a day from your budget")
+                    Text("about ${budget.perDay.wholeAmounts()} a day from your budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(perDayExact) })
                 } else if (budget.billsUseItAll) {
-                    Text("bills use it all", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
+                    Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
                 }
                 if (budget.categoriesNeedingAttention > 0) {
                     Text(
