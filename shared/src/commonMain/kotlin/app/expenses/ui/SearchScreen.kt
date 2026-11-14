@@ -143,6 +143,7 @@ fun SearchScreen(
     val platform = LocalPlatform.current
     LaunchedEffect(Unit) { platform.trace("search: composed") }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val feel = rememberFeel()
     // Done on the keyboard, choosing entries and scrolling the results all put the keyboard away, so the results can be seen
     val dismissKeyboard = { focusManager.clearFocus(); keyboard?.hide() }
     var text by fields.text
@@ -291,7 +292,7 @@ fun SearchScreen(
                     else -> {
                         Text(
                             "${rows.size} ${if (rows.size == 1) "result" else "results"}" +
-                                if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) " · ${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
+                                if (state.truncated) ", the most recent. Narrow the search to see others." else if (spentMinor > 0) (if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f) "\n" else " · ") + "${app.expenses.core.domain.Money(spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted()} spent" else "",
                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }.testTag("search_count"),
                         )
@@ -332,7 +333,7 @@ fun SearchScreen(
                         val pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi)
                         Row(
                             Modifier.animateItem().entryCardClip(pos).fillMaxWidth().entryCardFill(pos, isSelected)
-                                .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else { onRemember(text); onOpen(row) } }, onLongClick = { selected = selected.toggled(row.id) })
+                                .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else { onRemember(text); onOpen(row) } }, onLongClick = { if (selected.isEmpty()) feel(Feel.SELECT); selected = selected.toggled(row.id) })
                                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

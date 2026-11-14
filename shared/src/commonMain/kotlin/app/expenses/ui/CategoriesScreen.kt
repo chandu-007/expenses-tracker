@@ -27,7 +27,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -38,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -131,7 +131,7 @@ fun CategoriesScreen(
                 actions = { if (!incomeTab) TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
             )
         },
-        floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
+        floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("New category") }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
         KindTabs(incomeTab = incomeTab, onSelect = { incomeTab = it })

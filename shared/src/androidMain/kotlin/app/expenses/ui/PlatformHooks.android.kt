@@ -36,6 +36,7 @@ fun hapticConstant(feel: Feel, sdk: Int): Int = when (feel) {
     Feel.UNDO -> if (sdk >= 30) HapticFeedbackConstants.GESTURE_END else HapticFeedbackConstants.KEYBOARD_TAP
     Feel.LIMIT -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
     Feel.TICK -> HapticFeedbackConstants.CLOCK_TICK
+    Feel.SELECT -> HapticFeedbackConstants.LONG_PRESS // a long press that starts choosing: the platform's own meaning
 }
 
 @Composable

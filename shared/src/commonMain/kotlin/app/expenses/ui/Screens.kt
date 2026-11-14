@@ -517,7 +517,7 @@ fun EntryListScreen(
                 itemsIndexed(listItems, key = { _, it -> if (it is RowUi) it.seq else "day$it" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
                     if (item is RowUi) SwipeableRow(
                         item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
-                        onLongPress = { selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
+                        onLongPress = { if (selected.isEmpty()) feel(Feel.SELECT); selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
                         modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
                     ) else (item as Long).let { day -> DayHeader(day, dayTotals[day]?.let { signedAmount(Money(it, state.baseCurrency).formatted(), Flow3.OUT) }) }
                 }

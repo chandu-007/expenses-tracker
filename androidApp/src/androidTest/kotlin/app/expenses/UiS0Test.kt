@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertTextContains
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -70,6 +71,7 @@ class UiS0MotionAndHapticsTest {
         assertEquals(HapticFeedbackConstants.REJECT, hapticConstant(Feel.LIMIT, 30)); assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.LIMIT, 26))
         assertEquals(HapticFeedbackConstants.CONFIRM, hapticConstant(Feel.SAVE, 34)); assertEquals(HapticFeedbackConstants.CONFIRM, hapticConstant(Feel.PAID, 34)); assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, hapticConstant(Feel.SAVE, 28))
         assertEquals(HapticFeedbackConstants.CLOCK_TICK, hapticConstant(Feel.TICK, 26))
+        for (sdk in listOf(26, 34)) assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.SELECT, sdk), "starting a selection is the long-press feel")
     }
 }
 
@@ -106,5 +108,34 @@ class UiS0MoreBudgetRowTest {
         compose.onNodeWithTag("open_budget").performScrollTo().assertTextContains("of ₹60,000", substring = true)
         compose.onNodeWithTag("open_budget").performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("budget_summary"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() || compose.onAllNodes(hasTestTag("budget_back"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+}
+
+/** F-12: "Mark paid" offers Undo, and Undo puts the bill back (and removes the entry it recorded). F-10: the add buttons are extended and never cover a row's amount. */
+@RunWith(AndroidJUnit4::class)
+class UiS0BillUndoTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val container get() = (context.applicationContext as ExpensesApp).container
+    private var scenario: ActivityScenario<MainActivity>? = null
+    @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } } }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); runBlocking { container.startFresh() } }
+    private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    private fun waitFor(tag: String) = compose.waitUntil(15_000) { has(tag) }
+
+    @Test
+    fun markingABillPaidOffersUndoAndUndoBringsTheBillBackWithNothingRecorded() {
+        val due = java.time.LocalDate.now().plusDays(8).format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+        runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 4821 statement is generated. Total Amt Due Rs.5,000.00, Min Amt Due Rs.250.00, Due Date $due.", System.currentTimeMillis()) }
+        val id = runBlocking { container.write { it.bills.list(app.expenses.core.storage.BillStatus.FOUND).single().id.also { b -> it.bills.track(b) } } }!!
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
+        compose.openMore(); compose.onNodeWithTag("open_bills", useUnmergedTree = true).performScrollTo().performClick(); waitFor("bills_list")
+        compose.onNodeWithTag("bill_pay_$id", useUnmergedTree = true).performClick(); waitFor("bill_pay_amount")
+        compose.onNodeWithTag("bill_pay_ok", useUnmergedTree = true).performClick()
+        waitFor("bills_paid_title")
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Undo"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Undo", useUnmergedTree = true).performClick()
+        compose.waitUntil(10_000) { runBlocking { container.write { it.bills.get(id)?.status } } == app.expenses.core.storage.BillStatus.TRACKED }
+        assertEquals(0L, runBlocking { container.write { it.db.schemaQueries.entryCount().executeAsOne() } }, "what the payment recorded is gone with it")
     }
 }

@@ -2261,13 +2261,28 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             withStore { ok -> moved.asReversed().forEach { ok.billRepairs.undo(it) }; MessageIngest.changes.value += 1; _inbox.value = inboxRows(ok); billsChanged(ok) }
             return
         }
+        if (id.startsWith("$BILL_PAY_UNDO:")) {
+            val held = heldPayment?.takeIf { "$BILL_PAY_UNDO:${it.bill.id}" == id } ?: return
+            heldPayment = null
+            // takes back what "Mark paid" did: the entry it recorded (if it recorded one) goes, and the bill is as it was (found or tracked, with its words)
+            withStore { ok ->
+                held.entryId?.let { EntryActions(ok).delete(it) }
+                ok.bills.unpayTo(held.bill.id, held.bill.status, held.bill.body)
+                billsChanged(ok)
+            }
+            return
+        }
         val held = skippedBill?.takeIf { it.id == id } ?: return // taken now: see [undoDismissCapture]
         withStore { ok -> if (ok.bills.undismiss(id, held.status, held.body)) billsChanged(ok) }
     }
 
     fun billUndoGone(id: String) {
-        if (_billUndo.value?.id == id) { _billUndo.value = null; skippedBill = null; heldRepair = null }
+        if (_billUndo.value?.id == id) { _billUndo.value = null; skippedBill = null; heldRepair = null; heldPayment = null }
     }
+
+    /** The bill a "Mark paid" has just paid, and the entry it recorded, held for the few seconds its Undo is offered. */
+    private class HeldPayment(val bill: app.expenses.core.storage.Bill, val entryId: String?)
+    private var heldPayment: HeldPayment? = null
 
     /** What "Move to To review" moved, held for the few seconds its Undo is offered. */
     private var heldRepair: List<app.expenses.core.storage.BillRepairs.Moved>? = null
@@ -2326,7 +2341,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     // the bill's words are cleared once it is paid, so an entry recorded from it keeps them first
                     if (entryId != null) b.body?.let { ok.origins.put(entryId, app.expenses.core.storage.OriginStore.kindOf(b.source, b.sender), b.sender, it, b.receivedAt) }
                     ok.bills.markPaid(id, entryId, nowMillis())
-                    billsChanged(ok, if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
+                    heldPayment = HeldPayment(b, entryId)
+                    billsChanged(ok) // no plain message: the Undo bar says it ("Marked X as paid · Undo"), so the page does not show two bars
+                    _billUndo.value = ScreenUndo("$BILL_PAY_UNDO:$id", if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
                     null
                 }
             } catch (e: Exception) { if (e is IllegalArgumentException) e.message ?: "That could not be saved." else "That could not be saved. Try again." }
@@ -2757,6 +2774,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
         /** The id of the Undo bar of "Move to To review" on the Bills page. */
         const val BILL_REPAIR_UNDO = "bill-repair"
+        /** The prefix of the id of the Undo bar of "Mark paid" (the bill's id follows). */
+        const val BILL_PAY_UNDO = "bill-pay"
     }
 
     private fun accountKey(issuer: String, last4: String?) = app.expenses.core.storage.CaptureAccounts.key(issuer, last4)

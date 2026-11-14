@@ -52,6 +52,7 @@ actual fun rememberFeel(): (Feel) -> Unit {
                 Feel.LIMIT -> UiKitFeel.warning()
                 Feel.SAVE, Feel.PAID -> haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 Feel.TICK -> haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                Feel.SELECT -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             }
         }
     }

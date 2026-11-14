@@ -90,7 +90,7 @@ object Motion {
 val LocalReduceMotion = compositionLocalOf { false }
 
 /** The few moments the app answers with a touch. Each is a different feel, so a person learns what happened without looking. */
-enum class Feel { SAVE, UNDO, LIMIT, PAID, TICK }
+enum class Feel { SAVE, UNDO, LIMIT, PAID, TICK, SELECT }
 
 // ---- shared-element ("container transform") transitions ----
 

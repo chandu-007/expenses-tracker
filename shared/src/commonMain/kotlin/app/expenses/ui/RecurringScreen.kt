@@ -24,7 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -154,7 +154,7 @@ fun RecurringScreen(
     }
     Scaffold(
         topBar = { AreaTopBar("Repeating expenses", Area.MONEY, Icons.Outlined.Repeat, onBack, "recurring_back") },
-        floatingActionButton = { FloatingActionButton(onClick = { editing = NEW }, modifier = Modifier.testTag("new_recurring")) { Text("+", style = MaterialTheme.typography.headlineMedium) } },
+        floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { editing = NEW }, modifier = Modifier.testTag("new_recurring"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add repeating") }) },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 88.dp)) {
             if (due.isNotEmpty()) {

@@ -82,7 +82,7 @@ class SimilarUiTest {
     fun reviewingOneByOneMovesOnlyTheOnesAcceptedNewestFirst() {
         threeEarlierICloudsInOther(); launch()
         fileNew("iCloud", "Bills")
-        waitFor("similar_review", 15_000); tap("similar_review")
+        waitFor("similar_more", 15_000); tap("similar_more"); waitFor("similar_review"); tap("similar_review")
         waitFor("similar_progress"); assertEquals("1 of 3", textOf("similar_progress"))
         assertEquals("Apple iCloud", textOf("similar_row_title"), "the newest first")
         tap("similar_yes")
@@ -130,7 +130,7 @@ class SimilarUiTest {
     fun stopAskingIsListedUnderCategoriesAndAskAgainBringsTheOfferBack() {
         threeEarlierICloudsInOther(); launch()
         fileNew("iCloud", "Bills")
-        waitFor("similar_stop", 15_000); tap("similar_stop")
+        waitFor("similar_more", 15_000); tap("similar_more"); waitFor("similar_stop"); tap("similar_stop")
         compose.waitUntil(10_000) { !has("similar_dialog") }
         assertEquals("Other", inCategory("i1"), "stopping asking changes nothing")
         fileNew("iCloud", "Bills"); Thread.sleep(2_500); compose.waitForIdle()

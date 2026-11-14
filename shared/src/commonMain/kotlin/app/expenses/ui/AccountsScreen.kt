@@ -17,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -26,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,9 +81,9 @@ fun AccountsScreen(
     val archived = rows.filter { it.archived }
     Scaffold(
         topBar = { AreaTopBar("Accounts", Area.MONEY, Icons.Outlined.AccountBalance, onBack, "back") },
-        floatingActionButton = { FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account").semantics { contentDescription = "Add an account" }) { Text("+") } }, // a screen reader says "Add an account", not "plus"
+        floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account").semantics { contentDescription = "Add an account" }, icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add account") }) }, // a screen reader says "Add an account", not "plus"
     ) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list")) {
+        LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 88.dp)) { // room under the last row for the button, so it never covers an amount
             item {
                 val net = active.sumOf { it.balanceMinor }
                 // With the safe-to-spend line below it the header is kept short (no help sentence, less room under it): the cards must still start high enough on a phone

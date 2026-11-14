@@ -38,14 +38,17 @@ fun SimilarDialog(offer: SimilarUi, onApply: (List<String>) -> Unit, onDismiss: 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${if (n == 1) "1 earlier entry looks" else "$n earlier entries look"} like this one and ${if (n == 1) "is" else "are"} filed elsewhere ($where). File ${if (n == 1) "it" else "them"} under ${offer.categoryName} too?", modifier = Modifier.testTag("similar_text"))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { onDismiss(false) }, modifier = Modifier.testTag("similar_not_now")) { Text("Not now") }
+                    // two answers (Move all / Not now); the other two are one tap further, under "More choices"
+                    var more by remember(offer) { mutableStateOf(false) }
+                    if (!more) TextButton(onClick = { more = true }, modifier = Modifier.testTag("similar_more")) { Text("More choices") }
+                    else Column {
+                        if (n > 1) TextButton(onClick = { reviewing = true }, modifier = Modifier.testTag("similar_review")) { Text("Review one by one") }
                         TextButton(onClick = { onDismiss(true) }, modifier = Modifier.testTag("similar_stop")) { Text("Stop asking about this") }
                     }
                 }
             },
             confirmButton = { TextButton(onClick = { onApply(offer.rows.map { it.id }) }, modifier = Modifier.testTag("similar_all")) { Text(if (n == 1) "Move it" else "Move all $n") } },
-            dismissButton = { if (n > 1) TextButton(onClick = { reviewing = true }, modifier = Modifier.testTag("similar_review")) { Text("Review one by one") } },
+            dismissButton = { TextButton(onClick = { onDismiss(false) }, modifier = Modifier.testTag("similar_not_now")) { Text("Not now") } },
             modifier = Modifier.testTag("similar_dialog"),
         )
     } else {
