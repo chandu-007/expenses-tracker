@@ -18,7 +18,7 @@ echo "== step 1: build, host tests, release build, functional device tests"
 step1=$?
 ./gradlew --stop >/dev/null 2>&1
 ./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks \
-  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest,app.expenses.RecreateStressTest >> /tmp/verify-step1.log 2>&1
+  -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.RefreshBudgetTest,app.expenses.RecreateStressTest,app.expenses.FrameLogDriveTest >> /tmp/verify-step1.log 2>&1
 step1=$(( step1 != 0 ? step1 : $? ))
 echo "step 1 gradle exit: $step1"
 cp androidApp/build/outputs/androidTest-results/connected/debug/*.xml /tmp/verify-functional.xml 2>/dev/null

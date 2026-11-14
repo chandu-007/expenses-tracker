@@ -20,6 +20,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Test-data seeding through an intent extra exists only where this is true; never in release.
         buildConfigField("boolean", "SEEDING_ENABLED", "false")
+        // The frame-time logger (FrameLog.kt) exists only where this is true: the debug build. Every other build type keeps the constant false, so R8 removes it.
+        buildConfigField("boolean", "FRAME_LOG", "false")
         // Whether this build reads bank texts. Off only in the Google Play build, which has no SMS permission (see src/play/AndroidManifest.xml).
         buildConfigField("boolean", "SMS_CAPTURE", "true")
     }
@@ -40,6 +42,7 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "SEEDING_ENABLED", "true")
+            buildConfigField("boolean", "FRAME_LOG", "true")
         }
         release {
             signingConfigs.findByName("release")?.let { signingConfig = it }

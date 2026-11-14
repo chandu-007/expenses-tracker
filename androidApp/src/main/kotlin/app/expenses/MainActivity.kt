@@ -82,6 +82,8 @@ class MainActivity : FragmentActivity() {
 
         val host = ActivityRootHost()
         setContent { androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalHinge provides hinge) { ExpensesRoot(viewModel, host) } }
+        // debug builds only (a constant false elsewhere): frame times per screen change and burst in the log, and a small box when started with `--ez frame_overlay true`
+        FrameLog.install(this, showOverlay = intent.getBooleanExtra("frame_overlay", false))
         watchFold()
         // the widgets draw the accent chosen here (More, Appearance): when it changes they are drawn again at once, not when the person next leaves the app
         val appContext = applicationContext

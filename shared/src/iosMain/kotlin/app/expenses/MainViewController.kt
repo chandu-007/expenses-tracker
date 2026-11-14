@@ -35,6 +35,7 @@ import platform.darwin.NSObject
  */
 fun MainViewController(host: IosHostServices): UIViewController {
     val app = IosApp.get(host)
+    IosFrameLog.installIfRequested() // only with the launch argument -frame-log
     return ComposeUIViewController(configure = { enforceStrictPlistSanityCheck = false }) {
         // The screens do not deal with the keyboard themselves (on Android the window resizes for it); here the whole UI rises above it.
         Box(Modifier.fillMaxSize().imePadding()) { ExpensesRoot(app.viewModel, app.rootHost) }
