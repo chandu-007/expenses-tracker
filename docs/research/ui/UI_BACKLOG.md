@@ -385,6 +385,12 @@ Every slice: scope, before/after, test plan, performance budget, risks, effort, 
 - **Risks:** shortening Add exposes the composition hitch (it is fixed properly in S2); CMP bump moves layouts; iPhone notification privacy cannot be unit-tested.
 - **Owner decisions:** D3, D9, D12, D14 (part), D17.
 
+**S0 status (2026-11-14, Slice 113 in `docs/PHASE2_PROGRESS.md`; ids as made, a rebase may renumber them):**
+- DONE `8f57333` F-01 (reproduced first on the emulator; Hide amounts or App lock: no amount on either phone; public versions for every amount kind; evidence in `~/Documents/personal/expenses_builds/ui_s0/`).
+- DONE `24fd987` F-15 (frame logger on both phones; the real-phone baseline, D17, is still the owner's).
+- DONE `fae12a4` F-02 (tiers: feedback 90 unscaled, chips 150, tab 250, push 400, Add 380, arrivals still 1.8x, Slow keeps the caps growing with it; Reduce motion = 100 ms cross-fade; ring, bars, swipe flash through Motion), F-03, F-04 (skeleton, and Reports reopens at once when the ledger signature is unchanged), F-05 (the keyboard hides when the form starts to leave), F-06 (Reports amounts one line + tiles stack from 140% text, Attach buttons wrap, backup nudge stacks, Search chips wrap; checked on a device only by the tests listed in Slice 113, the 393/360 dp screenshots at 200% were NOT taken), F-07, F-08 (icons; the count text "N selected" was already there; the LONG_PRESS haptic is NOT done), F-09 (one `FilterChip` for the app: accent container, bold label, check), F-13 (Android constants tested; iPhone UIKit generators compiled only).
+- NOT DONE: F-10, F-11, F-12, F-14 (D12: nothing changed in `gradle/libs.versions.toml`), the tests and measurements listed under "Not done" in Slice 113.
+
 ### S1 · Tokens + consistent chrome + tabular figures (about 9 d)
 - **Scope:** U-07, U-04, U-18 (pattern), F-09 follow-ups.
 - **Before / after:** 14 radii to 5, 3 header styles to 1, ~9 card styles to 3, 5+ sheet styles to 1; selected chips in the accent; segmented controls; numbers do not jitter. Mock-up: `design_tokens_sheet_light.png`.

@@ -235,3 +235,11 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] A credit card tile says "owed" and when it is due; with a limit entered a thin bar shows how much is used.
 - [ ] Fold / tablet: the list pane shows the first entries without scrolling; "Select an entry" on the right.
 - [ ] iPhone: the same page; the bottom bar has Add in the middle; the shortcut and share-sheet paths still open Add.
+
+## UI S0 (Slice 113): what only a phone can show
+- [ ] iPhone, notices: turn Hide amounts on (then the App lock on with it off), set Settings, Notifications, Expenses, Show Previews to Always, lock the phone, trigger a bill, budget and card reminder (`-notify-debug-run`, or wait): no amount in the text on the lock screen or in the banner. Android was reproduced and fixed on an emulator; the iPhone path is compiled only.
+- [ ] Android phone: the same with Settings, Notifications, Lock screen set to Show all and to Hide sensitive content: the placeholder is "A budget needs attention / Open the app to see it".
+- [ ] Haptics (felt, not measured): Undo is a soft tap, not the old failure buzz; going over a budget limit is the warning pattern; save and paid are the confirm. iPhone: the soft impact and the warning are UIKit generators.
+- [ ] Motion: Add opens within about 0.4 s and the keyboard goes down with the form (not 0.6 s after it); a tab change feels immediate; Appearance, Reduce motion: screens cross-fade, nothing slides.
+- [ ] Frame logger: `adb logcat -s FrameLog` while you use the app (debug build), or the iPhone launch argument `-frame-log`; send back the lines for Home fling, Add open, Home to entry, tab switch (D17 baseline).
+- [ ] Text size 200% (Android) and the app's own large text (iPhone does not follow Dynamic Type in this Compose version): More backup nudge, Reports Income tile, Add "Attach a photo or file", Search chips row.
