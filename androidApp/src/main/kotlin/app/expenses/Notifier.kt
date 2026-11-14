@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
+import app.expenses.core.domain.NoticePrivacy
 
 /**
  * Shows the notices the check decided on. Two channels, one per kind of notice the user can switch off; the app sends nothing else
@@ -71,6 +72,18 @@ object Notifier {
         }
     }
 
+    /** Whether the app's own lock is on: a notice then carries no amount, as with Hide amounts (see NoticePrivacy). */
+    fun appLockOn(context: Context): Boolean = (context.applicationContext as? ExpensesApp)?.lock?.settings?.value?.enabled == true
+
+    /**
+     * What the lock screen shows for [n] when the phone hides sensitive content: our own title and the line "Open the app to see it", so the wording is the same on every Android version and for every
+     * kind that can carry an amount, not only for bills. Null for a kind with no figure.
+     */
+    private fun publicVersion(context: Context, channel: String, n: Notice): android.app.Notification? {
+        val title = NoticePrivacy.publicTitle(n.kind) ?: return null
+        return NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(NoticePrivacy.PUBLIC_TEXT).build()
+    }
+
     /** Shows each notice that can be shown and returns those that were. */
     fun show(context: Context, notices: List<Notice>): List<Notice> {
         if (notices.isEmpty() || !canShow(context)) return emptyList()
@@ -85,10 +98,8 @@ object Notifier {
             val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification).setContentTitle(n.title).setContentText(n.text)
                 .setContentIntent(if (isBill) openBills else open).setAutoCancel(true).setCategory(NotificationCompat.CATEGORY_REMINDER)
-            // a bill's amount is not shown on a locked screen: the lock-screen version says only that there is a bill
-            if (isBill) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
-                NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_notification).setContentTitle(if (n.kind == NoticeKind.BILL_FOUND) "A bill was found" else "A bill needs attention").setContentText("Open the app to see it").build(),
-            )
+            // every notice that can carry an amount is private on a lock screen that hides sensitive content, with a public version in our own words
+            publicVersion(context, channel, n)?.let { builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(it) }
             addButtons(context, builder, n)
             val notification = builder.build()
             @Suppress("MissingPermission") // checked in canShow

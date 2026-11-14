@@ -33,9 +33,10 @@ object NotificationWork {
         val now = LocalTime.now()
         val today = LocalDate.now()
         return container.write { ok ->
+            // with Hide amounts on in the app, or the App lock on, the notices carry no amount (the check builds them that way: NoticePrivacy)
             val result = ok.notifications.check(
                 kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth), now.hour * 60 + now.minute,
-                kotlinx.datetime.TimeZone.currentSystemDefault(),
+                kotlinx.datetime.TimeZone.currentSystemDefault(), hideText = Notifier.appLockOn(context),
             )
             val shown = Notifier.show(context, result.notices)
             ok.notifications.markShown(shown)

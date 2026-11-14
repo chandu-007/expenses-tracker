@@ -10,6 +10,7 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.DueItem
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticePlanner
+import app.expenses.core.domain.NoticePrivacy
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.formatted
 import app.expenses.core.storage.db.ExpensesDb
@@ -74,8 +75,12 @@ class NotificationService(
         }
     }
 
-    /** Posts what is set to post by itself, then works out which notices are due. Records nothing as shown. */
-    fun check(today: LocalDate, minuteOfDay: Int, zone: TimeZone, currency: Currency = app.expenses.core.domain.BaseCurrency.current): CheckResult {
+    /**
+     * Posts what is set to post by itself, then works out which notices are due. Records nothing as shown.
+     *
+     * With Hide amounts on in the app, or [hideText] (the caller says the App lock is on), no notice carries an amount: see [NoticePrivacy]. The key of a notice is the same either way.
+     */
+    fun check(today: LocalDate, minuteOfDay: Int, zone: TimeZone, currency: Currency = app.expenses.core.domain.BaseCurrency.current, hideText: Boolean = false): CheckResult {
         bills?.reconcileWithEntries()
         val posted = recurring.autoPost(today, zone).map { it.first }
         val bills = recurring.due(today).map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
@@ -107,22 +112,22 @@ class NotificationService(
             }
         } else null
         val prefs = prefs0
-        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1"
+        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1" || hideText
         return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide),
-            pace = pace, wrapUp = wrapUp, statements = cardStatements(today, zone), limits = cardLimits(today, zone), cleared = cardsCleared(today, zone)))
+            pace = pace, wrapUp = wrapUp, statements = cardStatements(today, zone), limits = cardLimits(today, zone), cleared = cardsCleared(today, zone)).map { NoticePrivacy.masked(it, hide) })
     }
 
     /**
      * What [check] would plan on [day] at [minuteOfDay], without posting or recording anything: for a platform that has to hand the system its
      * reminders ahead of time (iPhone). Only bills and cards: repeating items that wait for the person (one set to post by itself needs no
      * reminder), tracked bills and credit-card due dates. Budgets and the recap depend on spending that has not happened yet, and a bill found
-     * in a message is announced at once, so they are left to [check].
+     * in a message is announced at once, so they are left to [check]. [hideText] is as for [check].
      */
-    fun plannedFor(day: LocalDate, minuteOfDay: Int, zone: TimeZone): List<Notice> {
+    fun plannedFor(day: LocalDate, minuteOfDay: Int, zone: TimeZone, hideText: Boolean = false): List<Notice> {
         val prefs = prefs()
-        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1"
+        val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1" || hideText
         val due = recurring.due(day).filter { !it.item.auto }.map { BillDue(it.item.id, it.item.name, it.item.amount?.formatted(), it.date) }
-        return NoticePlanner.plan(prefs.copy(budgets = false, recap = false), day, minuteOfDay, due, emptyList(), sent(), cardsDue(day, zone), null, emptyList(), trackedBills(hide))
+        return NoticePlanner.plan(prefs.copy(budgets = false, recap = false), day, minuteOfDay, due, emptyList(), sent(), cardsDue(day, zone), null, emptyList(), trackedBills(hide)).map { NoticePrivacy.masked(it, hide) }
     }
 
     private fun money(minor: Long, code: String, hide: Boolean): String? {

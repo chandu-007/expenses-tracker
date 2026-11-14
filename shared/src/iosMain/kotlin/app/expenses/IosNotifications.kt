@@ -172,10 +172,10 @@ object IosNotifications {
                 IosNotificationCenter.reconcile(ok.notifications)
                 // a snoozed reminder waiting in the system is taken back when its bill was paid or removed in the meantime (Android checks as it fires)
                 IosNotificationCenter.dropStaleSnoozes { ref -> ok.bills.get(ref)?.status == app.expenses.core.storage.BillStatus.TRACKED }
-                val result = ok.notifications.check(now.date, minute, tz)
-                val hide = ok.templates.setting("hide_amounts") == "1"
-                val shown = IosNotificationCenter.show(result.notices.map { masked(it, hide) }, privateKeys(result.notices, hide))
-                // masked() keeps the key, so the record of what was shown is the same as without masking
+                // with Hide amounts on, or the App lock on, no notice carries an amount (the check builds them that way: NoticePrivacy, the same words as Android's), and iOS's Show Previews setting hides their text on a locked screen
+                val hide = ok.templates.setting("hide_amounts") == "1" || IosAppLock.isEnabled()
+                val result = ok.notifications.check(now.date, minute, tz, hideText = hide)
+                val shown = IosNotificationCenter.show(result.notices, privateKeys(result.notices, hide))
                 ok.notifications.markShown(shown)
                 IosNotificationCenter.planAhead(ok.notifications, now.date, minute, tz, hide)
                 shown.size
@@ -189,25 +189,6 @@ object IosNotifications {
     }
 
     // ---- what a notification may say ----
-
-    /**
-     * With Hide amounts on, Android's check already leaves the amount out of bills found in a message and tracked bills. The other kinds
-     * (a repeating expense, a card, a budget, the recap) carry figures in their text there; on iPhone those are replaced by a plain line too,
-     * so Hide amounts holds for every reminder (the more careful reading of the setting).
-     */
-    internal fun masked(n: Notice, hide: Boolean): Notice {
-        if (!hide) return n
-        return when (n.kind) {
-            NoticeKind.BILL_DUE -> n.copy(text = "Open the app to post or skip it")
-            NoticeKind.CARD_DUE -> n.copy(text = "Open the app to see what to pay")
-            NoticeKind.BUDGET_NEAR, NoticeKind.BUDGET_OVER -> n.copy(text = "Open the app to see how much is left")
-            NoticeKind.BUDGET_PACE -> n.copy(text = "Open the app to see how your spending is going")
-            NoticeKind.BUDGET_WRAPUP -> n.copy(text = "Open the app to see how last month went")
-            NoticeKind.CARD_STATEMENT, NoticeKind.CARD_LIMIT, NoticeKind.CARD_CLEARED -> n.copy(text = "Open the app to see your card")
-            NoticeKind.WEEKLY_RECAP -> n.copy(title = "Your weekly recap", text = "Open the app to see how last week went")
-            NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED -> n
-        }
-    }
 
     /**
      * Notices whose text is hidden on a lock screen that is set to hide previews (iOS's "Show Previews" setting, as Android's lock-screen
@@ -411,12 +392,11 @@ internal object IosNotificationCenter {
         for (offset in 0..AHEAD_DAYS) {
             if (offset == 0 && minute >= at) continue // this day's reminder hour has passed: the check itself decides what to show now
             val day = today.plus(offset, DateTimeUnit.DAY)
-            for (n in service.plannedFor(day, at, tz)) if (seen.add(n.key)) planned += n to day
+            for (n in service.plannedFor(day, at, tz, hideText = hide)) if (seen.add(n.key)) planned += n to day
         }
         val requests = planned.map { (n, day) ->
-            val masked = IosNotifications.masked(n, hide)
             val parts = NSDateComponents().also { c -> c.year = day.year.toLong(); c.month = day.monthNumber.toLong(); c.day = day.dayOfMonth.toLong(); c.hour = (at / 60).toLong(); c.minute = (at % 60).toLong() }
-            UNNotificationRequest.requestWithIdentifier(n.key, content(masked, n.kind.isBillPrivate() || hide), UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(parts, false))
+            UNNotificationRequest.requestWithIdentifier(n.key, content(n, n.kind.isBillPrivate() || hide), UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(parts, false))
         }
         val accepted = add(requests)
         saveAhead(planned.filter { it.first.key in accepted }.associate { (n, day) -> n.key to day.atTime(at / 60, at % 60).toInstant(tz).toEpochMilliseconds() })

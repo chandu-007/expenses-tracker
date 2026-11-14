@@ -163,6 +163,69 @@ class NotificationServiceTest {
         assertEquals("due 25 Oct · Tap to add it", n.text)
     }
 
+    // ---- F-01: no amount in any notice with Hide amounts or the App lock on ----
+
+    private val digitOrRupee = Regex("[0-9₹]")
+
+    /** A bill due today, a budget over its limit, a card due, a bill found in a message and a tracked bill: the kinds that carry figures, all in one check. */
+    private fun seedEveryAmountKind(): LocalDate {
+        bill("rent")
+        budgets.setLimit(null, m(100_000)); spend("overspend", 1_200, "Food") // not "big": the card's own spending below has that id
+        val day = cardWithStatementDue()
+        // the tracked bill is not a credit-card bill: one that is would take the place of the card's own reminder
+        billStore.add(found("f", due = "2026-10-25")); billStore.add(found("t", due = "2026-10-11").copy(kind = "UTILITY")); billStore.track("t")
+        return day
+    }
+
+    private fun assertNoAmounts(notices: List<app.expenses.core.domain.Notice>, what: String) {
+        assertTrue(notices.isNotEmpty(), what)
+        for (n in notices) {
+            // the date of a bill found in a message ("due 25 Oct") is the one digit that may remain: it is not an amount
+            val text = n.text.replace(Regex("due \\d{1,2} [A-Z][a-z]{2}"), "")
+            assertTrue(!digitOrRupee.containsMatchIn(text), "$what: ${n.kind} '${n.text}'")
+            assertTrue("₹" !in n.title, "$what: ${n.kind} title '${n.title}'")
+        }
+    }
+
+    @Test
+    fun withNothingHiddenTheNoticesCarryTheirAmountsAsBefore() {
+        val day = seedEveryAmountKind()
+        val kinds = withBills.check(day, noon, zone).notices
+        assertTrue(kinds.any { it.kind == NoticeKind.BILL_DUE && "₹" in it.text }, "$kinds")
+        assertTrue(kinds.any { it.kind == NoticeKind.CARD_DUE && "₹" in it.text }, "$kinds")
+        assertTrue(kinds.any { it.kind == NoticeKind.BUDGET_OVER && "₹" in it.text }, "$kinds")
+        assertTrue(kinds.any { it.kind == NoticeKind.BILL_FOUND && "₹" in it.text }, "$kinds")
+    }
+
+    @Test
+    fun hideAmountsLeavesTheAmountOutOfEveryKindOfNoticeAndKeepsTheirKeys() {
+        val day = seedEveryAmountKind()
+        val plain = withBills.check(day, noon, zone).notices
+        db.schemaQueries.putSetting("hide_amounts", "1")
+        val hidden = withBills.check(day, noon, zone).notices
+        assertNoAmounts(hidden, "Hide amounts on")
+        assertEquals(plain.map { it.key }, hidden.map { it.key }, "the same notices, so what is recorded as shown does not depend on the setting")
+        assertEquals(plain.map { it.kind }, hidden.map { it.kind })
+        assertTrue(hidden.map { it.kind }.containsAll(listOf(NoticeKind.BILL_DUE, NoticeKind.BUDGET_OVER, NoticeKind.CARD_DUE, NoticeKind.BILL_FOUND, NoticeKind.BILL_TRACKED)), "$hidden")
+    }
+
+    @Test
+    fun theAppLockDoesTheSameWithHideAmountsOffAndLeavesTheSettingAlone() {
+        val day = seedEveryAmountKind()
+        val locked = withBills.check(day, noon, zone, hideText = true).notices
+        assertNoAmounts(locked, "App lock on")
+        assertEquals(null, db.schemaQueries.settingValue("hide_amounts").executeAsOneOrNull(), "the lock does not turn Hide amounts on")
+        assertTrue(withBills.check(day, noon, zone).notices.any { "₹" in it.text }, "and with the lock off the figures are back")
+    }
+
+    @Test
+    fun theNoticesPlannedAheadForTheIPhoneAreMaskedTheSameWay() {
+        seedEveryAmountKind()
+        val planned = withBills.plannedFor(LocalDate(2026, 10, 11), noon, zone, hideText = true)
+        assertNoAmounts(planned, "planned ahead, lock on")
+        assertTrue(withBills.plannedFor(LocalDate(2026, 10, 11), noon, zone).any { "₹" in it.text }, "and with nothing hidden they have them")
+    }
+
     @Test
     fun aTrackedBillRemindsFromThreeDaysBeforeItsDateAndAFoundOneDoesNot() {
         billStore.add(found("t", due = "2026-10-09")); billStore.track("t")

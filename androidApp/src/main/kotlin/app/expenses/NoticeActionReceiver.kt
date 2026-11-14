@@ -11,6 +11,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
+import app.expenses.core.domain.NoticePrivacy
 import app.expenses.core.domain.Snooze
 import app.expenses.core.domain.SnoozeMode
 import app.expenses.core.storage.BillStatus
@@ -69,10 +70,11 @@ class SnoozedNoticeWorker(context: Context, params: WorkerParameters) : Coroutin
     override suspend fun doWork(): Result {
         val ref = inputData.getString(NoticeActionReceiver.EXTRA_REF) ?: return Result.success()
         val kind = runCatching { NoticeKind.valueOf(inputData.getString(NoticeActionReceiver.EXTRA_KIND).orEmpty()) }.getOrNull() ?: return Result.success()
-        // a bill paid or removed in the meantime is not reminded about
-        val stillOpen = (applicationContext as ExpensesApp).container.write { ok -> ok.bills.get(ref)?.status == BillStatus.TRACKED } ?: false
+        // a bill paid or removed in the meantime is not reminded about; and Hide amounts or the App lock may have been turned on since the notice was first shown, so the text is masked now, not when it was kept
+        val (stillOpen, hide) = (applicationContext as ExpensesApp).container.write { ok -> (ok.bills.get(ref)?.status == BillStatus.TRACKED) to (ok.templates.setting("hide_amounts") == "1") } ?: (false to false)
         if (!stillOpen) return Result.success()
-        Notifier.show(applicationContext, listOf(Notice("snooze:$ref:${System.currentTimeMillis()}", kind, inputData.getString(NoticeActionReceiver.EXTRA_TITLE).orEmpty(), inputData.getString(NoticeActionReceiver.EXTRA_TEXT).orEmpty(), ref)))
+        val notice = Notice("snooze:$ref:${System.currentTimeMillis()}", kind, inputData.getString(NoticeActionReceiver.EXTRA_TITLE).orEmpty(), inputData.getString(NoticeActionReceiver.EXTRA_TEXT).orEmpty(), ref)
+        Notifier.show(applicationContext, listOf(NoticePrivacy.masked(notice, hide || Notifier.appLockOn(applicationContext))))
         return Result.success()
     }
 }

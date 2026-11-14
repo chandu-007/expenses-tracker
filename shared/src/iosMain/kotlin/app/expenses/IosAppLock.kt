@@ -111,9 +111,12 @@ class IosAppLock(
         }
     }
 
-    private companion object {
-        const val NEEDS_PASSCODE = "Set a passcode in the iPhone's Settings first. The app lock uses it (with Face ID or Touch ID when you have them)."
-        const val ENABLED = "lock_enabled"
-        const val TIMEOUT = "lock_timeout"
+    companion object {
+        private const val NEEDS_PASSCODE = "Set a passcode in the iPhone's Settings first. The app lock uses it (with Face ID or Touch ID when you have them)."
+        private const val ENABLED = "lock_enabled"
+        private const val TIMEOUT = "lock_timeout"
+
+        /** Whether the app lock is on, from the preference the lock itself keeps: a reminder may be made with no screen, and carries no amounts while the lock is on. */
+        internal fun isEnabled(): Boolean = NSUserDefaults.standardUserDefaults.boolForKey(ENABLED)
     }
 }
