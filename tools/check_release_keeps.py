@@ -20,6 +20,8 @@ import glob
 import os
 import re
 import subprocess
+import tempfile
+import zipfile
 import sys
 import xml.etree.ElementTree as ET
 
@@ -124,6 +126,31 @@ def manifest_components(apk):
     return sorted(set(full))
 
 
+# The debug-only frame logger (UI S0 F-15): BuildConfig.FRAME_LOG is a constant false outside the debug build, so R8 must remove FrameLog, FrameProbe's wiring and FrameStats. If any of them is reachable in a release build,
+# a measuring tool would ship (and run an extra frame listener on every phone), so this check fails.
+LOGGER_CLASSES = ["app.expenses.FrameLog", "app.expenses.ui.FrameProbe", "app.expenses.core.domain.FrameStats", "app.expenses.FrameLogDriveTest"]
+LOGGER_STRINGS = ["addOnFrameMetricsAvailableListener", "OnFrameMetricsAvailableListener", "FRAMELOG_RESULT"]
+
+
+def debug_logger_leftovers(apk, mapping):
+    found = []
+    with open(mapping, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    for name in LOGGER_CLASSES:
+        if re.search(r"^" + re.escape(name) + r" -> ", text, re.M):
+            found.append(f"{name} is in the release build (mapping.txt lists it): the debug-only frame logger must be removed by R8, BuildConfig.FRAME_LOG must be false")
+    dexdump = tool("build-tools/*/dexdump")
+    with zipfile.ZipFile(apk) as z, tempfile.TemporaryDirectory() as tmp:
+        for n in z.namelist():
+            if re.fullmatch(r"classes\d*\.dex", n):
+                path = z.extract(n, tmp)
+                out = subprocess.run([dexdump, "-d", path], capture_output=True).stdout.decode("utf-8", errors="replace")
+                for s in LOGGER_STRINGS:
+                    if s in out:
+                        found.append(f"'{s}' is referenced in {n}: the frame logger's code reached the release build")
+    return found
+
+
 def main():
     if len(sys.argv) not in (2, 3) or not os.path.isfile(sys.argv[1]):
         print(__doc__)
@@ -180,13 +207,15 @@ def main():
         elif not c.has_default_constructor():
             failures.append(f"the manifest declares {name} but it has no no-argument constructor: Android creates it by name")
 
+    failures += debug_logger_leftovers(apk, mapping)
+
     if failures:
-        print("FAIL: R8 broke classes that are created by name:")
+        print("FAIL: the release build is wrong (R8 broke classes that are created by name, or the debug frame logger reached it):")
         for f in failures:
             print("  - " + f)
         print("Fix: a keep rule in androidApp/proguard-rules.pro (see the widget rules there).")
         return 1
-    print("PASS: every class created by name (widget callbacks, widgets, manifest components) survived R8 with its constructor")
+    print("PASS: every class created by name (widget callbacks, widgets, manifest components) survived R8 with its constructor, and the debug frame logger is not in the build")
     return 0
 
 
