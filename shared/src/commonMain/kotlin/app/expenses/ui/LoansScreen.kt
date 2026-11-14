@@ -212,7 +212,7 @@ private fun GotItBackDialog(w: app.expenses.WaitingRowUi, accounts: List<app.exp
                 )
                 Text("Came into", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    accounts.forEach { a -> androidx.compose.material3.FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("got_account_${a.name}")) }
+                    accounts.forEach { a -> FilterChip(selected = a.id == account, onClick = { account = a.id }, label = { Text(a.name) }, modifier = Modifier.testTag("got_account_${a.name}")) }
                 }
                 Text("Part of it is fine: the rest stays waiting. It is recorded as a refund of the expense.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("got_problem")) }

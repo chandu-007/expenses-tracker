@@ -1,5 +1,11 @@
 package app.expenses.ui
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -38,8 +44,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -129,23 +133,13 @@ internal fun FiltersButton(count: Int, onClick: () -> Unit, modifier: Modifier =
     }
 }
 
-/** A chip that is on must look on: a filled container in the app's colour (not the faint grey of the default) and a border. */
-@Composable
-private fun filterColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer, selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer, selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-)
-
-@Composable
-private fun filterBorder(selected: Boolean) = FilterChipDefaults.filterChipBorder(enabled = true, selected = selected, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp)
-
 /** One choice of a group in the panel: with a tick when it is the one chosen. */
 @Composable
 private fun ChoiceChip(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
     FilterChip(
         selected = selected, onClick = onClick, label = { Text(label) },
         leadingIcon = if (selected) ({ Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
-        colors = filterColors(), border = filterBorder(selected), modifier = Modifier.testTag(tag),
+        modifier = Modifier.testTag(tag),
     )
 }
 
@@ -154,7 +148,7 @@ private fun RemovableChip(label: String, tag: String, description: String, onRem
     FilterChip(
         selected = true, onClick = onRemove, label = { Text(label, maxLines = 1) },
         trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) },
-        colors = filterColors(), border = filterBorder(true), modifier = Modifier.semantics { contentDescription = description }.testTag(tag),
+        modifier = Modifier.semantics { contentDescription = description }.testTag(tag),
     )
 }
 
@@ -163,7 +157,7 @@ private fun QuickChip(label: String, on: Boolean, tag: String, onClick: () -> Un
     FilterChip(
         selected = on, onClick = onClick, label = { Text(label, maxLines = 1) },
         trailingIcon = if (on) ({ Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
-        colors = filterColors(), border = filterBorder(on), modifier = Modifier.testTag(tag),
+        modifier = Modifier.testTag(tag),
     )
 }
 
@@ -180,7 +174,7 @@ internal fun FilterStrip(input: SearchInput, categories: List<CategoryUi>, accou
     val daysChosen = input.fromDay != null || input.toDay != null
     val dates = SearchDates.summary(input.fromDay, input.toDay)
     val amount = if (input.minRupees.isNotBlank() || input.maxRupees.isNotBlank()) amountFilterLabel(input.minRupees, input.maxRupees) else null
-    ChipRow(modifier.testTag("search_active_chips"), resetKey = input.filterCount()) {
+    val chips: @Composable () -> Unit = {
         if (onPeriod) QuickChip("This period", true, "search_range_THIS_PERIOD") { onEdit(input.copy(range = SearchRange.ANY)) }
         if (onExpense) QuickChip("Expenses", true, "search_kind_expense") { onEdit(input.copy(kind = SearchKind.ANY)) }
         if (onIncome) QuickChip("Income", true, "search_kind_income") { onEdit(input.copy(kind = SearchKind.ANY)) }
@@ -204,6 +198,9 @@ internal fun FilterStrip(input: SearchInput, categories: List<CategoryUi>, accou
         if (!onExpense) QuickChip("Expenses", false, "search_kind_expense") { onEdit(input.copy(kind = SearchKind.EXPENSE)) }
         if (!onIncome) QuickChip("Income", false, "search_kind_income") { onEdit(input.copy(kind = SearchKind.INCOME)) }
     }
+    // from 140% text the chips wrap onto a second line instead of scrolling sideways with the third one cut off ("Inc"); at normal sizes the row scrolls and fades as before
+    if (LocalDensity.current.fontScale >= 1.4f) androidx.compose.foundation.layout.FlowRow(modifier.padding(horizontal = 16.dp).testTag("search_active_chips"), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
+    else ChipRow(modifier.testTag("search_active_chips"), resetKey = input.filterCount()) { chips() }
 }
 
 /** One end of the chosen days: a button showing the day (or "From"/"To" while open) that opens the picker, and a way to clear it. */
@@ -241,10 +238,13 @@ private fun PickerField(value: String, tag: String, on: Boolean, content: @Compo
  * covers only that pane and the entry open beside it stays in sight.
  * [input] is the search as it is now; every change goes to [onEdit] (`typing`: an amount is being typed, keep the keyboard) and the search runs at once, so the button shows the real
  * number of results. Back, the cross, the dimmed page and Apply all close it, keeping what is chosen.
+ *
+ * It arrives and leaves with motion (it used to appear and vanish in one frame): the dimming fades and the sheet slides up 24 dp while fading in, 220 ms easing out; on the way out both take 150 ms
+ * easing in. Under Reduce motion they are the short cross-fade. It is shown inside an [androidx.compose.animation.AnimatedVisibility], which keeps it composed until the exit has finished.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FiltersPanel(
+internal fun AnimatedVisibilityScope.FiltersPanel(
     input: SearchInput, state: SearchUi, dateProblem: String?, canSave: Boolean,
     categories: List<CategoryUi>, tags: List<String>, accounts: List<AccountUi>, saved: List<SavedSearchUi>,
     onEdit: (SearchInput, Boolean) -> Unit, onUseSaved: (SearchInput) -> Unit, onRemoveSaved: (SavedSearchUi) -> Unit, onSave: () -> Unit,
@@ -262,9 +262,17 @@ internal fun FiltersPanel(
         else -> "Show ${state.results.size} ${if (state.results.size == 1) "result" else "results"}"
     }
     fun edit(i: SearchInput) = onEdit(i, false)
+    val reduce = LocalReduceMotion.current
+    val rise = with(LocalDensity.current) { 24.dp.roundToPx() }
     BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = "Filters"; isTraversalGroup = true }) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"))
-        val place = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxHeight * 0.9f)
+        Box(
+            Modifier.fillMaxSize().animateEnterExit(enter = fadeIn(tween(if (reduce) Motion.REDUCED_MS else Motion.SHEET_IN, easing = Motion.EaseOut)), exit = fadeOut(tween(if (reduce) Motion.REDUCED_MS else Motion.CHIP, easing = Motion.EaseIn)))
+                .background(Color.Black.copy(alpha = 0.40f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"),
+        )
+        val place = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxHeight * 0.9f).animateEnterExit(
+            enter = if (reduce) fadeIn(tween(Motion.REDUCED_MS)) else slideInVertically(tween(Motion.SHEET_IN, easing = Motion.EaseOut)) { rise } + fadeIn(tween(Motion.SHEET_IN, easing = Motion.EaseOut)),
+            exit = if (reduce) fadeOut(tween(Motion.REDUCED_MS)) else slideOutVertically(tween(Motion.CHIP, easing = Motion.EaseIn)) { rise } + fadeOut(tween(Motion.CHIP, easing = Motion.EaseIn)),
+        )
         Surface(
             place.pointerInput(Unit) { detectTapGestures { } }.testTag("filters_panel"),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),

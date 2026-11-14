@@ -172,8 +172,8 @@ private fun DetailPane(editing: Editable?, editor: @Composable (Editable) -> Uni
     if (editing == null) WidePlaceholder()
     AnimatedVisibility(
         visible = editing != null,
-        enter = fadeIn(Motion.tween<Float>(reduce, Motion.STANDARD)),
-        exit = fadeOut(Motion.tween<Float>(reduce, Motion.QUICK)),
+        enter = fadeIn(Motion.tween<Float>(reduce, Motion.TAB)),
+        exit = fadeOut(Motion.tween<Float>(reduce, Motion.CHIP)),
     ) {
         val leaving = transition.targetState == EnterExitState.PostExit
         // Home's row and the editor carry the same shared-container key; with both drawn at once that would be two claims on one element. The pane has its own fade instead.

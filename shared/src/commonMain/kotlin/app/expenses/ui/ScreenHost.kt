@@ -47,7 +47,8 @@ object ScreenKeys {
  * - the add form: rises from the bottom over a home that settles back;
  * - the edit form: the tapped row grows into it (a container transform, through [sharedContainer]), and shrinks back on return;
  * - going back to home: the screen leaving shrinks away and home returns.
- * Under Reduce motion every change is instant. While a screen is leaving it is still drawn but hidden from accessibility and the tests, so there is never
+ * Under Reduce motion every change is a short cross-fade (nothing travels). The durations are the tiers of [Motion]: a tab change at most 250 ms, a screen pushed at most 400 ms, the add form at most 380 ms
+ * (the keyboard rises with it: the amount takes focus at once), whatever the speed chosen under Appearance. While a screen is leaving it is still drawn but hidden from accessibility and the tests, so there is never
  * a second copy of a screen's controls to find.
  *
  * [content] is given the key it should draw: the leaving screen draws its own key, not the new one.
@@ -56,6 +57,11 @@ object ScreenKeys {
 @Composable
 fun ScreenHost(screenKey: Int, content: @Composable (key: Int) -> Unit) {
     val reduce = LocalReduceMotion.current
+    // the debug-only frame logger starts a measuring window at each change of screen (FrameProbe.onScreenChange is null in every build without one)
+    val previousKey = androidx.compose.runtime.remember { intArrayOf(screenKey) }
+    androidx.compose.runtime.LaunchedEffect(screenKey) {
+        if (previousKey[0] != screenKey) { FrameProbe.onScreenChange?.invoke(previousKey[0], screenKey); previousKey[0] = screenKey }
+    }
     SharedTransitionLayout {
         AnimatedContent(
             targetState = screenKey,
@@ -64,23 +70,23 @@ fun ScreenHost(screenKey: Int, content: @Composable (key: Int) -> Unit) {
             transitionSpec = {
                 val from = initialState; val to = targetState
                 if (reduce) {
-                    EnterTransition.None togetherWith ExitTransition.None
+                    fadeIn(tween(Motion.REDUCED_MS)) togetherWith fadeOut(tween(Motion.REDUCED_MS))
                 } else when {
-                    from in TABS && to in TABS -> fadeIn(tween(Motion.STANDARD)) togetherWith fadeOut(tween(Motion.STANDARD)) // the bar stays put while the page changes
+                    from in TABS && to in TABS -> fadeIn(tween(Motion.TAB)) togetherWith fadeOut(tween(Motion.TAB)) // the bar stays put while the page changes
                     to == ScreenKeys.ADD_FORM ->
-                        (slideInVertically(tween(Motion.GLIDE, easing = Motion.EaseOut)) { it } + fadeIn(tween(Motion.STANDARD))) togetherWith
-                            (scaleOut(tween(Motion.GLIDE, easing = Motion.EaseOut), targetScale = 0.94f) + fadeOut(tween(Motion.GLIDE)))
+                        (slideInVertically(tween(Motion.ADD_FORM, easing = Motion.EaseOut)) { it } + fadeIn(tween(Motion.TAB))) togetherWith
+                            (scaleOut(tween(Motion.ADD_FORM, easing = Motion.EaseOut), targetScale = 0.94f) + fadeOut(tween(Motion.ADD_FORM)))
                     from == ScreenKeys.ADD_FORM ->
-                        (scaleIn(tween(Motion.GLIDE, easing = Motion.EaseOut), initialScale = 0.94f) + fadeIn(tween(Motion.GLIDE))) togetherWith
-                            (slideOutVertically(tween(Motion.GLIDE, easing = Motion.EaseOut)) { it } + fadeOut(tween(Motion.GLIDE)))
+                        (scaleIn(tween(Motion.ADD_FORM, easing = Motion.EaseOut), initialScale = 0.94f) + fadeIn(tween(Motion.ADD_FORM))) togetherWith
+                            (slideOutVertically(tween(Motion.ADD_FORM, easing = Motion.EaseOut)) { it } + fadeOut(tween(Motion.ADD_FORM)))
                     to == ScreenKeys.EDIT_FORM || from == ScreenKeys.EDIT_FORM ->
-                        fadeIn(tween(Motion.STANDARD)) togetherWith fadeOut(tween(Motion.STANDARD)) // the shared container carries the movement
+                        fadeIn(tween(Motion.TAB)) togetherWith fadeOut(tween(Motion.TAB)) // the shared container carries the movement
                     to == ScreenKeys.HOME ->
-                        (scaleIn(tween(Motion.EMPHASIZED, easing = Motion.EaseOut), initialScale = 1.04f) + fadeIn(tween(Motion.STANDARD))) togetherWith
-                            (scaleOut(tween(Motion.STANDARD, easing = Motion.EaseIn), targetScale = 0.94f) + fadeOut(tween(Motion.STANDARD)))
+                        (scaleIn(tween(Motion.PUSH, easing = Motion.EaseOut), initialScale = 1.04f) + fadeIn(tween(Motion.TAB))) togetherWith
+                            (scaleOut(tween(Motion.TAB, easing = Motion.EaseIn), targetScale = 0.94f) + fadeOut(tween(Motion.TAB)))
                     else ->
-                        (scaleIn(tween(Motion.EMPHASIZED, easing = Motion.EaseOut), initialScale = 0.94f) + fadeIn(tween(Motion.STANDARD))) togetherWith
-                            fadeOut(tween(Motion.QUICK))
+                        (scaleIn(tween(Motion.PUSH, easing = Motion.EaseOut), initialScale = 0.94f) + fadeIn(tween(Motion.TAB))) togetherWith
+                            fadeOut(tween(Motion.CHIP))
                 }.also {
                     // the screen being opened is drawn above; the screen being left, on the way back, is drawn above
                     it.targetContentZIndex = if (to == ScreenKeys.HOME && from != ScreenKeys.EDIT_FORM) -1f else 1f

@@ -879,6 +879,14 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private val _report = MutableStateFlow<ReportUi?>(null)
     val report: StateFlow<ReportUi?> = _report
 
+    /**
+     * The page Reports opens on (this period, by category), kept when Reports is left, with the signature of the ledger it was made from and the day it was made for. Opening Reports again with nothing changed in
+     * between shows it at once and works nothing out again; with anything changed (or another day) the screen draws a skeleton and the page is filled in when it is ready: never old figures that are no longer right.
+     */
+    private class OpeningReport(val signature: DataSignature, val day: Long, val report: ReportUi)
+    private var openingReport: OpeningReport? = null
+    private val OPENING_REPORT = ReportRequest(ReportMode.PERIOD, 0)
+
     /** How many report builds are running: a report over a big ledger takes a moment, and the screen says so (after a short wait) while the old figures are still shown. */
     private val _reportBuilds = MutableStateFlow(0)
     val reportBuilds: StateFlow<Int> get() = _reportBuilds
@@ -3807,7 +3815,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     // ---- reports ----
 
-    fun openReports() = reportAction { ReportRequest(ReportMode.PERIOD, 0) }
+    /**
+     * Opens Reports on this period, by category. With the page kept from the last time ([openingReport]) and nothing changed in the ledger since (its signature), that page is shown at once and nothing is worked
+     * out again; otherwise the page is built (the screen draws a skeleton until it is there).
+     */
+    fun openReports() {
+        reportRequest = OPENING_REPORT
+        _reportBuilds.update { it + 1 }
+        viewModelScope.launch(BACKGROUND) {
+            try {
+                container.write { ok ->
+                    val kept = openingReport
+                    if (kept != null && kept.day == todayLocal().toEpochDays() && kept.signature == container.dataSignature(ok)) { if (reportRequest == OPENING_REPORT) _report.value = kept.report }
+                    else reportRequest?.let { publishReport(ok, it) }
+                }
+            } finally { _reportBuilds.update { it - 1 } }
+        }
+    }
     fun setReportMode(mode: ReportMode) = reportAction { r -> r.copy(mode = mode, offset = 0, drillTarget = null, drillStart = null, drillEnd = null) }
     fun setReportGroup(group: ReportGroup) = reportAction { r -> r.copy(group = group, drillTarget = null, drillStart = null, drillEnd = null) }
     fun stepReport(delta: Int) = reportAction { r -> if (r.mode == ReportMode.CUSTOM) r else r.copy(offset = minOf(0, r.offset + delta), drillTarget = null, drillStart = null, drillEnd = null) }
@@ -4246,8 +4270,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         reportRequest = next(current)
         _reportBuilds.update { it + 1 }
         viewModelScope.launch(BACKGROUND) {
-            try { container.write { ok -> reportRequest?.let { _report.value = buildReport(ok, it) } } } finally { _reportBuilds.update { it - 1 } }
+            try { container.write { ok -> reportRequest?.let { publishReport(ok, it) } } } finally { _reportBuilds.update { it - 1 } }
         }
+    }
+
+    /** Builds the report for [r] and shows it; the one Reports opens on is also kept for the next time it is opened (see [openingReport]). */
+    private fun publishReport(ok: AppContainer.Opened.Ok, r: ReportRequest) {
+        val built = buildReport(ok, r)
+        _report.value = built
+        if (r == OPENING_REPORT && built.drill == null) openingReport = OpeningReport(container.dataSignature(ok), todayLocal().toEpochDays(), built)
     }
 
     private fun buildReport(ok: AppContainer.Opened.Ok, r: ReportRequest): ReportUi {
@@ -4651,7 +4682,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             .values.fold(Money.zero(inr)) { a, m -> a + m }
         val cats = ok.categories.list()
         categoryNames = cats.associate { it.id to it.name }
-        reportRequest?.let { _report.value = buildReport(ok, it) } // keep an open report in step with edits made from its entry list
+        reportRequest?.let { publishReport(ok, it) } // keep an open report in step with edits made from its entry list
         calendarRequest?.let { _calendar.value = buildCalendar(ok, it) }
         searchInput?.let { i -> // and an open search, so an entry edited from the results is shown as it now is
             val min = i.minRupees.trim().takeIf { it.isNotEmpty() }?.let { parseAmount(it, inr) }

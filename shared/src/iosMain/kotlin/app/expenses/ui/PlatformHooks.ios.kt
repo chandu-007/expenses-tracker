@@ -32,19 +32,27 @@ import platform.UniformTypeIdentifiers.UTTypeFolder
 import platform.UniformTypeIdentifiers.UTTypeItem
 import platform.darwin.NSObject
 
+// UIKit's feedback generators for the two meanings Compose's HapticFeedbackType has no good iOS pattern for: Undo (a soft, neutral tap: it reverses something, it is not an error) and a limit crossed (the system's warning).
+// Made once and kept, as Compose keeps its own.
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private object UiKitFeel {
+    private val soft by lazy { platform.UIKit.UIImpactFeedbackGenerator(platform.UIKit.UIImpactFeedbackStyle.UIImpactFeedbackStyleSoft) }
+    private val notices by lazy { platform.UIKit.UINotificationFeedbackGenerator() }
+    fun undo() = soft.impactOccurred()
+    fun warning() = notices.notificationOccurred(platform.UIKit.UINotificationFeedbackType.UINotificationFeedbackTypeWarning)
+}
+
 @Composable
 actual fun rememberFeel(): (Feel) -> Unit {
     val haptic = LocalHapticFeedback.current
     return remember(haptic) {
         { feel ->
-            haptic.performHapticFeedback(
-                when (feel) {
-                    Feel.SAVE, Feel.PAID -> HapticFeedbackType.Confirm
-                    Feel.UNDO -> HapticFeedbackType.Reject
-                    Feel.LIMIT -> HapticFeedbackType.LongPress
-                    Feel.TICK -> HapticFeedbackType.SegmentTick
-                },
-            )
+            when (feel) {
+                Feel.UNDO -> UiKitFeel.undo()
+                Feel.LIMIT -> UiKitFeel.warning()
+                Feel.SAVE, Feel.PAID -> haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                Feel.TICK -> haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            }
         }
     }
 }

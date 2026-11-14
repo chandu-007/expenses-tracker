@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
  * A URI is a String everywhere in shared code (Android: a content Uri's toString(); iOS: a file URL's absoluteString).
  */
 
-/** A function that performs a [Feel]: a crisp confirm on saving, a soft reject on Undo, a firmer one when a budget limit is crossed, a double tap for paid. */
+/** A function that performs a [Feel]: a crisp confirm on saving (and for a paid bill), a soft neutral tap on Undo (it reverses something; it is not a failure), the one warning when a budget limit is crossed, a tick for the little things. */
 @Composable
 expect fun rememberFeel(): (Feel) -> Unit
 

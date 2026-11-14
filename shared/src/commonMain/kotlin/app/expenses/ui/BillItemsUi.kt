@@ -114,9 +114,11 @@ internal fun BillItemsReader(
         // opened over it left that screen and the list of items to be shown after it fighting over what was on top (the list appeared and was gone).
         if (choosing) {
             Text("The words in the photo are read on this phone. Nothing is sent anywhere.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { picker.takePhoto { readPhoto(it) } }, modifier = Modifier.testTag("bill_items_camera")) { Text("Take a photo") }
-                OutlinedButton(onClick = { picker.openDocument(listOf("image/*")) { readPhoto(it) } }, modifier = Modifier.testTag("bill_items_pick")) { Text("Choose a photo") }
+            val big = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.3f
+            val wide = if (big) Modifier.fillMaxWidth() else Modifier
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { picker.takePhoto { readPhoto(it) } }, modifier = wide.testTag("bill_items_camera")) { Text("Take a photo") }
+                OutlinedButton(onClick = { picker.openDocument(listOf("image/*")) { readPhoto(it) } }, modifier = wide.testTag("bill_items_pick")) { Text("Choose a photo") }
             }
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("bill_items_problem")) }

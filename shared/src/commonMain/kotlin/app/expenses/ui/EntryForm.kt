@@ -52,7 +52,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -232,6 +231,11 @@ fun EntryFormScreen(
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val platform = LocalPlatform.current
     LaunchedEffect(padOn) { if (padOn) keyboard?.hide() }
+    // the keyboard leaves WITH the form: it used to wait until the form had finished sliding away (about 0.6 s at the default speed) and hung on the screen over Home. A form that starts to leave (Save, Cancel, Back)
+    // puts the keyboard away at once and gives up the focus, so both go down together. (The app's own number pad is part of the form and slides with it.)
+    val leaving = LocalLeavingScreen.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(leaving) { if (leaving) { keyboard?.hide(); focusManager.clearFocus() } }
     LaunchedEffect(Unit) { if (start.amountText.isEmpty()) focus.requestFocus() }
     val forIncome = draft.kind == DraftKind.INCOME
     if (pickingCategory) CategoryPickerDialog(
@@ -302,8 +306,8 @@ fun EntryFormScreen(
             Column {
                 AnimatedVisibility(
                     visible = padOn,
-                    enter = if (reduceMotion) EnterTransition.None else expandVertically(tween(Motion.STANDARD, easing = Motion.EaseOut)) + fadeIn(tween(Motion.STANDARD)),
-                    exit = if (reduceMotion) ExitTransition.None else shrinkVertically(tween(Motion.QUICK)) + fadeOut(tween(Motion.QUICK)),
+                    enter = if (reduceMotion) fadeIn(tween(Motion.REDUCED_MS)) else expandVertically(tween(Motion.TAB, easing = Motion.EaseOut)) + fadeIn(tween(Motion.TAB)),
+                    exit = if (reduceMotion) fadeOut(tween(Motion.REDUCED_MS)) else shrinkVertically(tween(Motion.CHIP)) + fadeOut(tween(Motion.CHIP)),
                 ) {
                     NumberPad { key -> draft = draft.copy(amountText = padPress(draft.amountText, key, currency.minorUnitDigits)) }
                 }
@@ -715,9 +719,12 @@ private fun AttachmentsSection(saved: Boolean, items: List<app.expenses.Attachme
             }
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("attachment_problem")) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (picker.canTakePhoto) OutlinedButton(onClick = { picker.takePhoto { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_camera")) { Text("Take a photo") }
-            OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = Modifier.testTag("attachment_add")) { Text("Attach a photo or file") }
+        // side by side while there is room; at large text each is a full-width button on its own line (the second used to collapse into a tall oval)
+        val big = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.3f
+        val wide = if (big) Modifier.fillMaxWidth() else Modifier
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (picker.canTakePhoto) OutlinedButton(onClick = { picker.takePhoto { it?.let(onAttach) } }, modifier = wide.testTag("attachment_camera")) { Text("Take a photo") }
+            OutlinedButton(onClick = { picker.openDocument(listOf("image/*", "application/pdf", "*/*")) { it?.let(onAttach) } }, modifier = wide.testTag("attachment_add")) { Text("Attach a photo or file") }
         }
         extra()
         Text(if (saved) "Kept on this phone, and included in a backup unless you switch that off under Your data." else "Optional. Added to the entry when you save it. Kept on this phone, and included in a backup unless you switch that off under Your data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("attachments_hint"))

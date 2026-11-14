@@ -201,7 +201,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
 @Composable
 private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier, badge: Boolean = false) {
     val tint by androidx.compose.animation.animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) 0 else Motion.STANDARD), label = "tab tint",
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) Motion.REDUCED_MS else Motion.TAB), label = "tab tint",
     )
     Column(
         modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
@@ -273,7 +273,7 @@ fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
 fun Modifier.pressScale(onClick: () -> Unit, haptic: androidx.compose.ui.hapticfeedback.HapticFeedbackType? = null): Modifier = composed {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 600f), label = "press")
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, Motion.press(), label = "press")
     val feedback = androidx.compose.ui.platform.LocalHapticFeedback.current
     this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { haptic?.let { feedback.performHapticFeedback(it) }; onClick() }
 }

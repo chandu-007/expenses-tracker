@@ -79,7 +79,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val reduce = LocalReduceMotion.current
-    val scale by animateFloatAsState(if (pressed && !reduce) 0.97f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "tilePress")
+    val scale by animateFloatAsState(if (pressed && !reduce) 0.97f else 1f, Motion.press(), label = "tilePress")
     Box(
         modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(if (compact) 18.dp else 22.dp))
             .background(Brush.linearGradient(listOf(Color(d.top), Color(d.bottom)), start = Offset.Zero, end = Offset(900f, 900f)))

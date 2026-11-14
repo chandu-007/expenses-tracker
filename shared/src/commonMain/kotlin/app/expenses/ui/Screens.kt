@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Receipt
@@ -89,7 +90,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -335,6 +335,7 @@ fun EntryListScreen(
                         MoreRow("open_bills", Icons.Outlined.Receipt, "Bills", if (state.billPeek.newCount > 0) "${state.billPeek.newCount} new" else "Card and utility bills found in your messages", onClick = onOpenBills),
                     )),
                     MoreSection("Money", money.top, money.bottom, listOf(
+                        MoreRow("open_budget", Icons.Outlined.AccountBalanceWallet, "Budget", state.budget.overall.limit?.let { "${state.budget.overall.note} of $it" } ?: "Set a limit for ${state.budget.periodName}", onClick = onOpenBudget),
                         MoreRow("manage_accounts", Icons.Outlined.AccountBalance, "Accounts", "${activeAccounts.size} ${if (activeAccounts.size == 1) "account" else "accounts"} \u00B7 net $net", onClick = onManageAccounts),
                         MoreRow("manage_categories", Icons.Outlined.Label, "Categories", "${visible.count { it.kind.forExpense }} for expenses \u00B7 ${visible.count { it.kind.forIncome }} for income", onClick = onManageCategories),
                         MoreRow("open_recurring", Icons.Outlined.Repeat, "Repeating expenses", "Rent, subscriptions, EMIs", onClick = onOpenRecurring),
@@ -535,7 +536,8 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
     )
     // a row that has just been added glows in the accent colour and settles over a second, so the eye finds it
     val flash = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(fresh) { if (fresh) { flash.snapTo(1f); flash.animateTo(0f, androidx.compose.animation.core.tween(1100)) } }
+    val reduceMotion = LocalReduceMotion.current
+    LaunchedEffect(fresh) { if (fresh) { flash.snapTo(1f); flash.animateTo(0f, Motion.tween(reduceMotion, Motion.FLASH, androidx.compose.animation.core.LinearEasing)) } }
     SwipeToDismissBox(
         state = dismiss,
         enableDismissFromStartToEnd = false,

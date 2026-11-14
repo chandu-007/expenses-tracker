@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import app.expenses.core.domain.formatted
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton

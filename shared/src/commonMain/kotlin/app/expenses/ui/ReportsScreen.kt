@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
 import app.expenses.DrillLineUi
 import app.expenses.DrillUi
@@ -96,10 +96,14 @@ fun ReportsScreen(
         ) { DatePicker(state = state) }
     }
     Scaffold(bottomBar = { tabBar() }, topBar = { TopAppBar(title = { Text("Reports") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("reports_back")) { Text("Back") } }) }) { padding ->
+        // a screen reader hears "Reports loaded" only when the wait was long (over a second): a page that comes at once needs no announcement
+        var waitedLong by remember { mutableStateOf(false) }
+        androidx.compose.runtime.LaunchedEffect(report == null) { if (report == null) { kotlinx.coroutines.delay(ANNOUNCE_AFTER_MS); waitedLong = true } }
         if (report == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("Loading…", modifier = Modifier.testTag("reports_working")) }
+            ReportsSkeleton(padding)
             return@Scaffold
         }
+        if (waitedLong) Box(Modifier.size(1.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite; contentDescription = "Reports loaded" }.testTag("reports_loaded_announcement"))
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -168,6 +172,7 @@ fun ReportsScreen(
 }
 
 private const val WORKING_SHOWS_AFTER_MS = 250L
+private const val ANNOUNCE_AFTER_MS = 1_000L
 
 @Composable
 private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, onDrill: (DrillTarget, Long?, Long?, String?) -> Unit) {

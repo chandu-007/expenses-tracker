@@ -128,20 +128,27 @@ class MotionUiTest {
     fun theAddFormRisesInFromBelowOverHomeRatherThanAppearingAtOnceAndReduceMotionMakesItInstant() {
         launch(); compose.mainClock.autoAdvance = false
         node("add").performClick()
-        compose.mainClock.advanceTimeByFrame(); compose.mainClock.advanceTimeBy(48)
+        compose.mainClock.advanceTimeByFrame()
         compose.waitUntil(5_000) { has("amount") }
-        compose.mainClock.advanceTimeBy(80)
-        val early = top("amount")
+        // while it rises its top is lower on the screen than where it ends up (a frame in which it is not placed yet reads 0, which cannot be higher than that)
+        var early = 0f
+        repeat(12) { early = maxOf(early, top("amount")); compose.mainClock.advanceTimeByFrame() }
+        // at the default speed (Relaxed, 1.8x) the form used to take 828 ms; the add form is capped at 380 ms (D3), so it is in place a little after that
+        assertEquals(1.8f, app.expenses.ui.Motion.scale, "the default speed is Relaxed")
+        compose.mainClock.advanceTimeBy(app.expenses.ui.Motion.ADD_FORM + 100L)
+        val withinCap = top("amount")
         compose.mainClock.advanceTimeBy(2_000)
         val settled = top("amount")
         compose.mainClock.autoAdvance = true
-        assertTrue(early > settled + 40f, "the form is still on its way up 50 ms in: top $early, settled $settled")
-        // with Reduce motion on, it is in place at once
+        assertTrue(early > settled + 40f, "the form is still on its way up in the first frames: top $early, settled $settled")
+        assertEquals(settled, withinCap, 1f, "the form has settled within its 380 ms cap (+100 ms) at the default speed")
+        // with Reduce motion on, it does not travel: it cross-fades in 100 ms (a position taken once that fade is over is the settled one)
         node("cancel").performClick(); waitFor("add")
         runBlocking { container.write { it.templates.putSetting("reduce_motion", "1") } }; launch()
         compose.mainClock.autoAdvance = false
-        node("add").performClick(); compose.mainClock.advanceTimeByFrame(); compose.mainClock.advanceTimeBy(48)
+        node("add").performClick(); compose.mainClock.advanceTimeByFrame(); compose.mainClock.advanceTimeBy(app.expenses.ui.Motion.REDUCED_MS + 50L)
         compose.waitUntil(5_000) { has("amount") }
+        compose.mainClock.advanceTimeBy(app.expenses.ui.Motion.REDUCED_MS + 50L)
         val reduced = top("amount"); compose.mainClock.advanceTimeBy(2_000); val reducedSettled = top("amount")
         compose.mainClock.autoAdvance = true
         assertEquals(reducedSettled, reduced, 1f, "under Reduce motion the form does not travel")

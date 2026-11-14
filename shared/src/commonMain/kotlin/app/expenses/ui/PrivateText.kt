@@ -47,6 +47,10 @@ fun Text(
 /** For text that is not drawn with [Text], such as a screen reader description: the same masking, with the setting passed in. */
 fun privatelyPlain(text: String, hide: Boolean): String = if (hide) AmountMask.mask(text) else text
 
+/** For a figure that must stay on one line at any text size (large text in a small tile): it shrinks from [maxSp] down to 12 sp, in half-sp steps, until it fits. Use with `maxLines = 1`. */
+fun amountFit(maxSp: Int): androidx.compose.foundation.text.TextAutoSize =
+    androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp), maxFontSize = androidx.compose.ui.unit.TextUnit(maxSp.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp), stepSize = androidx.compose.ui.unit.TextUnit(0.5f, androidx.compose.ui.unit.TextUnitType.Sp))
+
 /** True while the compact density is on: lists use tighter rows. */
 val LocalCompact = compositionLocalOf { false }
 

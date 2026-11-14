@@ -44,17 +44,25 @@ fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> 
 /** A single dismissible reminder, shown only when [BackupNudge] says so. */
 @Composable
 fun BackupNudgeCard(onBackUp: () -> Unit, onLater: () -> Unit) {
-    // one slim bar: what and why on the left, the two answers on the right (it used to be a tall card with a paragraph)
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp).testTag("backup_nudge"),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
+    // one slim bar: what and why on the left, the two answers on the right (it used to be a tall card with a paragraph). From 140% text the two buttons go under the words, as the nudge cards do:
+    // beside them the words were squeezed to one word per line.
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
+    val words: @Composable (Modifier) -> Unit = { m ->
+        Column(m) {
             Text("Back up your expenses", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text("They live only on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
+    }
+    val buttons: @Composable () -> Unit = {
         Button(onClick = onBackUp, modifier = Modifier.testTag("nudge_backup")) { Text("Back up now") }
         TextButton(onClick = onLater, modifier = Modifier.testTag("nudge_later")) { Text("Later") }
+    }
+    val bar = Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.primaryContainer).testTag("backup_nudge")
+    if (stacked) Column(bar.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
+        words(Modifier)
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) { buttons() }
+    } else Row(bar.padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        words(Modifier.weight(1f))
+        buttons()
     }
 }

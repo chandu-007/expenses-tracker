@@ -26,20 +26,22 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 
+/**
+ * The Android haptic constant for [feel] on a phone with API level [sdk]: what each pattern is documented to mean, so a person learns what happened without looking. A save and a paid bill
+ * are a confirm; Undo is a soft, neutral end-of-gesture tap (it reverses something, it is not a failure: it used to be the "reject" buzz); a budget limit crossed is the one warning (reject, which is
+ * the firmest of the three); a tick is a clock tick. Before API 30 the constants that do not exist fall back to the nearest older one.
+ */
+fun hapticConstant(feel: Feel, sdk: Int): Int = when (feel) {
+    Feel.SAVE, Feel.PAID -> if (sdk >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
+    Feel.UNDO -> if (sdk >= 30) HapticFeedbackConstants.GESTURE_END else HapticFeedbackConstants.KEYBOARD_TAP
+    Feel.LIMIT -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
+    Feel.TICK -> HapticFeedbackConstants.CLOCK_TICK
+}
+
 @Composable
 actual fun rememberFeel(): (Feel) -> Unit {
     val view = LocalView.current
-    return remember(view) {
-        { feel ->
-            val constant = when (feel) {
-                Feel.SAVE, Feel.PAID -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
-                Feel.UNDO -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.KEYBOARD_TAP
-                Feel.LIMIT -> HapticFeedbackConstants.LONG_PRESS
-                Feel.TICK -> HapticFeedbackConstants.CLOCK_TICK
-            }
-            view.performHapticFeedback(constant)
-        }
-    }
+    return remember(view) { { feel -> view.performHapticFeedback(hapticConstant(feel, Build.VERSION.SDK_INT)) } }
 }
 
 @Composable

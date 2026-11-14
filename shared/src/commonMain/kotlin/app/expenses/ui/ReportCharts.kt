@@ -68,7 +68,7 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heroBackground().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onSpent).testTag("report_spent_card")) {
             Text("Spent", style = MaterialTheme.typography.labelLarge, color = on.copy(alpha = 0.8f))
-            Text(report.spent, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = on, modifier = Modifier.testTag("report_spent"))
+            Text(report.spent, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = on, maxLines = 1, autoSize = amountFit(36), modifier = Modifier.testTag("report_spent"))
             report.comparison?.let { c ->
                 // the words say "more" or "less"; the chip's colour only repeats that, so it is never the sole signal
                 val more = c.contains("more")
@@ -78,16 +78,20 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).clickable(onClick = onIncome).padding(12.dp).testTag("report_income_card")) {
+        // from 140% text the two tiles sit one under the other: side by side each is about 150 dp wide, and an amount like ₹1,85,000.00 broke in the middle of the number (".00" on a line of its own)
+        val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
+        val tiles: @Composable (Modifier) -> Unit = { mod ->
+            Column(mod.clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).clickable(onClick = onIncome).padding(12.dp).testTag("report_income_card")) {
                 Text("Income", style = MaterialTheme.typography.labelMedium, color = on.copy(alpha = 0.8f))
-                Text(report.income, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = on, modifier = Modifier.testTag("report_income"))
+                Text(report.income, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = on, maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_income"))
             }
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).padding(12.dp)) {
+            Column(mod.clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).padding(12.dp)) {
                 Text("Income minus spending", style = MaterialTheme.typography.labelMedium, color = on.copy(alpha = 0.8f))
-                Text(report.net, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) on else Color(0xFFFFB4AB), modifier = Modifier.testTag("report_net"))
+                Text(report.net, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) on else Color(0xFFFFB4AB), maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_net"))
             }
         }
+        if (stacked) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { tiles(Modifier.fillMaxWidth()) }
+        else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { tiles(Modifier.weight(1f)) }
     }
 }
 
@@ -105,11 +109,11 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
     val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, null)) else emptyList()
     val reduce = LocalReduceMotion.current
     val sweep = remember(all) { Animatable(if (reduce) 1f else 0f) }
-    LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween((700 * Motion.scale / 1.8f).toInt().coerceAtLeast(500))) }
+    LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween(Motion.CHART)) }
     val track = MaterialTheme.colorScheme.surfaceVariant
     var picked by remember { mutableStateOf<String?>(null) }
-    val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "pull") }
-    val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.55f else 1f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "dim") }
+    val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "pull") }
+    val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.55f else 1f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "dim") }
     fun toggle(key: String) { picked = if (picked == key) null else key }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("breakdown"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(
@@ -186,10 +190,10 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
         Text(if (report.mode == ReportMode.PERIOD) "Last six periods" else "Spending by month", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             report.trend.forEachIndexed { i, bar ->
-                val h by animateFloatAsState(bar.fraction, Motion.tween(reduce, 500, androidx.compose.animation.core.FastOutSlowInEasing), label = "bar")
+                val h by animateFloatAsState(bar.fraction, Motion.tween(reduce, Motion.BAR, androidx.compose.animation.core.FastOutSlowInEasing), label = "bar")
                 val source = remember { MutableInteractionSource() }
                 val pressed by source.collectIsPressedAsState()
-                val lift by animateFloatAsState(if (pressed) 1f else 0f, Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "barPress")
+                val lift by animateFloatAsState(if (pressed) 1f else 0f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "barPress")
                 val barColor = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f + 0.40f * lift)
                 Column(
                     Modifier.weight(1f).clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },

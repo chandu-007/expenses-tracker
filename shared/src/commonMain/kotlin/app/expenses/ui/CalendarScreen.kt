@@ -82,7 +82,7 @@ fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Uni
             // a change of month fades the new grid in; the old one is dropped at once so its tags are never doubled for long
             if (reduce) grid() else AnimatedContent(
                 targetState = state.offset,
-                transitionSpec = { fadeIn(tween(Motion.QUICK)) togetherWith ExitTransition.None },
+                transitionSpec = { fadeIn(tween(Motion.CHIP)) togetherWith ExitTransition.None },
                 label = "calendarMonth",
             ) { month -> androidx.compose.runtime.key(month) { grid() } }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -120,7 +120,7 @@ private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onCli
     val hide = LocalHideAmounts.current
     val reduce = LocalReduceMotion.current
     val picked = MaterialTheme.colorScheme.secondaryContainer
-    val highlight by animateColorAsState(if (selected) picked.copy(alpha = 0.6f) else picked.copy(alpha = 0f), Motion.tween(reduce, Motion.QUICK, Motion.EaseOut), label = "calSelected")
+    val highlight by animateColorAsState(if (selected) picked.copy(alpha = 0.6f) else picked.copy(alpha = 0f), Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "calSelected")
     val description = "${c.day}, " + (if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
     Column(
         modifier.height(56.dp).padding(1.dp).clip(RoundedCornerShape(6.dp)).background(shade)

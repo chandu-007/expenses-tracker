@@ -110,9 +110,9 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
     val fade = remember { Animatable(0f) }
     LaunchedEffect(active) {
         if (active) {
-            if (reduce) fade.snapTo(1f) else fade.animateTo(1f, tween(Motion.QUICK))
+            if (reduce) fade.snapTo(1f) else fade.animateTo(1f, tween(Motion.CHIP))
         } else {
-            if (reduce) fade.snapTo(0f) else fade.animateTo(0f, tween(Motion.QUICK))
+            if (reduce) fade.snapTo(0f) else fade.animateTo(0f, tween(Motion.CHIP))
             shownIndex = -1
         }
     }

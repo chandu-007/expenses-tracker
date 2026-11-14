@@ -8,6 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -113,20 +120,20 @@ fun BulkBar(
             TextButton(onClick = onCancel, modifier = Modifier.testTag("bulk_cancel")) { Text("Cancel") }
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = { pickingCategory = true }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_category")) { Text("Set category") }
+            FilledTonalButton(onClick = { pickingCategory = true }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_category")) { BulkLabel(Icons.Outlined.Label, "Set category") }
             if (transferOnBar) Box {
-                TextButton(onClick = { menu = "transfer" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_transfer")) { Text("Make transfer") }
+                TextButton(onClick = { menu = "transfer" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_transfer")) { BulkLabel(Icons.Outlined.SwapHoriz, "Make transfer") }
                 DropdownMenu(expanded = menu == "transfer", onDismissRequest = { menu = null }) {
                     Text("To", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { menu = null; onMakeTransfer!!(a.id) }, modifier = Modifier.testTag("bulk_transfer_to_${a.name}")) }
                 }
             } else Box {
-                TextButton(onClick = { menu = "account" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_account")) { Text("Account") }
+                TextButton(onClick = { menu = "account" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_account")) { BulkLabel(Icons.Outlined.AccountBalance, "Account") }
                 accountMenu()
             }
-            TextButton(onClick = onDelete, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onDelete, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_delete")) { BulkLabel(Icons.Outlined.Delete, "Delete", MaterialTheme.colorScheme.error) }
             Box {
-                TextButton(onClick = { menu = "more" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_more")) { Text("More") }
+                TextButton(onClick = { menu = "more" }, contentPadding = BAR_BUTTON_PADDING, modifier = Modifier.testTag("bulk_more")) { BulkLabel(Icons.Outlined.MoreHoriz, "More") }
                 DropdownMenu(expanded = menu == "more", onDismissRequest = { menu = null }) {
                     if (transferOnBar) DropdownMenuItem(text = { Text("Account…") }, onClick = { menu = "account" }, modifier = Modifier.testTag("bulk_account"))
                     DropdownMenuItem(text = { Text("Tag…") }, onClick = { menu = "tag" }, modifier = Modifier.testTag("bulk_tag"))
@@ -140,6 +147,15 @@ fun BulkBar(
             }
         }
         }
+    }
+}
+
+/** A bar action: its icon and its word. The word stays (a screen reader reads it, and an icon alone is a guess); the icon makes the four buttons tell apart at a glance. */
+@Composable
+private fun BulkLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color = Color.Unspecified) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = if (color == Color.Unspecified) androidx.compose.material3.LocalContentColor.current else color, modifier = Modifier.size(18.dp))
+        Text(text, color = color, modifier = Modifier.padding(start = 6.dp))
     }
 }
 

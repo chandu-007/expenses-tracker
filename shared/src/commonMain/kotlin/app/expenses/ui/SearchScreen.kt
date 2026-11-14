@@ -54,7 +54,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -358,13 +357,16 @@ fun SearchScreen(
             }
         }
     }
-    if (filtersOpen) FiltersPanel(
-        input = input, state = state, dateProblem = dateProblem, canSave = state.hasConditions && state.problem == null,
-        categories = categories, tags = tags, accounts = accounts, saved = saved,
-        onEdit = { i, typing -> changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId, typing = typing) },
-        onUseSaved = { i -> filtersOpen = false; changedAll(i) }, onRemoveSaved = { deletingSaved = it }, onSave = { savingName = "" },
-        onPickDay = { which -> dismissKeyboard(); pickingDay = which }, onDone = { dismissKeyboard() }, onClose = { filtersOpen = false },
-    )
+    // the panel and the dimming animate themselves (SearchFilters.kt); this only keeps them composed until the exit is over
+    androidx.compose.animation.AnimatedVisibility(visible = filtersOpen, enter = androidx.compose.animation.EnterTransition.None, exit = androidx.compose.animation.ExitTransition.None) {
+        FiltersPanel(
+            input = input, state = state, dateProblem = dateProblem, canSave = state.hasConditions && state.problem == null,
+            categories = categories, tags = tags, accounts = accounts, saved = saved,
+            onEdit = { i, typing -> changed(t = i.text, lo = i.minRupees, hi = i.maxRupees, c = i.categoryId, k = i.kind, r = i.range, g = i.tag, fd = i.fromDay, td = i.toDay, ac = i.accountId, typing = typing) },
+            onUseSaved = { i -> filtersOpen = false; changedAll(i) }, onRemoveSaved = { deletingSaved = it }, onSave = { savingName = "" },
+            onPickDay = { which -> dismissKeyboard(); pickingDay = which }, onDone = { dismissKeyboard() }, onClose = { filtersOpen = false },
+        )
+    }
     }
 }
 

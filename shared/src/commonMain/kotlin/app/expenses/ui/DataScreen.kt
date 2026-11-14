@@ -28,7 +28,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import app.expenses.BackupKeys
 import app.expenses.core.domain.AttachmentRules
-import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.FlowRow
 import app.expenses.core.domain.AutoExportFrequency
 import app.expenses.AutoExportUi
