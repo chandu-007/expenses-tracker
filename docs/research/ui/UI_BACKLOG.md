@@ -45,8 +45,8 @@ Effort is working days for one engineer (S = under 2, M = 3-6, L = over 6). Tota
 
 | Slice | Name | Effort | Needs | Depends on | Shippable alone because |
 |---|---|---|---|---|---|
-| **S0** | Fix now + quick wins + measurement | ~11 d | D3 D9 D12 D14(part) D17 | none | every item is local; the bug fix ships in a patch release |
-| **S1** | Tokens + consistent chrome + tabular figures | ~9 d | D4 | S0 | pure restyle; no flow changes |
+| **S0** (released in 0.14.0) | Fix now + quick wins + measurement | ~11 d | D3 D9 D12 D14(part) D17 | none | every item is local; the bug fix ships in a patch release |
+| **S1** (released in 0.14.0) | Tokens + consistent chrome + tabular figures | ~9 d | D4 | S0 | pure restyle; no flow changes |
 | **S2** | Add/Edit redesign + read-only entry detail | ~11 d (+1 maths pad, +4 smart field, optional) | none | S1 | the form and detail are two screens; old tags kept |
 | **S3** | Category identity + rows + swipe + neutral amounts | ~9 d | D1 D5 D6 | S1 | only row/tile/colour changes |
 | **S4** | Charts system (signature charts, scrub, table, safe palette) | ~10 d | D6 | S3 (colour slots) | Reports and Home chart only |

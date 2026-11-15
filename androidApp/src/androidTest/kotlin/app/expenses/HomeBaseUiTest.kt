@@ -159,10 +159,19 @@ class HomeBaseUiTest {
 
     @Test
     fun addIsInTheBarOnSearchAndReportsToo() {
-        // the box takes the focus and the keyboard comes up on an emulator boot that has one; the bar is hidden while it is up, so Done closes it first
-        launch(); tap("open_search"); waitFor("search_text"); runCatching { compose.onNodeWithTag("search_text", useUnmergedTree = true).performImeAction() }; tap("bar_add"); waitFor("amount")
+        // the box takes the focus and the keyboard comes up on an emulator boot that has one; the bar is hidden while it is up, so Done closes it first. The bar moves while the keyboard goes down (a tap
+        // in that moment is lost: seen twice on a loaded API 26 emulator), so the tap is repeated until the form is open
+        fun addFromTheBar() {
+            repeat(5) {
+                if (has("amount")) return
+                runCatching { tap("bar_add") }
+                runCatching { compose.waitUntil(4_000) { has("amount") } }
+            }
+            waitFor("amount")
+        }
+        launch(); tap("open_search"); waitFor("search_text"); runCatching { compose.onNodeWithTag("search_text", useUnmergedTree = true).performImeAction() }; addFromTheBar()
         tap("cancel"); waitFor("add")
-        tap("open_reports"); waitFor("bar_add"); tap("bar_add"); waitFor("amount")
+        tap("open_reports"); waitFor("bar_add"); addFromTheBar()
     }
 
     // ---- day totals ---------------------------------------------------------------------------------------------------------------------------------------------

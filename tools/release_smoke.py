@@ -302,7 +302,18 @@ def step_add_expense():
     time.sleep(0.8)
     if screen.refresh().find(text="Save") is None:
         sh("input", "keyevent", "KEYCODE_BACK")  # close a keyboard that hides Save
-    tap("Save", text="Save")
+    # On a freshly wiped API 26 emulator the keyboard's "Tap to Google Search" overlay can sit on top of the form and take the tap meant for Save (seen by the S1 run: the smoke then stopped at
+    # "see 123 in the list"). Save is tapped, and if the form is still open a moment later (Save still on screen) the overlay is sent away with Back and Save tapped again, up to four times.
+    for attempt in range(4):
+        tap("Save", text="Save")
+        time.sleep(1.5)
+        if screen.refresh().find(text="Save") is None:
+            return
+        sh("input", "keyevent", "KEYCODE_BACK")
+        time.sleep(1)
+        if screen.refresh().find(text="Save") is None:
+            raise StepFailed(f"Back after an unanswered Save closed the form (attempt {attempt + 1}); the entry may not be saved. Visible: {screen.texts()[:40]}")
+    raise StepFailed(f"Save did not close the form after four taps. Visible: {screen.texts()[:40]}")
 
 
 def step_see_in_list():
