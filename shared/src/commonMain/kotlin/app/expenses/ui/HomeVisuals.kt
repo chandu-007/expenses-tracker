@@ -64,7 +64,7 @@ fun RollingAmount(
     minor: Long,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
-    style: TextStyle = Number.Hero,
+    style: TextStyle = NumberStyle.Hero,
     fontWeight: FontWeight? = null,
     /** Draw whole units ("₹31,822") while the semantics keep the exact [finalText] ("₹31,822.40"): what a screen reader says and what tests read is never rounded. */
     whole: Boolean = false,

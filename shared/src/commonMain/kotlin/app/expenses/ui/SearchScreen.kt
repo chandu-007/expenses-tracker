@@ -343,7 +343,7 @@ fun SearchScreen(
                                 MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)
                             }
                             val flow = flowOf(row.kind, row.inflow)
-                            Text(signedAmount(row.amount, flow), style = Number.Row, color = amountColor(flow))
+                            Text(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow))
                         }
                     }
                     }

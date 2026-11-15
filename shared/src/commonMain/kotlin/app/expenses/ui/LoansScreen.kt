@@ -104,7 +104,7 @@ fun LoansScreen(
                                         Text(listOf(w.whoText, w.dateText).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_who_${w.title}"))
                                         Text(w.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_detail_${w.title}"))
                                     }
-                                    Text(w.remainingText, style = Number.Row, color = amountColor(Flow3.IN), modifier = Modifier.testTag("waiting_amount_${w.title}"))
+                                    Text(w.remainingText, style = NumberStyle.Row, color = amountColor(Flow3.IN), modifier = Modifier.testTag("waiting_amount_${w.title}"))
                                 }
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(onClick = { gettingBack = w.id }, modifier = Modifier.testTag("waiting_got_${w.title}")) { Text("Got it back") }
@@ -133,7 +133,7 @@ fun LoansScreen(
                             Text(r.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                             Text(r.state, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("loan_state_${r.name}"))
                         }
-                        if (r.minor != 0L) Text(r.amountText, style = Number.Row, color = amountColor(if (r.minor > 0) Flow3.IN else Flow3.OUT), modifier = Modifier.testTag("loan_amount_${r.name}"))
+                        if (r.minor != 0L) Text(r.amountText, style = NumberStyle.Row, color = amountColor(if (r.minor > 0) Flow3.IN else Flow3.OUT), modifier = Modifier.testTag("loan_amount_${r.name}"))
                     }
                   }
                 }
@@ -183,7 +183,7 @@ private fun HistoryRow(e: LoanEntryUi, pos: CardPos, onOpen: (String) -> Unit, m
                 Text(if (e.gave) "You gave" else "You got", style = MaterialTheme.typography.bodyLarge)
                 Text(listOf(e.dateText, e.account, e.note).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = Number.Row, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
+            Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = NumberStyle.Row, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
         }
     }
 }

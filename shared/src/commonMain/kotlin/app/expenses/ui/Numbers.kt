@@ -38,7 +38,7 @@ fun appTypography(): Typography {
 }
 
 /** The four number roles: a hero figure, a figure in a list row, a figure in a label, a figure on a chart (11 sp). */
-object Number {
+object NumberStyle {
     /** The hero: 40 sp semi-bold, tight, tabular. The sign and the paise are drawn small by [MoneyText]; at large text the screens cap it as they always did. */
     val Hero = TextStyle(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp, fontFeatureSettings = TABULAR_FIGURES)
     /** A row's amount: body large, semi-bold. */
@@ -69,7 +69,7 @@ fun moneyAnnotated(text: String, paiseColor: Color, smallSign: Boolean = true): 
 fun MoneyText(
     text: String,
     modifier: Modifier = Modifier,
-    style: TextStyle = Number.Hero,
+    style: TextStyle = NumberStyle.Hero,
     color: Color = Color.Unspecified,
     maxLines: Int = 1,
     autoSize: androidx.compose.foundation.text.TextAutoSize? = null,

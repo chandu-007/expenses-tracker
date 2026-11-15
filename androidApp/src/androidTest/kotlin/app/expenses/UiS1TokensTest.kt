@@ -24,7 +24,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.expenses.ui.Details
 import app.expenses.ui.LocalHideAmounts
 import app.expenses.ui.MoneyText
-import app.expenses.ui.Number
+import app.expenses.ui.NumberStyle
 import app.expenses.ui.Segment
 import app.expenses.ui.SegmentedChoice
 import app.expenses.ui.Text
@@ -53,7 +53,7 @@ class UiS1TokensTest {
                 val tm = rememberTextMeasurer()
                 val t = MaterialTheme.typography
                 LaunchedEffect(Unit) {
-                    for ((name, style) in listOf("hero" to Number.Hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to Number.Chart, "display" to t.displaySmall)) {
+                    for ((name, style) in listOf("hero" to NumberStyle.Hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to NumberStyle.Chart, "display" to t.displaySmall)) {
                         for (digits in listOf("1111", "8888", "0000", "1,11,111.00", "8,88,888.00")) widths["$name:$digits"] = tm.measure(digits, style.copy(fontSize = 32.sp)).size.width
                     }
                 }
