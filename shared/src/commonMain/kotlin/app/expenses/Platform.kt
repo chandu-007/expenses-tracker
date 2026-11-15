@@ -54,6 +54,12 @@ interface Platform {
     /** Measurement builds only: seeds big ledgers and logs startup marks. */
     val seedingEnabled: Boolean
 
+    /**
+     * True when the system font draws digits of different widths unless asked for tabular figures (the iPhone's: measured on the simulator, "1111" 179 px against "8888" 246 px), so every text style is asked for
+     * `tnum`. False on Android, whose Roboto digits are tabular already: asking costs frames there (measured, `docs/PERFORMANCE.md`, UI S1), so only the hero figures and chart labels ask.
+     */
+    val proportionalDigits: Boolean get() = false
+
     /** How many automatic export files of each kind are kept. */
     val autoExportKeep: Int
     val backupMinPassphrase: Int

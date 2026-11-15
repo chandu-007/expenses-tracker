@@ -18,16 +18,18 @@ import androidx.compose.ui.unit.sp
 import app.expenses.core.domain.MoneyParts
 
 /**
- * Numbers have a voice (UI S1). Every digit is drawn with tabular figures (`tnum`): every digit as wide as the others, so a figure that changes does not jitter and right-aligned amounts line up. Android's Roboto
- * already does this; on the iPhone the system font does not unless it is asked (measured on the simulator: "1111" 179 px against "8888" 246 px without, 242 and 242 with). It is asked of every text style here.
+ * Numbers have a voice (UI S1). Digits drawn with tabular figures (`tnum`) are all as wide as each other, so a figure that changes does not jitter and right-aligned amounts line up. Android's Roboto already does this;
+ * the iPhone's system font does not unless it is asked (measured on the simulator: "1111" 179 px against "8888" 246 px without, 242 and 242 with). So on the iPhone every text style is asked ([Platform.proportionalDigits]);
+ * on Android only the hero figure and the chart labels are (a global `tnum` made every list frame dearer there: `docs/PERFORMANCE.md`, UI S1).
  */
 const val TABULAR_FIGURES = "tnum"
 
 private fun TextStyle.tabular() = copy(fontFeatureSettings = TABULAR_FIGURES)
 
-/** Material's twelve styles, each with tabular figures: the theme's typography. */
-fun appTypography(): Typography {
+/** Material's fifteen styles; each with tabular figures when [allTabular] (the iPhone), Material's own otherwise. */
+fun appTypography(allTabular: Boolean): Typography {
     val d = Typography()
+    if (!allTabular) return d
     return Typography(
         displayLarge = d.displayLarge.tabular(), displayMedium = d.displayMedium.tabular(), displaySmall = d.displaySmall.tabular(),
         headlineLarge = d.headlineLarge.tabular(), headlineMedium = d.headlineMedium.tabular(), headlineSmall = d.headlineSmall.tabular(),
@@ -37,7 +39,7 @@ fun appTypography(): Typography {
     )
 }
 
-/** The four number roles: a hero figure, a figure in a list row, a figure in a label, a figure on a chart (11 sp). */
+/** The four number roles: a hero figure and a chart label (11 sp) always tabular; a figure in a list row and in a label take the theme's style (tabular on the iPhone, see [appTypography]). */
 object NumberStyle {
     /** The hero: 40 sp semi-bold, tight, tabular. The sign and the paise are drawn small by [MoneyText]; at large text the screens cap it as they always did. */
     val Hero = TextStyle(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp, fontFeatureSettings = TABULAR_FIGURES)

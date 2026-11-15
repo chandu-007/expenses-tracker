@@ -58,6 +58,7 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val supportsSmsCapture get() = false
     override val supportsNotificationCapture get() = false
     override val supportsWidget get() = true
+    override val proportionalDigits get() = true
     override val seedingEnabled get() = false
     override val autoExportKeep get() = AutoExportKeys.KEEP
     override val backupMinPassphrase get() = IosBackupCipher.MIN_PASSPHRASE

@@ -38,7 +38,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * UI S1 on the device: tabular figures (every digit as wide as the others, at the hero size and in the theme's own styles), the hero figure with the sign and the paise small while the text is the exact amount and a
+ * UI S1 on the device: tabular figures (every digit as wide as the others, in the hero and chart styles always and in every theme style when the theme asks for it, as it does on the iPhone), the hero figure with the sign and the paise small while the text is the exact amount and a
  * hidden amount stays masked, the segmented control as a radio group that keeps its tags, the "Details" disclosure.
  */
 @RunWith(AndroidJUnit4::class)
@@ -49,7 +49,7 @@ class UiS1TokensTest {
     fun everyDigitIsAsWideAsTheOthersInTheHeroAndInTheThemesStyles() {
         val widths = mutableMapOf<String, Int>()
         compose.setContent {
-            MaterialTheme(typography = appTypography(), shapes = appShapes()) {
+            MaterialTheme(typography = appTypography(allTabular = true), shapes = appShapes()) {
                 val tm = rememberTextMeasurer()
                 val t = MaterialTheme.typography
                 LaunchedEffect(Unit) {
@@ -69,7 +69,7 @@ class UiS1TokensTest {
 
     @Test
     fun theHeroFigureDrawsASmallSignAndQuietPaiseButReadsTheExactAmount() {
-        compose.setContent { MaterialTheme(typography = appTypography()) { Column { MoneyText("₹1,85,000.50", Modifier.testTag("hero")); MoneyText("₹31,822", Modifier.testTag("whole")) } } }
+        compose.setContent { MaterialTheme(typography = appTypography(allTabular = true)) { Column { MoneyText("₹1,85,000.50", Modifier.testTag("hero")); MoneyText("₹31,822", Modifier.testTag("whole")) } } }
         compose.onNodeWithTag("hero").assertTextEquals("₹1,85,000.50")
         compose.onNodeWithTag("whole").assertTextEquals("₹31,822")
         val spans = moneyAnnotated("₹1,85,000.50", androidx.compose.ui.graphics.Color.Gray).spanStyles
@@ -92,7 +92,7 @@ class UiS1TokensTest {
     fun theSegmentedControlIsARadioGroupThatKeepsTheTagOfEverySegment() {
         var chosen by mutableStateOf("b")
         compose.setContent {
-            MaterialTheme(typography = appTypography()) {
+            MaterialTheme(typography = appTypography(allTabular = true)) {
                 SegmentedChoice(listOf(Segment("a", "Light", "seg_a"), Segment("b", "Dark", "seg_b"), Segment("c", "System", "seg_c")), chosen, { chosen = it })
             }
         }
