@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -63,36 +64,38 @@ fun <T> SegmentedChoice(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val share = (maxWidth - 6.dp - 2.dp * (segments.size - 1)) / segments.size
         val fits = share >= widestWord + 16.dp
+        // the segment itself (the node that is selectable and carries the tag) is 48 dp high; the 3 dp frame around the visible pill is inside it, so the whole track height is a touch target
         @Composable
         fun seg(s: Segment<T>, m: Modifier) {
             val on = s.value == selected
-            Box(
-                m.clip(if (fits) Radius.Full else Radius.S)
-                    .background(if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .then(if (on) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, if (fits) Radius.Full else Radius.S) else Modifier)
-                    .selectable(selected = on, onClick = { onSelect(s.value) }, role = Role.RadioButton)
-                    .testTag(s.tag),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    s.label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                    color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                )
+            Box(m.selectable(selected = on, onClick = { onSelect(s.value) }, role = Role.RadioButton).testTag(s.tag), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.fillMaxSize().padding(vertical = 3.dp)
+                        .clip(if (fits) Radius.Full else Radius.S)
+                        .background(if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                        .then(if (on) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, if (fits) Radius.Full else Radius.S) else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        s.label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
             }
         }
         when {
-            fits -> Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup().clip(Radius.Full).background(track).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                segments.forEach { s -> seg(s, Modifier.weight(1f).fillMaxHeight().heightIn(min = 42.dp)) }
+            fits -> Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup().clip(Radius.Full).background(track).padding(horizontal = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                segments.forEach { s -> seg(s, Modifier.weight(1f).fillMaxHeight().heightIn(min = 48.dp)) }
             }
-            crowded == WhenCrowded.SCROLL -> Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup().clip(Radius.M).background(track).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                segments.forEach { s -> seg(s, Modifier.heightIn(min = 42.dp).widthIn(min = 48.dp)) }
+            crowded == WhenCrowded.SCROLL -> Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup().clip(Radius.M).background(track).padding(horizontal = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                segments.forEach { s -> seg(s, Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)) }
             }
             else -> {
                 // as many to a row as keep their widest word whole (a 2 by 2 grid for four labels at large text), one to a row when not even two do
                 val perRow = (segments.size - 1 downTo 2).firstOrNull { k -> (maxWidth - 6.dp - 2.dp * (k - 1)) / k >= widestWord + 16.dp } ?: 1
-                Column(Modifier.fillMaxWidth().selectableGroup().clip(Radius.M).background(track).padding(3.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.fillMaxWidth().selectableGroup().clip(Radius.M).background(track).padding(horizontal = 3.dp)) {
                     segments.chunked(perRow).forEach { rowOf ->
                         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             rowOf.forEach { s -> seg(s, Modifier.weight(1f).fillMaxHeight().heightIn(min = 48.dp)) }

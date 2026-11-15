@@ -48,6 +48,9 @@ sqldelight {
             // ON CONFLICT ... DO UPDATE needs SQLite 3.24+; the default dialect is 3.18.
             // Android's SQLCipher 4.x and the JVM sqlite-jdbc driver both bundle newer SQLite.
             dialect(libs.sqldelight.sqlite.dialect)
+            // `check` compares databases/1.db (a snapshot of the schema as the .sq files describe it) with a fresh database. The app creates later tables and
+            // columns with SchemaUpgrade.ensureLatest (no .sqm files yet), so after ANY change to a .sq file run
+            // `./gradlew :core:storage:generateCommonMainExpensesDbSchema` and commit the new 1.db. It is never read at run time.
             verifyMigrations.set(true)
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
         }

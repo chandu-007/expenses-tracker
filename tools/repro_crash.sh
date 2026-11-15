@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 label=${1:-repro}; loops=${2:-8}; crashes=0; other=0; clean=0
 for i in $(seq 1 $loops); do
   rm -rf androidApp/build/outputs/androidTest-results
-  ./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest > /tmp/repro_${label}_$i.log 2>&1
+  ./gradlew :androidApp:connectedDebugAndroidTest --rerun-tasks -Pandroid.testInstrumentationRunnerArguments.notClass=app.expenses.PerformanceBudgetTest,app.expenses.FrameLogDriveTest > /tmp/repro_${label}_$i.log 2>&1
   r=$(python3 - <<'E'
 import glob,re
 for p in glob.glob("androidApp/build/outputs/androidTest-results/connected/debug/*.xml"):

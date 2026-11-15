@@ -34,8 +34,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.FlowRow
@@ -81,7 +79,7 @@ fun AccountsScreen(
     val archived = rows.filter { it.archived }
     Scaffold(
         topBar = { ScreenHeader("Accounts", onBack, "back") },
-        floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account").semantics { contentDescription = "Add an account" }, icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add account") }) }, // a screen reader says "Add an account", not "plus"
+        floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add account") }) }, // the visible words are the spoken name (the icon has none), so Voice Access "tap Add account" finds it
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 88.dp)) { // room under the last row for the button, so it never covers an amount
             item {

@@ -35,8 +35,8 @@ fun CurrencyScreen(current: Currency, blocker: String?, onChoose: (String) -> Un
                 }
             }
             if (blocker != null) Text(blocker, modifier = Modifier.fillMaxWidth().inlineCard(MaterialTheme.colorScheme.tertiary).padding(16.dp).testTag("currency_blocker"))
+            if (blocker == null) Text("You can change this now because nothing has an amount yet. After your first entry it is fixed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Details("currency_details") {
-                if (blocker == null) Text("You can change this now because nothing has an amount yet. After your first entry it is fixed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Rupees are written with lakh and crore grouping (₹12,34,567); other currencies with thousands grouping and their code (USD 1,234,567). Nothing is converted between currencies.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

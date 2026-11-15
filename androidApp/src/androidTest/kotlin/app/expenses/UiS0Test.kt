@@ -138,4 +138,24 @@ class UiS0BillUndoTest {
         compose.waitUntil(10_000) { runBlocking { container.write { it.bills.get(id)?.status } } == app.expenses.core.storage.BillStatus.TRACKED }
         assertEquals(0L, runBlocking { container.write { it.db.schemaQueries.entryCount().executeAsOne() } }, "what the payment recorded is gone with it")
     }
+
+    /** Review finding: leaving Bills before the bar went left the offer alive; the page showed it again later and its Undo deleted the entry the payment had recorded. */
+    @Test
+    fun anUndoOfferedOnTheBillsPageDoesNotComeBackWhenThePageIsOpenedAgain() {
+        val due = java.time.LocalDate.now().plusDays(8).format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"))
+        runBlocking { Capture.ingest(container, Capture.SMS, "AX-HDFCBK-S", "Your HDFC Bank Credit Card ending 4821 statement is generated. Total Amt Due Rs.5,000.00, Min Amt Due Rs.250.00, Due Date $due.", System.currentTimeMillis()) }
+        val id = runBlocking { container.write { it.bills.list(app.expenses.core.storage.BillStatus.FOUND).single().id.also { b -> it.bills.track(b) } } }!!
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
+        compose.openMore(); compose.onNodeWithTag("open_bills", useUnmergedTree = true).performScrollTo().performClick(); waitFor("bills_list")
+        compose.onNodeWithTag("bill_pay_$id", useUnmergedTree = true).performClick(); waitFor("bill_pay_amount")
+        compose.onNodeWithTag("bill_pay_ok", useUnmergedTree = true).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Undo"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("bills_back", useUnmergedTree = true).performClick()
+        compose.waitUntil(10_000) { !has("bills_list") }
+        compose.openMore(); compose.onNodeWithTag("open_bills", useUnmergedTree = true).performScrollTo().performClick(); waitFor("bills_list")
+        compose.waitForIdle()
+        Thread.sleep(1_500) // a snackbar shows within a few frames; give a stale one every chance to appear
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("Undo"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the offer died with the page")
+        assertEquals(app.expenses.core.storage.BillStatus.PAID, runBlocking { container.write { it.bills.get(id)?.status } }, "the payment stays")
+    }
 }

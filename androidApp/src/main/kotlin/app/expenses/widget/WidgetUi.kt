@@ -1,5 +1,6 @@
 package app.expenses.widget
 
+import android.annotation.SuppressLint
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -63,6 +64,8 @@ import app.expenses.core.domain.WidgetTier
 
 internal const val TARGET = WidgetSummary.Room.TARGET
 
+// Glance marks ColorProvider(@ColorRes) as library-group-only, but it is the way to give a widget a colour that follows light and dark from resources; used since 0.10, drawn on every device test.
+@SuppressLint("RestrictedApi")
 internal object WidgetColors {
     val text = ColorProvider(R.color.widget_text)
     val muted = ColorProvider(R.color.widget_muted)

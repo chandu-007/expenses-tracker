@@ -106,7 +106,8 @@ class UiS1TokensTest {
         val role = compose.onNodeWithTag("seg_c", useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Role)
         assertEquals(androidx.compose.ui.semantics.Role.RadioButton, role)
         val height = compose.onNodeWithTag("seg_a", useUnmergedTree = true).fetchSemanticsNode().size.height
-        assertTrue(height >= 40, "a segment is tall enough to hit: $height px")
+        val density = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        assertTrue(height >= (48 * density).toInt() - 1, "a segment is a 48 dp touch target: $height px at density $density")
     }
 
     @Test

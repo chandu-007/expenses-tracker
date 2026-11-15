@@ -11,8 +11,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +61,11 @@ internal class IosApp private constructor(private val host: IosHostServices) {
             viewModel.state.filterIsInstance<UiState.Ready>().debounce(800).collect {
                 runCatching { IosWidgetData.publish(container, lock.settings.value.enabled); host.reloadWidgets() }
             }
+        }
+        // the reminders for the next days were handed to the system with their words fixed: when Hide amounts or the App lock is turned on (or off) they are made again at once, not at the next time the app comes forward
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            combine(viewModel.state.filterIsInstance<UiState.Ready>().map { it.hideAmounts }, lock.settings.map { it.enabled }) { hide, locked -> hide || locked }
+                .distinctUntilChanged().drop(1).collect { IosNotifications.checkAsync { } }
         }
     }
 

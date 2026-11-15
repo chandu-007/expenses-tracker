@@ -2104,7 +2104,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** The bills page asks to be kept up to date while it is open. */
     fun watchBills(on: Boolean) {
         billsWatching = on
-        if (on) withStore { _bills.value = billsUi(it) } else _bills.value = BillsUi()
+        if (on) withStore { _bills.value = billsUi(it) } else {
+            _bills.value = BillsUi()
+            // an Undo offered on this page dies with it: kept, it came back with the page later and could take back (or delete) something the person had since moved on from
+            _billUndo.value = null; skippedBill = null; heldRepair = null; heldPayment = null
+        }
     }
 
     private val billDay = DatePattern("EEE, d MMM")
@@ -2266,8 +2270,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             heldPayment = null
             // takes back what "Mark paid" did: the entry it recorded (if it recorded one) goes, and the bill is as it was (found or tracked, with its words)
             withStore { ok ->
-                held.entryId?.let { EntryActions(ok).delete(it) }
-                ok.bills.unpayTo(held.bill.id, held.bill.status, held.bill.body)
+                ok.store.atomically {
+                    held.entryId?.let { EntryActions(ok).delete(it) }
+                    ok.bills.unpayTo(held.bill.id, held.bill.status, held.bill.body)
+                }
                 billsChanged(ok)
             }
             return
@@ -2307,7 +2313,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun setBillDue(id: String, epochDay: Long) = withStore { ok -> ok.bills.setDueDate(id, localDateOfEpochDay(epochDay).toString()); billsChanged(ok) }
 
-    fun unpayBill(id: String) = withStore { ok -> ok.bills.unpay(id); billsChanged(ok, "Back in your bills") }
+    fun unpayBill(id: String) {
+        // the bill was put back to unpaid by hand: the Undo of the earlier "Mark paid" would still delete the entry that payment recorded
+        if (heldPayment?.bill?.id == id) { heldPayment = null; if (_billUndo.value?.id?.startsWith("$BILL_PAY_UNDO:") == true) _billUndo.value = null }
+        withStore { ok -> ok.bills.unpay(id); billsChanged(ok, "Back in your bills") }
+    }
 
     /**
      * Marks a bill paid. With [record] the payment is also entered in the ledger: a transfer from [payFromId] to the card [cardAccountId] for a credit card

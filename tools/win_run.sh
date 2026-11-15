@@ -7,6 +7,7 @@ set -eu
 [ $# -ge 2 ] || { echo "usage: $0 <git-ref> <gradle args...>" >&2; exit 2; }
 PC="${WIN_PC:-chandu@100.106.212.44}"
 REF="$1"; shift
+case "$*" in *enableIos*) echo "never pass -PenableIos to the Windows PC (no Xcode there)" >&2; exit 2;; esac
 NAME="run-$(date +%Y%m%d-%H%M%S)"
 ssh -o BatchMode=yes -o ConnectTimeout=15 "$PC" "powershell -NoProfile -Command \"(Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd /c D:\\dev\\run.bat $REF $* > D:\\dev\\logs\\$NAME.log 2>&1'}).ReturnValue\"" | tr -d '\r' | grep -qx 0 || { echo "start failed" >&2; exit 1; }
 echo "$NAME"

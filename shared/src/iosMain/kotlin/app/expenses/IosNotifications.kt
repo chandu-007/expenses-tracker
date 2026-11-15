@@ -137,7 +137,10 @@ object IosNotifications {
                         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
                         val minute = now.hour * 60 + now.minute
                         val mode = if (action == IosNotificationCenter.ACTION_SNOOZE_TOMORROW) app.expenses.core.domain.SnoozeMode.TOMORROW else app.expenses.core.domain.Snooze.laterMode(minute)
-                        IosNotificationCenter.snooze(Notice("snooze:$ref:${nowMillis()}", runCatching { NoticeKind.valueOf(kind) }.getOrDefault(NoticeKind.BILL_TRACKED), title, body, ref), app.expenses.core.domain.Snooze.delayMinutes(mode, minute))
+                        // the notice comes back with the words it has now: masked when Hide amounts or the App lock is on at the moment of the tap (the title and body it was shown with carry the amount)
+                        val hide = IosAppLock.isEnabled() || (host?.let { h -> IosCore.get(h).container.write { ok -> ok.templates.setting("hide_amounts") == "1" } } == true)
+                        val notice = app.expenses.core.domain.NoticePrivacy.masked(Notice("snooze:$ref:${nowMillis()}", runCatching { NoticeKind.valueOf(kind) }.getOrDefault(NoticeKind.BILL_TRACKED), title, body, ref), hide)
+                        IosNotificationCenter.snooze(notice, app.expenses.core.domain.Snooze.delayMinutes(mode, minute))
                     }
                     IosNotificationCenter.ACTION_PAY_CARD -> if (ref != null) IosLinks.payCard(ref)
                 }

@@ -231,9 +231,10 @@ object BillItems {
         }
         var n = name.toMutableList()
         // a unit price left standing in the name ("Milk 500ml 27.00 54.00")
-        while (n.size > 1 && n.last().contains('.') && (amount(n.last(), digits) != null || MISREAD_PRICE.matches(n.last()))) n.removeLast()
-        while (n.size > 1 && n.last().endsWith("%")) n.removeLast()
-        if (n.isNotEmpty() && n.last() in OPS) n.removeLast()
+        // removeAt(lastIndex), not removeLast(): compiled against Android's library it is the JDK 21 member, and the Android host test on JDK 17 fails with NoSuchMethodError
+        while (n.size > 1 && n.last().contains('.') && (amount(n.last(), digits) != null || MISREAD_PRICE.matches(n.last()))) n.removeAt(n.lastIndex)
+        while (n.size > 1 && n.last().endsWith("%")) n.removeAt(n.lastIndex)
+        if (n.isNotEmpty() && n.last() in OPS) n.removeAt(n.lastIndex)
         // a serial number ("1." or "2)") or an item code before the name
         if (n.size > 1 && n[0].length > 1 && (n[0].endsWith('.') || n[0].endsWith(')')) && n[0].dropLast(1).all { it in '0'..'9' }) n = n.drop(1).toMutableList()
         if (n.size > 1 && n[0].length >= 4 && n[0].all { it in '0'..'9' } && n.drop(1).any { letters(it) > 0 }) n = n.drop(1).toMutableList()
