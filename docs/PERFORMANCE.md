@@ -105,3 +105,42 @@ Search now draws its whole page in the list pane on a two-pane window, and `Sear
 Reading it: in the fair pair (3 and 4) the two builds are the same within the noise of one slow frame (Home fling p90 218 vs 200; Add open p99 800 vs 301 is ONE long frame in 95 and 79; Search scroll p90 84 vs 68). **No improvement and no regression can be claimed from these numbers.** The expected benefit of the Add cap (833 ms visible to 380 ms) is a visible-duration change that these per-frame figures do not show (the windows end 500 ms after idle), and the composition hitch the audit blamed on the eager form is not touched by S0 (it is S2's). The real-phone baseline (D17) is still the owner's.
 
 **Release sanity:** `assembleRelease` ok, `tools/check_release_keeps.py`: PASS (9,647 classes, 4 ActionCallback classes, 2 widget classes); `tools/release_smoke.sh` API 26: 7 steps passed, 7 widget steps skipped (by design on API 26); API 34: 14 of 14 steps passed (bill photo, widget placed, eye, chip, from a killed process, Hide amounts, no widget error). The frame logger is not in the release build by construction (`BuildConfig.FRAME_LOG` false); a `dexdump` for `OnFrameMetricsAvailableListener` in the release APK was not done.
+
+## UI S0 follow-up: the +34% "account balances" and the longer worst frames were measurement noise (re-measured 2026-11-15)
+
+**Account balances** (`PerformanceBudgetTest.accountBalancesForTheHomeStripStayUnder150msPhoneBudgetInTheBackground`, API 26 cold-booted with `-wipe-data` and `tools/emulator_setup.sh` before EVERY run, 5 alternating rounds with the order rotated each round, three builds: `7ffd8ec` base, `a192eda` (S0 with Compose Multiplatform 1.12.2), `9b7dc31` head; host `uptime` 1-minute load 2.9 to 22 at the starts of the runs, swap used 19.8 to 20.6 GB, so NOT quiet; `/tmp/sA_out/host.txt` was the log):
+
+| Build | five runs (ms) | median |
+|---|---|---|
+| 7ffd8ec | 135.8, 129.0, 126.1, 112.9, 75.2 | 126.1 |
+| a192eda | 145.3, 136.8, 77.5, 131.5, 97.0 | 131.5 |
+| head | 135.4, 103.0, 104.2, 132.5, 126.3 | 126.3 |
+
+The ranges overlap completely (75 to 136, 77 to 145, 103 to 135): the earlier 114 against 152 ms was three runs on a swapping host. **No regression.** The code path agrees: the figure is `db.schemaQueries.accountBalances()` run by the test on its own database; S0 changed no storage query, and nothing of Home or the chrome runs inside the measured block.
+
+**Compose Multiplatform 1.12.2 changes nothing in the Android APK:** the debug APK of the base plus only the logger patch and the same plus only the version bump are byte-identical (md5 17adb7df7fc743ef314be18037143979 for both). The app takes its Android Compose libraries from the androidx Compose BOM, which wins over the CMP version, so the bump matters to the iPhone build only. It cannot be the cause of anything measured on Android.
+
+**Frame logger, the six interactions, three builds** (`FrameLogDriveTest`, API 34 emulator cold-booted before EVERY run, 5 alternating rounds with rotated order; `pure` = `7ffd8ec` + only the logger patch of `24fd987` (cherry-picked: no S0 code at all), `24fd987` = logger + F-01, `head` = `9b7dc31`; before each run the script waited for the 1-minute load to drop under 9 (starts: load 4.0 to 11, swap used 12.1 to 13.4 GB); median over the 5 runs of the figure of each run; ms):
+
+| Interaction | build | frames | p50 | p90 | p99 | frames >100 ms | frames >700 ms | p99 of each run |
+|---|---|---|---|---|---|---|---|---|
+| Home fling | pure | 208 | 187.6 | 1264 | 2397 | 152 | 50 | 3868, 3134, 1851, 1860, 2397 |
+| | 24fd987 | 206 | 185.0 | 1335 | 2684 | 152 | 50 | 2051, 2928, 2018, 2684, 3118 |
+| | head | 209 | 185.0 | 1250 | 2467 | 150 | 50 | 1951, 2205, 3234, 2467, 2647 |
+| Home to entry | pure | 704 | 31.5 | 50.5 | 119 | 12 | 4 | 104, 110, 121, 177, 119 |
+| | 24fd987 | 761 | 32.8 | 53.3 | 124 | 13 | 3 | 128, 104, 124, 116, 152 |
+| | head | 638 | 31.5 | 51.4 | 134 | 10 | 3 | 163, 95, 103, 151, 134 |
+| Add open | pure | 395 | 30.7 | 45.3 | 259 | 6 | 4 | 259, 1234, 113, 1295, 112 |
+| | 24fd987 | 433 | 31.6 | 49.4 | 174 | 5 | 3 | 174, 90, 207, 1581, 106 |
+| | head | 343 | 31.1 | 48.2 | 170 | 6 | 3 | 1184, 87, 1319, 170, 115 |
+| Tab switch (4 switches) | pure | 604 | 33.0 | 72.3 | 607 | 41 | 4 | 654, 577, 496, 688, 607 |
+| | 24fd987 | 602 | 32.4 | 77.2 | 635 | 43 | 6 | 875, 724, 635, 584, 603 |
+| | head | 624 | 32.8 | 75.6 | 657 | 40 | 7 | 652, 602, 657, 707, 764 |
+| Search results scroll | pure | 172 | 107.2 | 570 | 1301 | 99 | 9 | 1301, 1451, 1184, 1301, 1080 |
+| | 24fd987 | 174 | 102.8 | 573 | 1219 | 97 | 8 | 1013, 1784, 1034, 1357, 1219 |
+| | head | 171 | 117.1 | 593 | 1145 | 96 | 10 | 1069, 1145, 1687, 1019, 1151 |
+| Reports tab switches | pure | 629 | 33.9 | 110 | 290 | 74 | 2 | 471, 211, 290, 458, 268 |
+| | 24fd987 | 654 | 33.3 | 105 | 335 | 75 | 1 | 217, 419, 415, 217, 335 |
+| | head | 739 | 33.2 | 93.6 | 300 | 74 | 4 | 426, 245, 293, 524, 300 |
+
+Reading it: **the three builds are the same within the spread of one build against itself.** The Add-open p99 that looked like 301 to 800 ms is one long frame: in the pure base alone the five runs give 259, 1234, 113, 1295 and 112 ms, and in head 1184, 87, 1319, 170 and 115 ms. Home to entry (p99 17 to 350 earlier) is 119 / 124 / 134 ms, tab switch 607 / 635 / 657, Search scroll 1301 / 1219 / 1145. Those worst frames are the software-drawn emulator's, not the app's. Candidates considered and not supported by data: F-02 motion tiers, F-05 keyboard handling, F-09 `FilterChip`, the Reports skeleton, the notification code (all in `head`, none moves a figure), and CMP 1.12.2 (byte-identical APK). Two earlier attempts at this table (hosts with load 29 to 36) were discarded as unusable. The emulator image hung twice during the series (an `adb logcat -c` that never returned); the script now has time limits and retries, and the hung runs were repeated, none was dropped.
