@@ -73,7 +73,12 @@ class ReportsUiTest {
         compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
-    private fun waitText(tag: String, text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag) and hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitText(tag: String, text: String) = compose.waitUntil(10_000) {
+        // a lazy list composes only what is on screen: the title above the summary is not there once the list has scrolled to the empty message below it
+        if (compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() && compose.onAllNodes(hasTestTag("report_list"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            runCatching { compose.onNodeWithTag("report_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+        compose.onAllNodes(hasTestTag(tag) and hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
 
     private fun spend(id: String, rupees: Long, category: String, at: Long = System.currentTimeMillis(), note: String = id) = runBlocking {
         container.write { ok ->

@@ -182,7 +182,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
     val dark = Appearances.isDark(look.mode, isSystemInDarkTheme())
     SideEffect { host.onDarkChanged(dark) }
-    MaterialTheme(colorScheme = colorSchemeFor(look, dark)) {
+    MaterialTheme(colorScheme = colorSchemeFor(look, dark), typography = androidx.compose.runtime.remember { app.expenses.ui.appTypography() }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
             // on a wide window (a tablet, an unfolded foldable) the app keeps a comfortable width in the middle instead of stretching every line across it

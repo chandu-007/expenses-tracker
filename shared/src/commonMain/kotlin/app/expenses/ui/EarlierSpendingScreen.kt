@@ -72,7 +72,7 @@ fun EarlierSpendingScreen(
     onAdd: (amount: String, categoryId: String, accountId: String, epochDay: Long, note: String, done: (String?) -> Unit) -> Unit,
     onBack: () -> Unit,
 ) {
-    Scaffold(topBar = { AreaTopBar("Bring in earlier spending", Area.MONEY, Icons.Outlined.History, onBack, "earlier_spending_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Bring in earlier spending", onBack, "earlier_spending_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("earlier_spending"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Spent money before you started using the app?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.testTag("earlier_spending_title"))
             Text(
@@ -90,7 +90,7 @@ fun EarlierSpendingScreen(
                 Text("If an account already held money, or a card already owed some, when you started, give it that opening balance. Or use Fix this balance on an account to match what your bank app says today: it moves the opening balance and adds no entry.", style = MaterialTheme.typography.bodyMedium)
                 OutlinedButton(onClick = onOpenAccounts, modifier = Modifier.heightIn(min = 48.dp).testTag("earlier_spending_balances")) { Text("Open Accounts") }
             }
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)).padding(14.dp).semantics(mergeDescendants = true) {}.testTag("earlier_spending_no_scan"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)).padding(14.dp).semantics(mergeDescendants = true) {}.testTag("earlier_spending_no_scan"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("What the app cannot do: read your old texts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("The app never looks through the messages already on your phone. It reads a bank text only as it arrives, from the time you set capture up. That keeps your inbox private; it also means older spending has to come from a statement or from you.", style = MaterialTheme.typography.bodyMedium)
             }
@@ -100,7 +100,7 @@ fun EarlierSpendingScreen(
 
 @Composable
 private fun Way(title: String, tag: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         content()
     }

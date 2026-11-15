@@ -126,8 +126,8 @@ fun CategoriesScreen(
 
     Scaffold(
         topBar = {
-            AreaTopBar(
-                "Categories", Area.MONEY, Icons.Outlined.Label, onBack, "categories_back",
+            ScreenHeader(
+                "Categories", onBack, "categories_back",
                 actions = { if (!incomeTab) TextButton(onClick = { suggesting = true }, modifier = Modifier.testTag("suggested_categories")) { Text("Suggested") } },
             )
         },
@@ -186,12 +186,12 @@ fun CategoriesScreen(
 private fun KindTabs(incomeTab: Boolean, onSelect: (Boolean) -> Unit) {
     val indicator = androidx.compose.animation.core.animateFloatAsState(if (incomeTab) 1f else 0f, Motion.spring(), label = "catTab")
     Box(Modifier.fillMaxWidth().padding(16.dp, 8.dp)) {
-        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.RoundedCornerShape(24.dp))) {
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, Radius.M)) {
             listOf(false to "Expenses", true to "Income").forEach { (inc, label) ->
                 val on = incomeTab == inc
                 Box(
                     Modifier.weight(1f).padding(3.dp)
-                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(21.dp))
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, Radius.M)
                         .clickable { onSelect(inc) }.padding(vertical = 10.dp)
                         .testTag(if (inc) "cat_tab_income" else "cat_tab_expense")
                         .semantics { selected = on },
@@ -309,7 +309,7 @@ private fun CategoryEditorScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Edit category") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cat_cancel")) { Text("Cancel") } }) },
+        topBar = { ScreenHeader("Edit category", onBack, "cat_cancel", backLabel = "Cancel") },
         bottomBar = {
             Button(
                 onClick = { onSave(name, color, hidden, parentId) },

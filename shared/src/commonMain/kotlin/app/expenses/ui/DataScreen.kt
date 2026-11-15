@@ -185,7 +185,7 @@ fun DataScreen(
         )
     }
 
-    Scaffold(topBar = { AreaTopBar("Your data", Area.PRIVACY, Icons.Outlined.Backup, onBack, "data_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("Your data", onBack, "data_back") }) { padding ->
         // what a button far down the page did is told at the top: the page goes back up to say it (a result below the fold was never seen)
         val dataScroll = rememberScrollState()
         androidx.compose.runtime.LaunchedEffect(state.status) { if (state.status != null) dataScroll.animateScrollTo(0) }

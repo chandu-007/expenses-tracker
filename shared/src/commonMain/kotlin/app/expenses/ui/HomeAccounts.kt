@@ -52,7 +52,7 @@ fun BalancesStrip(accounts: List<AccountRowUi>, selectedId: String? = null, onSe
     ) {
         accounts.forEach { a ->
             val chosen = a.id == selectedId
-            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(112.dp).height(tileHeight).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier))
+            AccountTile(a, compact = true, onClick = { onSelect(a.id) }, modifier = Modifier.width(112.dp).height(tileHeight).then(if (chosen) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, Radius.S) else Modifier))
         }
     }
 }
@@ -66,7 +66,7 @@ private fun LargeAccounts(accounts: List<AccountRowUi>, selectedId: String?, onS
     var open by rememberSaveable { mutableStateOf(false) }
     val summary = accounts.joinToString(" · ") { a -> a.name + " " + (if (a.owed) "owed " else "") + a.balanceText.wholeAmounts() }
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).testTag("balances"),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).standardCard().testTag("balances"),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = if (open) "Fold the accounts" else "Show each account") { open = !open }.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp).testTag("balances_toggle"),
@@ -85,7 +85,7 @@ private fun LargeAccounts(accounts: List<AccountRowUi>, selectedId: String?, onS
                 Column(
                     // the tag comes before clearAndSetSemantics: what follows it is cleared (the tile's own order)
                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onSelect(a.id) }.testTag("balance_chip_${a.name}").padding(horizontal = 16.dp, vertical = 8.dp)
-                        .then(if (chosen) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
+                        .then(if (chosen) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, Radius.S) else Modifier)
                         .clearAndSetSemantics { text = AnnotatedString(label); this.selected = chosen },
                 ) {
                     Text(a.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2)

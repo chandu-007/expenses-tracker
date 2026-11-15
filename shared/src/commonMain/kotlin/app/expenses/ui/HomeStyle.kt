@@ -69,10 +69,10 @@ fun Modifier.heroBackground(): Modifier {
     val p = MaterialTheme.colorScheme.primary
     val second = lerp(p, if (p.luminance() > 0.5f) Color.White else Color.Black, 0.28f)
     val onP = MaterialTheme.colorScheme.onPrimary
-    return this.clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(p, second)))
+    return this.clip(Radius.L).background(Brush.linearGradient(listOf(p, second)))
         // a soft light in the top corner and a fine edge: the look of a glossy pane, drawn once, with no blur and no cost while scrolling
         .drawBehind { drawCircle(Brush.radialGradient(listOf(onP.copy(alpha = 0.16f), Color.Transparent), center = Offset(size.width * 0.88f, 0f), radius = size.width * 0.6f), radius = size.width * 0.6f, center = Offset(size.width * 0.88f, 0f)) }
-        .border(1.dp, onP.copy(alpha = 0.22f), RoundedCornerShape(28.dp))
+        .border(1.dp, onP.copy(alpha = 0.22f), Radius.L)
 }
 
 /** "Today", "Yesterday", or "Mon, 5 Oct" for a local day given as an epoch-day number. */
@@ -107,8 +107,8 @@ fun DayHeader(epochDay: Long, total: String? = null) {
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() }.testTag("day_header_$epochDay"),
         verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(dayLabel(epochDay), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        if (total != null) Text(total, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = 12.dp).testTag("day_total_$epochDay"))
+        Text(dayLabel(epochDay), style = Heading.Day, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        if (total != null) Text(total, style = Heading.Day, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = 12.dp).testTag("day_total_$epochDay"))
     }
 }
 
@@ -204,7 +204,7 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) Motion.REDUCED_MS else Motion.TAB), label = "tab tint",
     )
     Column(
-        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box {
@@ -223,10 +223,10 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
 @Composable
 private fun AddItem(onClick: () -> Unit, modifier: Modifier) {
     Column(
-        modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(20.dp)).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Button },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Button },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.size(width = 56.dp, height = 32.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
             androidx.compose.material3.Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
         }
         androidx.compose.material3.Text(

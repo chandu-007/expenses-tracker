@@ -92,7 +92,7 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
     val hide = LocalHideAmounts.current
     androidx.compose.material3.Card(
         onClick = onOpen,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        shape = Radius.M,
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
         modifier = modifier.testTag("budget_summary"),
     ) {
@@ -160,7 +160,7 @@ fun BudgetScreen(
             onDismiss = { editing = null; editingOverall = false },
         )
     }
-    Scaffold(topBar = { AreaTopBar("Budget", Area.MONEY, Icons.Outlined.Savings, onBack, "budget_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("Budget", onBack, "budget_back") }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {

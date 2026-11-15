@@ -153,7 +153,7 @@ fun RecurringScreen(
         return
     }
     Scaffold(
-        topBar = { AreaTopBar("Repeating expenses", Area.MONEY, Icons.Outlined.Repeat, onBack, "recurring_back") },
+        topBar = { ScreenHeader("Repeating expenses", onBack, "recurring_back") },
         floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { editing = NEW }, modifier = Modifier.testTag("new_recurring"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add repeating") }) },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 88.dp)) {
@@ -296,7 +296,7 @@ private fun RecurringEditor(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text((if (start == null) "New repeating " else "Edit repeating ") + kind.name.lowercase(), maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("rec_cancel")) { Text("Cancel") } }) },
+        topBar = { ScreenHeader((if (start == null) "New repeating " else "Edit repeating ") + kind.name.lowercase(), onBack, "rec_cancel", backLabel = "Cancel") },
         bottomBar = {
             Button(
                 onClick = {

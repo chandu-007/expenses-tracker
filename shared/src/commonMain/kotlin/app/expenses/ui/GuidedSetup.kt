@@ -78,7 +78,7 @@ class SetupActions(
 fun GuidedSetupScreen(step: SetupStep, setup: SetupUi, facts: SetupFacts, accounts: List<AccountRowUi>, actions: SetupActions) {
     var disclosing by rememberSaveable { mutableStateOf(false) }
     if (disclosing) SmsDisclosure(onAgree = { disclosing = false; actions.onAllowTexts() }, onDecline = { disclosing = false })
-    Scaffold(topBar = { AreaTopBar("Set up reading bank texts", Area.CAPTURE, Icons.Outlined.Sms, { actions.onLeave(step) }, "setup_close", backLabel = "Close") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Set up reading bank texts", { actions.onLeave(step) }, "setup_close", backLabel = "Close") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("setup_screen"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(CaptureSetup.stepWord(step), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("setup_progress"))
             LinearProgressIndicator(progress = { step.number / SetupStep.COUNT.toFloat() }, modifier = Modifier.fillMaxWidth())
@@ -201,7 +201,7 @@ private fun DigitsRow(row: AccountRowUi, a: SetupActions) {
     var typed by rememberSaveable(row.id) { mutableStateOf("") }
     var problem by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     val has = !row.last4.isNullOrBlank()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp).testTag("setup_account_${row.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp).testTag("setup_account_${row.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(row.name, style = MaterialTheme.typography.titleSmall)
         StateLine(has, "Digits ending ${row.last4}", "No digits yet", "setup_account_state_${row.id}")
         if (!has) {

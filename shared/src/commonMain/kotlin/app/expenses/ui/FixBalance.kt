@@ -105,7 +105,7 @@ internal fun FixBalanceDialog(a: AccountRowUi, onFix: (id: String, amount: Strin
 @Composable
 internal fun FixBalanceHint(a: AccountRowUi, onFix: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier.fillMaxWidth().padding(16.dp, 8.dp, 16.dp, 0.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)).padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = 2.dp)
+        modifier.fillMaxWidth().padding(16.dp, 8.dp, 16.dp, 0.dp).background(MaterialTheme.colorScheme.secondaryContainer, Radius.S).padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = 2.dp)
             .testTag("fix_balance_hint"),
     ) {
         Text(a.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)

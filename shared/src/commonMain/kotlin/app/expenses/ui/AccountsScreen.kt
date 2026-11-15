@@ -80,7 +80,7 @@ fun AccountsScreen(
     val active = rows.filter { !it.archived }
     val archived = rows.filter { it.archived }
     Scaffold(
-        topBar = { AreaTopBar("Accounts", Area.MONEY, Icons.Outlined.AccountBalance, onBack, "back") },
+        topBar = { ScreenHeader("Accounts", onBack, "back") },
         floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("add_account").semantics { contentDescription = "Add an account" }, icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("Add account") }) }, // a screen reader says "Add an account", not "plus"
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("accounts_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 88.dp)) { // room under the last row for the button, so it never covers an amount
@@ -90,7 +90,7 @@ fun AccountsScreen(
                 // for the third and fourth of them to be in view when they are spread (AccountTilesUiTest reads where each one is).
                 Column(Modifier.padding(16.dp, if (safeToSpend != null) 8.dp else 16.dp, 16.dp, if (safeToSpend != null) 0.dp else 16.dp)) {
                     Text("Net worth", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
+                    MoneyText(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
                     if (safeToSpend == null) Text("Balances start from the opening balance you set, then follow your entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (safeToSpend != null) SafeToSpendLine(safeToSpend, "safe_to_spend_line", onClick = { safeOpen = true }, compact = true)

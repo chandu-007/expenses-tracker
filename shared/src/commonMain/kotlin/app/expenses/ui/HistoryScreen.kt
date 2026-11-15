@@ -27,7 +27,7 @@ import app.expenses.HistoryUi
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(history: HistoryUi, onBack: () -> Unit, onRestore: (Int) -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("History: ${history.title}", maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("history_back")) { Text("Back") } }) }) { pad ->
+    Scaffold(topBar = { ScreenHeader("History: ${history.title}", onBack, "history_back") }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("history_list")) {
             items(history.revisions, key = { it.index }) { r ->
                 Column(Modifier.fillMaxWidth().padding(16.dp).testTag("revision_${r.index}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {

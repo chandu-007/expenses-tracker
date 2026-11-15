@@ -39,12 +39,10 @@ import app.expenses.core.domain.ThemeMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}) {
-    Scaffold(topBar = { AreaTopBar("Appearance", Area.LOOK, Icons.Outlined.Palette, onBack, "appearance_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Appearance", onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { m -> FilterChip(selected = current.mode == m, onClick = { onChange(current.copy(mode = m)) }, label = { Text(m.label) }, modifier = Modifier.testTag("theme_${m.name}")) }
-            }
+            SegmentedChoice(ThemeMode.entries.map { Segment(it, it.label, "theme_${it.name}") }, current.mode, { onChange(current.copy(mode = it)) })
             Text("Accent colour", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Appearances.ACCENTS.forEach { a ->
@@ -57,17 +55,13 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
                 }
             }
             Text("List spacing", style = MaterialTheme.typography.labelMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Density.entries.forEach { d -> FilterChip(selected = current.density == d, onClick = { onChange(current.copy(density = d)) }, label = { Text(d.label) }, modifier = Modifier.testTag("density_${d.name}")) }
-            }
+            SegmentedChoice(Density.entries.map { Segment(it, it.label, "density_${it.name}") }, current.density, { onChange(current.copy(density = it)) })
             Text("Motion", style = MaterialTheme.typography.labelMedium)
-            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("off" to "Off", "quick" to "Quick", "relaxed" to "Relaxed", "slow" to "Slow").forEach { (key, label) ->
-                    FilterChip(selected = motionSpeed == key, onClick = { onMotionSpeed(key) }, label = { Text(label) }, modifier = Modifier.testTag("motion_$key"))
-                }
+            SegmentedChoice(listOf("off" to "Off", "quick" to "Quick", "relaxed" to "Relaxed", "slow" to "Slow").map { (key, label) -> Segment(key, label, "motion_$key") }, motionSpeed, onMotionSpeed)
+            Details("appearance_details") {
+                Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Compact fits more entries on the screen: the rows of the list, search and report entries are about a third tighter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Compact fits more entries on the screen: the rows of the list, search and report entries are about a third tighter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

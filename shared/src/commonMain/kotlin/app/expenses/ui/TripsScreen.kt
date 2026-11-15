@@ -130,7 +130,7 @@ fun TripsScreen(
     }
     val snackbar = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     Scaffold(
-        topBar = { AreaTopBar("Travel mode", Area.MONEY, Icons.Outlined.Flight, onBack, "trips_back") },
+        topBar = { ScreenHeader("Travel mode", onBack, "trips_back") },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (state == null) return@Scaffold
@@ -167,7 +167,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.tripSection(
 
 @Composable
 private fun TripRow(r: TripRowUi, onOpen: (String) -> Unit, onEdit: (String) -> Unit, onDelete: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).testTag("trip_row_${r.name}")) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).testTag("trip_row_${r.name}")) {
         Column(
             Modifier.fillMaxWidth().clickable(onClickLabel = "Open the summary of ${r.name}", role = Role.Button) { onOpen(r.id) }.heightIn(min = 48.dp).padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).testTag("trip_open_${r.name}"),
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -226,7 +226,7 @@ private fun TripForm(row: TripRowUi?, key: String, tags: List<String>, onSave: T
         ) { DatePicker(state = picker) }
     }
 
-    Scaffold(topBar = { AreaTopBar(if (row == null) "New trip" else "Edit trip", Area.MONEY, Icons.Outlined.Flight, onClose, "trip_form_back", backLabel = "Cancel") }) { padding ->
+    Scaffold(topBar = { ScreenHeader(if (row == null) "New trip" else "Edit trip", onClose, "trip_form_back", backLabel = "Cancel") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp).testTag("trip_form"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
                 name, { v -> name = v; problem = null; if (!tagTouched) tag = TripRules.suggestedTag(v).orEmpty() },
@@ -278,7 +278,7 @@ private fun TripForm(row: TripRowUi?, key: String, tags: List<String>, onSave: T
             }
 
             usedBy?.let { n ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("The tag \"${(app.expenses.core.domain.TagRules.normalize(tag).orEmpty())}\" is already on $n ${if (n == 1L) "entry" else "entries"}. They will count in this trip's total.", color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.testTag("trip_tag_used"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { usedBy = null; submit(true) }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_tag_use_anyway")) { Text("Use it anyway") }

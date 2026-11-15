@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +26,7 @@ import app.expenses.core.domain.CurrencyChoices
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CurrencyScreen(current: Currency, blocker: String?, onChoose: (String) -> Unit, onBack: () -> Unit) {
-    Scaffold(topBar = { AreaTopBar("Currency", Area.LOOK, Icons.Outlined.CurrencyRupee, onBack, "currency_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Currency", onBack, "currency_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Every amount in this ledger is in ${CurrencyChoices.name(current)} (${current.code}).", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("currency_current"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -33,9 +34,11 @@ fun CurrencyScreen(current: Currency, blocker: String?, onChoose: (String) -> Un
                     FilterChip(selected = c == current, onClick = { if (c != current) onChoose(c.code) }, label = { Text("${c.code} · ${CurrencyChoices.name(c)}") }, modifier = Modifier.testTag("currency_${c.code}"))
                 }
             }
-            if (blocker != null) Text(blocker, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("currency_blocker"))
-            else Text("You can change this now because nothing has an amount yet. After your first entry it is fixed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Rupees are written with lakh and crore grouping (₹12,34,567); other currencies with thousands grouping and their code (USD 1,234,567). Nothing is converted between currencies.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (blocker != null) Text(blocker, modifier = Modifier.fillMaxWidth().inlineCard(MaterialTheme.colorScheme.tertiary).padding(16.dp).testTag("currency_blocker"))
+            Details("currency_details") {
+                if (blocker == null) Text("You can change this now because nothing has an amount yet. After your first entry it is fixed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Rupees are written with lakh and crore grouping (₹12,34,567); other currencies with thousands grouping and their code (USD 1,234,567). Nothing is converted between currencies.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

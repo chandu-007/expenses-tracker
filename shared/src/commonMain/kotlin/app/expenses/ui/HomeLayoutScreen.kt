@@ -36,7 +36,7 @@ import app.expenses.core.domain.HomeSection
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeLayoutScreen(layout: HomeLayout, onChange: (HomeLayout) -> Unit, onBack: () -> Unit) {
-    Scaffold(topBar = { AreaTopBar("Customise home", Area.LOOK, Icons.Outlined.Dashboard, onBack, "home_layout_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Customise home", onBack, "home_layout_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             Text("Choose what the home screen shows and move blocks up or down. The headline total and the list of entries are always there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             layout.order.forEachIndexed { i, section ->

@@ -62,7 +62,7 @@ fun CategoriseScreen(
 ) {
     val undoHost = rememberUndoSnackbar(undo, onUndo, onUndoGone)
     var picking by rememberSaveable { mutableStateOf(false) }
-    Scaffold(topBar = { AreaTopBar("Categorise", Area.CAPTURE, Icons.Outlined.Label, onBack, "categorise_back") }, snackbarHost = { SnackbarHost(undoHost) }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Categorise", onBack, "categorise_back") }, snackbarHost = { SnackbarHost(undoHost) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("categorise_screen"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val s = state
             when {
@@ -79,7 +79,7 @@ fun CategoriseScreen(
                     val item = s.current!!
                     Text("${s.left} left", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("categorise_left"))
                     Column(
-                        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp).testTag("categorise_item_${item.id}"),
+                        Modifier.fillMaxWidth().standardCard().padding(16.dp).testTag("categorise_item_${item.id}"),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(item.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("categorise_title"))

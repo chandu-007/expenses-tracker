@@ -89,7 +89,7 @@ fun GuideScreen(
             }
             Surface(
                 Modifier.align(if (cardAtTop) Alignment.TopCenter else Alignment.BottomCenter).safeDrawingPadding().padding(12.dp).fillMaxWidth().testTag("guide_card"),
-                shape = RoundedCornerShape(28.dp), tonalElevation = 6.dp, shadowElevation = 10.dp, color = MaterialTheme.colorScheme.surface,
+                shape = Radius.L, tonalElevation = 6.dp, shadowElevation = 10.dp, color = MaterialTheme.colorScheme.surface,
             ) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

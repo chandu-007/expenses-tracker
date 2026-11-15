@@ -1,29 +1,18 @@
 package app.expenses.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 
 /** The five areas of the More page. Each has its own colour, shared by the rows that open its screens, so the app tells where you are at a glance. */
 enum class Area(val top: Color, val bottom: Color) {
@@ -34,23 +23,25 @@ enum class Area(val top: Color, val bottom: Color) {
     HELP(Color(0xFFFB8C00), Color(0xFFEF6C00)),
 }
 
-/** The top bar of a screen opened from More: the area's icon tile and colour wash beside the title, the same Back button (with its [backTag]) as before. */
+/**
+ * THE header of every screen that is not a tab (UI S1): a back arrow (48 dp, with its [backTag]; [backLabel] is what a screen reader says: "Back", "Close", "Cancel"), the title and at most two actions on the right. No icon
+ * tile, no area colour wash, no "Back" in words: one look on all 40 screens. A long title ("Privacy: what this app can see") takes a smaller size and a second line rather than being cut off. Like the bottom bar its text
+ * stops growing at 130% of the phone's text size (the page below it goes on to 200%): at 200% a title beside a word action ("Categories" and "Suggested") has no room, and the bar is chrome, not content.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AreaTopBar(title: String, area: Area, icon: ImageVector, onBack: () -> Unit, backTag: String, backLabel: String = "Back", actions: @Composable RowScope.() -> Unit = {}) {
-    TopAppBar(
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Brush.linearGradient(listOf(area.top, area.bottom))), contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(10.dp))
-                // a long title ("Privacy: what this app can see") takes a smaller size and a second line rather than being cut off
-                Text(title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = if (title.length > 22) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge)
-            }
-        },
-        navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag(backTag)) { Text(backLabel) } },
-        actions = actions,
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = area.top.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.background)),
-    )
+fun ScreenHeader(title: String, onBack: () -> Unit, backTag: String, backLabel: String = "Back", actions: @Composable RowScope.() -> Unit = {}) {
+    CappedFontScale(HEADER_TEXT_SCALE) {
+        TopAppBar(
+            title = { Text(title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = if (title.length > 22) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge) },
+            navigationIcon = {
+                IconButton(onClick = onBack, modifier = Modifier.testTag(backTag)) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = backLabel) }
+            },
+            actions = actions,
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+        )
+    }
 }
+
+/** The largest text scale the header draws at (the phone's setting still applies to everything below it). */
+const val HEADER_TEXT_SCALE = 1.3f

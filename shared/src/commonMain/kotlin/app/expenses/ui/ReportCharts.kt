@@ -81,11 +81,11 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
         // from 140% text the two tiles sit one under the other: side by side each is about 150 dp wide, and an amount like ₹1,85,000.00 broke in the middle of the number (".00" on a line of its own)
         val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
         val tiles: @Composable (Modifier) -> Unit = { mod ->
-            Column(mod.clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).clickable(onClick = onIncome).padding(12.dp).testTag("report_income_card")) {
+            Column(mod.clip(Radius.S).background(on.copy(alpha = 0.14f)).clickable(onClick = onIncome).padding(12.dp).testTag("report_income_card")) {
                 Text("Income", style = MaterialTheme.typography.labelMedium, color = on.copy(alpha = 0.8f))
                 Text(report.income, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = on, maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_income"))
             }
-            Column(mod.clip(RoundedCornerShape(16.dp)).background(on.copy(alpha = 0.14f)).padding(12.dp)) {
+            Column(mod.clip(Radius.S).background(on.copy(alpha = 0.14f)).padding(12.dp)) {
                 Text("Income minus spending", style = MaterialTheme.typography.labelMedium, color = on.copy(alpha = 0.8f))
                 Text(report.net, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) on else Color(0xFFFFB4AB), maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_net"))
             }
@@ -165,7 +165,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
                 val source = remember { MutableInteractionSource() }
                 val pressed by source.collectIsPressedAsState()
                 LaunchedEffect(pressed) { if (pressed) toggle(s.key) }
-                val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                val base = Modifier.fillMaxWidth().clip(Radius.XS)
                 val tappable = s.onClick?.let { base.clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = it) }
                     ?: base.pointerInput(s.key) { detectTapGestures(onPress = { toggle(s.key) }) }
                 Row(

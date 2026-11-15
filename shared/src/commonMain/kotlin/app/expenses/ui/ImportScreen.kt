@@ -130,7 +130,7 @@ fun ImportScreen(
     onPlainFile: () -> Unit = {},
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Import a statement") }, navigationIcon = { TextButton(onClick = onClose, modifier = Modifier.testTag("import_close")) { Text(if (state.result != null) "Done" else "Cancel") } }) },
+        topBar = { ScreenHeader("Import a statement", onClose, "import_close", backLabel = if (state.result != null) "Done" else "Cancel") },
         bottomBar = {
             if (state.result == null && state.mapping != null) {
                 Button(onClick = onImport, enabled = !state.busy && state.txnCount > 0 && state.accountId.isNotEmpty() && state.cardGroup?.resolved != false, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("import_confirm")) {

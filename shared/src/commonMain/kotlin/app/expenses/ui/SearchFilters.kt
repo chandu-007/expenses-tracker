@@ -225,7 +225,7 @@ private fun PanelSection(title: String, content: @Composable () -> Unit) {
 private fun PickerField(value: String, tag: String, on: Boolean, content: @Composable (close: () -> Unit) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag), shape = RoundedCornerShape(12.dp)) {
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag), shape = Radius.S) {
             Text(value, modifier = Modifier.weight(1f), maxLines = 1, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
         }
@@ -267,7 +267,7 @@ internal fun AnimatedVisibilityScope.FiltersPanel(
     BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = "Filters"; isTraversalGroup = true }) {
         Box(
             Modifier.fillMaxSize().animateEnterExit(enter = fadeIn(tween(if (reduce) Motion.REDUCED_MS else Motion.SHEET_IN, easing = Motion.EaseOut)), exit = fadeOut(tween(if (reduce) Motion.REDUCED_MS else Motion.CHIP, easing = Motion.EaseIn)))
-                .background(Color.Black.copy(alpha = 0.40f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"),
+                .background(Sheet.Scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close filters", onClick = onClose).testTag("filters_scrim"),
         )
         val place = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxHeight * 0.9f).animateEnterExit(
             enter = if (reduce) fadeIn(tween(Motion.REDUCED_MS)) else slideInVertically(tween(Motion.SHEET_IN, easing = Motion.EaseOut)) { rise } + fadeIn(tween(Motion.SHEET_IN, easing = Motion.EaseOut)),
@@ -275,11 +275,12 @@ internal fun AnimatedVisibilityScope.FiltersPanel(
         )
         Surface(
             place.pointerInput(Unit) { detectTapGestures { } }.testTag("filters_panel"),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, shadowElevation = 12.dp,
+            shape = Radius.SheetTop,
+            color = MaterialTheme.colorScheme.surface, tonalElevation = Elevation.Chrome, shadowElevation = 12.dp,
         ) {
             Column(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SheetHandle()
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Filters", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                     TextButton(onClick = { edit(input.withoutFilters()) }, enabled = count > 0, modifier = Modifier.heightIn(min = 48.dp).testTag("filters_clear")) { Text("Clear all") }
                     IconButton(onClick = onClose, modifier = Modifier.testTag("filters_close")) { Icon(Icons.Outlined.Close, contentDescription = "Close filters") }
@@ -339,8 +340,8 @@ internal fun AnimatedVisibilityScope.FiltersPanel(
                     }
                     PanelSection("Amount") {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = input.minRupees, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) onEdit(input.copy(minRupees = v), true) }, label = { Text("From ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = Modifier.weight(1f).testTag("search_min"))
-                            OutlinedTextField(value = input.maxRupees, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) onEdit(input.copy(maxRupees = v), true) }, label = { Text("To ₹") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = Modifier.weight(1f).testTag("search_max"))
+                            OutlinedTextField(value = input.minRupees, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) onEdit(input.copy(minRupees = v), true) }, label = { Text("From ₹") }, singleLine = true, shape = Radius.S, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = Modifier.weight(1f).testTag("search_min"))
+                            OutlinedTextField(value = input.maxRupees, onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) onEdit(input.copy(maxRupees = v), true) }, label = { Text("To ₹") }, singleLine = true, shape = Radius.S, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = Modifier.weight(1f).testTag("search_max"))
                         }
                         state.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("filters_problem")) }
                     }

@@ -50,7 +50,7 @@ internal fun AccountQuestion(
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
     val offered = if (r.accountChoices.isEmpty()) accounts else accounts.filter { it.id in r.accountChoices }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)).padding(12.dp).testTag("inbox_account_ask_${r.id}"),
+        modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)).padding(12.dp).testTag("inbox_account_ask_${r.id}"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Which account is this?", style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("inbox_account_title_${r.id}"))

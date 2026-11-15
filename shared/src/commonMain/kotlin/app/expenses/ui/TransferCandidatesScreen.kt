@@ -65,7 +65,7 @@ fun TransferCandidatesScreen(
     fun setSelection(g: TransferGroupUi, ids: Set<String>) { ticked = ticked.filterNot { it.startsWith("${g.key}|") }.toSet() + ids.map { "${g.key}|$it" }; touched = touched + g.key }
 
     Scaffold(
-        topBar = { AreaTopBar("Transfer candidates", Area.MONEY, Icons.Outlined.CompareArrows, onBack, "transfer_candidates_back") },
+        topBar = { ScreenHeader("Transfer candidates", onBack, "transfer_candidates_back") },
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
     ) { padding ->
         if (state == null) return@Scaffold

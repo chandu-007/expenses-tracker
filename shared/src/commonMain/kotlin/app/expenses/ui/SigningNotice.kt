@@ -26,7 +26,7 @@ fun signingNoticeText(): String? {
 @Composable
 fun SigningNotice(modifier: Modifier = Modifier) {
     val text = signingNoticeText() ?: return
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp).testTag("signing_notice")) {
+    Box(modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp).testTag("signing_notice")) {
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
     }
 }

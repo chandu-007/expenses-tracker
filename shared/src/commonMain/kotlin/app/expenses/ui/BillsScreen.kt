@@ -100,7 +100,7 @@ fun BillsScreen(
             dismissButton = { TextButton(onClick = { dating = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
-    Scaffold(topBar = { AreaTopBar("Bills", Area.CAPTURE, Icons.Outlined.Receipt, onBack, "bills_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Bills", onBack, "bills_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         if (ui.loaded && all.isEmpty() && ui.paid.isEmpty()) {
             Column(Modifier.padding(pad).padding(24.dp).fillMaxSize()) {
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
@@ -113,7 +113,7 @@ fun BillsScreen(
             }
         } else LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("bills_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui.repairable > 0) item(key = "repair") {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)).padding(12.dp).testTag("bills_repair_card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)).padding(12.dp).testTag("bills_repair_card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         if (ui.repairable == 1) "1 bill below is really the confirmation of a payment (\"bill payment ... was successful\"), made by an earlier version. Nothing is due. Move it to To review, where it can mark the bill it paid."
                         else "${ui.repairable} bills below are really confirmations of payments (\"bill payment ... was successful\"), made by an earlier version. Nothing is due. Move them to To review, where each can mark the bill it paid.",
@@ -154,7 +154,7 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
     val found = b.status == "FOUND"; val paid = b.status == "PAID"
     val tint = when { b.overdue && !paid -> MaterialTheme.colorScheme.error; b.soon && !paid -> AMBER; else -> MaterialTheme.colorScheme.primary }
     Card(
-        modifier.fillMaxWidth().testTag("bill_${b.id}"), shape = RoundedCornerShape(24.dp),
+        modifier.fillMaxWidth().testTag("bill_${b.id}"), shape = Radius.M,
         colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = if (paid) 0.04f else 0.08f).compositeOver(MaterialTheme.colorScheme.surface)),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -172,7 +172,7 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
             }
             if (!paid) {
                 b.minDueText?.let { Text("Minimum due $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("bill_min_${b.id}")) }
-                if (b.autoDebit) Text("This is taken from your account automatically. Add it to keep the money there and to see it here until the debit arrives.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)).padding(10.dp).testTag("bill_auto_${b.id}"))
+                if (b.autoDebit) Text("This is taken from your account automatically. Add it to keep the money there and to see it here until the debit arrives.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)).padding(10.dp).testTag("bill_auto_${b.id}"))
             }
             when {
                 found -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -193,7 +193,7 @@ private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> 
                 if (!b.id.startsWith("card:") && !b.isRepeat && (b.dueEpochDay == null || b.overdue)) TextButton(onClick = { onSetDate(b.id) }, modifier = Modifier.testTag("bill_setdate_${b.id}")) { Text(if (b.dueEpochDay == null) "Set the due date" else "Change the due date") }
                 if (found && b.body.isNotEmpty()) TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("bill_text_toggle_${b.id}")) { Text(if (showText) "Hide message" else "Show message") }
             }
-            if (showText) Text(b.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("bill_text_${b.id}"))
+            if (showText) Text(b.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("bill_text_${b.id}"))
         }
     }
 }

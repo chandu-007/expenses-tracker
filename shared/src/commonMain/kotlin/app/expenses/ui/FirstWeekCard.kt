@@ -55,7 +55,7 @@ fun FirstWeekCard(
     // the same surface and the same close button as every other nudge (NudgeCard); the close hides the checklist for good, as "Hide" did
     NudgeSurface("first_week_card", modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { folded = !folded }.padding(vertical = 6.dp).wrapContentHeight(Alignment.CenterVertically).testTag("first_week_toggle")) {
+            Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(Radius.S).clickable { folded = !folded }.padding(vertical = 6.dp).wrapContentHeight(Alignment.CenterVertically).testTag("first_week_toggle")) {
                 Text("Getting started", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("$done of ${items.size} done" + if (folded) " · tap to open" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("first_week_progress"))
             }
@@ -64,7 +64,7 @@ fun FirstWeekCard(
         if (!folded) Column(Modifier.padding(end = 12.dp)) {
             items.forEach { item ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(item.step) }.padding(vertical = 8.dp, horizontal = 2.dp).testTag("first_week_item_${item.step.name}"), // 48 dp: a finished step has no second line and was 44
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(Radius.S).clickable { onOpen(item.step) }.padding(vertical = 8.dp, horizontal = 2.dp).testTag("first_week_item_${item.step.name}"), // 48 dp: a finished step has no second line and was 44
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Tick(item.done, Modifier.testTag(if (item.done) "first_week_done_${item.step.name}" else "first_week_todo_${item.step.name}"))

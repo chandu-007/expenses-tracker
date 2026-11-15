@@ -140,7 +140,7 @@ fun InboxScreen(
         confirmButton = { TextButton(onClick = { confirmingAll = false; refused.clear(); easy.forEach { r -> onConfirm(r.id, r.accountId, r.categoryId, r.treatment, r.fromAccountId, r.toAccountId, "") { p -> if (p != null) refused += p } } }, modifier = Modifier.testTag("inbox_add_all_ok")) { Text("Add ${easy.size}") } },
         dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
     )
-    Scaffold(topBar = { AreaTopBar("To review", Area.CAPTURE, Icons.Outlined.Inbox, onBack, "inbox_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
+    Scaffold(topBar = { ScreenHeader("To review", onBack, "inbox_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         if (rows.isEmpty() && onPaste != null) {
             LazyColumn(Modifier.padding(pad).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp)) {
                 item(key = "empty") {
@@ -302,14 +302,14 @@ private fun InboxCard(
             val adding = swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd
             val skipping = swipe.dismissDirection == SwipeToDismissBoxValue.EndToStart
             if (canSwipe && (adding || skipping)) Box(
-                Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                Modifier.fillMaxSize().clip(Radius.M)
                     .background(if (adding) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 24.dp),
                 contentAlignment = if (adding) androidx.compose.ui.Alignment.CenterStart else androidx.compose.ui.Alignment.CenterEnd,
             ) { Text(if (adding) "Add" else "Skip", style = MaterialTheme.typography.titleMedium, color = if (adding) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
         },
     ) {
     androidx.compose.material3.Card(
-        Modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        Modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = Radius.M,
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -375,7 +375,7 @@ private fun InboxCard(
                 cardPick ?: billPay.cardAccountId, { cardPick = it },
             ) else if (!legMode) {
             // where it will go: the decision, with its own Change next to it
-            Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (paired && r.treatment == "TRANSFER") {
                     Text("Recorded as a ${r.treatmentLabel}: from ${nameOf(fromAcct)} to ${nameOf(toAcct)}. It moves money between your own accounts, so it is not spending.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inbox_pair_${r.id}"))
                     if (r.transferNote.isNotEmpty()) Text(r.transferNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_transfer_learned_${r.id}"))
@@ -520,7 +520,7 @@ private fun InboxCard(
                 Text("Every later payment to or from the same address shows this name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (showText) {
-                Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(r.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_text_${r.id}"))
                     Text("Read automatically: please check it before adding.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { reporting = true }, modifier = Modifier.testTag("inbox_report_${r.id}")) { Text("Share this message for a fix") }
@@ -554,7 +554,7 @@ private fun BillPaymentBox(
     billId: String, onBill: (String) -> Unit, from: String, onFrom: (String) -> Unit, card: String, onCard: (String) -> Unit,
 ) {
     val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "choose an account" }
-    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(bill.kindLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("inbox_billpay_label_${r.id}"))
         Text(bill.question, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("inbox_billpay_question_${r.id}"))
         if (bill.sameNote.isNotEmpty()) Callout(bill.sameNote, MaterialTheme.colorScheme.tertiary, Modifier.testTag("inbox_billpay_same_${r.id}"))
@@ -605,7 +605,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     androidx.compose.material3.Card(
-        modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = Radius.M,
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -634,7 +634,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
                 OutlinedButton(onClick = { onApart(r.id, r.pairedItemId) }, modifier = Modifier.testTag("inbox_transfer_apart_${r.id}")) { Text("These are separate") }
             }
             TextButton(onClick = { showText = !showText }, modifier = Modifier.testTag("inbox_transfer_show_${r.id}")) { Text(if (showText) "Hide messages" else "Show both messages") }
-            if (showText) Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showText) Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Money out of ${nameOf(r.fromAccountId)}: ${r.body}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_transfer_text_out_${r.id}"))
                 Text("Money into ${nameOf(r.toAccountId)}: ${r.pairedBody}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inbox_transfer_text_in_${r.id}"))
             }
@@ -645,7 +645,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
 /** A note with a coloured edge, for the things that change what the right action is (a likely repeat, a related entry). */
 @Composable
 private fun Callout(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.12f)).padding(12.dp))
+    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = modifier.fillMaxWidth().clip(Radius.S).background(color.copy(alpha = 0.12f)).padding(12.dp))
 }
 
 /** Turning SMS capture on or off, and what it does and does not do, before Android asks for the permission. */
@@ -666,7 +666,7 @@ fun CaptureSettingsScreen(
     // Google Play's rule for the text permission: a prominent disclosure, answered with a tap, before Android's own permission question
     var disclosing by rememberSaveable { mutableStateOf(false) }
     if (disclosing) SmsDisclosure(onAgree = { disclosing = false; onToggle(true) }, onDecline = { disclosing = false })
-    Scaffold(topBar = { AreaTopBar(if (readsTexts) "Capture from texts" else "Capture from payment apps", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader(if (readsTexts) "Capture from texts" else "Capture from payment apps", onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Capture finds payments in the alerts your phone gets and lists them in To review. Nothing is added until you approve it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_intro"))
             CheckupButtons(onOpenCheckup, onOpenSetup)
@@ -734,7 +734,7 @@ internal const val LEARNED_OPEN_MAX = 8
 @Composable
 internal fun Collapsible(title: String, tag: String, startOpen: Boolean = false, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     var open by rememberSaveable(tag) { mutableStateOf(startOpen) }
-    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 14.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 14.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth().clickable { open = !open }.heightIn(min = 48.dp).semantics(mergeDescendants = true) { stateDescription = if (open) "Open" else "Folded" }.testTag("capture_group_$tag"), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, contentDescription = null)
@@ -749,7 +749,7 @@ private fun CaptureSource(
     title: String, summary: String, on: Boolean, onChange: (Boolean) -> Unit, switchTag: String, key: String,
     notes: @Composable () -> Unit, details: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             Switch(checked = on, onCheckedChange = onChange, modifier = Modifier.testTag(switchTag))
@@ -782,7 +782,7 @@ fun CaptureRulesScreen(
     var learnedOpen by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var tested by remember { mutableStateOf<Long?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
-    Scaffold(topBar = { AreaTopBar("Category rules", Area.CAPTURE, Icons.Outlined.Label, onBack, "rules_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Category rules", onBack, "rules_back") }, snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().testTag("rules_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

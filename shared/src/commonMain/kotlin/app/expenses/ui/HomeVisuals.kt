@@ -64,7 +64,7 @@ fun RollingAmount(
     minor: Long,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
-    style: TextStyle = MaterialTheme.typography.displaySmall,
+    style: TextStyle = Number.Hero,
     fontWeight: FontWeight? = null,
     /** Draw whole units ("₹31,822") while the semantics keep the exact [finalText] ("₹31,822.40"): what a screen reader says and what tests read is never rounded. */
     whole: Boolean = false,
@@ -78,10 +78,11 @@ fun RollingAmount(
     val shown = roll.value.roundToLong().takeIf { roll.value != minor.toFloat() }
         ?.let { Money(it, BaseCurrency.current).formatted() }.let { rolled -> (rolled ?: finalText).let { if (whole) it.wholeAmounts() else it } }
     val announced = privately(finalText)
-    Text(
+    // the sign at 60% and the paise quiet (UI S1); the semantics keep the exact text
+    MoneyText(
         shown,
         modifier = modifier.clearAndSetSemantics { text = AnnotatedString(announced) },
-        color = color, style = style, fontWeight = fontWeight,
+        color = color, style = if (fontWeight != null) style.copy(fontWeight = fontWeight) else style,
     )
 }
 

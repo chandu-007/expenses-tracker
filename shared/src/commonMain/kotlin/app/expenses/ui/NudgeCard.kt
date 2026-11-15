@@ -39,9 +39,8 @@ import androidx.compose.ui.unit.dp
 /** The surface every nudge sits on: the app's accent at 10% over the page, 20 dp corners, 16 dp from the screen edge. Carries the test tag of the card. */
 @Composable
 internal fun NudgeSurface(tag: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, onClickLabel: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(20.dp)).background(tint)
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).inlineCard(MaterialTheme.colorScheme.primary)
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .testTag(tag) // before the padding: the node is the whole card
             .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),

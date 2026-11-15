@@ -84,7 +84,7 @@ fun ReportMessageDialog(initialSender: String, initialBody: String, extraRoots: 
                     // Material's Text, not the masking one: this box must show the words that will be copied, kept amounts included
                     androidx.compose.material3.Text(
                         report, style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("report_preview"),
+                        modifier = Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp).testTag("report_preview"),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { note = if (platform.copyText(report)) "Copied. Paste it where you want to send it." else "Copying is not available here: use Send by email." }, modifier = Modifier.testTag("report_copy")) { Text("Copy") }

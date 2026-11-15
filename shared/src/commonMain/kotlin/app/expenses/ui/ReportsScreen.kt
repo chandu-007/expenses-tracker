@@ -95,7 +95,7 @@ fun ReportsScreen(
             dismissButton = { TextButton(onClick = { pickingRange = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
-    Scaffold(bottomBar = { tabBar() }, topBar = { TopAppBar(title = { Text("Reports") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("reports_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(bottomBar = { tabBar() }, topBar = { ScreenHeader("Reports", onBack, "reports_back") }) { padding ->
         // a screen reader hears "Reports loaded" only when the wait was long (over a second): a page that comes at once needs no announcement
         var waitedLong by remember { mutableStateOf(false) }
         androidx.compose.runtime.LaunchedEffect(report == null) { if (report == null) { kotlinx.coroutines.delay(ANNOUNCE_AFTER_MS); waitedLong = true } }
@@ -106,21 +106,18 @@ fun ReportsScreen(
         if (waitedLong) Box(Modifier.size(1.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite; contentDescription = "Reports loaded" }.testTag("reports_loaded_announcement"))
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
-                FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = report.mode == ReportMode.PERIOD, onClick = { onMode(ReportMode.PERIOD) }, label = { Text("By period") }, modifier = Modifier.testTag("mode_period"))
-                    FilterChip(selected = report.mode == ReportMode.YEAR, onClick = { onMode(ReportMode.YEAR) }, label = { Text("By year") }, modifier = Modifier.testTag("mode_year"))
-                    FilterChip(selected = report.mode == ReportMode.FINANCIAL_YEAR, onClick = { onMode(ReportMode.FINANCIAL_YEAR) }, label = { Text("Financial year") }, modifier = Modifier.testTag("mode_fy"))
-                    FilterChip(selected = report.mode == ReportMode.CUSTOM, onClick = { onMode(ReportMode.CUSTOM) }, label = { Text("Any dates") }, modifier = Modifier.testTag("mode_custom"))
-                }
+                SegmentedChoice(
+                    listOf(Segment(ReportMode.PERIOD, "By period", "mode_period"), Segment(ReportMode.YEAR, "By year", "mode_year"), Segment(ReportMode.FINANCIAL_YEAR, "Financial year", "mode_fy"), Segment(ReportMode.CUSTOM, "Any dates", "mode_custom")),
+                    report.mode, onMode, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
                 if (report.mode == ReportMode.CUSTOM) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pickingRange = "from" }, modifier = Modifier.testTag("custom_from")) { Text("From ${dayLabel(report.customStartDay)}") }
                     OutlinedButton(onClick = { pickingRange = "to" }, modifier = Modifier.testTag("custom_to")) { Text("To ${dayLabel(report.customEndDay - 1)}") }
                 }
-                FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(ReportGroup.CATEGORY to "Category", ReportGroup.ACCOUNT to "Account", ReportGroup.TAG to "Tag", ReportGroup.MERCHANT to "Merchant").forEach { (g, label) ->
-                        FilterChip(selected = report.group == g, onClick = { onGroup(g) }, label = { Text(label) }, modifier = Modifier.testTag("group_${g.name}"))
-                    }
-                }
+                SegmentedChoice(
+                    listOf(ReportGroup.CATEGORY to "Category", ReportGroup.ACCOUNT to "Account", ReportGroup.TAG to "Tag", ReportGroup.MERCHANT to "Merchant").map { (g, label) -> Segment(g, label, "group_${g.name}") },
+                    report.group, onGroup, Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(-1) }, modifier = Modifier.testTag("report_prev").semantics { contentDescription = "Earlier" }) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
                     Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).testTag("report_title"), maxLines = 1)
@@ -195,7 +192,7 @@ private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, o
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DrillScreen(drill: DrillUi, onBack: () -> Unit, onOpenEntry: (String) -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text(drill.title, maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("drill_back")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { ScreenHeader(drill.title, onBack, "drill_back") }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 Column(Modifier.padding(16.dp)) {

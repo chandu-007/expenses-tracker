@@ -81,7 +81,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
     val reduce = LocalReduceMotion.current
     val scale by animateFloatAsState(if (pressed && !reduce) 0.97f else 1f, Motion.press(), label = "tilePress")
     Box(
-        modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(if (compact) 18.dp else 22.dp))
+        modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip((if (compact) Radius.S else Radius.M))
             .background(Brush.linearGradient(listOf(Color(d.top), Color(d.bottom)), start = Offset.Zero, end = Offset(900f, 900f)))
             .clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick).testTag(tag)
             // the small chip reads as one line, as it always did; the full tile keeps its parts (balance, status) separate for the accounts page
@@ -107,7 +107,7 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
                 if (!compact) Text(kindLine, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 8.dp)) // 0.9, not 0.8: the small label measured 4.23:1 on the green Cash card (4.5 is the rule)
             }
             Column {
-                if (a.last4 != null) Text("••••  ${a.last4}", color = ink.copy(alpha = 0.85f), style = (if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium).copy(fontFamily = FontFamily.Monospace, letterSpacing = 1.sp))
+                if (a.last4 != null) Text("••••  ${a.last4}", color = ink.copy(alpha = 0.85f), style = (if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium).copy(letterSpacing = 1.sp))
                 if (!compact) a.card?.statusText?.takeIf { it.isNotEmpty() }?.let { Text(it, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall, maxLines = 2, modifier = Modifier.testTag("card_status_${a.name}")) }
                 if (!compact && a.hasCardSummary) a.card?.let { CardSummaryLines(it, Triple("tile_cycle_spend_${a.name}", "tile_limit_use_${a.name}", "tile_due_line_${a.name}"), ink.copy(alpha = 0.9f), Modifier.padding(top = 6.dp)) }
             }
@@ -203,7 +203,7 @@ fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, mo
                 AccountTile(
                     a, compact = false, onClick = { if (expanded) onOpen(a) else expanded = true },
                     stripAmount = if (i == n - 1) 0f else (1f - open.value).coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxWidth().height(heights[i]).offset(y = y).shadow(if (i == 0) 0.dp else 8.dp, RoundedCornerShape(22.dp), clip = false),
+                    modifier = Modifier.fillMaxWidth().height(heights[i]).offset(y = y).shadow(if (i == 0) Elevation.Flat else Elevation.Held, Radius.M, clip = false),
                 )
             }
         }

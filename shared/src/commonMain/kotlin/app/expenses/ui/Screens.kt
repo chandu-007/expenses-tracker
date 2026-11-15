@@ -442,7 +442,7 @@ fun EntryListScreen(
                         Text(
                             line,
                             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
+                            modifier = Modifier.padding(horizontal = 16.dp).clip(Radius.XS).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
                         )
                     }
                     sections.forEach { section ->
@@ -484,10 +484,11 @@ fun EntryListScreen(
                         TextButton(onClick = { onFilterAccount(null) }, modifier = Modifier.testTag("account_filter_clear")) { Text("Show all") }
                     }
                     // narrow the account's list by date; searching inside it is one tap away
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        listOf(Triple(app.expenses.HomePeriod.THIS_MONTH, "This month", "account_period_this"), Triple(app.expenses.HomePeriod.LAST_MONTH, "Last month", "account_period_last"), Triple(app.expenses.HomePeriod.ALL, "All", "account_period_all")).forEach { (p, label, tag) ->
-                            FilterChip(selected = state.homePeriod == p, onClick = { onSetHomePeriod(p) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
-                        }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SegmentedChoice(
+                            listOf(Segment(app.expenses.HomePeriod.THIS_MONTH, "This month", "account_period_this"), Segment(app.expenses.HomePeriod.LAST_MONTH, "Last month", "account_period_last"), Segment(app.expenses.HomePeriod.ALL, "All", "account_period_all")),
+                            state.homePeriod, onSetHomePeriod, Modifier.weight(1f), crowded = WhenCrowded.SCROLL,
+                        )
                         TextButton(onClick = { onSearchAccount(filtered.id) }, modifier = Modifier.testTag("account_search")) { Text("Search") }
                     }
                 }
@@ -554,7 +555,7 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         // Home's headings say the day: the row says the account and the category (a row with neither keeps its date)
         val detail = row.detail.ifEmpty { row.subtitle }
         val amount: @Composable () -> Unit = {
-            Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
+            Text(signedAmount(row.amount, flow), style = Number.Row, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
         }
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
@@ -586,7 +587,7 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadOnlyEntryScreen(title: String, reason: String, onBack: () -> Unit, origin: app.expenses.OriginUi? = null) {
-    Scaffold(topBar = { TopAppBar(title = { Text(title, maxLines = 1) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Back") } }) }) { padding ->
+    Scaffold(topBar = { ScreenHeader(title, onBack, "cancel") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Can't edit this entry here", style = MaterialTheme.typography.titleMedium)
             Text(reason, modifier = Modifier.testTag("read_only_reason"))

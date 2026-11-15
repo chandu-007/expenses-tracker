@@ -69,7 +69,7 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
     val allowed = allowedState.value
     val askPermission = rememberNotificationPermissionRequest { allowedState.refresh() }
 
-    Scaffold(topBar = { AreaTopBar("Notifications", Area.CAPTURE, Icons.Outlined.Notifications, onBack, "notif_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("Notifications", onBack, "notif_back") }) { padding ->
         if (!platform.supportsNotifications) {
             Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp).testTag("notif_unavailable"))
             return@Scaffold

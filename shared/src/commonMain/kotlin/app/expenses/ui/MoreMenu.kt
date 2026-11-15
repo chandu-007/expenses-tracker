@@ -80,7 +80,7 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
                     placeholder = { Text("Search settings and tools") },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                     trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }, modifier = Modifier.testTag("more_search_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear") } },
-                    shape = RoundedCornerShape(28.dp),
+                    shape = Radius.L,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                         focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.Transparent,
@@ -101,7 +101,7 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
                 if (shown.isEmpty()) Text("Nothing matches \"$q\".", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp).testTag("more_nothing"))
                 shown.forEach { s ->
                     Text(s.heading.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, top = 16.dp, bottom = 6.dp))
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
+                    Column(Modifier.fillMaxWidth().standardCard()) {
                         s.rows.forEachIndexed { i, r ->
                             if (i > 0) Box(Modifier.padding(start = 70.dp, end = 14.dp).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)))
                             RowView(r, s.top, s.bottom)
@@ -117,7 +117,7 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
 @Composable
 private fun RowView(r: MoreRow, top: Color, bottom: Color) {
     Row(Modifier.fillMaxWidth().clickable(onClick = r.onClick).padding(horizontal = 14.dp, vertical = 11.dp).testTag(r.tag), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(top, bottom))), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(42.dp).clip(Radius.S).background(Brush.linearGradient(listOf(top, bottom))), contentAlignment = Alignment.Center) {
             Icon(r.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
@@ -131,7 +131,7 @@ private fun RowView(r: MoreRow, top: Color, bottom: Color) {
 
 @Composable
 private fun NudgeCard(n: MoreNudge, modifier: Modifier) {
-    Box(modifier.clip(RoundedCornerShape(22.dp)).background(Brush.linearGradient(listOf(n.top, n.bottom))).clickable(onClick = n.onClick).padding(14.dp).testTag(n.tag)) {
+    Box(modifier.clip(Radius.M).background(Brush.linearGradient(listOf(n.top, n.bottom))).clickable(onClick = n.onClick).padding(14.dp).testTag(n.tag)) {
         Column {
             Icon(n.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
             Text(n.title, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))

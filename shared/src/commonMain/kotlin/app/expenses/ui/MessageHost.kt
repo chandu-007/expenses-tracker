@@ -85,7 +85,7 @@ fun MessageBarHost(
         Box(Modifier.weight(1f).fillMaxWidth().then(if (b != null) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier)) { content() }
         if (b != null) Row(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)
-                .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(8.dp)).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                .background(MaterialTheme.colorScheme.inverseSurface, Radius.XS).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite }.testTag("message_host"),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {

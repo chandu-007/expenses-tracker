@@ -58,7 +58,7 @@ fun GoalsScreen(
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Keep") } },
         )
     } }
-    Scaffold(topBar = { AreaTopBar("Savings goals", Area.MONEY, Icons.Outlined.Flag, onBack, "goals_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("Savings goals", onBack, "goals_back") }) { padding ->
         if (state == null) return@Scaffold
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("goals_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
             item {

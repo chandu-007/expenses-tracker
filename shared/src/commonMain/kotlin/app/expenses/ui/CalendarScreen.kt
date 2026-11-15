@@ -52,7 +52,7 @@ import app.expenses.core.domain.formatted
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Unit, onSelect: (Long) -> Unit, onOpenEntry: (String) -> Unit) {
-    Scaffold(topBar = { AreaTopBar("Calendar", Area.MONEY, Icons.Outlined.CalendarMonth, onBack, "calendar_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Calendar", onBack, "calendar_back") }) { pad ->
         if (state == null) return@Scaffold
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -123,7 +123,7 @@ private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onCli
     val highlight by animateColorAsState(if (selected) picked.copy(alpha = 0.6f) else picked.copy(alpha = 0f), Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "calSelected")
     val description = "${c.day}, " + (if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
     Column(
-        modifier.height(56.dp).padding(1.dp).clip(RoundedCornerShape(6.dp)).background(shade)
+        modifier.height(56.dp).padding(1.dp).clip(Radius.XS).background(shade)
             .background(highlight)
             .clickable(onClick = onClick).padding(2.dp).testTag("cal_day_${c.day}").semantics { contentDescription = privatelyPlain(description, hide) },
         horizontalAlignment = Alignment.CenterHorizontally,

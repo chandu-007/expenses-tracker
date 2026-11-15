@@ -32,4 +32,24 @@ class UiConventionsTest {
             assertTrue(Regex("""(?<![A-Za-z.])Text\(""").containsMatchIn(src), "$name draws its words with Text")
         }
     }
+
+    /** UI S1: a screen takes its corner from the four steps in `Tokens.kt` (8, 14, 20, 28) or the pill; it never draws a radius of its own again (the app had 14). */
+    @Test
+    fun noScreenDrawsACornerRadiusOfItsOwn() {
+        val literal = Regex("""RoundedCornerShape\(\s*[0-9.]+\.dp\s*\)""")
+        val offenders = ui.walkTopDown().filter { it.extension == "kt" && it.name != "Tokens.kt" }.filter { literal.containsMatchIn(it.readText()) }.map { it.name }.toList()
+        assertTrue(offenders.isEmpty(), "these draw a RoundedCornerShape(N.dp) of their own; use Radius.XS / S / M / L from Tokens.kt: $offenders")
+    }
+
+    /** UI S1: one header. Screens call `ScreenHeader`; `TopAppBar` is Material's inside it, in the Add form (redone in S2) and in the Search selection bar. */
+    @Test
+    fun everyScreenOpensWithTheOneHeader() {
+        val allowedToNameTopAppBar = setOf("AreaBar.kt", "EntryForm.kt", "SearchScreen.kt")
+        val files = ui.walkTopDown().filter { it.extension == "kt" }.toList()
+        val old = files.filter { Regex("""\bAreaTopBar\b""").containsMatchIn(it.readText()) }.map { it.name }
+        assertTrue(old.isEmpty(), "AreaTopBar is gone, use ScreenHeader: $old")
+        val own = files.filter { it.name !in allowedToNameTopAppBar && Regex("""(?<![A-Za-z])TopAppBar\(""").containsMatchIn(it.readText()) }.map { it.name }
+        assertTrue(own.isEmpty(), "these build their own TopAppBar instead of ScreenHeader: $own")
+        assertTrue(files.count { Regex("""\bScreenHeader\(""").containsMatchIn(it.readText()) } >= 30, "the screens use ScreenHeader")
+    }
 }

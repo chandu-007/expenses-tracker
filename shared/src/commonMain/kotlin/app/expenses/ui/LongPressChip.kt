@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LongPressChip(label: String, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, leading: androidx.compose.ui.graphics.vector.ImageVector? = null) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = Radius.XS
     Surface(
         shape = shape, color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.defaultMinSize(minHeight = 40.dp).clip(shape)

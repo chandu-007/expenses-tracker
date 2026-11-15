@@ -37,8 +37,8 @@ internal fun CardSummaryLines(c: CardRowUi, tags: Triple<String, String, String>
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(c.cycleText, color = ink, style = MaterialTheme.typography.bodySmall, maxLines = 2, modifier = Modifier.testTag(tags.first))
         if (c.limitText.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.testTag(tags.second + "_group")) {
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(trackColor).testTag(tags.second + "_bar")) {
-                Box(Modifier.fillMaxWidth(c.limitFraction.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(barColor(c.limitFraction)))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).background(trackColor).testTag(tags.second + "_bar")) {
+                Box(Modifier.fillMaxWidth(c.limitFraction.coerceIn(0f, 1f)).fillMaxHeight().clip(Radius.XS).background(barColor(c.limitFraction)))
             }
             Text(c.limitText, color = ink, style = MaterialTheme.typography.bodySmall, maxLines = 2, modifier = Modifier.testTag(tags.second))
         }

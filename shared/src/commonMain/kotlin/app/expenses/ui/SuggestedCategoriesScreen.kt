@@ -47,7 +47,7 @@ fun SuggestedCategoriesScreen(existing: List<CategoryUi>, onAdd: (Map<String, Se
     }
     val count = remember(picks, existing) { CategoryCatalog.plan(domain, picks).size }
     Scaffold(
-        topBar = { AreaTopBar("Suggested categories", Area.MONEY, Icons.Outlined.Label, onBack, "suggested_back") },
+        topBar = { ScreenHeader("Suggested categories", onBack, "suggested_back") },
         bottomBar = {
             Button(
                 onClick = { onAdd(picks) }, enabled = count > 0,

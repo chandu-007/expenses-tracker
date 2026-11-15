@@ -73,7 +73,7 @@ fun SecurityScreen(
     var chosen by rememberSaveable { mutableStateOf(LockTimeout.ONE_MINUTE) }
     val shown = if (settings.enabled) settings.timeout else chosen
 
-    Scaffold(topBar = { AreaTopBar("App lock", Area.PRIVACY, Icons.Outlined.Lock, onBack, "security_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("App lock", onBack, "security_back") }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (!platform.supportsAppLock) Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("lock_unavailable"))
             else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

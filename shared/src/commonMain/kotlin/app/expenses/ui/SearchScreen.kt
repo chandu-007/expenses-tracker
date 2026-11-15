@@ -263,7 +263,7 @@ fun SearchScreen(
                 navigationIcon = { IconButton(onClick = { selected = emptyList() }, modifier = Modifier.testTag("search_selection_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Stop choosing") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             )
-            else TopAppBar(title = { Text("Search") }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp).testTag("search_back")) { Text("Back") } })
+            else ScreenHeader("Search", onBack, "search_back")
         }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             // What stays in place (it does not scroll away): the box and the Filters button, the one row of filters, and the summary line. Under them only the results move.
@@ -274,7 +274,7 @@ fun SearchScreen(
                     placeholder = { Text("Search entries", maxLines = 1) },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                     trailingIcon = { if (text.isNotEmpty()) IconButton(onClick = { changed(t = "", typing = true) }, modifier = Modifier.testTag("search_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the search") } },
-                    shape = RoundedCornerShape(28.dp),
+                    shape = Radius.L,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                         focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = Color.Transparent,
@@ -343,7 +343,7 @@ fun SearchScreen(
                                 MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)
                             }
                             val flow = flowOf(row.kind, row.inflow)
-                            Text(signedAmount(row.amount, flow), style = MaterialTheme.typography.bodyLarge, color = amountColor(flow))
+                            Text(signedAmount(row.amount, flow), style = Number.Row, color = amountColor(flow))
                         }
                     }
                     }
@@ -415,7 +415,7 @@ private fun SearchStart(
                 Text("RECENT SEARCHES", style = MaterialTheme.typography.labelSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 TextButton(onClick = onClearRecent, modifier = Modifier.heightIn(min = 48.dp).testTag("recent_clear")) { Text("Clear") }
             }
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
+            Column(Modifier.fillMaxWidth().standardCard()) {
                 recent.forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { onPick(r) }.padding(start = 14.dp).testTag("recent_$r"), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -436,8 +436,8 @@ private fun SearchStart(
 
 @Composable
 private fun TryCard(title: String, line: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)).clickable(onClick = onClick).padding(14.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
+    Row(Modifier.fillMaxWidth().standardCard().clickable(onClick = onClick).padding(14.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(38.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

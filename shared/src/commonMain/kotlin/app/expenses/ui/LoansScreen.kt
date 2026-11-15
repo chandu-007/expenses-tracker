@@ -70,7 +70,7 @@ fun LoansScreen(
     Scaffold(
         snackbarHost = { androidx.compose.material3.SnackbarHost(undoHost) },
         topBar = {
-            AreaTopBar(selected?.name ?: "Lent and borrowed", Area.MONEY, Icons.Outlined.SwapHoriz, { if (selected != null) onSelect(null) else onBack() }, "loans_back")
+            ScreenHeader(selected?.name ?: "Lent and borrowed", { if (selected != null) onSelect(null) else onBack() }, "loans_back")
         },
     ) { padding ->
         if (selected == null) {
@@ -104,7 +104,7 @@ fun LoansScreen(
                                         Text(listOf(w.whoText, w.dateText).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_who_${w.title}"))
                                         Text(w.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("waiting_detail_${w.title}"))
                                     }
-                                    Text(w.remainingText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(Flow3.IN), modifier = Modifier.testTag("waiting_amount_${w.title}"))
+                                    Text(w.remainingText, style = Number.Row, color = amountColor(Flow3.IN), modifier = Modifier.testTag("waiting_amount_${w.title}"))
                                 }
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(onClick = { gettingBack = w.id }, modifier = Modifier.testTag("waiting_got_${w.title}")) { Text("Got it back") }
@@ -133,7 +133,7 @@ fun LoansScreen(
                             Text(r.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                             Text(r.state, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("loan_state_${r.name}"))
                         }
-                        if (r.minor != 0L) Text(r.amountText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(if (r.minor > 0) Flow3.IN else Flow3.OUT), modifier = Modifier.testTag("loan_amount_${r.name}"))
+                        if (r.minor != 0L) Text(r.amountText, style = Number.Row, color = amountColor(if (r.minor > 0) Flow3.IN else Flow3.OUT), modifier = Modifier.testTag("loan_amount_${r.name}"))
                     }
                   }
                 }
@@ -169,7 +169,7 @@ fun LoansScreen(
 @Composable
 private fun Total(label: String, amount: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     // one thing for a screen reader and a test: "Owed to you ₹5,000.00"
-    Column(modifier.semantics(mergeDescendants = true) {}.clip(RoundedCornerShape(20.dp)).background(color.copy(alpha = 0.10f)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier.semantics(mergeDescendants = true) {}.inlineCard(color).padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(amount, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
     }
@@ -183,7 +183,7 @@ private fun HistoryRow(e: LoanEntryUi, pos: CardPos, onOpen: (String) -> Unit, m
                 Text(if (e.gave) "You gave" else "You got", style = MaterialTheme.typography.bodyLarge)
                 Text(listOf(e.dateText, e.account, e.note).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
+            Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = Number.Row, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
         }
     }
 }

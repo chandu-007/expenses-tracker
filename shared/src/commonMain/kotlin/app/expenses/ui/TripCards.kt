@@ -43,7 +43,7 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
     val fraction = card.budgetPercent?.let { (it / 100f).coerceIn(0f, 1f) } ?: if (card.length > 0) (card.dayNumber.toFloat() / card.length).coerceIn(0f, 1f) else 0f
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
+            .clip(Radius.S).background(MaterialTheme.colorScheme.secondaryContainer)
             .clickable(onClickLabel = "Open the trip summary", role = Role.Button, onClick = onOpen)
             .heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp).testTag("home_trip_card"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -55,7 +55,7 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
         }
         if (!hide) {
             androidx.compose.material3.LinearProgressIndicator(
-                progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).testTag("home_trip_progress"),
+                progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).testTag("home_trip_progress"),
                 color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f),
             )
             if (card.budgetPercent != null && card.budgetText.isNotEmpty()) {

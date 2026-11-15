@@ -51,7 +51,7 @@ internal fun ReportsSkeleton(padding: PaddingValues) {
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(24.dp, 180.dp)) }
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(96.dp, corner = 24.dp)) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(72.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-            listOf(0.4f, 0.65f, 0.5f, 0.8f, 0.55f, 1f).forEach { f -> Box(Modifier.weight(1f).height(72.dp * f).clip(RoundedCornerShape(6.dp)).background(block)) }
+            listOf(0.4f, 0.65f, 0.5f, 0.8f, 0.55f, 1f).forEach { f -> Box(Modifier.weight(1f).height(72.dp * f).clip(Radius.XS).background(block)) }
         }
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(112.dp).clip(CircleShape).background(block))

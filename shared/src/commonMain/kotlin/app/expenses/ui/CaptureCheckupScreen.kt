@@ -118,12 +118,12 @@ fun CaptureCheckupScreen(
     DisposableEffect(Unit) { onDispose { onClearResult() } }
     LaunchedEffect(Unit) { if (initialText.isNotBlank()) onCheck("", initialText) }
     val platform = LocalPlatform.current
-    Scaffold(topBar = { AreaTopBar("Why isn't capture working?", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_checkup_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Why isn't capture working?", onBack, "capture_checkup_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("capture_checkup"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui == null) { Text("Checking…", modifier = Modifier.testTag("capture_checkup_loading")); return@Column }
             val head = ui.headline
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background((if (head.attention == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error).copy(alpha = 0.12f)).padding(14.dp)
+                Modifier.fillMaxWidth().clip(Radius.S).background((if (head.attention == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error).copy(alpha = 0.12f)).padding(14.dp)
                     .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }.testTag("capture_checkup_status"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -172,7 +172,7 @@ private fun CheckRowView(r: CheckRow, onAct: (CheckAct, String) -> Unit, onTick:
         CheckLevel.NOTE -> Icons.Outlined.Info to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag("capture_checkup_row_${r.id}"),
+        Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag("capture_checkup_row_${r.id}"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -211,7 +211,7 @@ private fun CheckResultView(r: MessageCheckUi, onAct: (CheckAct, String) -> Unit
     LaunchedEffect(r) { requester.bringIntoView() }
     val tint = when (r.verdict) { "ignore" -> MaterialTheme.colorScheme.onSurfaceVariant; else -> MaterialTheme.colorScheme.primary }
     Column(
-        Modifier.fillMaxWidth().bringIntoViewRequester(requester).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag("capture_checkup_result"),
+        Modifier.fillMaxWidth().bringIntoViewRequester(requester).clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag("capture_checkup_result"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {

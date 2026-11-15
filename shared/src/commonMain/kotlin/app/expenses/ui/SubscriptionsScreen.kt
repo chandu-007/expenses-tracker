@@ -25,7 +25,7 @@ import app.expenses.SubscriptionsUi
 /** Charges that keep coming (found from your own entries): what each costs, when it is next expected, and what they add up to. */
 @Composable
 fun SubscriptionsScreen(state: SubscriptionsUi?, onBack: () -> Unit, onNotOne: (String) -> Unit, onShowIgnored: () -> Unit, onRepeat: (String) -> Unit = {}) {
-    Scaffold(topBar = { AreaTopBar("Subscriptions", Area.MONEY, Icons.Outlined.Autorenew, onBack, "subscriptions_back") }) { padding ->
+    Scaffold(topBar = { ScreenHeader("Subscriptions", onBack, "subscriptions_back") }) { padding ->
         if (state == null) return@Scaffold
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("subscriptions_list")) {
             item {

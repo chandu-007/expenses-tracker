@@ -60,7 +60,7 @@ fun HomeMoneyTiles(budget: BudgetUi, safe: SafeToSpendUi?, onOpenBudget: () -> U
 fun SafeToSpendTile(ui: SafeToSpendUi, tag: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val tint = if (ui.nothingSpare) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Column(
-        modifier.clip(RoundedCornerShape(20.dp)).background(tint.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface))
+        modifier.inlineCard(tint, strength = 0.08f)
             .clickable(onClickLabel = "Show how safe to spend is worked out", onClick = onClick).semantics(mergeDescendants = true) { }.testTag(tag)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),

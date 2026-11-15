@@ -62,7 +62,7 @@ private const val SHORTCUT_STEPS_IN_STAGE_1 = 3
 /** One stage of the setup: a heading and what to do. */
 @Composable
 private fun SetupStep(number: Int, title: String, tag: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Step $number  $title", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(tag))
         content()
     }
@@ -77,7 +77,7 @@ private fun SetupStep(number: Int, title: String, tag: String, content: @Composa
 @Composable
 internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (String) -> Unit, onOpenRules: () -> Unit, onOpenHealth: () -> Unit, onBack: () -> Unit, onTestMessage: ((String, (PasteOutcome) -> Unit) -> Unit)? = null, skipped: List<app.expenses.SkippedSenderUi> = emptyList(), onTrustSkipped: (String) -> Unit = {}, onOpenCheckup: (() -> Unit)? = null, onOpenSetup: (() -> Unit)? = null) {
     val platform = LocalPlatform.current
-    Scaffold(topBar = { AreaTopBar("Capture from texts", Area.CAPTURE, Icons.Outlined.Sms, onBack, "capture_back") }) { pad ->
+    Scaffold(topBar = { ScreenHeader("Capture from texts", onBack, "capture_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Bank texts on iPhone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("shortcuts_title"))
             CheckupButtons(onOpenCheckup, onOpenSetup)
@@ -85,7 +85,7 @@ internal fun ShortcutsCaptureScreen(settings: CaptureSettingsUi, onHeaders: (Str
             // is it working? the time of the newest text that reached capture (from the capture log, which keeps counts and times only, never the words)
             val received = settings.lastReceivedText?.let { "Last text received $it" } ?: "Nothing received yet"
             val statusColor = if (settings.lastReceivedFresh) amountColor(Flow3.IN) else MaterialTheme.colorScheme.onSurfaceVariant
-            Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(statusColor.copy(alpha = 0.12f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.fillMaxWidth().clip(Radius.S).background(statusColor.copy(alpha = 0.12f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(received, style = MaterialTheme.typography.titleSmall, color = statusColor, modifier = Modifier.testTag("shortcuts_status"))
                 Text(if (settings.lastReceivedFresh) "The automation is reaching this app." else "This turns green when a text has arrived in the last 7 days. A test message counts too.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

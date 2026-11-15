@@ -97,7 +97,7 @@ fun TripSummaryScreen(
     var waited by androidx.compose.runtime.remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(1_000); waited = true }
     Scaffold(
-        topBar = { AreaTopBar(state?.name ?: "Trip", Area.MONEY, Icons.Outlined.Flight, onBack, "trip_summary_back") },
+        topBar = { ScreenHeader(state?.name ?: "Trip", onBack, "trip_summary_back") },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (state == null) {
@@ -106,7 +106,7 @@ fun TripSummaryScreen(
         }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = if (undo != null) 96.dp else 24.dp).testTag("trip_summary"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // the figures
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).inlineCardSolid(MaterialTheme.colorScheme.primaryContainer).padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Spent on this trip", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text(state.totalText, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.testTag("trip_total"))
                 Text("${state.datesText} · ${state.daysText}${if (!state.enabled) " · Off" else ""}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.testTag("trip_days"))
@@ -166,7 +166,7 @@ private fun TripBars(bars: List<TripBarUi>) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("trip_bars"), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
             bars.forEachIndexed { i, b ->
                 Column(
-                    Modifier.width(48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { selected = if (selected == i) -1 else i }
+                    Modifier.width(48.dp).clip(Radius.XS).clickable(role = Role.Button) { selected = if (selected == i) -1 else i }
                         .semantics { contentDescription = privatelyPlain(b.description + if (b.isToday) " (today)" else "", hide) }.testTag("trip_bar_$i"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -196,7 +196,7 @@ private fun TripCategoryRow(c: TripCategoryUi, index: Int) {
             Text(c.amountText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = if (c.negative) MaterialTheme.colorScheme.error else Color.Unspecified)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LinearProgressIndicator(progress = { c.share / 100f }, color = color, modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)))
+            LinearProgressIndicator(progress = { c.share / 100f }, color = color, modifier = Modifier.weight(1f).height(6.dp).clip(Radius.XS))
             Text("${c.share}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

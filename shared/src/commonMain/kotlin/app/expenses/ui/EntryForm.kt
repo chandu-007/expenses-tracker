@@ -283,7 +283,7 @@ fun EntryFormScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize().then(if (start.id != null) Modifier.sharedContainer("entry:${start.id}") else Modifier),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = Radius.SheetTop,
         color = MaterialTheme.colorScheme.surface,
     ) {
     Scaffold(
@@ -291,7 +291,7 @@ fun EntryFormScreen(
         topBar = {
             Column(Modifier.statusBarsPadding()) {
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(width = 40.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)).testTag("sheet_handle"))
+                    Box(Modifier.size(width = 40.dp, height = 4.dp).clip(Radius.XS).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)).testTag("sheet_handle"))
                 }
                 TopAppBar(
                     title = { Text(title) }, navigationIcon = { TextButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Text("Cancel") } },
@@ -352,7 +352,7 @@ fun EntryFormScreen(
                     },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    shape = Radius.M,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { if (it.isFocused) platform.trace("add: amount focused") }.tourSpot("amount").testTag("amount"),
                 )
@@ -404,7 +404,7 @@ fun EntryFormScreen(
                             onClick = { draft = draft.copy(category = if (draft.kind == DraftKind.INCOME && c.id == draft.category) "" else c.id) },
                             label = { Text(displayName(categories, c)) },
                             leadingIcon = { CategoryAvatar(c.name, c.name, size = 24.dp) },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                            shape = Radius.S,
                             modifier = Modifier.testTag("category_chip_${c.id}"),
                         )
                     }
@@ -612,7 +612,7 @@ private fun NumberPad(onKey: (String) -> Unit) {
                     val tag = when (key) { "." -> "pad_dot"; "<" -> "pad_back"; else -> "pad_$key" }
                     Box(
                         Modifier.weight(1f).height(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-                            .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable(interactionSource = source, indication = null) { feel(Feel.TICK); onKey(key) }
                             .semantics { contentDescription = when (key) { "<" -> "Backspace"; "." -> "Decimal point"; else -> key } }
                             .testTag(tag),
