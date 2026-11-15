@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.expenses.ReportMode
 import app.expenses.ReportUi
 
@@ -68,7 +69,7 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heroBackground().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onSpent).testTag("report_spent_card")) {
             Text("Spent", style = MaterialTheme.typography.labelLarge, color = on.copy(alpha = 0.8f))
-            Text(report.spent, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = on, maxLines = 1, autoSize = amountFit(36), modifier = Modifier.testTag("report_spent"))
+            MoneyText(report.spent, style = NumberStyle.Hero, color = on, maxLines = 1, minFontSize = 12.sp, modifier = Modifier.testTag("report_spent"))
             report.comparison?.let { c ->
                 // the words say "more" or "less"; the chip's colour only repeats that, so it is never the sole signal
                 val more = c.contains("more")

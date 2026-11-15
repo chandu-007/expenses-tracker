@@ -75,7 +75,7 @@ fun <T> SegmentedChoice(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    s.label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge, maxLines = 2,
+                    s.label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                     color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),

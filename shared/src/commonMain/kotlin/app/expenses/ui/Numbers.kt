@@ -1,5 +1,6 @@
 package app.expenses.ui
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
@@ -12,7 +13,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.expenses.core.domain.MoneyParts
@@ -66,7 +69,10 @@ fun moneyAnnotated(text: String, paiseColor: Color, smallSign: Boolean = true): 
     }
 }
 
-/** An amount drawn as a hero figure. Hidden amounts (Hide amounts) are masked first and come out as plain text. */
+/**
+ * An amount drawn as a hero figure. Hidden amounts (Hide amounts) are masked first and come out as plain text. With [minFontSize] the figure stays on one line at any text size: it takes the largest size (1 sp steps, from the
+ * style's down to [minFontSize]) at which it fits the width on offer; the sign and the paise are in em, so they follow. (Compose's own auto-size ignores the spans of a text, which is why this does not use it.)
+ */
 @Composable
 fun MoneyText(
     text: String,
@@ -74,10 +80,23 @@ fun MoneyText(
     style: TextStyle = NumberStyle.Hero,
     color: Color = Color.Unspecified,
     maxLines: Int = 1,
-    autoSize: androidx.compose.foundation.text.TextAutoSize? = null,
+    minFontSize: TextUnit = TextUnit.Unspecified,
 ) {
     val shown = privately(text)
     val ink = color.takeOrElse { androidx.compose.material3.LocalContentColor.current }
     val built = remember(shown, ink) { moneyAnnotated(shown, paiseColor = ink.copy(alpha = 0.72f)) }
-    androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style, maxLines = maxLines, autoSize = autoSize)
+    if (minFontSize == TextUnit.Unspecified) {
+        androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style, maxLines = maxLines)
+        return
+    }
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints {
+        val widthPx = constraints.maxWidth
+        val fitted = remember(built, widthPx, style, minFontSize) {
+            var size = style.fontSize.value
+            while (size > minFontSize.value && measurer.measure(built, style.copy(fontSize = size.sp), maxLines = 1, softWrap = false).size.width > widthPx) size -= 1f
+            size.sp
+        }
+        androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style.copy(fontSize = fitted), maxLines = maxLines, softWrap = false)
+    }
 }

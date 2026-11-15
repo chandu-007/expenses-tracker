@@ -144,3 +144,84 @@ The ranges overlap completely (75 to 136, 77 to 145, 103 to 135): the earlier 11
 | | head | 739 | 33.2 | 93.6 | 300 | 74 | 4 | 426, 245, 293, 524, 300 |
 
 Reading it: **the three builds are the same within the spread of one build against itself.** The Add-open p99 that looked like 301 to 800 ms is one long frame: in the pure base alone the five runs give 259, 1234, 113, 1295 and 112 ms, and in head 1184, 87, 1319, 170 and 115 ms. Home to entry (p99 17 to 350 earlier) is 119 / 124 / 134 ms, tab switch 607 / 635 / 657, Search scroll 1301 / 1219 / 1145. Those worst frames are the software-drawn emulator's, not the app's. Candidates considered and not supported by data: F-02 motion tiers, F-05 keyboard handling, F-09 `FilterChip`, the Reports skeleton, the notification code (all in `head`, none moves a figure), and CMP 1.12.2 (byte-identical APK). Two earlier attempts at this table (hosts with load 29 to 36) were discarded as unusable. The emulator image hung twice during the series (an `adb logcat -c` that never returned); the script now has time limits and retries, and the hung runs were repeated, none was dropped.
+
+## UI S1 measured (Slice 114, 2026-11-15): tabular figures, the timing A/B and the frame logger
+
+**The iPhone width test (the 10 minutes asked for first).** A throwaway composable on the iPhone 17 simulator (iOS 26.5) measured text through Compose's `TextMeasurer` at 32 sp (`println` to the console; removed, not committed):
+
+| Text | no feature | `tnum` | `tnum, lnum` |
+|---|---|---|---|
+| 1111 | 179 px | 242 | 242 |
+| 8888 | 246 px | 242 | 242 |
+| 1,11,111 | 314 | 420 | 420 |
+| 8,88,888 | 412 | 420 | 420 |
+| ₹1,11,111.00 | 518 | 630 | 630 |
+| ₹8,88,888.00 | 615 | 630 | 630 |
+
+So the iPhone's system font draws digits of different widths unless asked, and **it honours `fontFeatureSettings = "tnum"`** (every digit 242 px, every lakh figure the same width whatever its digits). Decision D4: system digits with `tnum`; **no bundled digits font** (the owner approved one only if it needed no new Gradle artifact: Compose Resources, `components.resources`, is a new first-party artifact, and the iPhone needs `tnum` to work, which it does). On Android the same test is `UiS1TokensTest` (`1111`, `8888`, `0000` and a lakh figure measure the same in the hero, body, label, title, chart and display styles).
+
+**A global `tnum` on Android was a real regression, found by the A/B and fixed before it was pushed as the final design.** The first S1 build asked for `tnum` on every Material text style (the plain, obvious way). Roboto's digits are tabular already, so it added nothing on Android and cost frames: alternating 3 rounds on the API 34 emulator (cold boot before every run, host 1-minute load 5 to 12 at the starts, swap 18 to 20 GB), builds `head` = the code before S1, `s1d` = S1 with the global `tnum`, `v1` = S1 with the typography left as Material's (diagnostic; made from an earlier S1 state), ms, median of the 3 runs:
+
+| Interaction | build | frames | p50 | p90 | p99 | frames >100 ms | frames >700 ms | p99 of each run |
+|---|---|---|---|---|---|---|---|---|
+| Home fling | head | 224 | 34.7 | 318 | 1291 | 81 | 20 | 2072, 1291, 284 |
+|  | s1d | 211 | 109.4 | 1233 | 1952 | 112 | 30 | 1918, 1952, 2334 |
+|  | v1 | 223 | 33.8 | 401 | 2135 | 79 | 18 | 284, 2135, 3351 |
+| Home to entry | head | 276 | 26.9 | 42 | 80 | 0 | 0 | 122, 80, 18 |
+|  | s1d | 479 | 31.5 | 54 | 191 | 11 | 3 | 134, 206, 191 |
+|  | v1 | 250 | 18.1 | 41 | 122 | 2 | 1 | 417, 122, 88 |
+| Add open | head | 188 | 26.6 | 45 | 121 | 4 | 3 | 121, 1617, 18 |
+|  | s1d | 263 | 32.7 | 51 | 1120 | 5 | 2 | 223, 1695, 1120 |
+|  | v1 | 156 | 18.1 | 46 | 367 | 7 | 1 | 150, 1452, 367 |
+| Add close | head | 106 | 28.0 | 55 | 1119 | 6 | 2 | 1162, 1119, 151 |
+|  | s1d | 249 | 31.6 | 56 | 666 | 6 | 2 | 207, 1122, 666 |
+|  | v1 | 93 | 30.1 | 56 | 1024 | 4 | 1 | 134, 1024, 1951 |
+| Tab switch (4 switches) | head | 454 | 17.2 | 41 | 146 | 9 | 1 | 591, 146, 84 |
+|  | s1d | 606 | 26.0 | 55 | 628 | 32 | 5 | 533, 628, 769 |
+|  | v1 | 514 | 17.4 | 42 | 184 | 14 | 1 | 36, 493, 184 |
+| Search results scroll | head | 206 | 17.5 | 168 | 606 | 37 | 1 | 982, 606, 117 |
+|  | s1d | 184 | 51.1 | 529 | 1067 | 65 | 7 | 4239, 1067, 741 |
+|  | v1 | 207 | 22.3 | 144 | 603 | 44 | 0 | 134, 1250, 603 |
+| Reports tab switches | head | 711 | 17.1 | 32 | 101 | 8 | 0 | 533, 101, 19 |
+|  | s1d | 702 | 18.6 | 74 | 218 | 51 | 1 | 218, 662, 164 |
+|  | v1 | 687 | 17.2 | 36 | 100 | 8 | 0 | 28, 218, 100 |
+
+`s1d` is worse than `head` and `v1` on five of the seven: Home fling p50 109 against 34.7 and 33.8, Reports tab switches 51 frames over 100 ms against 8 and 8, Search scroll p50 51 against 17.5 and 22, tab switch p50 26 against 17.2 and 17.4, Home to entry 11 frames over 100 ms against 0 and 2; `v1` is the same as `head` within the noise. The cause is the feature setting itself (every text of every list row is shaped with an OpenType feature). The keyboard test `UiS0LayoutTest.theKeyboardGoesDownWithTheAddFormNotAfterIt` moved the same way on API 34 (head 2,460 and 2,469 ms, `s1a` 3,416 and 3,465 ms; with the other build between, 1,684 / 2,069 / 3,187: that test is noisy, so it is not used as evidence). **The fix:** `Platform.proportionalDigits` is true on the iPhone only, where `appTypography(allTabular = true)` asks every style for `tnum`; on Android only `NumberStyle.Hero` and `NumberStyle.Chart` carry it (a hero figure is one text, a chart label is drawn once). The same alternating 3 rounds on the final build `s1e` against `head` (ms, median of 3):
+
+| Interaction | build | frames | p50 | p90 | p99 | frames >100 ms | frames >700 ms | p99 of each run |
+|---|---|---|---|---|---|---|---|---|
+| Home fling | head | 203 | 192.3 | 1411 | 2287 | 146 | 50 | 2287, 2364, 334 |
+|  | s1e | 210 | 177.0 | 933 | 1979 | 151 | 46 | 2617, 1979, 501 |
+| Home to entry | head | 578 | 31.3 | 52 | 333 | 14 | 3 | 179, 333, 484 |
+|  | s1e | 519 | 33.1 | 55 | 166 | 16 | 3 | 525, 166, 158 |
+| Add open | head | 297 | 30.9 | 53 | 1167 | 10 | 4 | 1184, 1167, 20 |
+|  | s1e | 292 | 30.1 | 51 | 1317 | 9 | 3 | 1317, 1528, 351 |
+| Add close | head | 265 | 29.5 | 47 | 802 | 4 | 3 | 802, 2147, 103 |
+|  | s1e | 248 | 31.7 | 52 | 267 | 8 | 3 | 267, 1323, 184 |
+| Tab switch (4 switches) | head | 609 | 32.1 | 68 | 616 | 36 | 4 | 616, 716, 51 |
+|  | s1e | 513 | 33.4 | 67 | 624 | 37 | 3 | 851, 624, 37 |
+| Search results scroll | head | 180 | 101.3 | 594 | 1132 | 90 | 10 | 1132, 1352, 117 |
+|  | s1e | 165 | 118.8 | 458 | 701 | 99 | 2 | 1638, 701, 117 |
+| Reports tab switches | head | 754 | 34.1 | 79 | 330 | 57 | 2 | 386, 330, 20 |
+|  | s1e | 698 | 33.7 | 85 | 491 | 62 | 3 | 569, 491, 19 |
+
+On the final build the two are the same within the spread of one build against itself (Home fling p50 192 against 177, p90 1411 against 933; Reports tab switches 57 against 62 frames over 100 ms; tab switch p50 32.1 against 33.4, 36 against 37 frames over 100 ms; Add open 10 against 9, Add close 4 against 8: single long frames). **No regression is claimed away; none is left in these numbers, and no improvement is claimed either** (the emulator draws in software; the host load stayed 5 to 16, `/tmp/s1_ab*/host.txt`).
+
+**Timing gate A/B** (`RefreshBudgetTest` + `PerformanceBudgetTest` + `HomeListTest`, debug builds, API 26 cold-booted with `-wipe-data` and `tools/emulator_setup.sh` before EVERY run, order head, S1, S1, head, head, S1; the S1 build here is `s1d`, before the typography was scoped: these are SQL and storage tests that never draw a Text, so the later UI change cannot move them). Host: load 4 to 23, swap 18 to 20 GB, so the absolute gates fail on the base too (8, 7 and 8 of 16 failed on the base, 8, 9 and 9 on S1; seven of them fail in every run of both builds; `savingOneTransactionStaysUnder50msPhoneBudgetAtP95` failed in 2 of 3 base runs and 3 of 3 S1 runs, and `categoryTotalsForTenYearsStayUnder1sPhoneBudget` in 2 of 3 S1 runs and none of the base runs (231.7 against 257.8 ms with a limit of 250 ms): each is a "phone budget" divided by 4 for the emulator, and none of them draws anything or runs code S1 changed):
+
+| Metric (median of 3 runs) | before S1 (`head` = 9b7dc31 code) | S1 (`s1d`) |
+|---|---|---|
+| Account balances over 100,000 entries (ms) | 120.5 | 122.8 |
+| Category totals, 10 years, 100k rows (ms) | 231.7 | 257.8 |
+| Deep scroll, last page (ms) | 1.9 | 2.5 |
+| Filtered search, no text, whole ledger (ms) | 555.5 | 550.2 |
+| Rebuild after the row is shown, p50 / p95 (ms) | 94.1/217.5 | 92.5/165.1 |
+| Save one expense end to end, p95 of 40 (ms) | 40.6 | 43.0 |
+| Save to new row and total visible at 100k, p50 / p95 (ms) | 23.2/51.0 | 22.9/42.0 |
+| Search, common word + rare short word, whole ledger (ms) | 730.5 | 690.4 |
+| Search, most common merchant (ms) | 14.2 | 16.3 |
+| Search, shared note text (ms) | 42.0 | 40.4 |
+| Tag suggestions, 33k tagged entries (ms) | 7.8 | 10.4 |
+| Whole save path, p50 / p95 (ms) | 16.7/40.6 | 20.1/43.0 |
+
+The two builds are the same within the noise of a swapping host (category totals 231.7 against 257.8 is the largest, the rows of three runs each overlap).
