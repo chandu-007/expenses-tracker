@@ -129,7 +129,7 @@ private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onCli
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(c.day.toString(), style = MaterialTheme.typography.labelMedium, color = if (c.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-        Text(c.spent, fontSize = 10.sp, maxLines = 1, modifier = Modifier.testTag("cal_amount_${c.day}"))
+        Text(c.spent, style = NumberStyle.Chart, maxLines = 1, modifier = Modifier.testTag("cal_amount_${c.day}"))
         if (c.bills > 0) Text("•", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, modifier = Modifier.testTag("cal_bill_dot_${c.day}"))
     }
 }

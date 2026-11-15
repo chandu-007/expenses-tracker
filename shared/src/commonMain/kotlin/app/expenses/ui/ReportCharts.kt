@@ -156,7 +156,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(label, style = NumberStyle.Chart, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(totalText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(horizontal = 18.dp))
             }
         }
@@ -202,7 +202,7 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
                     Box(Modifier.height(96.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
                         Box(Modifier.fillMaxWidth().height((96 * h).dp.coerceAtLeast(if (bar.fraction > 0f) 4.dp else 2.dp)).background(barColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)))
                     }
-                    Text(bar.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, fontWeight = if (bar.isSelected) FontWeight.Bold else null, color = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(bar.label, style = NumberStyle.Chart, maxLines = 1, fontWeight = if (bar.isSelected) FontWeight.Bold else null, color = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

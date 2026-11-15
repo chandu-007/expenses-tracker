@@ -173,7 +173,7 @@ private fun TripBars(bars: List<TripBarUi>) {
                     Box(Modifier.height(112.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
                         Box(Modifier.width(22.dp).fillMaxHeight(b.fraction.coerceIn(0.03f, 1f)).clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)).background(if (b.isFuture) future else if (b.isToday) today else past))
                     }
-                    Text(b.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.heightIn(min = 32.dp).padding(top = 4.dp))
+                    Text(b.label, style = NumberStyle.Chart, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.heightIn(min = 32.dp).padding(top = 4.dp))
                 }
             }
         }

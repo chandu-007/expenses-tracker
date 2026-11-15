@@ -60,10 +60,12 @@ class UiS1TokensTest {
             }
         }
         compose.waitUntil(10_000) { widths.size == 30 }
+        // equal to within the kerning of the font ("11" is a kerned pair in the Roboto of Android 8: 197 against 201 px of 32 sp text); proportional digits differ by a third (the iPhone's font without `tnum`: 179 against 246)
+        fun sameWidth(a: Int?, b: Int?, what: String) = assertTrue(a != null && b != null && kotlin.math.abs(a - b) <= 0.05f * a, "$what: $a px against $b px")
         for (style in listOf("hero", "body", "label", "title", "chart", "display")) {
-            assertEquals(widths["$style:1111"], widths["$style:8888"], "$style: 1111 and 8888 are the same width (tabular figures)")
-            assertEquals(widths["$style:1111"], widths["$style:0000"], "$style: 1111 and 0000 are the same width")
-            assertEquals(widths["$style:1,11,111.00"], widths["$style:8,88,888.00"], "$style: a lakh figure keeps its width whatever the digits")
+            sameWidth(widths["$style:1111"], widths["$style:8888"], "$style: 1111 and 8888 are the same width (tabular figures)")
+            sameWidth(widths["$style:1111"], widths["$style:0000"], "$style: 1111 and 0000 are the same width")
+            sameWidth(widths["$style:1,11,111.00"], widths["$style:8,88,888.00"], "$style: a lakh figure keeps its width whatever the digits")
         }
     }
 
