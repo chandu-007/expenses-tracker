@@ -416,6 +416,12 @@ Every slice: scope, before/after, test plan, performance budget, risks, effort, 
 - **Risks:** biggest test churn of any slice; income/transfer/loan variants multiply layouts; the amount-in-words and keypad focus logic; the "More" sheet must not hide a needed option (split, expect back).
 - **Owner decisions:** none required (N-01 Hinglish tokens need a native speaker).
 
+**S2 status (2026-11-16, Slice 115 in `docs/PHASE2_PROGRESS.md`):**
+- DONE commit `ccf58ee`: U-01 (the compact amount-first form: maths on the pad N-02, six tiles with More, "Usually Food for X", one More chip, a button that says what it saves, S1 sheet and header, a 560 dp column on a wide window), U-02 (the read-only detail with Edit, Duplicate, Delete and Undo, the usual-amount line, the row grows into it from the tapped row only), the shared-container part of U-27 (the list row composable carries the modifier on the tapped row only; Search results scroll measured the same, no improvement claimed), and the carried-over leftovers (Reports skeleton tracks, Reduce motion bars at 0 ms, iPhone previews for every amount notice). An entry kind "Loan" everywhere.
+- NOT BUILT: N-01 the smart "chai 20" field (optional extra); a history line inside the detail (the owner: the button is enough).
+- NOT ACHIEVED: "no frame over 100 ms on Add open" on the emulator: 4 of 25 repetitions have one (6 and 6 for the old form); it is inside the noise, no cheap cause was found (see `docs/PERFORMANCE.md`, "UI S2 measured"). Home to entry has fewer frames (49 against 117), no timing figure more than 1.3 times worse, cold start 302 ms against 297.
+- VERIFIED: host 828 / 221 / 600 (Mac), native 821 / 207, iPhone unit 41 and interop, API 26 full suite (138 classes; the 6 first-pass failures root-caused and fixed in tests, the five classes alone 43 of 43), API 34 (51 classes, 393 tests), release smoke API 34 14 of 14 and API 26 7 + 7 skipped, keeps check PASS, release APK +0.06%. Pictures (before and after, 393/360 dp, light/dark, 100%/200%, 864 dp) in `~/Documents/personal/expenses_builds/ui_s2/`. NOT seen on a phone or an iPhone.
+
 ### S3 · Category identity + rows + neutral amounts (about 9 d)
 - **Scope:** U-03, U-05, U-12, U-27 (if not done).
 - **Before / after:** letter tiles and all-red amounts become glyph tiles in stable colours with neutral amounts and a swipe that shows its action; mock-up `rows_glyph_tiles_before_after_light.png`.
