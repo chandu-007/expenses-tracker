@@ -225,3 +225,42 @@ On the final build the two are the same within the spread of one build against i
 | Whole save path, p50 / p95 (ms) | 16.7/40.6 | 20.1/43.0 |
 
 The two builds are the same within the noise of a swapping host (category totals 231.7 against 257.8 is the largest, the rows of three runs each overlap).
+
+## Release 0.14.0 A/B against 0.13.0 (2026-11-16): timing classes, frame logger, cold start
+
+`base` = `b899430` (0.13.0) + the logger patch `24fd987` (cherry-picked clean, nothing else); `head` = the 0.14.0 product code (`67f6f4e`) with test-only changes on top. Debug builds, run with `adb shell am instrument`. Host: swap 14.2 to 14.8 GB used, 1-minute load 3.6 to 8.6 at each start; the emulator was cold-booted before every run.
+
+**Timing classes** (`RefreshBudgetTest`, `PerformanceBudgetTest`, `HomeListTest`; API 26; order base, head, head, base, base, head = 3 runs each; the budget tests FAIL on both builds on this emulator, 16 run, 5 to 9 failures per run, as in earlier releases: the absolute figures are over the phone budgets). Medians of the 3 runs (min to max), ms:
+
+| `PERF` figure | base | head | ratio |
+|---|---|---|---|
+| save to new row and total visible at 100k, p50 | 20.1 (16.0 to 23.9) | 22.3 (21.5 to 29.8) | 1.11 |
+| rebuild after the row is shown, p50 | 84.3 (61.7 to 102.9) | 104.7 (85.4 to 111.3) | 1.24 |
+| deep scroll, last page | 0.87 (0.73 to 0.91) | 2.12 (0.80 to 2.29) | 2.44 |
+| slowest of 60 saves | 18.0 (13.3 to 22.7) | 30.8 (13.7 to 38.6) | 1.71 |
+| save one expense end to end | 28.1 (26.9 to 36.8) | 36.8 (19.3 to 53.7) | 1.31 |
+| search, most common merchant | 10.5 (6.6 to 12.1) | 13.9 (6.7 to 16.0) | 1.33 |
+| search, shared note text 'upi' | 41.9 (23.6 to 46.0) | 51.7 (23.2 to 53.7) | 1.23 |
+| account balances, whole ledger | 112.6 (84.6 to 124.7) | 104.3 (57.3 to 134.6) | 0.93 |
+| category totals, one year | 11.2 (5.7 to 14.3) | 9.5 (5.8 to 13.4) | 0.84 |
+| category totals, ten years | 227.9 (132.9 to 243.9) | 229.1 (120.5 to 256.4) | 1.01 |
+| filtered search, nothing matches (whole ledger) | 526 (300 to 555) | 599 (276 to 614) | 1.14 |
+| 12 other figures (searches, tag suggestions, split save, recent) | | | 0.27 to 1.20 |
+
+Reading it: seven figures are above 1.2 by median, but in every one the head's range contains the base's (or the base's range reaches inside it), and the same figures swung as much in 0.13.0's own run (deep scroll 0.33 to 1.40 base against 0.97 to 2.54 new there; slowest of 60 saves 23.6 to 32.1). Three runs each cannot show a 1.3 times effect on figures whose spread is 2 times. No consistent regression, none ruled out for deep scroll and slowest-save; both are sub-3 ms and 40 ms figures on a software-drawn emulator.
+
+**Cold start** (`am start -W`, `TotalTime`, 7 starts after each timing run, so on the 100k-entry ledger the tests leave): base median 1,293 ms (964 to 1,744, 21 starts), head 1,459 ms (381 to 2,005, 21 starts). The ranges overlap; the head's spread includes starts of 381 and 700 ms, so the 13% in the medians is within the noise of one build against itself.
+
+**Frame logger, six interactions** (`FrameLogDriveTest`, API 34, 2 runs each, base and head alternating, cold boot before each; swap 14.2 to 14.8 GB, load 5.4 to 8.6 at start; seeded 1,500-entry ledger; median of the 2 runs, ms; "over 100" = frames over 100 ms). Only 2 runs each: the emulator would not start a third after a run ("Running multiple emulators with the same AVD") and the first attempts were lost to that.
+
+| Interaction | base: frames, p50 / p90 / p99, over 100 | head: frames, p50 / p90 / p99, over 100 |
+|---|---|---|
+| Home fling | 209, 183.6 / 1283 / 1994, 146 | 215, 184.1 / 1237 / 1858, 152 |
+| Home to entry | 734, 33.0 / 55.8 / 109, 10 | 623, 33.0 / 54.5 / 136, 11 |
+| Add open | 401, 32.5 / 49.7 / 680, 8 | 328, 33.2 / 57.8 / 1351, 10 |
+| Add close | 262, 29.4 / 47.2 / 564, 4 | 258, 32.5 / 65.7 / 1320, 10 |
+| Reports tab switches | 686, 33.0 / 103.6 / 370, 76 | 736, 33.7 / 100.5 / 399, 76 |
+| the four tab switches | 634, 33.3 / 68.2 / 665, 37 | 652, 33.0 / 73.5 / 708, 39 |
+| Search results scroll | 159, 129.8 / 571 / 761, 104 | 169, 113.2 / 545 / 836, 103 |
+
+The p50 and p90 of every interaction are the same within a few percent (Home fling 183.6 against 184.1, Reports tab switches 33.0 against 33.7). Two cells are worse on the head by more than noise would usually allow: Add open p99 680 against 1,351 ms and Add close p90 47 against 66 ms, p99 564 against 1,320 ms, and "over 100 ms" 4 against 10 for Add close. Each p99 is one long frame (the earlier slices saw the same single frames of 1,184 to 1,319 ms in builds with no S0 or S1 code), but with 2 runs this is NOT proved noise. It is worth a look in S2 (the Add form is rebuilt there anyway).
