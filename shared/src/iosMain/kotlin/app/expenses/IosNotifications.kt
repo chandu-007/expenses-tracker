@@ -3,6 +3,7 @@
 package app.expenses
 
 import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.NoticePrivacy
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
@@ -273,7 +274,7 @@ internal object IosNotificationCenter {
     /** "private": with the lock screen set to hide previews, only the app name and "Open the app to see it" show, as Android's lock-screen version. */
     fun registerCategories() {
         val open = UNNotificationCategory.categoryWithIdentifier(CATEGORY_OPEN, emptyList<Any>(), emptyList<Any>(), "", 0uL)
-        val private = UNNotificationCategory.categoryWithIdentifier(CATEGORY_PRIVATE, emptyList<Any>(), emptyList<Any>(), "Open the app to see it", 0uL)
+        val private = UNNotificationCategory.categoryWithIdentifier(CATEGORY_PRIVATE, emptyList<Any>(), emptyList<Any>(), NoticePrivacy.PUBLIC_TEXT, 0uL)
         // the buttons of Android's notices: a tracked bill can be marked paid or reminded about again, a card notice has Pay now (which opens the app)
         val bill = listOf(
             UNNotificationAction.actionWithIdentifier(ACTION_MARK_PAID, "Mark paid", 0uL),
@@ -284,13 +285,15 @@ internal object IosNotificationCenter {
         center.setNotificationCategories(setOf(
             open, private,
             UNNotificationCategory.categoryWithIdentifier(CATEGORY_BILL, bill, emptyList<Any>(), "", 0uL),
-            UNNotificationCategory.categoryWithIdentifier(CATEGORY_BILL_PRIVATE, bill, emptyList<Any>(), "Open the app to see it", 0uL),
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_BILL_PRIVATE, bill, emptyList<Any>(), NoticePrivacy.PUBLIC_TEXT, 0uL),
             UNNotificationCategory.categoryWithIdentifier(CATEGORY_CARD, card, emptyList<Any>(), "", 0uL),
-            UNNotificationCategory.categoryWithIdentifier(CATEGORY_CARD_PRIVATE, card, emptyList<Any>(), "Open the app to see it", 0uL),
+            UNNotificationCategory.categoryWithIdentifier(CATEGORY_CARD_PRIVATE, card, emptyList<Any>(), NoticePrivacy.PUBLIC_TEXT, 0uL),
         ))
     }
 
+    /** [hidden] or any kind that can carry an amount (a kind with a [NoticePrivacy.publicTitle]) takes the "private" category, so a phone set to hide previews shows [NoticePrivacy.PUBLIC_TEXT], not the amount. */
     private fun content(n: Notice, hidden: Boolean) = UNMutableNotificationContent().apply {
+        val withheld = hidden || NoticePrivacy.publicTitle(n.kind) != null
         setTitle(n.title)
         setBody(n.text)
         // the recap is the quiet kind (Android's low-importance channel)
@@ -309,9 +312,9 @@ internal object IosNotificationCenter {
         }
         if (ref != null) setUserInfo(mapOf("ref" to ref, "kind" to n.kind.name))
         setCategoryIdentifier(when (buttons) {
-            "bill" -> if (hidden) CATEGORY_BILL_PRIVATE else CATEGORY_BILL
-            "card" -> if (hidden) CATEGORY_CARD_PRIVATE else CATEGORY_CARD
-            else -> if (hidden) CATEGORY_PRIVATE else CATEGORY_OPEN
+            "bill" -> if (withheld) CATEGORY_BILL_PRIVATE else CATEGORY_BILL
+            "card" -> if (withheld) CATEGORY_CARD_PRIVATE else CATEGORY_CARD
+            else -> if (withheld) CATEGORY_PRIVATE else CATEGORY_OPEN
         })
     }
 

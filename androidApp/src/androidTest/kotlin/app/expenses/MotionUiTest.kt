@@ -53,15 +53,19 @@ class MotionUiTest {
     private fun spend(id: String, minor: Long, daysAgo: Long = 0) = runBlocking { container.write { it.store.save(Expense(EntryId(id), System.currentTimeMillis() - daysAgo * 86_400_000L - 3_600_000, AccountId("cash"), Money(minor, Currency.INR))) } }
 
     @Test
-    fun theNumberPadIsOffByDefaultTypesIntoTheSameAmountFieldAndTheKeyboardStillWorks() {
+    fun theNumberPadIsUpByDefaultDoesMathsTypesIntoTheSameAmountFieldAndTheKeyboardStillWorks() {
         launch(); tap("add"); waitFor("amount")
-        assertTrue(!has("number_pad"), "the system keyboard is the default")
-        tap("amount_pad_toggle"); waitFor("number_pad")
+        waitFor("number_pad") // a new entry opens with the app's pad, no system keyboard
         for (k in listOf("pad_1", "pad_2", "pad_dot", "pad_5")) tap(k)
         node("amount").assertTextContains("12.5", substring = true)
         tap("pad_back"); node("amount").assertTextContains("12.", substring = true)
+        // maths on the pad: 12.5 + 800, worked out as it is typed, and what is saved is what it comes to
+        for (k in listOf("pad_5", "pad_plus", "pad_8", "pad_0", "pad_0")) tap(k)
+        node("amount").assertTextContains("12.5+800", substring = true)
+        waitFor("amount_result"); node("amount_result").assertTextContains("812.50", substring = true)
         tap("amount_pad_toggle"); gone("number_pad")
         node("amount").performTextClearance(); node("amount").performTextInput("99"); node("amount").assertTextContains("99", substring = true)
+        tap("amount_pad_toggle"); waitFor("number_pad")
     }
 
     @Test

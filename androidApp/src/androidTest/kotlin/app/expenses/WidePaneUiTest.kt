@@ -98,19 +98,25 @@ class WidePaneUiTest {
     fun openingARowShowsTheEditorBesideTheListAndCancelOrBackClearsIt() {
         seed("e1", "Cafe", 10_000)
         launch(1000); waitFor("row_Cafe")
+        // tapping the row shows the entry's detail in the pane; Edit puts the form there
         compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick()
-        waitFor("amount"); waitGone("wide_placeholder")
+        waitFor("detail_edit"); waitGone("wide_placeholder")
+        assertTrue(has("row_Cafe") && has("add"), "the list stays up while the detail is open")
+        compose.onNodeWithTag("detail_edit", useUnmergedTree = true).performClick()
+        waitFor("amount")
         compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00")
         assertTrue(has("row_Cafe") && has("add"), "the list stays up while the entry is open")
         assertTrue(left("amount") >= right("row_Cafe") - 1f, "the editor is to the right of the row, not over it")
 
         compose.onNodeWithTag("cancel").performClick()
-        waitGone("amount"); waitFor("wide_placeholder")
+        waitGone("amount"); waitFor("detail_back") // Cancel in the form comes back to the detail
+        compose.onNodeWithTag("detail_back").performClick()
+        waitFor("wide_placeholder")
 
         compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick()
-        waitFor("amount")
+        waitFor("detail_edit")
         back() // Back closes the entry first, it does not leave the app
-        waitGone("amount"); waitFor("wide_placeholder")
+        waitGone("detail_edit"); waitFor("wide_placeholder")
         assertTrue(has("row_Cafe"), "Home is still there after Back")
     }
 
@@ -118,8 +124,7 @@ class WidePaneUiTest {
     fun savingFromThePaneUpdatesTheListAndEmptiesThePane() {
         seed("e1", "Cafe", 10_000)
         launch(1000); waitFor("row_Cafe")
-        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick()
-        waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         compose.onNodeWithTag("amount").performTextClearance()
         compose.onNodeWithTag("amount").performTextInput("150.5")
         compose.onNodeWithTag("save").performClick()
@@ -133,9 +138,9 @@ class WidePaneUiTest {
         seed("e1", "Cafe", 10_000)
         launch(500); waitFor("row_Cafe")
         assertTrue(!has("wide_placeholder") && !has("wide_detail_pane") && !has("wide_list_pane"), "no panes on a narrow window")
-        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick()
-        waitFor("amount"); waitGone("row_Cafe")
+        compose.openEntryEditor("row_Cafe"); waitGone("row_Cafe")
         compose.onNodeWithTag("cancel").performClick()
+        waitFor("detail_back"); compose.onNodeWithTag("detail_back").performClick()
         waitFor("row_Cafe"); assertTrue(!has("wide_placeholder"))
     }
 
@@ -158,7 +163,7 @@ class WidePaneUiTest {
         assertTrue(has("wide_list_pane"), "the page keeps its place in the frame, so Home keeps its scroll position when More closes")
         compose.closeMore(); waitFor("wide_placeholder"); waitFor("row_Cafe")
         // an open entry keeps its pane while More is showing
-        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick(); waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         compose.openMore()
         assertTrue(has("amount") && has("wide_detail_pane"), "the entry being edited stays beside More")
     }
@@ -191,7 +196,7 @@ class WidePaneUiTest {
         launch(null); waitFor("row_Cafe"); Thread.sleep(800)
         val cover = windowDp(); assertTrue(cover.first in 340..350, "the cover is about 344 dp wide, was ${cover.first}")
         assertTrue(!has("wide_list_pane"), "the cover screen is a phone")
-        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick(); waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("77.5")
         compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
         var before: MainActivity? = null; scenario!!.onActivity { before = it }
@@ -235,7 +240,7 @@ class WidePaneUiTest {
         shell("wm size 2176x1812"); shell("wm density 420")
         shell("settings put secure show_ime_with_hard_keyboard 1")
         launch(null); waitFor("row_Cafe"); Thread.sleep(600); waitWide(true, "unfolded on its side")
-        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performClick(); waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         var shown = false
         fun imeUp() = scenario!!.onActivity { shown = androidx.core.view.ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true }.let { shown }
         // the tap is repeated until the keyboard is up; the emulator's own keyboard app may have crashed on the way (see SystemDialogs) and left its dialog on the window focus: that is closed and the field tapped again
@@ -295,20 +300,20 @@ class WidePaneUiTest {
     fun anEntryOpenedFromSearchIsBesideTheResultsAndTheQueryTheResultsAndTheScrollStayThroughEditSaveAndBack() {
         seedCafes(); launch(1000); waitFor("row_Cafe Roma")
         openSearchAndType("caf")
-        tap("result_e2"); waitFor("amount"); waitGone("wide_placeholder")
+        tap("result_e2"); compose.continueToForm(); waitGone("wide_placeholder")
         compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "250.00")
         assertTrue(left("amount") >= right("result_e1") - 1f, "the editor is to the right of the results, not over them")
         assertEquals("caf", editable("search_text"), "the typed words are still in the box")
         assertTrue(has("result_e1") && has("result_e4") && !has("result_e3"), "the same results are listed")
         // another result replaces the entry (a new editor, not the old one's typed text)
-        tap("result_e1"); compose.waitUntil(10_000) { editable("amount") == "100.00" || runCatching { compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00") }.isSuccess }
+        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" || runCatching { compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00") }.isSuccess }
         // edit and save: the pane empties, the results stay, the line shows the new amount
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("150.5"); tap("save")
         waitGone("amount"); waitFor("wide_placeholder")
         assertEquals("caf", editable("search_text"), "the words survive a save")
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("150.50", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         // Back closes the entry first, the search second
-        tap("result_e4"); waitFor("amount"); back(); waitGone("amount"); waitFor("result_e4")
+        tap("result_e4"); compose.continueToForm(); back(); waitGone("amount"); back(); waitGone("detail_edit"); waitFor("result_e4") // Back leaves the form for the detail, then the detail
         assertEquals("caf", editable("search_text")); back(); waitGone("search_text"); waitFor("wide_placeholder")
     }
 
@@ -322,13 +327,13 @@ class WidePaneUiTest {
         assertTrue(!has("amount") && has("wide_placeholder"), "a tap while choosing ticks, it does not open the entry")
         assertTrue(has("search_selection_clear"), "still choosing")
         tap("search_selection_clear"); waitGone("search_selection_clear")
-        tap("result_e2"); waitFor("amount")
+        tap("result_e2"); compose.continueToForm()
     }
 
     @Test
     fun theFiltersPanelCoversOnlyTheListPaneAndTheOpenEntryStaysInSight() {
         seedCafes(); launch(1000); waitFor("row_Cafe Roma")
-        openSearchAndType("caf"); tap("result_e1"); waitFor("amount")
+        openSearchAndType("caf"); tap("result_e1"); compose.continueToForm()
         tap("search_filters_button"); waitFor("filters_apply")
         assertTrue(right("filters_panel") <= right("wide_list_pane") + 1f, "the panel stays inside the list pane")
         assertTrue(has("amount") && left("amount") >= right("filters_panel") - 1f, "the entry is still beside it, untouched")
@@ -340,8 +345,8 @@ class WidePaneUiTest {
         seedCafes(); launch(500); waitFor("row_Cafe Roma")
         openSearchAndType("caf")
         assertTrue(!has("wide_list_pane") && !has("wide_placeholder"), "one pane")
-        tap("result_e2"); waitFor("amount"); waitGone("result_e1")
-        back(); waitFor("result_e1")
+        tap("result_e2"); compose.continueToForm(); waitGone("result_e1")
+        back(); waitFor("detail_edit"); back(); waitFor("result_e1") // Back leaves the form for the detail, then the detail
         assertEquals("caf", editable("search_text"), "back from an entry brings the words back with the results")
     }
 
@@ -353,7 +358,7 @@ class WidePaneUiTest {
         openSearchAndType("caf")
         tap("search_kind_expense")
         waitFor("search_filters_badge") // the filter is on before anything is folded
-        tap("result_e2"); waitFor("amount")
+        tap("result_e2"); compose.continueToForm()
         waitEditable("amount", "250.00", "the entry opened from the results")
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("77.5")
         waitEditable("amount", "77.5", "typed in the pane")
@@ -371,7 +376,7 @@ class WidePaneUiTest {
         assertEquals("caf", editable("search_text")); assertTrue(has("search_filters_badge"), "the filter is still on")
         // fold, then Back: the results with the words and the filter, no entry
         shell("wm size 904x2316"); waitWide(false, "folded for the last time"); waitFor("amount")
-        back(); waitGone("amount"); waitFor("result_e1")
+        back(); waitGone("amount"); back(); waitFor("result_e1")
         assertEquals("caf", editable("search_text")); assertTrue(has("search_filters_badge"))
     }
 

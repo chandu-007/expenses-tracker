@@ -62,7 +62,7 @@ class TagsUiTest {
     fun tagsAreAddedInTheFormByTypingAndByTappingASuggestionAndAreShownAgainWhenEditing() {
         expense("old", "Old", listOf("Trip"))
         launch(); tap("add"); type("amount", "250")
-        type("tag_input", "#Goa"); tap("tag_add"); waitFor("tag_chip_Goa")
+        compose.openFormMore(); type("tag_input", "#Goa"); tap("tag_add"); waitFor("tag_chip_Goa")
         tap("tag_suggest_Trip"); waitFor("tag_chip_Trip")
         tap("save"); waitFor("add")
         val id = db { it.db.schemaQueries.recentEntries(5).executeAsList().first { r -> r.amount_minor == 25_000L }.id }
@@ -72,7 +72,7 @@ class TagsUiTest {
     @Test
     fun aDuplicateTagIsRefusedWithAReasonAndATagChipTakesItOff() {
         expense("a", "Alpha", listOf("Trip"))
-        launch(); tap("row_Alpha"); waitFor("tag_chip_Trip")
+        launch(); compose.openEntryEditor("row_Alpha"); waitFor("tag_chip_Trip")
         type("tag_input", "trip"); tap("tag_add"); waitFor("tag_problem"); waitText("already on this entry")
         tap("tag_chip_Trip"); waitGone("tag_chip_Trip")
         tap("save"); waitFor("add")
@@ -107,8 +107,8 @@ class TagsUiTest {
     fun aTagChangeShowsInTheEntrysHistory() {
         expense("a", "Alpha", listOf("Trip"))
         Thread.sleep(30)
-        launch(); tap("row_Alpha"); type("tag_input", "Tax"); tap("tag_add"); tap("save"); waitFor("add")
-        tap("row_Alpha"); tap("history_open"); waitFor("history_list")
+        launch(); compose.openEntryEditor("row_Alpha"); type("tag_input", "Tax"); tap("tag_add"); tap("save"); waitFor("add")
+        compose.openEntryEditor("row_Alpha"); tap("history_open"); waitFor("history_list")
         waitText("Tags: Trip → Tax, Trip")
     }
 }

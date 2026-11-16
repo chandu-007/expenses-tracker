@@ -162,6 +162,40 @@ def tap(what, text=None, desc=None, contains=False, cls=None, timeout=20):
     return n
 
 
+def save_node():
+    """The form's big button: "Save" when an entry is edited, "Add" and what it will add ("Add ₹123.00 · Food") when one is added (UI S2). Found among the buttons, so the bar's "Add" is never taken for it."""
+    for n in screen.nodes:
+        if n.text == "Save" or n.text.startswith("Add ₹") or n.text.startswith("Move ₹") or (n.text == "Add" and n.cls.endswith("Button")):
+            return n
+    return None
+
+
+def form_open():
+    screen.refresh()
+    return save_node() is not None
+
+
+def tap_save():
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        screen.refresh()
+        n = save_node()
+        if n:
+            tap_xy(*n.centre)
+            time.sleep(0.8)
+            return n
+        time.sleep(0.5)
+    raise StepFailed(f"the form's button (Save, or Add with the amount) is not on screen. Visible: {screen.texts()[:40]}")
+
+
+def open_form_more():
+    """The form keeps split, another currency, friends, expect back, tags, receipts and the quick entry behind one "More" chip (UI S2): opens it unless it is open."""
+    screen.refresh()
+    if screen.find(text="Fewer options"):
+        return
+    scroll_to_and_tap("the form's More chip", "More")
+
+
 def screen_size():
     m = re.search(r"(\d+)x(\d+)", sh("wm", "size"))
     return int(m.group(1)), int(m.group(2))
@@ -177,7 +211,8 @@ def scroll_to_and_tap(what, text, max_swipes=14):
             screen.refresh()
             n = screen.find(text=text)
             # only when it is well inside the form: a node cut off by the pinned Save bar would be tapped on the bar
-            if n and n.centre[1] < h * 0.58 and n.bounds[3] - n.bounds[1] >= 20 and n.centre[1] > h * 0.12:
+            # the new Add form (UI S2) pins the number pad and Save at the bottom: the bar starts at about 64% of the screen, so a chip scrolled to just above it has its centre at about 62%
+            if n and n.centre[1] < h * 0.63 and n.bounds[3] - n.bounds[1] >= 20 and n.centre[1] > h * 0.12:
                 tap_xy(*n.centre)
                 time.sleep(0.8)
                 return n
@@ -300,18 +335,18 @@ def step_add_expense():
     scroll_to_and_tap("the note field", "Note or merchant")
     sh("input", "text", NOTE)
     time.sleep(0.8)
-    if screen.refresh().find(text="Save") is None:
+    if not form_open():
         sh("input", "keyevent", "KEYCODE_BACK")  # close a keyboard that hides Save
     # On a freshly wiped API 26 emulator the keyboard's "Tap to Google Search" overlay can sit on top of the form and take the tap meant for Save (seen by the S1 run: the smoke then stopped at
     # "see 123 in the list"). Save is tapped, and if the form is still open a moment later (Save still on screen) the overlay is sent away with Back and Save tapped again, up to four times.
     for attempt in range(4):
-        tap("Save", text="Save")
+        tap_save()
         time.sleep(1.5)
-        if screen.refresh().find(text="Save") is None:
+        if not form_open():
             return
         sh("input", "keyevent", "KEYCODE_BACK")
         time.sleep(1)
-        if screen.refresh().find(text="Save") is None:
+        if not form_open():
             raise StepFailed(f"Back after an unanswered Save closed the form (attempt {attempt + 1}); the entry may not be saved. Visible: {screen.texts()[:40]}")
     raise StepFailed(f"Save did not close the form after four taps. Visible: {screen.texts()[:40]}")
 
@@ -361,6 +396,7 @@ def step_bill_photo():
         if time.time() > end:
             raise StepFailed(f"the Add button is not on Home. Visible: {screen.texts()[:40]}")
         time.sleep(1)
+    open_form_more()
     scroll_to_and_tap("'Read items from a photo'", "Read items from a photo")
     scroll_to_and_tap("'Choose a photo'", "Choose a photo")
     pick_in_system_picker()
@@ -478,7 +514,7 @@ def step_save_quick_entry():
     # the bill-photo step can leave its (empty) form open under the keyboard: close it first, or Add would tap the form's own tag button
     for _ in range(3):
         screen.refresh()
-        if screen.find(text="Cancel") and screen.find(text="Save") and screen.find(text="Add") and screen.find(text="Receipts and files"):
+        if screen.find(desc="Cancel") and save_node():
             tap("Cancel", text="Cancel")
             time.sleep(1)
             if screen.refresh().find(text="Discard"):
@@ -499,9 +535,10 @@ def step_save_quick_entry():
     scroll_to_and_tap("the note field", "Note or merchant")
     sh("input", "text", QUICK_NOTE)
     time.sleep(0.6)
-    if screen.refresh().find(text="Save") is None:
+    if not form_open():
         sh("input", "keyevent", "KEYCODE_BACK")  # close a keyboard that hides the checkbox
         time.sleep(0.8)
+    open_form_more()
     # the checkbox beside "Save as a quick entry" (the form has another one, "I expect this back", higher up)
     w, h = screen_size()
     box = None
@@ -518,7 +555,7 @@ def step_save_quick_entry():
         raise StepFailed(f"the 'Save as a quick entry' checkbox never came on screen. Visible: {screen.texts()[:40]}")
     tap_xy(*box.centre)
     time.sleep(0.6)
-    tap("Save", text="Save")
+    tap_save()
     wait_for(f"the quick entry {QUICK_NOTE} on Home", text=f"{QUICK_NOTE} ₹{QUICK_AMOUNT}.00", timeout=20)
 
 

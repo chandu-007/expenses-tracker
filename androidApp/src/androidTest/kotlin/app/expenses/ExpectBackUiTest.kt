@@ -62,7 +62,7 @@ class ExpectBackUiTest {
     fun theToggleOnTheFormKeepsWhoFromAndHowMuchAndTheExpenseShowsInTheWaitingList() {
         launch()
         tap("add"); type("amount", "1200"); type("note", "Team lunch")
-        tap("expect_toggle"); waitFor("expect_note")
+        compose.openFormMore(); tap("expect_toggle"); waitFor("expect_note")
         node("expect_note").assertTextContains("still counts as spending", substring = true) // the reports say so, in the form
         type("expect_from", "the office"); type("expect_amount", "800")
         tap("save"); waitFor("add")
@@ -85,7 +85,7 @@ class ExpectBackUiTest {
         launch()
         // edit: the toggle is on; choose Asha and save
         waitFor("add")
-        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }
+        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }; compose.continueToForm()
         waitFor("expect_toggle"); node("expect_toggle").assertIsSelected()
         tap("expect_person_Asha"); tap("save"); waitGone("expect_toggle")
         compose.waitUntil(10_000) { runBlocking { container.write { it.expects.get(id)?.personId } } != null }
@@ -94,7 +94,7 @@ class ExpectBackUiTest {
         node("waiting_who_Cab").assertTextContains("from Asha", substring = true)
         tap("loans_back"); compose.closeMore(); waitFor("add")
         // edit again and switch it off: it is forgotten and the chip goes
-        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }
+        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }; compose.continueToForm()
         waitFor("expect_toggle"); tap("expect_toggle"); tap("save"); waitGone("expect_toggle")
         compose.waitUntil(10_000) { runBlocking { container.write { it.expects.get(id) } } == null }
         waitGone("waiting_banner")
@@ -159,7 +159,7 @@ class ExpectBackUiTest {
     fun aSharedExpenseCannotBeExpectedBackAndTheToggleIsNotOfferedOnIncome() {
         runBlocking { container.write { it.people.create("Asha") } }
         launch()
-        tap("add"); type("amount", "900"); waitFor("expect_toggle")
+        tap("add"); type("amount", "900"); compose.openFormMore(); waitFor("expect_toggle")
         tap("split_toggle"); tap("split_person_Asha")
         compose.waitUntil(10_000) { !has("expect_toggle") } // sharing hides it
         tap("split_toggle") // and takes it back

@@ -53,7 +53,7 @@ class QuickEntryTest {
         compose.onNodeWithText(account).performClick()
         compose.onNodeWithTag("note").performTextInput(note)
         // The form scrolls; with the keyboard open the checkbox can be below the visible area.
-        if (asTemplate) compose.onNodeWithTag("save_template").performScrollTo().performClick()
+        if (asTemplate) { compose.openFormMore(); compose.onNodeWithTag("save_template").performScrollTo().performClick() }
         compose.onNodeWithTag("save").performClick()
     }
 

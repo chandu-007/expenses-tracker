@@ -64,17 +64,23 @@ class OriginUiTest {
         assertEquals(2, rows.size)
 
         val fromText = rows.first { it.merchant == "shop@okhdfc" }
-        tap("row_${fromText.merchant}"); waitFor("entry_origin")
+        // the detail names where it was read from, and "Show text" opens the words
+        compose.openEntryDetail("row_${fromText.merchant}"); waitFor("detail_origin_card")
+        compose.onNodeWithTag("detail_origin_kind", useUnmergedTree = true).assertTextContains("Text message from AX-HDFCBK-S")
+        assertFalse(has("entry_origin_text"), "the words are behind Show text")
+        tap("entry_origin_show"); waitFor("entry_origin")
         compose.onNodeWithTag("entry_origin_title", useUnmergedTree = true).assertTextContains("Where this came from")
         compose.onNodeWithTag("entry_origin_kind", useUnmergedTree = true).assertTextContains("Text message from AX-HDFCBK-S")
         compose.onNodeWithTag("entry_origin_text", useUnmergedTree = true).assertTextContains("UPI Ref 628374659283", substring = true)
-        tap("cancel"); waitFor("add")
+        // the form (Edit) still carries the section
+        tap("detail_edit"); waitFor("amount"); waitFor("entry_origin")
+        tap("cancel"); waitFor("detail_back"); tap("detail_back"); waitFor("add")
 
         val fromNotification = rows.first { it.merchant == "tea@okaxis" }
-        tap("row_${fromNotification.merchant}"); waitFor("entry_origin")
+        compose.openEntryDetail("row_${fromNotification.merchant}"); waitFor("detail_origin_card"); tap("entry_origin_show"); waitFor("entry_origin")
         compose.onNodeWithTag("entry_origin_kind", useUnmergedTree = true).assertTextContains("Notification from PhonePe")
         compose.onNodeWithTag("entry_origin_text", useUnmergedTree = true).assertTextContains("UPI Ref 628374650001", substring = true)
-        tap("cancel"); waitFor("add")
+        tap("detail_back"); waitFor("add")
 
         // the words are kept with the entry, in the database, after the inbox has forgotten them
         val origin = runBlocking { container.write { it.origins.get(fromText.id) } }
@@ -85,8 +91,9 @@ class OriginUiTest {
             val account = ok.db.schemaQueries.allAccounts().executeAsList().first { it.archived == 0L }.id
             ok.store.save(app.expenses.core.domain.ledger.Expense(app.expenses.core.domain.ledger.EntryId("typed1"), System.currentTimeMillis(), app.expenses.core.domain.ledger.AccountId(account), app.expenses.core.domain.Money(4_000, app.expenses.core.domain.BaseCurrency.current)), app.expenses.core.storage.EntryDetails(merchant = "Handtyped"))
         } }
-        launch(); tap("row_Handtyped"); waitFor("save")
+        launch(); compose.openEntryEditor("row_Handtyped"); waitFor("save")
         assertFalse(has("entry_origin"))
+        tap("cancel"); waitFor("detail_back"); assertFalse(has("detail_origin_card"), "an entry typed by hand has no origin card")
         assertEquals(null, runBlocking { container.write { it.origins.get("typed1") } })
     }
 }

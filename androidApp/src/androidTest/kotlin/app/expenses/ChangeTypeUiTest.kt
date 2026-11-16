@@ -79,7 +79,7 @@ class ChangeTypeUiTest {
     private fun balance(id: String) = db { ok -> ok.store.balances().getValue(AccountId(id)).minorUnits }
     private fun spendTotal() = db { ok -> ok.store.spendByCategory(inr).values.sumOf { it.minorUnits } }
     private fun waitKinds(vararg k: String) = dumpOnTimeout { compose.waitUntil(10_000) { kinds() == k.toList() } }
-    private fun edit(id: String) { launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }; waitFor("kind_TRANSFER") }
+    private fun edit(id: String) { launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor(id) }; compose.continueToForm(); waitFor("kind_TRANSFER") }
     private val amount = 200_000L
     private val long get() = System.currentTimeMillis() - 1_000
 
@@ -162,7 +162,7 @@ class ChangeTypeUiTest {
         assertEquals(1_200_000L, balance("bank")); assertEquals(0L, spendTotal())
         edit("i1"); tap("kind_EXPENSE"); waitFor("kind_change_note")
         node("kind_change_note").assertTextContains("Saving changes this income into an expense.", substring = true)
-        assertFalse(has("expect_toggle"), "'I expect this back' is for an expense that already exists")
+        compose.openFormMore(); assertFalse(has("expect_toggle"), "'I expect this back' is for an expense that already exists")
         tap("category_chip_Food")
         tap("save"); waitFor("add"); waitKinds("EXPENSE")
         assertEquals(amount, spendTotal()); assertEquals(800_000L, balance("bank")); assertEquals("Acme", liveRows().single().merchant); assertEquals("oct", liveRows().single().note)
@@ -217,7 +217,7 @@ class ChangeTypeUiTest {
         db { ok -> ok.store.save(Expense(EntryId("sp"), long - 5_000, AccountId("bank"), Money(amount, inr), listOf(CategorySplit(CategoryId("Food"), Money(150_000, inr)), CategorySplit(CategoryId("Bills"), Money(50_000, inr)))), EntryDetails(merchant = "Mall")) }
         edit("e1"); tap("kind_INCOME"); tap("kind_EXPENSE"); waitGone("kind_change_note")
         node("category_chip_Food").assertIsSelected()
-        tap("cancel"); waitFor("add")
+        tap("cancel"); tap("detail_back"); waitFor("add")
         edit("sp"); tap("kind_TRANSFER"); waitFor("kind_change_note")
         node("kind_change_note").assertTextContains("The category split will be removed.", substring = true)
         tap("kind_EXPENSE"); waitGone("kind_change_note"); waitFor("split_amount_0")
@@ -233,7 +233,7 @@ class ChangeTypeUiTest {
         edit("e1"); node("kind_EXPENSE").assertIsSelected(); assertFalse(has("kind_change_note"))
         tap("kind_INCOME"); waitFor("kind_change_note"); node("kind_change_note").assertTextContains("Saving changes this expense into income.", substring = true)
         tap("kind_EXPENSE"); waitGone("kind_change_note")
-        tap("cancel"); waitFor("add")
+        tap("cancel"); tap("detail_back"); waitFor("add")
         tap("add"); waitFor("kind_EXPENSE")
         assertTrue(has("kind_INCOME") && has("kind_TRANSFER") && has("kind_LOAN")); assertFalse(has("kind_REFUND")); assertFalse(has("kind_change_note"))
         tap("kind_TRANSFER"); assertFalse(has("kind_change_note")); assertFalse(has("kind_change_problem"))
@@ -265,10 +265,10 @@ class ChangeTypeUiTest {
             ok.store.save(Refund(EntryId("r1"), long, AccountId("bank"), Money(10_000, inr), EntryId("e1")), EntryDetails(merchant = "Got a refund"))
             ok.store.save(Settlement(EntryId("l1"), long - 9_000, PersonId(pid), AccountId("bank"), Money(50_000, inr), SettlementDirection.PAID_TO_PERSON))
         }
-        launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("r1") }
+        launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("r1") }; compose.continueToForm()
         waitFor("amount"); assertFalse(has("kind_TRANSFER") || has("kind_EXPENSE") || has("kind_INCOME") || has("kind_REFUND"))
         tap("cancel"); waitFor("add")
-        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("l1") }
+        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("l1") }; compose.continueToForm()
         waitFor("loan_gave"); assertFalse(has("kind_TRANSFER") || has("kind_EXPENSE") || has("kind_INCOME") || has("kind_LOAN"))
     }
 
@@ -276,7 +276,7 @@ class ChangeTypeUiTest {
     fun anExpenseWithRefundsStaysReadOnlyWithNoChips() {
         accounts(); seedExpense()
         db { ok -> ok.store.save(Refund(EntryId("r1"), long, AccountId("bank"), Money(10_000, inr), EntryId("e1"))) }
-        launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("e1") }
+        launch(); scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("e1") }; compose.continueToForm()
         waitFor("read_only_reason"); assertFalse(has("kind_TRANSFER"))
     }
 

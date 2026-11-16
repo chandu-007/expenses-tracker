@@ -136,6 +136,37 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         return f.copy(suggestion = SuggestedCategoryUi(advice.categoryId, name, advice.note, advice.certainty == app.expenses.core.domain.Certainty.SURE))
     }
 
+    /**
+     * What earlier expenses that read like [note] were put under (UI S2: "Usually Food for Chai"): the leading category when at least two agree and more agree than not, else null.
+     * An indexed words lookup of the 300 newest like it, never a scan of the ledger; nothing is written.
+     */
+    fun usualCategory(note: String): app.expenses.ui.UsualCategoryUi? {
+        val label = note.trim()
+        val words = app.expenses.core.domain.SimilarEntries.searchWords(label)
+        if (words.isEmpty()) return null
+        val candidates = ok.db.schemaQueries.similarCandidates("EXPENSE", words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
+            .map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
+        val profile = app.expenses.core.domain.SimilarEntries.profile(label, candidates, ok.captureRules.aliases()) ?: return null
+        val top = profile.top?.takeIf { it.isNotEmpty() } ?: return null
+        return if (profile.agree >= 2 && profile.agree > profile.other) app.expenses.ui.UsualCategoryUi(top, profile.agree) else null
+    }
+
+    /**
+     * How an expense's amount compares with what the person usually pays the same payee, for its detail (UI S2: "₹120 above your usual at Starbucks"): the difference in minor units (above is positive) and the
+     * payee as the person wrote it, or null when there is nothing worth saying ([app.expenses.core.domain.UsualAmount]). An indexed words lookup of the 300 newest like it; nothing is written.
+     */
+    fun usualAmount(entryId: String?, note: String, amountMinor: Long): app.expenses.ui.UsualAmountUi? {
+        val label = note.trim()
+        val words = app.expenses.core.domain.SimilarEntries.searchWords(label)
+        if (words.isEmpty() || amountMinor <= 0) return null
+        val currency = BaseCurrency.current
+        val candidates = ok.db.schemaQueries.similarCandidates("EXPENSE", words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
+            .map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
+        val usual = app.expenses.core.domain.UsualAmount.usual(label, entryId, currency.code, candidates, ok.captureRules.aliases()) ?: return null
+        val diff = app.expenses.core.domain.UsualAmount.difference(amountMinor, usual, currency.minorUnitDigits) ?: return null
+        return app.expenses.ui.UsualAmountUi(diff, label)
+    }
+
     /** The origin of [entryId] as the screen shows it, or null for an entry typed by hand. */
     fun originUi(entryId: String): OriginUi? {
         val o = ok.origins.get(entryId) ?: return null

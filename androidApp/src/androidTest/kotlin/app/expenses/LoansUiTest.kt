@@ -109,7 +109,7 @@ class LoansUiTest {
         waitFor("person_chip_Ravi"); tap("account_chip_Bank"); tap("save"); waitFor("add")
         openLoans(); tap("loan_row_Ravi"); waitFor("loan_balance")
         val id = entries().single().id
-        tap("loan_history_$id"); type("amount", "1200"); tap("save")
+        tap("loan_history_$id"); compose.continueToForm(); type("amount", "1200"); tap("save")
         waitText("loan_balance", "₹1,200.00")
         assertEquals(listOf(120_000L), entries().map { it.amount_minor }, "edited in place, not added")
     }

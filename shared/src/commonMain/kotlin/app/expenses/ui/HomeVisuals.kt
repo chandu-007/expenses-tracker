@@ -206,8 +206,8 @@ private fun budgetStateColor(state: BudgetState): Color = when (state) {
 @Composable
 fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
     val reduce = LocalReduceMotion.current
-    val progress by animateFloatAsState((line.percent / 100f).coerceIn(0f, 1f), Motion.tween(reduce, Motion.STANDARD), label = "budget_fill")
-    val color by animateColorAsState(budgetStateColor(line.state), Motion.tween(reduce, Motion.STANDARD), label = "budget_color")
+    val progress by animateFloatAsState((line.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_fill")
+    val color by animateColorAsState(budgetStateColor(line.state), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_color")
     LinearProgressIndicator(progress = { progress }, color = color, modifier = modifier.fillMaxWidth())
 }
 

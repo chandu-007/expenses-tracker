@@ -122,12 +122,12 @@ class Release013FixesUiTest {
     fun onAWideWindowAddFromTheBarOrHomeOpensTheAddFormNotTheOldEntry() {
         seedCafes()
         launch(1000); openSearchAndType("caf")
-        tap("result_e1"); waitFor("amount"); compose.waitUntil(10_000) { editable("amount") == "100.00" }
+        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" }
         compose.onNodeWithTag("search_text").performImeAction() // the bar goes while the keyboard is up
         tap("bar_add"); compose.waitUntil(10_000) { has("amount") && editable("amount").isEmpty() }
         tap("cancel"); waitFor("add")
         // Home: the entry beside the list, then Add
-        tap("row_Cafe"); compose.waitUntil(10_000) { has("amount") && editable("amount") == "100.00" }
+        compose.openEntryEditor("row_Cafe"); compose.waitUntil(10_000) { has("amount") && editable("amount") == "100.00" }
         tap("add"); compose.waitUntil(10_000) { has("amount") && editable("amount").isEmpty() }
     }
 
@@ -135,7 +135,7 @@ class Release013FixesUiTest {
     fun onAWideWindowABulkChangeToTheOpenEntryClosesItsFormSoItsSaveCannotUndoTheChange() {
         seedCafes()
         launch(1000); openSearchAndType("caf")
-        tap("result_e1"); waitFor("amount"); compose.waitUntil(10_000) { editable("amount") == "100.00" }
+        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" }
         compose.onNodeWithTag("result_e2", useUnmergedTree = true).performTouchInput { longClick() }; waitFor("search_selection_clear")
         tap("result_e1")
         tap("bulk_category"); tap("bulk_category_option_Bills")
@@ -147,11 +147,12 @@ class Release013FixesUiTest {
     fun onAWideWindowBackClosesTheFiltersPanelBeforeTheEntryBesideIt() {
         seedCafes()
         launch(1000); openSearchAndType("caf")
-        tap("result_e1"); waitFor("amount"); compose.waitUntil(10_000) { editable("amount") == "100.00" }
+        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" }
         tap("search_filters_button"); waitFor("filters_apply")
         back(); waitGone("filters_apply")
         assertTrue(has("amount") && editable("amount") == "100.00", "the first Back closed only the Filters panel; the entry is still open")
-        back(); waitGone("amount"); waitFor("wide_placeholder")
+        back(); waitGone("amount") // Back from the form shows the entry's detail
+        back(); waitGone("detail_edit"); waitFor("wide_placeholder")
     }
 
     // ---- one pane ----
@@ -162,8 +163,8 @@ class Release013FixesUiTest {
         launch(); tap("open_search"); waitFor("search_text")
         compose.onNodeWithTag("search_text").performTextInput("cab"); waitFor("result_m30")
         compose.onNodeWithTag("search_results").performScrollToNode(hasTestTag("result_m5")); waitFor("result_m5")
-        tap("result_m5"); waitFor("amount"); waitGone("result_m5")
-        tap("cancel"); waitFor("search_text")
+        tap("result_m5"); compose.continueToForm(); waitGone("result_m5")
+        tap("cancel"); tap("detail_back"); waitFor("search_text")
         // the page was taken down and put back: the words are in the box, and the list is where it was (the newest rows are not on the screen) instead of blanked by a second search and put at the top
         compose.waitUntil(10_000) { has("result_m5") }
         assertTrue(has("result_m5") && !has("result_m30"), "the list is still scrolled down to m5")

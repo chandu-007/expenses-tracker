@@ -530,6 +530,7 @@ fun EntryListScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDelete: (RowUi) -> Unit, selecting: Boolean, isSelected: Boolean, onLongPress: () -> Unit, onToggle: () -> Unit, fresh: Boolean = false, modifier: Modifier = Modifier) {
+    val tappedEntry = LocalTappedEntry.current
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
@@ -548,7 +549,7 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
                 Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
             }
         },
-        modifier = modifier.entryCardClip(pos).sharedContainer("entry:${row.id}").testTag("row_${row.title}"),
+        modifier = modifier.entryCardClip(pos).tappedContainer(row.id).testTag("row_${row.title}"),
     ) {
         val large = isLargeText()
         val flow = flowOf(row.kind, row.inflow)
@@ -560,7 +561,7 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
-                .combinedClickable(onClick = { if (selecting) onToggle() else onOpen(row) }, onLongClick = onLongPress)
+                .combinedClickable(onClick = { if (selecting) onToggle() else { tappedEntry?.id = row.id; onOpen(row) } }, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
             verticalAlignment = Alignment.CenterVertically,
         ) {

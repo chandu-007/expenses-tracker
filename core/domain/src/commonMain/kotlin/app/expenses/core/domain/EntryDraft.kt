@@ -15,7 +15,7 @@ import app.expenses.core.domain.ledger.Share
 import app.expenses.core.domain.ledger.SettlementDirection
 import app.expenses.core.domain.ledger.Transfer
 
-enum class DraftKind(val label: String) { EXPENSE("Expense"), INCOME("Income"), TRANSFER("Transfer"), REFUND("Refund"), LOAN("Lent or borrowed") }
+enum class DraftKind(val label: String) { EXPENSE("Expense"), INCOME("Income"), TRANSFER("Transfer"), REFUND("Refund"), LOAN("Loan") }
 
 /** One part of a split expense, as typed. */
 data class SplitDraft(val category: String, val amountText: String)

@@ -113,8 +113,8 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
     LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween(Motion.CHART)) }
     val track = MaterialTheme.colorScheme.surfaceVariant
     var picked by remember { mutableStateOf<String?>(null) }
-    val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "pull") }
-    val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.55f else 1f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "dim") }
+    val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tweenOrSnap(reduce, Motion.CHIP, Motion.EaseOut), label = "pull") }
+    val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.55f else 1f, Motion.tweenOrSnap(reduce, Motion.CHIP, Motion.EaseOut), label = "dim") }
     fun toggle(key: String) { picked = if (picked == key) null else key }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("breakdown"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(
@@ -191,10 +191,10 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
         Text(if (report.mode == ReportMode.PERIOD) "Last six periods" else "Spending by month", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             report.trend.forEachIndexed { i, bar ->
-                val h by animateFloatAsState(bar.fraction, Motion.tween(reduce, Motion.BAR, androidx.compose.animation.core.FastOutSlowInEasing), label = "bar")
+                val h by animateFloatAsState(bar.fraction, Motion.tweenOrSnap(reduce, Motion.BAR, androidx.compose.animation.core.FastOutSlowInEasing), label = "bar")
                 val source = remember { MutableInteractionSource() }
                 val pressed by source.collectIsPressedAsState()
-                val lift by animateFloatAsState(if (pressed) 1f else 0f, Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "barPress")
+                val lift by animateFloatAsState(if (pressed) 1f else 0f, Motion.tweenOrSnap(reduce, Motion.CHIP, Motion.EaseOut), label = "barPress")
                 val barColor = if (bar.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.30f + 0.40f * lift)
                 Column(
                     Modifier.weight(1f).clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onBar(bar.startDay, bar.endDay) }.testTag("trend_bar_$i").semantics { contentDescription = privatelyPlain("${bar.label}: ${bar.amount}", hide) },

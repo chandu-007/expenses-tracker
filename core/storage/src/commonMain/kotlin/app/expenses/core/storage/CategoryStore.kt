@@ -40,6 +40,13 @@ class CategoryStore(
     /** Number of things referring to the category (splits, income, quick entries), including deleted entries. */
     fun usage(id: String): Long = q.categoryUsage(id).executeAsOne()
 
+    /** How many entries each category is on (UI S2: the entry form shows the most used as tiles). Two grouped reads of the category indexes; no row of an entry is read. */
+    fun useCounts(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        q.categoryUseCounts().executeAsList().forEach { r -> r.id?.let { out[it] = (out[it] ?: 0L) + r.uses } }
+        return out
+    }
+
     /** A subcategory always has its parent's kind; a top-level category has the [kind] asked for. */
     fun create(name: String, parentId: String? = null, colorArgb: Long? = null, kind: CategoryKind = CategoryKind.EXPENSE): Category = db.transactionWithResult {
         val all = list()

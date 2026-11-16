@@ -90,8 +90,8 @@ class CategoriesTest {
      */
     private fun openAddForm() {
         compose.waitUntil(30_000) {
-            if (compose.onAllNodes(hasTestTag("new_category_chip")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("add").performClick() }
-            compose.onAllNodes(hasTestTag("new_category_chip")).fetchSemanticsNodes().isNotEmpty()
+            if (compose.onAllNodes(hasTestTag("more_categories")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("add").performClick() }
+            compose.onAllNodes(hasTestTag("more_categories")).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -103,7 +103,11 @@ class CategoriesTest {
     private fun openNewCategoryDialog() {
         FailureShot.around("openNewCategoryDialog") {
             compose.waitUntil(30_000) {
-                if (compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("new_category_chip").performScrollTo().performClick() }
+                // "+ New category" is in the list behind "More" (UI S2)
+                if (compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isEmpty()) {
+                    if (compose.onAllNodes(hasTestTag("new_category_chip")).fetchSemanticsNodes().isNotEmpty()) runCatching { compose.onNodeWithTag("new_category_chip").performClick() }
+                    else runCatching { compose.onNodeWithTag("more_categories").performScrollTo().performClick() }
+                }
                 compose.onAllNodes(hasTestTag("cat_name")).fetchSemanticsNodes().isNotEmpty()
             }
         }
@@ -181,12 +185,16 @@ class CategoriesTest {
         compose.onNodeWithTag("cancel").performClick()
         // the Add form slides away over Home, and both are on screen while it does: a tap on the row in that moment lands on the leaving form (seen on Android 14, where the list was reached first).
         // Wait for the form to be gone and the screen to settle before touching the row.
-        waitGone("new_category_chip"); waitFor("add"); compose.waitForIdle()
+        waitGone("more_categories"); waitFor("add"); compose.waitForIdle()
         // the row's tap is repeated until the editor is there: on a slow emulator Home is still settling after the form closed and the tap is lost (seen again in a long API 34 batch, with a screenshot of
         // Home with the Movie row and no editor)
         FailureShot.around("openMovieRow") {
             compose.waitUntil(30_000) {
-                if (compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().isEmpty()) runCatching { compose.onNodeWithTag("row_Movie").performClick() }
+                if (compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().isEmpty()) {
+                    // a tap on the row opens its detail; Edit opens the form
+                    if (compose.onAllNodes(hasTestTag("detail_edit")).fetchSemanticsNodes().isNotEmpty()) runCatching { compose.onNodeWithTag("detail_edit").performClick() }
+                    else runCatching { compose.onNodeWithTag("row_Movie").performClick() }
+                }
                 compose.onAllNodes(hasTestTag("category_chip_Fun")).fetchSemanticsNodes().isNotEmpty()
             }
         }

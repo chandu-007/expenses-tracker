@@ -108,7 +108,7 @@ class KeyboardShortcutsUiTest {
             launch(); waitFor("row_Cafe")
             compose.onNodeWithTag("open_search").performClick(); waitFor("search_text")
             compose.onNodeWithTag("search_text").performTextInput("caf"); waitFor("result_e1")
-            compose.onNodeWithTag("result_e1", useUnmergedTree = true).performClick(); waitFor("amount")
+            compose.onNodeWithTag("result_e1", useUnmergedTree = true).performClick(); compose.continueToForm() // the result shows the entry's detail beside the list; Edit puts the form there
             compose.onNodeWithTag("amount").performClick(); compose.waitUntil(10_000) { focused("amount") }
             ctrl(android.view.KeyEvent.KEYCODE_F)
             compose.waitUntil(10_000) { focused("search_text") }
@@ -137,7 +137,7 @@ class KeyboardShortcutsUiTest {
             val second = focusedTag()
             assertTrue(second?.startsWith("result_") == true && second != first, "the arrow moved from $first to $second")
             key(android.view.KeyEvent.KEYCODE_ENTER)
-            if (!runCatching { compose.waitUntil(10_000) { has("amount") } }.isSuccess) throw AssertionError("Enter did not open the entry (focus was on $second)")
+            if (!runCatching { compose.waitUntil(10_000) { has("detail_edit") } }.isSuccess) throw AssertionError("Enter did not open the entry (focus was on $second)")
         } finally { app.expenses.ui.WideLayoutTestHook.widthDp = null }
     }
 }

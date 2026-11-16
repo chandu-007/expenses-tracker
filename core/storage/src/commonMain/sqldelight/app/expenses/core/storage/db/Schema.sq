@@ -1339,6 +1339,12 @@ SELECT (SELECT COUNT(*) FROM entry_split WHERE category_id = :id)
      + (SELECT COUNT(*) FROM template WHERE category_id = :id AND deleted = 0)
      + (SELECT COUNT(*) FROM recurring WHERE category_id = :id AND deleted = 0);
 
+-- How many entries each category is on (expense splits and incomes), read from the two category indexes: the order of the entry form's category tiles, most used first.
+categoryUseCounts:
+SELECT category_id AS id, COUNT(*) AS uses FROM entry_split GROUP BY category_id
+UNION ALL
+SELECT category_id AS id, COUNT(*) AS uses FROM entry WHERE category_id IS NOT NULL GROUP BY category_id;
+
 remapSplits:
 UPDATE entry_split SET category_id = :into WHERE category_id = :from;
 

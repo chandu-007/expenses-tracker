@@ -212,10 +212,9 @@ class AccessibilityUiTest {
         seedHome(); launch()
         tap("add"); waitFor("save")
         check("Add form", "amount")
-        tap("amount_pad_toggle"); waitFor("number_pad")
+        waitFor("number_pad") // a new entry opens with the pad up
         check("Add form with the number pad", "amount")
         compose.onNodeWithTag("amount", useUnmergedTree = true).performTextInput("123")
-        tap("amount_pad_toggle")
         check("Add form with an amount", "save")
     }
 

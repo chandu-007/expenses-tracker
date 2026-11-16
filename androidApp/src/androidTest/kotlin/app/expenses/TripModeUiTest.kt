@@ -74,6 +74,12 @@ class TripModeUiTest {
         while (!done() && tries < 6) { runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }; tries++; runCatching { compose.waitUntil(2_500) { done() } } }
         compose.waitUntil(5_000) { done() }
     }
+    /** A tap on an entry's row shows its detail (UI S2); Edit opens the form. The tap is repeated until one of them is there. */
+    private fun editRow(row: String) {
+        tapUntil(row) { has("detail_edit") || has("note") }
+        if (has("detail_edit")) tapUntil("detail_edit") { has("note") }
+        waitFor("note")
+    }
     private fun tap(tag: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).also { runCatching { it.performScrollTo() } }.performClick() }
     private fun type(tag: String, text: String) { waitFor(tag); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextClearance(); compose.onNodeWithTag(tag, useUnmergedTree = true).performTextInput(text) }
     private fun textOf(tag: String): String = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config.let { c ->
@@ -173,11 +179,11 @@ class TripModeUiTest {
         assertEquals(listOf("Trip: Goa"), tagsOf(id))
 
         // an edit of the note leaves the tag; the tag taken off in the editor stays off through the next edits
-        tapUntil("row_Lunch") { has("note") }; type("note", "Lunch at the beach"); tap("save"); waitFor("add")
+        editRow("row_Lunch"); type("note", "Lunch at the beach"); tap("save"); waitFor("add")
         assertEquals(listOf("Trip: Goa"), tagsOf(id))
-        tapUntil("row_Lunch at the beach") { has("tag_chip_Trip: Goa") }; tapUntil("tag_chip_Trip: Goa") { !has("tag_chip_Trip: Goa") }; tap("save"); waitFor("add")
+        editRow("row_Lunch at the beach"); tapUntil("tag_chip_Trip: Goa") { !has("tag_chip_Trip: Goa") }; tap("save"); waitFor("add")
         assertTrue(tagsOf(id).isEmpty(), "taken off")
-        tapUntil("row_Lunch at the beach") { has("note") }; type("note", "Beach lunch"); tap("save"); waitFor("add")
+        editRow("row_Lunch at the beach"); type("note", "Beach lunch"); tap("save"); waitFor("add")
         assertTrue(tagsOf(id).isEmpty(), "and it stays off after the note is edited: the tag is added once, when the entry is made")
         assertTrue(!has("trip_chip"), "the editor of an entry that exists does not offer it")
     }

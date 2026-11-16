@@ -45,7 +45,7 @@ class SplitBillUiTest {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
         tap("add"); waitFor("amount")
         type("amount", "900"); tap("category_chip_Food")
-        tap("split_toggle")
+        compose.openFormMore(); tap("split_toggle")
         for (name in listOf("Asha", "Ravi")) { tap("split_new_person"); type("new_person_name", name); tap("new_person_ok"); waitFor("split_person_$name") }
         compose.waitUntil(10_000) { has("split_summary") && textOf("split_summary").startsWith("You pay ₹300.00 of it; each of the 2 owes ₹300.00") }
         tap("save"); waitFor("add")
@@ -68,7 +68,7 @@ class SplitBillUiTest {
     @Test
     fun aBillSplitByTypedAmountsLeavesYouTheRestAndAFriendWhoPaidIsOwedYourShareWithNoAccountMoving() {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
-        tap("add"); waitFor("amount"); type("amount", "1000"); tap("category_chip_Food"); tap("split_toggle"); tap("split_mode_1")
+        tap("add"); waitFor("amount"); type("amount", "1000"); tap("category_chip_Food"); compose.openFormMore(); tap("split_toggle"); tap("split_mode_1")
         newPerson("Asha", "split_new_person"); waitFor("split_amount_Asha"); type("split_amount_Asha", "250")
         newPerson("Ravi", "split_new_person"); waitFor("split_amount_Ravi"); type("split_amount_Ravi", "400")
         compose.waitUntil(10_000) { textOf("split_summary").startsWith("You pay ₹350.00 of it") }
@@ -79,7 +79,7 @@ class SplitBillUiTest {
             assertEquals(listOf(35_000L, 25_000L, 40_000L), ok.db.schemaQueries.sharesOf(e.id).executeAsList().map { it.amount_minor })
         } }
         // a different bill that Asha paid: the amount is your share, she is owed it, and no account of yours moves
-        tap("add"); waitFor("amount"); type("amount", "300"); tap("category_chip_Food"); tap("split_toggle"); tap("split_mode_2"); tap("split_payer_Asha")
+        tap("add"); waitFor("amount"); type("amount", "300"); tap("category_chip_Food"); compose.openFormMore(); tap("split_toggle"); tap("split_mode_2"); tap("split_payer_Asha")
         compose.waitUntil(10_000) { textOf("split_summary").startsWith("You owe Asha") }
         tap("save"); waitFor("add")
         runBlocking { container.write { ok ->

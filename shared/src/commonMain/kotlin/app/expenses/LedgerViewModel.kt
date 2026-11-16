@@ -412,7 +412,7 @@ val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLE
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 /** [kind] says which entries the category is offered for: expenses, income, or both (only for categories made before kinds existed that income already used). */
-data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE)
+data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, /** How many entries are on it (for the order of the form's tiles, most used first). */ val uses: Long = 0L)
 
 /** An attachment as the editor lists it. */
 data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
@@ -929,6 +929,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val name = draft.note.trim().ifEmpty { draft.category }
             ok.templates.save(Template(Uuid.random().toString(), name, amount, CategoryId(draft.category), AccountId(draft.accountId), draft.note.trim().ifEmpty { null }))
         }
+        // the tiles' order follows use: a new entry counts for its category at once
+        if (draft.id == null && draft.category.isNotEmpty() && (draft.kind == DraftKind.EXPENSE || draft.kind == DraftKind.INCOME) && tileUsesRead) tileUses = tileUses + (draft.category to (tileUses[draft.category] ?: 0L) + 1L)
         _editor.value = null
         val verb = when (draft.kind) { DraftKind.EXPENSE -> "expense"; DraftKind.INCOME -> "income"; DraftKind.TRANSFER -> "transfer"; DraftKind.REFUND -> "refund"; DraftKind.LOAN -> if (draft.gave) "money given" else "money received" }
         refreshQuickly(ok, undo = if (draft.id == null) UndoUi(id, "Added $verb ${amount.formatted()}", reveal = true) else null)
@@ -1110,6 +1112,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** The address to hand to a viewer app for one attachment. */
     fun attachmentUri(id: String): String = attachmentFiles.shareUri(id)
 
+    /** "Usually Food for Chai": what earlier expenses like [note] were put under, or null. Read only. */
+    suspend fun usualCategory(note: String): app.expenses.ui.UsualCategoryUi? = container.write { ok -> EntryActions(ok).usualCategory(note) }
+
+    /** "₹120 above your usual at Starbucks" on an entry's detail, or null. Read only. */
+    suspend fun usualAmount(entryId: String?, note: String, amountMinor: Long): app.expenses.ui.UsualAmountUi? = container.write { ok -> EntryActions(ok).usualAmount(entryId, note, amountMinor) }
+
     fun closeEditor() {
         _editor.value = null
         _editorProblem.value = null
@@ -1248,6 +1256,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun deleteEntry(row: RowUi) = withStore { ok ->
         EntryActions(ok).delete(row.id)
         refresh(ok, undo = UndoUi(row.id, "Deleted ${row.title} ${row.amount}", restore = true))
+    }
+
+    /** Deletes the entry open in the detail (UI S2) and offers to bring it back, as swiping its row away does. */
+    fun deleteOpenEntry(id: String, title: String, amount: String) = withStore { ok ->
+        EntryActions(ok).delete(id)
+        _editor.value = null
+        _editorProblem.value = null
+        _attachments.value = emptyList()
+        refresh(ok, undo = UndoUi(id, "Deleted $title $amount", restore = true))
     }
 
     /** The account Home's list shows, or null for all of them. Read and changed only under the write lock. */
@@ -1390,6 +1407,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var accountRowsCache: List<AccountRowUi> = emptyList()
     private var sparkCache: SparkUi = SparkUi()
     private var categoryUsageCache: Map<String, Long> = emptyMap()
+    /** How many entries each category is on, read once (two grouped reads of indexes) and kept up to date as entries are saved: the order of the entry form's category tiles. */
+    @Volatile private var tileUses: Map<String, Long> = emptyMap()
+    @Volatile private var tileUsesRead = false
     private var categoriesOpen = false
     private var nudgeCache = false
     private var categoriseCache = 0
@@ -1428,6 +1448,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 val rows = if (balances != null && (accountsOpen || balancesVisible)) accountRows(ok, accountList, balances) else accountRowsCache
                 val safe = if (balances != null && wantSafe) safeToSpendUi(ok, accountList, balances, todayLocal(), inr) else null
                 val usage = if (categoriesOpen) ok.categories.list().associate { it.id to ok.categories.usage(it.id) } else categoryUsageCache
+                if (!tileUsesRead) { tileUses = ok.categories.useCounts(); tileUsesRead = true }
                 Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok))
             } ?: return@launch
             nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; sparkCache = figures.spark; figuresReady = true
@@ -4769,7 +4790,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             autoExport = autoExportUi(ok),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
-            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind) },
+            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind, tileUses[it.id] ?: 0L) },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
             lastIncomeCategory = lastIncomeCategory,

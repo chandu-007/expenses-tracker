@@ -35,6 +35,8 @@ import app.expenses.ui.BillsScreen
 import app.expenses.ui.AliasControls
 import app.expenses.ui.GuideScreen
 import app.expenses.core.domain.BaseCurrency
+import app.expenses.core.domain.formatted
+import app.expenses.ui.duplicable
 import app.expenses.core.domain.toPlainString
 import app.expenses.core.domain.Appearance
 import app.expenses.core.domain.Appearances
@@ -166,6 +168,15 @@ private val NoShortcutRequests = MutableStateFlow<ShortcutRequest?>(null)
 
 private class Held<T : Any>(var value: T?)
 
+/** Whether the open entry showed its detail (true) or its form (false), with the identity of the entry it belongs to: kept so a window that turns wide or narrow brings back the same one. */
+private class ViewHold {
+    private var identity: List<Any?>? = null
+    private var viewing: Boolean? = null
+    fun of(identity: List<Any?>): Boolean? = if (this.identity == identity) viewing else null
+    fun keep(identity: List<Any?>, viewing: Boolean) { this.identity = identity; this.viewing = viewing }
+    fun forget() { identity = null; viewing = null }
+}
+
 /** The draft last typed in the open entry, with the identity of the entry it belongs to. Not state: nothing observes it, it is only read when an editor is created. */
 private class TypedDraft {
     private var identity: List<Any?>? = null
@@ -274,6 +285,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var prefillCategory by rememberSaveable { mutableStateOf<String?>(null) }
             var prefillAccount by rememberSaveable { mutableStateOf<String?>(null) }
             var prefillNote by rememberSaveable { mutableStateOf("") }
+            // "Duplicate" on an entry's detail: the amount to start the new entry with (cleared whenever the add screen closes)
+            var prefillAmount by rememberSaveable { mutableStateOf("") }
+            LaunchedEffect(adding) { if (!adding) prefillAmount = "" }
             // Lets `am start` and tracing measure cold start up to the first screen with data, not just the spinner.
             LaunchedEffect(state is UiState.Ready) { if (state is UiState.Ready) { platform.trace("ready composed"); host.onReady() } }
 
@@ -387,13 +401,35 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 // What is typed in the open entry is kept here as it changes, so when the window turns wide or narrow under an open entry (a foldable unfolded or folded), the editor that appears in
                 // its new place (the pane beside Home, or the full screen) starts from it instead of from the saved entry. Forgotten when the editor closes.
                 val typedDraft = androidx.compose.runtime.remember { TypedDraft() }
-                androidx.compose.runtime.LaunchedEffect(editing == null) { if (editing == null) typedDraft.forget() }
+                val viewHold = androidx.compose.runtime.remember { ViewHold() }
+                // the entry whose row was just tapped: only that row carries the shared container that grows into the entry's detail
+                val tappedEntry = androidx.compose.runtime.remember { app.expenses.ui.TappedEntry() }
+                androidx.compose.runtime.LaunchedEffect(editing == null) { if (editing == null) { typedDraft.forget(); viewHold.forget() } }
                 val editorScreen: @androidx.compose.runtime.Composable (Editable) -> Unit = { e -> when (e) {
                     is Editable.Form -> {
-                        BackHandler { viewModel.closeEditor() }
                         // Keyed, so opening a refund from an expense's editor starts a new form instead of reusing the expense's typed state.
                         androidx.compose.runtime.key(e.draft.id, e.draft.kind, e.draft.refundsEntry) {
                         val identity = listOf(e.draft.id, e.draft.kind, e.draft.refundsEntry)
+                        // tapping an entry shows its detail first (UI S2); Edit opens the form, and Cancel in it comes back to the detail. A refund being made or edited has no detail.
+                        val hasDetail = e.draft.id != null && e.draft.refundsEntry == null
+                        // kept in the root, not saved with the screen: when the window turns wide or narrow under an open entry, the detail or form that appears in its new place is the one that was showing
+                        var viewing by androidx.compose.runtime.remember(identity) { mutableStateOf(viewHold.of(identity) ?: hasDetail) }
+                        androidx.compose.runtime.SideEffect { viewHold.keep(identity, viewing) }
+                        BackHandler { if (!viewing && hasDetail) viewing = true else viewModel.closeEditor() }
+                        if (viewing) {
+                            app.expenses.ui.EntryDetailScreen(
+                                form = e, categories = s.categories,
+                                accounts = s.allAccounts.filter { a -> a.id == e.draft.accountId || a.id == e.draft.toAccountId || s.accounts.any { it.id == a.id } },
+                                people = people, attachments = attachmentList,
+                                onEdit = { viewing = false }, onBack = viewModel::closeEditor,
+                                onDuplicate = if (e.draft.duplicable()) ({ val d = e.draft; viewModel.closeEditor(); prefillCategory = d.category.ifEmpty { null }; prefillAccount = d.accountId.ifEmpty { null }; prefillNote = d.note; prefillAmount = d.amountText; adding = true }) else null,
+                                onDelete = { val d = e.draft; viewModel.deleteOpenEntry(d.id!!, d.note.ifBlank { e.title.removePrefix("Edit ") }, app.expenses.core.domain.parseAmount(d.amountText, BaseCurrency.current)?.formatted() ?: d.amountText) },
+                                onHistory = e.draft.id?.let { id -> { viewModel.openHistory(id) } },
+                                onRefund = if (e.canRefund) ({ e.draft.id?.let(viewModel::startRefund) ?: Unit }) else null,
+                                onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
+                                usualAmount = viewModel::usualAmount,
+                            )
+                        } else {
                         EntryFormScreen(
                             restored = typedDraft.of(identity), onDraft = { d -> typedDraft.keep(identity, d) },
                             title = e.title,
@@ -409,7 +445,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onRemoveAttachment = { a -> e.draft.id?.let { viewModel.removeAttachment(it, a.id) } },
                             people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
                             onSave = { d, _ -> if (e.canChangeKind && d.kind != e.draft.kind) viewModel.saveChangingKind(d) else viewModel.saveEntry(d, false) },
-                            onBack = viewModel::closeEditor,
+                            onBack = { if (hasDetail) viewing = true else viewModel.closeEditor() },
                             refundOf = e.refundOf,
                             onHistory = e.draft.id?.let { id -> { viewModel.openHistory(id) } },
                             kindChangeProblem = editorProblem,
@@ -417,6 +453,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             origin = e.origin,
                             suggestedCategory = e.suggestion,
                         )
+                        }
                         }
                     }
                     is Editable.ReadOnly -> {
@@ -496,6 +533,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 }
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
                 // given the room, so the bar covers nothing and takes no touch)
+                androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalTappedEntry provides tappedEntry) {
                 app.expenses.ui.MessageBarHost(
                     s.message, homeShowing = screenKey == app.expenses.ui.ScreenKeys.HOME, hideAmounts = s.hideAmounts, onShown = viewModel::dismissMessage,
                     // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own; so is Accounts (11), where Archive offers one
@@ -838,8 +876,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             attachments = stagedList, attachmentProblem = attachmentProblem, onAttach = viewModel::stageAttachment,
                             onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
                             onRemoveAttachment = { a -> viewModel.unstageAttachment(a.id) },
-                            start = prefillTransfer?.split('|')?.let { p -> EntryDraft(null, DraftKind.TRANSFER, p[2], "", emptyList(), p[0], p[1], p.getOrElse(3) { "" }, nowMillis()) } ?: prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, "", prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
+                            start = prefillTransfer?.split('|')?.let { p -> EntryDraft(null, DraftKind.TRANSFER, p[2], "", emptyList(), p[0], p[1], p.getOrElse(3) { "" }, nowMillis()) } ?: prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, prefillAmount, prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
                             kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
+                            usualCategory = viewModel::usualCategory,
                             accounts = s.accounts,
                             categories = s.categories,
                             onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
@@ -942,6 +981,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )
                 } }
+                }
                 }
                 }
                 }

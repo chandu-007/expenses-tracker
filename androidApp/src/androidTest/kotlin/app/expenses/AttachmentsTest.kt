@@ -57,7 +57,7 @@ class AttachmentsTest {
 
     @Test
     fun aFileIsCopiedInRecordedShownInTheEditorReadableThroughTheProviderAndRemovedWithItsFile() {
-        seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
+        seed(); launch(); compose.openEntryEditor("row_Cafe"); compose.openFormMore(); waitFor("attachment_add")
         val bytes = ByteArray(5_000) { (it * 7).toByte() }
         vm().addAttachment("e", source("bill.pdf", bytes).toString())
         waitFor("attachment_bill.pdf")
@@ -73,7 +73,7 @@ class AttachmentsTest {
 
     @Test
     fun anOversizedOrEmptyFileIsRefusedWithAMessageAndLeavesNoFileOrRecord() {
-        seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
+        seed(); launch(); compose.openEntryEditor("row_Cafe"); compose.openFormMore(); waitFor("attachment_add")
         vm().addAttachment("e", source("huge.bin", ByteArray(15 * 1024 * 1024 + 1)).toString())
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("over 15 MB", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         vm().addAttachment("e", source("empty.txt", ByteArray(0)).toString())
@@ -83,7 +83,7 @@ class AttachmentsTest {
 
     @Test
     fun theEleventhFileIsRefusedAndItsCopyIsRemoved() {
-        seed(); launch(); tap("row_Cafe"); waitFor("attachment_add")
+        seed(); launch(); compose.openEntryEditor("row_Cafe"); compose.openFormMore(); waitFor("attachment_add")
         repeat(10) { i -> vm().addAttachment("e", source("f$i.txt", byteArrayOf(1, 2, 3)).toString()); compose.waitUntil(10_000) { recorded().size == i + 1 } }
         vm().addAttachment("e", source("one-too-many.txt", byteArrayOf(9)).toString())
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("attachment_problem") and hasText("up to 10 attachments", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
@@ -92,7 +92,7 @@ class AttachmentsTest {
 
     @Test
     fun aNewEntryCanTakeAFileBeforeItIsSavedAndTheSweepRemovesOnlyFilesWithNoRecord() {
-        launch(); tap("add"); waitFor("attachments_hint")
+        launch(); tap("add"); compose.openFormMore(); waitFor("attachments_hint")
         assertTrue(has("attachment_add"), "a bill can be attached while adding, it is optional")
         seed()
         val keep = "keep"; val orphan = "orphan"

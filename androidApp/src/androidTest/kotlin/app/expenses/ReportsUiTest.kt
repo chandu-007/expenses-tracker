@@ -234,7 +234,7 @@ class ReportsUiTest {
         compose.onNodeWithTag("report_row_Food").performClick()
         waitFor("drill_row_a")
         compose.onNodeWithTag("drill_row_a").performClick()
-        waitFor("amount")
+        compose.continueToForm() // the entry's detail first (UI S2), then its form
         compose.onNodeWithTag("amount").performTextClearance()
         compose.onNodeWithTag("amount").performTextInput("450")
         compose.onNodeWithTag("save").performClick()

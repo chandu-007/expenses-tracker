@@ -8,6 +8,10 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollToNode
@@ -56,21 +60,35 @@ class IncomeCategoriesUiTest {
     private fun openAdd() { tap("add"); waitFor("amount") }
     private fun openFromMenu(tag: String) { compose.openMore(); tap(tag) }
 
+    private fun tagsStartingWith(prefix: String): Set<String> =
+        compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("tag starts with $prefix") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith(prefix) == true }, useUnmergedTree = true)
+            .fetchSemanticsNodes().mapNotNull { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.removePrefix(prefix) }.toSet()
+
     private fun assertOffers(prefix: String, shown: List<String>, notShown: List<String>) {
         shown.forEach { assertTrue(has("$prefix$it"), "$prefix$it should be offered") }
         notShown.forEach { assertTrue(!has("$prefix$it"), "$prefix$it must not be offered") }
     }
 
+    /** What the entry form offers: the tiles and, behind "More", the whole list (the list is lazy, so it is scrolled through). Every id in [shown] is offered and none in [notShown] is. */
+    private fun assertFormOffers(prefix: String, shown: List<String>, notShown: List<String>) {
+        tap("more_categories"); waitFor("category_list")
+        val list = node("category_list")
+        fun inList(id: String) = runCatching { list.performScrollToNode(hasTestTag("category_option_$id")) }.isSuccess
+        shown.forEach { assertTrue(has("$prefix$it") || inList(it), "$prefix$it should be offered") }
+        notShown.forEach { assertTrue(!has("$prefix$it") && !inList(it), "$prefix$it must not be offered") }
+        compose.onNodeWithText("Close").performClick(); compose.waitUntil(10_000) { !has("category_list") }
+    }
+
     @Test
     fun theFormOffersIncomeCategoriesForIncomeAndExpenseOnesForAnExpenseAndSwitchingSwapsTheChoice() {
         launch(); openAdd()
-        assertOffers("category_chip_", expenseIds, incomeIds)
+        assertFormOffers("category_chip_", expenseIds, incomeIds)
         tap("kind_INCOME")
         compose.waitUntil(10_000) { has("category_chip_income:salary") }
-        assertOffers("category_chip_", incomeIds, expenseIds)
+        assertFormOffers("category_chip_", incomeIds, expenseIds)
         tap("kind_EXPENSE")
         compose.waitUntil(10_000) { has("category_chip_Food") }
-        assertOffers("category_chip_", expenseIds, incomeIds)
+        assertFormOffers("category_chip_", expenseIds, incomeIds)
         compose.onNodeWithTag("category_chip_${firstVisible(false)}").assertIsSelected() // an income category is not left on an expense
     }
 
@@ -114,7 +132,7 @@ class IncomeCategoriesUiTest {
     fun aCategoryCreatedFromTheIncomeFormIsAnIncomeCategoryAndFromTheExpenseFormAnExpenseOne() {
         launch(); openAdd()
         tap("kind_INCOME"); waitFor("category_chip_income:salary")
-        tap("new_category_chip"); waitFor("cat_name")
+        tap("more_categories"); tap("new_category_chip"); waitFor("cat_name")
         node("cat_name").performTextInput("Freelance"); tap("cat_confirm")
         compose.waitUntil(10_000) { db { ok -> ok.categories.list().any { it.name == "Freelance" } } }
         val freelance = db { ok -> ok.categories.list().first { it.name == "Freelance" } }
@@ -123,7 +141,7 @@ class IncomeCategoriesUiTest {
 
         tap("kind_EXPENSE"); waitFor("category_chip_Food")
         assertTrue(!has("category_chip_${freelance.id}"), "an income category is not offered for an expense")
-        tap("new_category_chip"); waitFor("cat_name")
+        tap("more_categories"); tap("new_category_chip"); waitFor("cat_name")
         node("cat_name").performTextClearance(); node("cat_name").performTextInput("Gadgets"); tap("cat_confirm")
         compose.waitUntil(10_000) { db { ok -> ok.categories.list().any { it.name == "Gadgets" } } }
         assertEquals(CategoryKind.EXPENSE, db { ok -> ok.categories.list().first { it.name == "Gadgets" }.kind })

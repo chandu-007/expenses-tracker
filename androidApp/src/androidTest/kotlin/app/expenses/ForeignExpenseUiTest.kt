@@ -43,7 +43,7 @@ class ForeignExpenseUiTest {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
         tap("add"); waitFor("amount")
         tap("category_chip_Food"); type("note", "Taxi")
-        tap("foreign_toggle"); tap("foreign_cur_USD"); type("foreign_amount", "25"); type("foreign_rate", "83.20")
+        compose.openFormMore(); tap("foreign_toggle"); tap("foreign_cur_USD"); type("foreign_amount", "25"); type("foreign_rate", "83.20")
         compose.waitUntil(10_000) { textOf("foreign_summary").startsWith("That is ₹2,080.00 from your account") }
         assertEquals("2080.00", textOf("amount"), "the amount follows what is worked out")
         tap("save"); waitFor("add")
@@ -54,7 +54,7 @@ class ForeignExpenseUiTest {
         } }
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("USD 25.00", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } // the row says what was paid there
         // the next entry in dollars starts from the same rate
-        tap("add"); waitFor("amount"); tap("foreign_toggle"); tap("foreign_cur_USD")
+        tap("add"); waitFor("amount"); compose.openFormMore(); tap("foreign_toggle"); tap("foreign_cur_USD")
         compose.waitUntil(10_000) { textOf("foreign_rate") == "83.20" }
     }
 
@@ -62,7 +62,7 @@ class ForeignExpenseUiTest {
     fun withoutAnAmountAndARateTheFormExplainsAndKeepsSaveOffAndAnotherCurrencyEntryOpensReadOnlyWithAnExplanation() {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
         tap("add"); waitFor("amount"); tap("category_chip_Food"); type("note", "Hotel")
-        tap("foreign_toggle"); tap("foreign_cur_EUR"); type("foreign_amount", "100")
+        compose.openFormMore(); tap("foreign_toggle"); tap("foreign_cur_EUR"); type("foreign_amount", "100")
         assertTrue(textOf("foreign_summary").contains("does not look rates up"), textOf("foreign_summary"))
         type("foreign_rate", "90"); compose.waitUntil(10_000) { textOf("foreign_summary").startsWith("That is ₹9,000.00") }
         tap("save"); waitFor("add")

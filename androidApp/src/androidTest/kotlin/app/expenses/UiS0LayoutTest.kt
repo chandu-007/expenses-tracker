@@ -105,6 +105,9 @@ class UiS0LayoutTest {
     @Test
     fun theKeyboardGoesDownWithTheAddFormNotAfterIt() {
         launch(); tap("add"); waitFor("amount")
+        // a new entry opens with the app's pad and no keyboard (UI S2); the keyboard is one tap away, and this is about it leaving with the form
+        assertTrue(!imeVisible(), "the pad, not the keyboard, is up at first")
+        tap("amount_pad_toggle")
         compose.waitUntil(15_000) { imeVisible() }
         val tapped = System.currentTimeMillis()
         node("cancel").performClick()
@@ -157,7 +160,7 @@ class UiS0LayoutTest {
     @Test fun reportsAmountsOn360dpAt200Percent() { twice(true); reportsAmountsStayOnOneLine() }
 
     private fun attachButtonsAreWholeButtons() {
-        spend("a", 100, "Cafe"); launch(); tap("row_Cafe"); waitFor("attachment_add")
+        spend("a", 100, "Cafe"); launch(); compose.openEntryEditor("row_Cafe"); compose.openFormMore(); waitFor("attachment_add")
         val b = bounds("attachment_add")
         assertTrue(b.right <= screenWidth() + 1f, "the button is inside the window: $b")
         assertTrue(b.height < dp(110f), "'Attach a photo or file' is a button, not a tall oval: ${b.height / context.resources.displayMetrics.density} dp high")

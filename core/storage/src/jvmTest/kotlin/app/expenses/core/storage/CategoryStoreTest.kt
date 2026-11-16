@@ -325,5 +325,15 @@ class CategoryStoreTest {
         categories.merge("Groceries", both.id)
         assertEquals(null, categories.list().firstOrNull { it.id == "Groceries" })
     }
-}
 
+    @Test
+    fun useCountsAreHowManyEntriesEachCategoryIsOnForTheOrderOfTheFormTiles() {
+        categories.list().take(3) // the starter categories exist
+        expense("a", 100, "Food"); expense("b", 100, "Food"); expense("c", 100, "Transport")
+        ledger.save(Income(EntryId("i1"), 1, AccountId("bank"), m(500), CategoryId("income:salary")), EntryDetails())
+        ledger.save(Income(EntryId("i2"), 2, AccountId("bank"), m(500), CategoryId("income:salary")), EntryDetails())
+        val uses = categories.useCounts()
+        assertEquals(2L, uses["Food"]); assertEquals(1L, uses["Transport"]); assertEquals(2L, uses["income:salary"])
+        assertNull(uses["Health"], "a category nothing is on has no count")
+    }
+}

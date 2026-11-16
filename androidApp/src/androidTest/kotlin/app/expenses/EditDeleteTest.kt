@@ -1,6 +1,7 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -76,8 +77,7 @@ class EditDeleteTest {
     fun tappingARowOpensTheEditorWithItsValuesAndSavingChangesTheTotal() {
         seed("e1", 10_000, "Food", "Cafe")
         launch(); waitSpend("₹100.00")
-        compose.onNodeWithTag("row_Cafe").performClick()
-        waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00")
         compose.onNodeWithTag("note").assertTextEquals("Note or merchant", "Cafe")
         compose.onNodeWithTag("amount").performTextClearance()
@@ -96,11 +96,14 @@ class EditDeleteTest {
     fun cancellingAnEditChangesNothing() {
         seed("e1", 10_000, "Food", "Cafe")
         launch(); waitSpend("₹100.00")
-        compose.onNodeWithTag("row_Cafe").performClick()
-        waitFor("amount")
+        compose.openEntryEditor("row_Cafe")
         compose.onNodeWithTag("amount").performTextClearance()
         compose.onNodeWithTag("amount").performTextInput("999")
         compose.onNodeWithTag("cancel").performClick()
+        // Cancel in the form comes back to the entry's detail (nothing was saved); Back leaves it
+        waitFor("detail_edit")
+        compose.onNodeWithTag("detail_amount").assertTextContains("₹100.00", substring = true)
+        compose.onNodeWithTag("detail_back").performClick()
         waitFor("add")
         compose.onNodeWithTag("month_spend").assertTextEquals("₹100.00")
     }

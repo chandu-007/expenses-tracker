@@ -80,7 +80,7 @@ class CalendarUiTest {
         open(); tap("cal_day_3")
         waitFor("cal_day_title"); text("cal_day_total").assertTextEquals("Spent ₹200.00")
         waitFor("cal_line_Alpha"); waitFor("cal_line_Bravo")
-        tap("cal_line_Alpha"); waitFor("amount")
+        tap("cal_line_Alpha"); compose.continueToForm() // an entry opens its detail first (UI S2); Edit puts the form up
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("500"); tap("save")
         waitFor("cal_month")                                   // back on the calendar, not the list
         compose.waitUntil(10_000) { runCatching { text("cal_amount_3").assertTextEquals("₹580") }.isSuccess }

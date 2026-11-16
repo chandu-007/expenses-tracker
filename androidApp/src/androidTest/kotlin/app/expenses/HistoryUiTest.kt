@@ -60,11 +60,11 @@ class HistoryUiTest {
         seed()
         // wait so the saves get different times (history groups by time)
         Thread.sleep(30)
-        launch(); tap("row_Cafe"); type("amount", "150"); tap("save"); waitFor("add")
+        launch(); compose.openEntryEditor("row_Cafe"); type("amount", "150"); tap("save"); waitFor("add")
         Thread.sleep(30)
-        tap("row_Cafe"); type("amount", "175"); tap("category_chip_Bills"); tap("save"); waitFor("add")
+        compose.openEntryEditor("row_Cafe"); type("amount", "175"); tap("category_chip_Bills"); tap("save"); waitFor("add")
         assertEquals(17_500L, amount())
-        tap("row_Cafe"); tap("history_open"); waitFor("history_list")
+        compose.openEntryEditor("row_Cafe"); tap("history_open"); waitFor("history_list")
         waitText("Created"); waitText("Account: Cash"); waitText("Amount: ₹100.00 → ₹150.00"); waitText("Amount: ₹150.00 → ₹175.00"); waitText("Categories: Food ₹150.00 → Bills ₹175.00")
         // the newest edit is undone: back to ₹150 and Food
         tap("restore_2"); waitFor("add")
@@ -80,14 +80,14 @@ class HistoryUiTest {
     fun deletingAndBringingBackAnEntryAppearsInItsHistory() {
         seed()
         db { ok -> Thread.sleep(30); ok.store.delete(EntryId("e")); Thread.sleep(30); ok.store.restore(EntryId("e")) }
-        launch(); tap("row_Cafe"); tap("history_open"); waitFor("history_list")
+        launch(); compose.openEntryEditor("row_Cafe"); tap("history_open"); waitFor("history_list")
         waitText("Deleted"); waitText("Brought back"); waitText("Created")
         assertTrue(!has("restore_0") && !has("restore_1"), "only edits can be undone")
     }
 
     @Test
     fun backFromTheHistoryReturnsToTheEditorNotTheList() {
-        seed(); launch(); tap("row_Cafe"); tap("history_open"); waitFor("history_list")
+        seed(); launch(); compose.openEntryEditor("row_Cafe"); tap("history_open"); waitFor("history_list")
         tap("history_back"); waitFor("amount")
     }
 }

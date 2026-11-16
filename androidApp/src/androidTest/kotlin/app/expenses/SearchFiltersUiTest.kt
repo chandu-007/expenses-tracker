@@ -182,7 +182,7 @@ class SearchFiltersUiTest {
     fun onATwoPaneWindowTheFiltersAreASheetOverTheListPaneOnlyNoWiderThanThePane() {
         seed(); shell("wm size 1812x2176"); shell("wm density 420") // a Z Fold 5 unfolded: 690 x 829 dp
         openSearch(); tap("search_kind_expense"); waitFor("result_a")
-        waitFor("wide_list_pane"); tap("result_a"); waitFor("amount") // an entry open beside the results
+        waitFor("wide_list_pane"); tap("result_a"); compose.continueToForm() // an entry open beside the results
         openPanel()
         val d = 420 / 160f
         val panel = bounds("filters_panel")

@@ -114,7 +114,7 @@ class EntryKindsUiTest {
     @Test
     fun aSplitNeedsToAddUpAndIsStoredPartByPartAndCountedPerCategory() {
         launch()
-        tap("add"); type("amount", "1000"); tap("split_start")
+        tap("add"); type("amount", "1000"); compose.openFormMore(); tap("split_start")
         tap("split_category_0"); tap("split_pick_0_Food"); type("split_amount_0", "600")
         tap("split_category_1"); tap("split_pick_1_Bills"); type("split_amount_1", "300")
         waitText("₹100.00 left to assign")
@@ -131,7 +131,7 @@ class EntryKindsUiTest {
     fun aSplitExpenseReopensAsTheSameSplitAndCanBeChangedBackToOneCategory() {
         launch()
         db { ok -> ok.store.save(Expense(EntryId("s"), System.currentTimeMillis(), AccountId("cash"), Money(100_000, inr), listOf(CategorySplit(CategoryId("Food"), Money(60_000, inr)), CategorySplit(CategoryId("Bills"), Money(40_000, inr)))), EntryDetails(merchant = "Mall")) }
-        launch(); tap("row_Mall")
+        launch(); compose.openEntryEditor("row_Mall")
         waitFor("split_amount_0")
         compose.onNodeWithTag("split_amount_0").assertTextEquals("₹", "600.00")
         tap("split_remove_1")
@@ -144,26 +144,26 @@ class EntryKindsUiTest {
     fun aRefundLowersSpendingIsBoundedByTheExpenseAndCanBeEditedAfterwards() {
         launch()
         db { ok -> ok.store.save(Expense(EntryId("buy"), System.currentTimeMillis() - 5000, AccountId("cash"), Money(300_000, inr), listOf(CategorySplit(CategoryId("Shopping"), Money(300_000, inr)))), EntryDetails(merchant = "Shoes")) }
-        launch(); tap("row_Shoes"); tap("refund_start")
+        launch(); compose.openEntryEditor("row_Shoes"); tap("refund_start")
         waitFor("refund_of"); waitText("Up to ₹3,000.00 can still be refunded")
         type("amount", "4000"); waitFor("form_problem"); compose.onNodeWithTag("save").assertIsNotEnabled()
         type("amount", "1000"); type("note", "Return"); compose.onNodeWithTag("save").assertIsEnabled(); addSaved()
         assertEquals(200_000L, spendTotal(), "net spend dropped by the refund")
         assertTrue(kinds().contains("REFUND") && !kinds().contains("INCOME"), "a refund is not income")
         // a second refund may take only what is left
-        tap("row_Return"); waitFor("refund_of")
+        compose.openEntryEditor("row_Return"); waitFor("refund_of")
         compose.onNodeWithTag("amount").assertTextContains("1000.00")
         waitText("Up to ₹3,000.00 can still be refunded") // editing it: its own amount is not counted against it
         type("amount", "1500"); addSaved()
         assertEquals(150_000L, spendTotal(), "editing the refund changed what was taken back")
         assertEquals(1, db { ok -> ok.db.schemaQueries.refundsOf("buy").executeAsList().size })
-        tap("row_Shoes"); waitFor("read_only_reason") // an expense with a refund is read-only until the refund is removed
+        compose.openEntryEditor("row_Shoes"); waitFor("read_only_reason") // an expense with a refund is read-only until the refund is removed
     }
 
     @Test
     fun theFormKeepsWhatWasTypedWhenTheScreenIsRecreated() {
         launch()
-        tap("add"); type("amount", "1000"); tap("split_start")
+        tap("add"); type("amount", "1000"); compose.openFormMore(); tap("split_start")
         tap("split_category_0"); tap("split_pick_0_Food"); type("split_amount_0", "250")
         scenario!!.recreate()
         waitFor("split_amount_0")
@@ -180,11 +180,11 @@ class EntryKindsUiTest {
             ok.store.save(app.expenses.core.domain.ledger.Income(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), Money(80_000, inr), CategoryId("Salary")), EntryDetails(merchant = "Acme"))
             ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("atm"), System.currentTimeMillis() - 10, AccountId("bank"), AccountId("cash"), Money(20_000, inr)), EntryDetails(merchant = "ATM"))
         }
-        launch(); tap("row_Acme"); waitFor("amount")
+        launch(); compose.openEntryEditor("row_Acme"); waitFor("amount")
         compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "800.00")
         type("amount", "900"); addSaved()
         assertEquals(90_000L + 0, db { ok -> ok.store.balances().getValue(AccountId("bank")).minorUnits } + 20_000L)
-        tap("row_ATM"); waitFor("to_chip_Cash"); type("amount", "300"); addSaved()
+        compose.openEntryEditor("row_ATM"); waitFor("to_chip_Cash"); type("amount", "300"); addSaved()
         assertEquals(30_000L, balance("cash"))
     }
 }

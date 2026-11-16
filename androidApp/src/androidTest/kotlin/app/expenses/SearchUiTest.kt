@@ -153,6 +153,7 @@ class SearchUiTest {
         type("search_text", "swiggy")
         waitFor("result_a"); waitFor("result_b")
         compose.onNodeWithTag("result_a").performClick()
+        compose.continueToForm() // the result shows the entry's detail first (UI S2); Edit puts the form up
         waitFor("note")
         compose.onNodeWithTag("note").performTextClearance(); compose.onNodeWithTag("note").performTextInput("Zomato")
         compose.onNodeWithTag("save").performClick()

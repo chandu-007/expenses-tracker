@@ -57,6 +57,8 @@ class FrameLogDriveTest {
         action()
         compose.waitForIdle(); Thread.sleep(500) // the frame metrics of the last frames arrive a little after they were drawn
         val s = FrameLog.end()
+        // every repetition on its own, so the worst frame of each can be told apart from the totals below
+        Log.i("FRAMELOG_REP", s.line(label))
         results[label] = (results[label] ?: FrameStats()).plus(s)
     }
 
@@ -74,9 +76,13 @@ class FrameLogDriveTest {
 
         repeat(REPS) {
             measure("Home fling") { flingHome(5) }
-            // Home to entry: a tap on the first row opens its form; the close is not part of the measurement
-            measure("Home to entry") { compose.onAllNodes(aRow, useUnmergedTree = true).onFirst().performClick(); waitFor("save") }
-            node("cancel").performClick(); waitFor("add"); compose.waitForIdle()
+            // Home to entry: a tap on the first row opens the entry (from UI S2 its read-only detail; before it, the form: the base builds wait for "save"); the close is not part of the measurement
+            measure("Home to entry") { compose.onAllNodes(aRow, useUnmergedTree = true).onFirst().performClick(); compose.waitUntil(20_000) { has("detail_edit") || has("save") } }
+            // the detail's Edit opens the form (UI S2; a build before it has no detail and skips this)
+            if (has("detail_edit")) {
+                measure("Detail to Edit") { node("detail_edit").performClick(); waitFor("save") }
+                node("cancel").performClick(); waitFor("detail_back"); node("detail_back").performClick(); waitFor("add"); compose.waitForIdle()
+            } else { node("cancel").performClick(); waitFor("add"); compose.waitForIdle() }
             measure("Add open") { node("add").performClick(); waitFor("amount") }
             measure("Add close") { node("cancel").performClick(); waitFor("add") }
             // the bar's tabs, one after the other and back (Search is left out here: it raises the keyboard, which is measured by its own scroll below)

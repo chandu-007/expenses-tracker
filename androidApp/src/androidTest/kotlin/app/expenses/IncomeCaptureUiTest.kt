@@ -153,7 +153,7 @@ class IncomeCaptureUiTest {
             }
         }
         launch()
-        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("in1") }
+        scenario!!.onActivity { androidx.lifecycle.ViewModelProvider(it)[LedgerViewModel::class.java].openEditor("in1") }; compose.continueToForm()
         waitFor("income_suggestion")
         compose.onNodeWithTag("income_suggestion").assertTextContains("Suggested: Gifts received", substring = true)
         tap("income_suggestion")

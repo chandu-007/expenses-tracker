@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,8 +29,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * What Reports shows while its first page is being worked out (it used to be the words "Loading…" in the middle of a white page): the page's own chrome, the four period choices and the four groupings as
- * chips that cannot be pressed yet, and plain blocks where the title, the figures, the chart and the list will be. It does not pulse or shimmer (a looping animation keeps the screen redrawing), it only
+ * What Reports shows while its first page is being worked out (it used to be the words "Loading…" in the middle of a white page): the page's own chrome, the two segmented controls as plain pill tracks (period choices and
+ * groupings), and plain blocks where the title, the figures, the chart and the list will be. It does not pulse or shimmer (a looping animation keeps the screen redrawing), it only
  * fades in once, and it is hidden from screen readers: there is nothing in it to read.
  */
 @Composable
@@ -42,11 +41,10 @@ internal fun ReportsSkeleton(padding: PaddingValues) {
     val block = MaterialTheme.colorScheme.surfaceVariant
     fun Modifier.block(h: Dp, w: Dp? = null, corner: Dp = 8.dp) = (if (w == null) fillMaxWidth() else width(w)).height(h).clip(RoundedCornerShape(corner)).background(block)
     Column(Modifier.fillMaxSize().padding(padding).graphicsLayer { alpha = shown.value }.clearAndSetSemantics { testTag = "reports_skeleton" }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("By period", "By year", "Financial year", "Any dates").forEachIndexed { i, l -> FilterChip(selected = i == 0, onClick = {}, enabled = false, label = { Text(l) }) }
-        }
-        FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Category", "Account", "Tag", "Merchant").forEachIndexed { i, l -> FilterChip(selected = i == 0, onClick = {}, enabled = false, label = { Text(l) }) }
+        // the two segmented controls of the real screen: a full-width pill track, 3 dp frame + 42 dp segment = 48 dp, with the same outer padding; no gap between them but their own
+        Column {
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
         }
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(24.dp, 180.dp)) }
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(96.dp, corner = 24.dp)) }

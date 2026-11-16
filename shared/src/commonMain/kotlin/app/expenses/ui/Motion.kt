@@ -9,6 +9,8 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import kotlin.concurrent.Volatile
@@ -84,6 +86,10 @@ object Motion {
     /** A tween of [ms], or under Reduce motion the short cross-fade [REDUCED_MS] (the change is still seen, nothing travels). */
     fun <T> tween(reduce: Boolean, ms: Int = STANDARD, easing: androidx.compose.animation.core.Easing = EaseOut): FiniteAnimationSpec<T> =
         if (reduce) tween(REDUCED_MS) else tween(ms, easing = easing)
+
+    /** A tween of [ms], or under Reduce motion no animation at all: the value jumps (charts and bars, where even a short cross-fade would be a visible slide). */
+    fun <T> tweenOrSnap(reduce: Boolean, ms: Int = STANDARD, easing: androidx.compose.animation.core.Easing = EaseOut): FiniteAnimationSpec<T> =
+        if (reduce) androidx.compose.animation.core.snap() else tween(ms, easing = easing)
 }
 
 /** True when the person asked for less motion (the switch under Appearance) or the phone's animations are off (Developer options, or Remove animations). */
@@ -117,4 +123,20 @@ fun Modifier.sharedContainer(key: Any): Modifier = composed {
             resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
         )
     }
+}
+
+/**
+ * The entry whose row was just tapped (UI S2). Only that row carries the shared-container modifier: the id is set as the tap happens, a frame before the screen changes, so the row grows into the detail and
+ * shrinks back on return, while every other row of the list stays a plain row (a shared-bounds modifier on every row of a long list cost composition on every scroll).
+ */
+class TappedEntry { var id: String? by androidx.compose.runtime.mutableStateOf<String?>(null) }
+
+val LocalTappedEntry = androidx.compose.runtime.compositionLocalOf<TappedEntry?> { null }
+
+/** [sharedContainer] for [entryId] while it is the tapped entry; nothing otherwise. */
+@Composable
+fun Modifier.tappedContainer(entryId: String): Modifier {
+    val tapped = LocalTappedEntry.current ?: return this
+    val isTapped by androidx.compose.runtime.remember(entryId, tapped) { androidx.compose.runtime.derivedStateOf { tapped.id == entryId } }
+    return if (isTapped) this.sharedContainer("entry:$entryId") else this
 }
