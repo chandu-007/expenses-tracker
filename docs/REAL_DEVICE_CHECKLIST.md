@@ -268,3 +268,13 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] TalkBack / VoiceOver: a row offers "Delete" as an action, a category tile is not read (the row names the category), the Icon grid reads each icon's name and which one is chosen, the "Show spending in red" row reads as a switch.
 - [ ] Text size 200%: the Categories editor (the colour and icon grids wrap, "Got it" is reachable), the Home rows (the tile is 32 dp, the amount goes under the words).
 - [ ] After an update from 0.13.x or 0.14.0: every category changed colour once; the line at the top of Categories is shown until "Got it".
+
+## UI S4 (Slice 117): what only a phone can show
+- [ ] Android phone and iPhone: Reports: drag a finger along the bars slowly: does the bubble follow the finger without lag, is a tick felt for each bar (iPhone: a softer tick), does lifting the finger remove the bubble, does a plain tap on a bar still open that month's entries.
+- [ ] Android phone and iPhone: the ring: round caps, the gaps between slices, the total in the middle; a thin slice (under 5%) is a dot: does that read as a slice or as dirt? Do two slices ever look alike (they should not: the colours are chosen to differ)?
+- [ ] Colour-blind eyes (or a simulator on the phone): the ring and the legend of a report with five categories; a screenshot of the table twin.
+- [ ] TalkBack: the bars are read one by one with amount and change; "Show as table" is a switch that says shown or hidden; each table row reads as one line; the Home line offers "Show as table" in the actions menu. VoiceOver: the same (not verified: the custom action on the Home line, and whether the bars read as buttons with their selected state).
+- [ ] Hide amounts on: the bubble, the average label, the table, the sentence and what is read aloud show no figure.
+- [ ] Reduce motion on (Appearance, Motion: Off, or the phone's setting): the bars are at full height at once and the bubble appears without animation.
+- [ ] Text size 200%: Reports (the legend rows put the share and the amount under the name; the bubble and the table stay readable), the Trip summary bars with the table.
+- [ ] Feel: Reports open and scroll, and switching between "By period", "By year" and the groupings, on an older phone: is it as smooth as before?
