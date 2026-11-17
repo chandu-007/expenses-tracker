@@ -622,12 +622,12 @@ data class CalendarUi(
 enum class ReportMode { PERIOD, YEAR, FINANCIAL_YEAR, CUSTOM }
 
 /** A row of a report grouped by account, tag or merchant. [key] is what drilling in needs (null: entries with no tag). */
-data class GroupRowUi(val key: String?, val name: String, val amount: String, val share: Int, val negative: Boolean)
+data class GroupRowUi(val key: String?, val name: String, val amount: String, val share: Int, val negative: Boolean, /** The amount in minor units, for the chart's "Others" and its table. */ val minor: Long = 0L)
 
-data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList())
+data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList(), val minor: Long = 0L)
 
 /** One bar of the trend. [fraction] is its height relative to the tallest bar (0 to 1). Tapping it opens the entries of that period. */
-data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long)
+data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long, /** The total in minor units: the chart's average line, the bubble's change from the bar before, the table. */ val minor: Long = 0L)
 
 data class DrillLineUi(val entryId: String, val date: String, val title: String, val category: String, val amount: String, val negative: Boolean)
 
@@ -4384,7 +4384,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val income = reports.income(period, zone, inr)
         val net = income - spent
         val colors = ok.categories.list().associate { it.id to it.colorArgb }
-        fun row(c: app.expenses.core.domain.CategoryRow): ReportRowUi = ReportRowUi(c.categoryId, c.name, c.total.formatted(), c.share, c.categoryId?.let { colors[it] }, c.total.minorUnits < 0, c.children.map(::row))
+        fun row(c: app.expenses.core.domain.CategoryRow): ReportRowUi = ReportRowUi(c.categoryId, c.name, c.total.formatted(), c.share, c.categoryId?.let { colors[it] }, c.total.minorUnits < 0, c.children.map(::row), c.total.minorUnits)
 
         // Trend: the six periods ending at this one, or the twelve months of the year.
         val bars: List<Triple<String, kotlinx.datetime.LocalDate, app.expenses.core.domain.DatePeriod>> = if (r.mode == ReportMode.YEAR) {
@@ -4397,7 +4397,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val totals = reports.trend(bars.map { it.third }, zone, inr)
         val tallest = totals.maxOfOrNull { it.minorUnits }?.takeIf { it > 0 } ?: 1L
         val trend = bars.mapIndexed { i, (label, _, p) ->
-            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays())
+            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays(), totals[i].minorUnits)
         }
 
         val change = ReportMath.percentChange(spent, reports.spent(previous, zone, inr))
@@ -4429,7 +4429,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 truncated = lines.size.toLong() == limit,
             )
         }
-        val groupRows = if (r.group == ReportGroup.CATEGORY) emptyList() else reports.groups(r.group, period, zone, inr).map { GroupRowUi(it.key, it.name, it.total.formatted(), it.share, it.total.minorUnits < 0) }
+        val groupRows = if (r.group == ReportGroup.CATEGORY) emptyList() else reports.groups(r.group, period, zone, inr).map { GroupRowUi(it.key, it.name, it.total.formatted(), it.share, it.total.minorUnits < 0, it.total.minorUnits) }
         return ReportUi(
             r.mode, title, r.mode != ReportMode.CUSTOM && r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison,
             reports.breakdown(period, zone, inr).map(::row), trend, drill, r.group, groupRows, period.start.toEpochDays().toLong(), period.endExclusive.toEpochDays().toLong(),

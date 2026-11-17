@@ -283,6 +283,10 @@ class TripModeUiTest {
         assertTrue(!has("trip_bar_5"))
         tap("trip_bar_0"); compose.waitUntil(10_000) { textOf("trip_bar_readout").contains(Money(340_000, inr).formatted()) } // the first day: 400 and 3,000
         tap("trip_bar_2"); compose.waitUntil(10_000) { textOf("trip_bar_readout").contains("(today)") && textOf("trip_bar_readout").contains(Money(30_000, inr).formatted()) } // today: 200 less the refund of 500
+        // UI S4: "Show as table" lists the same bars (a day each) with the same amounts
+        tap("trip_table_toggle"); waitFor("trip_table"); for (i in 0 until 5) waitFor("trip_table_row_$i")
+        assertTrue(mergedText("trip_table_row_0").contains(Money(340_000, inr).formatted()), mergedText("trip_table_row_0"))
+        assertTrue(mergedText("trip_table_row_2").contains(Money(30_000, inr).formatted()), mergedText("trip_table_row_2"))
     }
 
     @Test

@@ -6,7 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -118,22 +121,17 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
         }
     }
 
-    val description = privately("Spending over the last ${n} days")
+    var showTable by remember { mutableStateOf(false) }
+    // a screen reader hears the highest day and today, and can open the same numbers as a table (a long press does it for everyone else)
+    val highest = days.maxByOrNull { it.minor }
+    val description = privately("Spending over the last $n days." + (highest?.takeIf { it.minor > 0 }?.let { " Highest: ${it.label}." } ?: "") + " Today: ${days.last().label}.")
     Box(
-        modifier.fillMaxWidth().height(height).testTag("home_spark").semantics { contentDescription = description }
-            .pointerInput(n) {
-                fun indexAt(x: Float): Int = if (n <= 1 || size.width <= 0) 0 else ((x / size.width) * (n - 1)).roundToInt().coerceIn(0, n - 1)
-                fun move(x: Float) {
-                    val i = indexAt(x)
-                    if (i != touched) { touched = i; shownIndex = i; feel(Feel.TICK) }
-                }
-                detectHorizontalDragGestures(
-                    onDragStart = { at -> active = true; touched = -1; move(at.x) },
-                    onDragEnd = { active = false },
-                    onDragCancel = { active = false },
-                    onHorizontalDrag = { change, _ -> move(change.position.x); change.consume() },
-                )
-            },
+        modifier.fillMaxWidth().height(height).testTag("home_spark").semantics {
+            contentDescription = description
+            customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction("Show as table") { showTable = true; true })
+        }
+            .chartScrub(n, onScrub = { i -> active = true; touched = i; shownIndex = i; feel(Feel.TICK) }, onEnd = { active = false }, indexAt = ::pointIndex)
+            .pointerInput(n) { detectTapGestures(onLongPress = { showTable = true }) },
     ) {
         val maxMinor = (days.maxOfOrNull { it.minor } ?: 1L).coerceAtLeast(1L).toFloat()
         Canvas(Modifier.fillMaxSize()) {
@@ -192,6 +190,12 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
             )
         }
     }
+    if (showTable) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { showTable = false },
+        title = { Text("Spending over the last $n days") },
+        text = { ChartTable(listOf("Day", "Spent"), days.map { d -> TableLine(listOf(d.label.substringBefore(" · "), d.label.substringAfter(" · ", "")), d.label.replace(" · ", ": ")) }, "spark_table", Modifier.heightIn(max = 420.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { showTable = false }, modifier = Modifier.testTag("spark_table_close")) { Text("Close") } },
+    )
 }
 
 /** Colour of a budget state: calm when fine, amber when near, red when over. Matches the budget screen. */

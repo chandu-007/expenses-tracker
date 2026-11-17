@@ -51,6 +51,24 @@ object CategoryLook {
     /** The slot of the category with this [id]: a starter's fixed one, else one from the id. */
     fun slot(id: String): Int = STARTER_SLOTS[id] ?: slotOf(id)
 
+    /**
+     * The colour (RGB) of each thing in one chart (UI S4): a colour the person chose ([own]) stays; otherwise the slot of its id (or, with no id, its position), and when that colour is already
+     * taken by another slice or bar of the same chart the next free slot, so two slices of a ring are never the same colour. After the twelfth every colour is in use and a slot repeats.
+     */
+    fun chartHues(ids: List<String?>, own: List<Int?>): List<Int> {
+        val used = HashSet<Int>()
+        val out = IntArray(ids.size) { -1 }
+        for (i in ids.indices) own.getOrNull(i)?.let { out[i] = it and 0xFFFFFF; used += it and 0xFFFFFF }
+        for (i in ids.indices) {
+            if (out[i] != -1) continue
+            val base = ids[i]?.let { slot(it) } ?: (i % SLOTS)
+            var pick = SLOT_RGB[base]
+            for (k in 0 until SLOTS) { val c = SLOT_RGB[(base + k) % SLOTS]; if (c !in used) { pick = c; break } }
+            out[i] = pick; used += pick
+        }
+        return out.toList()
+    }
+
     /** The tile colours of [slot] in the light or dark theme. */
     fun tileFor(slot: Int, dark: Boolean): Tile = tileOfHue(SLOT_RGB[slot.mod(SLOTS)], dark)
 

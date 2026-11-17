@@ -78,4 +78,26 @@ class CategoryLookTest {
             assertTrue(d >= 15.0, "normal vision: slots $i and $j are only ${(d * 10).toInt() / 10.0} apart")
         }
     }
+
+    @Test
+    fun twoSlicesOfOneChartNeverShareAColourAndEachKeepsItsOwnWhenItCanAndAChosenColourStays() {
+        // ids that land on the same slot: found by search, so the test does not depend on a particular hash value
+        val same = (0 until 400).map { "x$it" }.groupBy { CategoryLook.slotOf(it) }.values.first { it.size >= 3 }.take(3)
+        val hues = CategoryLook.chartHues(same, listOf(null, null, null))
+        assertEquals(3, hues.toSet().size, "three ids on one slot get three colours: $hues")
+        assertEquals(CategoryLook.SLOT_RGB[CategoryLook.slotOf(same[0])], hues[0], "the first keeps its own slot")
+        // the same call gives the same answer (stable between recompositions)
+        assertEquals(hues, CategoryLook.chartHues(same, listOf(null, null, null)))
+        // a chosen colour is kept, and an id never takes it
+        val chosen = CategoryLook.SLOT_RGB[CategoryLook.slotOf(same[0])]
+        val withChosen = CategoryLook.chartHues(listOf(same[0], same[1]), listOf(null, chosen))
+        assertEquals(chosen, withChosen[1]); assertNotEquals(chosen, withChosen[0])
+        // five of twelve slots always come out different, whatever the ids
+        for (seed in 0 until 50) {
+            val five = (0 until 5).map { "c$seed-$it" }
+            assertEquals(5, CategoryLook.chartHues(five, five.map { null }).toSet().size)
+        }
+        // without ids it is by position, all different up to twelve
+        assertEquals(12, CategoryLook.chartHues(List(12) { null }, List(12) { null }).toSet().size)
+    }
 }

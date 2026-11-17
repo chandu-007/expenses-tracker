@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
+import app.expenses.core.domain.ReportSentence
 import app.expenses.DrillLineUi
 import app.expenses.DrillUi
 import app.expenses.ReportMode
@@ -104,6 +106,7 @@ fun ReportsScreen(
             return@Scaffold
         }
         if (waitedLong) Box(Modifier.size(1.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite; contentDescription = "Reports loaded" }.testTag("reports_loaded_announcement"))
+        val colors = rememberChartColors(report)
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 SegmentedChoice(
@@ -124,13 +127,19 @@ fun ReportsScreen(
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(1) }, enabled = report.canGoNext, modifier = Modifier.testTag("report_next").semantics { contentDescription = "Later" }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                 }
             }
+            item {
+                // one sentence that says the point before the chart does (UI S4)
+                val top = if (report.group == ReportGroup.CATEGORY) report.rows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) } else report.groupRows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) }
+                val sentence = top?.let { ReportSentence.headline(report.group.name.lowercase(), it.first, it.second, it.third, report.spent) }.orEmpty()
+                if (sentence.isNotEmpty()) Text(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("report_headline"))
+            }
             item { ReportSummary(report, onSpent = { onDrill(DrillTarget.All, null, null, null) }, onIncome = { onDrill(DrillTarget.Income, null, null, null) }) }
             item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             item {
-                val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.mapIndexed { i, r ->
-                    Slice(r.categoryId ?: "none", r.name, r.share, reportColor(r.colorArgb, i, r.categoryId)) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
-                } else report.groupRows.filter { !it.negative }.mapIndexed { i, r ->
-                    Slice(r.key ?: "none", r.name, r.share, reportColor(null, i)) {
+                val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.map { r ->
+                    Slice(r.categoryId ?: "none", r.name, r.share, colors[r.categoryId], r.amount, r.minor, r.name) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
+                } else report.groupRows.filter { !it.negative }.map { r ->
+                    Slice(r.key ?: "none", r.name, r.share, colors[r.key], r.amount, r.minor, null) {
                         onDrill(when (report.group) { ReportGroup.ACCOUNT -> DrillTarget.InAccount(r.key!!); ReportGroup.TAG -> r.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged; else -> DrillTarget.AtMerchant(r.key.orEmpty()) }, null, null, r.name)
                     }
                 }
@@ -147,8 +156,8 @@ fun ReportsScreen(
                     Text("Nothing spent in this period. Pick another period above, or add an expense.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
                 }
             }
-            if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { i, row ->
-                GroupReportRow(row, reportColor(null, i)) {
+            if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { _, row ->
+                GroupReportRow(row, colors[row.key]) {
                     val target = when (report.group) {
                         ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
                         ReportGroup.TAG -> row.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged
@@ -158,9 +167,9 @@ fun ReportsScreen(
                 }
                 HorizontalDivider()
             }
-            if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows, key = { _, r -> r.categoryId ?: "" }) { i, row ->
-                CategoryReportRow(row, indent = false, color = reportColor(row.colorArgb, i, row.categoryId), onDrill = onDrill)
-                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = reportColor(row.colorArgb, i, row.categoryId).copy(alpha = 0.7f), onDrill = onDrill) }
+            if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows, key = { _, r -> r.categoryId ?: "" }) { _, row ->
+                CategoryReportRow(row, indent = false, color = colors[row.categoryId], onDrill = onDrill)
+                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = colors[row.categoryId].copy(alpha = 0.7f), onDrill = onDrill) }
                 HorizontalDivider()
             }
         }
@@ -183,7 +192,7 @@ private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, o
             Box(Modifier.size(10.dp).background(color, CircleShape))
             Text(row.name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
             Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).size(width = 40.dp, height = 18.dp))
+            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
         }
         LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }
@@ -229,7 +238,7 @@ private fun GroupReportRow(row: GroupRowUi, color: Color, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
             Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).size(width = 40.dp, height = 18.dp))
+            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
         }
         LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }

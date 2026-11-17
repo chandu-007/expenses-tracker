@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -138,7 +139,8 @@ fun TripSummaryScreen(
             if (state.categories.isNotEmpty()) {
                 Text("Where it went", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("trip_categories"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    state.categories.forEachIndexed { i, c -> TripCategoryRow(c, i) }
+                    val hues = remember(state.categories) { app.expenses.core.domain.CategoryLook.chartHues(state.categories.map { null }, state.categories.map { c -> c.colorArgb?.let { (it and 0xFFFFFF).toInt() } }) }
+                    state.categories.forEachIndexed { i, c -> TripCategoryRow(c, Color(0xFF000000.toInt() or hues[i])) }
                 }
             } else if (state.entryCount == 0) {
                 Text("Nothing is tagged for this trip on its days yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_summary_empty"))
@@ -171,7 +173,7 @@ private fun TripBars(bars: List<TripBarUi>) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(Modifier.height(112.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                        Box(Modifier.width(22.dp).fillMaxHeight(b.fraction.coerceIn(0.03f, 1f)).clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)).background(if (b.isFuture) future else if (b.isToday) today else past))
+                        Box(Modifier.width(22.dp).fillMaxHeight(b.fraction.coerceIn(0.03f, 1f)).clip(Radius.Full).background(if (b.isFuture) future else if (b.isToday) today else past))
                     }
                     Text(b.label, style = NumberStyle.Chart, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.heightIn(min = 32.dp).padding(top = 4.dp))
                 }
@@ -183,12 +185,14 @@ private fun TripBars(bars: List<TripBarUi>) {
             style = MaterialTheme.typography.bodyMedium, color = if (b == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.heightIn(min = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }.testTag("trip_bar_readout"),
         )
+        var table by rememberSaveable { mutableStateOf(false) }
+        TableToggle(table, { table = !table }, "trip_table_toggle", Modifier.align(Alignment.Start))
+        if (table) ChartTable(listOf("Day", "Spent"), bars.map { b -> TableLine(listOf(b.label.replace('\n', ' '), b.amountText), b.description + if (b.isToday) " (today)" else "") }, "trip_table")
     }
 }
 
 @Composable
-private fun TripCategoryRow(c: TripCategoryUi, index: Int) {
-    val color = reportColor(c.colorArgb, index)
+private fun TripCategoryRow(c: TripCategoryUi, color: Color) {
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}.testTag("trip_cat_${c.name}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(color))
