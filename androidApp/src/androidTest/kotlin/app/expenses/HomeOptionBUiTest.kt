@@ -123,8 +123,10 @@ class HomeOptionBUiTest {
         seedTypical(); launch(); waitTiles()
         val b = bounds("budget_summary"); val s = bounds("home_safe_to_spend_line")
         assertTrue(b.right <= s.left + 1f && kotlin.math.abs(b.top - s.top) < 2f && kotlin.math.abs(b.height - s.height) < 2f, "two tiles in one row, the same height: $b $s")
-        assertTrue(textOf("budget_per_day").endsWith("a day from your budget"), textOf("budget_per_day"))
-        assertTrue(textOf("home_safe_to_spend_line_per_day").endsWith("from your balances"), textOf("home_safe_to_spend_line_per_day"))
+        // UI S5 (owner decision D7): one "a day" figure, on the month card; the balances' sum is one tap away
+        assertTrue(textOf("hero_pace_line").contains("a day · ") && textOf("hero_pace_line").contains("to month end"), textOf("hero_pace_line"))
+        assertEquals("How is this worked out?", textOf("home_safe_to_spend_line_how"))
+        assertFalse(has("budget_per_day") || has("home_safe_to_spend_line_per_day"), "no second a-day figure on the tiles")
         // the exact amounts are what is read (a screen reader, these tests); the figures are drawn in whole units
         assertTrue(Regex("""₹[\d,]+\.\d\d left of ₹60,000\.00""").matches(textOf("budget_overall_note")), textOf("budget_overall_note"))
         assertTrue(Regex("""₹[\d,]+\.\d\d safe to spend.*""").matches(textOf("home_safe_to_spend_line_text")), textOf("home_safe_to_spend_line_text"))

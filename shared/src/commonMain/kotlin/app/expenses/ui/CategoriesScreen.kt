@@ -58,6 +58,17 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.material.icons.outlined.DragHandle
+import app.expenses.core.domain.formatted
 import app.expenses.CategoryUi
 import app.expenses.core.domain.Category
 import app.expenses.core.domain.CategoryKind
@@ -149,27 +160,82 @@ fun CategoriesScreen(
         }
         KindTabs(incomeTab = incomeTab, onSelect = { incomeTab = it })
         val shown = categories.filter { it.kind.serves(incomeTab) }
+        // this period's spend per category (UI S5): the mini bars are relative to the biggest one on the page; colours differ within the page ([CategoryLook.chartHues])
+        val biggest = shown.maxOfOrNull { it.spentMinor } ?: 0L
+        val hues = remember(shown) { app.expenses.core.domain.CategoryLook.chartHues(shown.map { it.id }, shown.map { c -> c.colorArgb?.let { (it and 0xFFFFFF).toInt() } }) }
+        val feel = rememberFeel()
+        // where each row is on the screen, for a drag: read only when a finger is down (a plain map, not state)
+        val bounds = remember { HashMap<String, Pair<Float, Float>>() }
+        var dragging by remember { mutableStateOf<String?>(null) }
+        var dragDy by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
         LazyColumn(Modifier.fillMaxSize().testTag("categories_list"), contentPadding = PaddingValues(bottom = 88.dp)) {
             items(shown, key = { it.id }) { c ->
                 val level = if (c.parentId == null) 0 else 1
                 val siblings = shown.filter { it.parentId == c.parentId }
                 val index = siblings.indexOfFirst { it.id == c.id }
-                Row(
-                    Modifier.fillMaxWidth().clickable { editing = c.id }.padding(start = (16 + 28 * level).dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("cat_row_${c.id}"),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CategoryTilePreview(c.id, c.name, c.colorArgb, c.glyph, size = 36.dp, modifier = Modifier.padding(end = 12.dp))
+                val lifted = dragging == c.id
+                val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
+                val rowModifier =
+                    Modifier.fillMaxWidth()
+                        .onGloballyPositioned { bounds[c.id] = it.positionInRoot().y to it.size.height.toFloat() }
+                        .zIndex(if (lifted) 1f else 0f)
+                        .graphicsLayer { translationY = if (lifted) dragDy else 0f; shadowElevation = if (lifted) 12f else 0f }
+                        .background(if (lifted) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                        .clickable { editing = c.id }.padding(start = (16 + 28 * level).dp, end = 4.dp, top = 6.dp, bottom = 6.dp).testTag("cat_row_${c.id}")
+                val info: @Composable () -> Unit = {
                     Column(Modifier.weight(1f)) {
                         Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                         val note = buildList {
                             if (c.hidden) add("hidden")
                             if (c.kind == CategoryKind.BOTH) add("both")
+                            if (c.spentMinor > 0 && !incomeTab) add(app.expenses.core.domain.Money(c.spentMinor, app.expenses.core.domain.BaseCurrency.current).formatted() + " this period")
                             add(if (c.usage == 0L) "not used yet" else "${c.usage} ${if (c.usage == 1L) "item" else "items"}")
                         }.joinToString(" · ")
-                        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("cat_note_${c.id}"))
+                        if (!incomeTab && c.spentMinor > 0 && biggest > 0 && !LocalHideAmounts.current) {
+                            val hue = Color(0xFF000000.toInt() or hues[shown.indexOf(c)])
+                            Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(hue.copy(alpha = 0.18f)).testTag("cat_bar_${c.id}")) {
+                                Box(Modifier.fillMaxWidth((c.spentMinor.toFloat() / biggest).coerceIn(0.02f, 1f)).fillMaxHeight().background(hue, androidx.compose.foundation.shape.CircleShape))
+                            }
+                        }
                     }
-                    TextButton(onClick = { onMove(c.id, -1) }, enabled = index > 0, modifier = Modifier.testTag("up_${c.id}").semantics { contentDescription = "Move ${c.name} up" }) { Text("▲") }
-                    TextButton(onClick = { onMove(c.id, 1) }, enabled = index < siblings.lastIndex, modifier = Modifier.testTag("down_${c.id}").semantics { contentDescription = "Move ${c.name} down" }) { Text("▼") }
+                }
+                val controls: @Composable () -> Unit = {
+                    // the handle: press and hold, then drag to another place among the same level's categories (the arrows stay: a drag is not for everyone, WCAG 2.5.7)
+                    Box(
+                        Modifier.size(44.dp).testTag("drag_${c.id}").semantics { contentDescription = "Drag to move ${c.name}, or use the arrows" }
+                            .pointerInput(c.id, index, siblings.size) {
+                                var last = index
+                                fun target(): Int {
+                                    val me = bounds[c.id] ?: return index
+                                    val centre = me.first + me.second / 2f + dragDy
+                                    var best = index; var bestD = Float.MAX_VALUE
+                                    siblings.forEachIndexed { i, sib -> bounds[sib.id]?.let { (top, h) -> val d = kotlin.math.abs(top + h / 2f - centre); if (d < bestD) { bestD = d; best = i } } }
+                                    return best
+                                }
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { dragging = c.id; dragDy = 0f; last = index; feel(Feel.SELECT) },
+                                    onDrag = { change, amount -> change.consume(); dragDy += amount.y; val t = target(); if (t != last) { last = t; feel(Feel.TICK) } },
+                                    onDragEnd = { val steps = target() - index; dragging = null; dragDy = 0f; repeat(kotlin.math.abs(steps)) { onMove(c.id, if (steps < 0) -1 else 1) } },
+                                    onDragCancel = { dragging = null; dragDy = 0f },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Outlined.DragHandle, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TextButton(onClick = { onMove(c.id, -1) }, enabled = index > 0, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.widthIn(min = 40.dp).testTag("up_${c.id}").semantics { contentDescription = "Move ${c.name} up" }) { Text("▲") }
+                    TextButton(onClick = { onMove(c.id, 1) }, enabled = index < siblings.lastIndex, contentPadding = PaddingValues(horizontal = 6.dp), modifier = Modifier.widthIn(min = 40.dp).testTag("down_${c.id}").semantics { contentDescription = "Move ${c.name} down" }) { Text("▼") }
+                }
+                // from 140% text the handle and the arrows go under the words: beside them the note had room for a word a line
+                if (stacked) Column(rowModifier) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CategoryTilePreview(c.id, c.name, c.colorArgb, c.glyph, size = 36.dp, modifier = Modifier.padding(end = 12.dp))
+                        info()
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { controls() }
+                } else Row(rowModifier, verticalAlignment = Alignment.CenterVertically) {
+                    CategoryTilePreview(c.id, c.name, c.colorArgb, c.glyph, size = 36.dp, modifier = Modifier.padding(end = 12.dp))
+                    info()
+                    controls()
                 }
                 HorizontalDivider()
             }

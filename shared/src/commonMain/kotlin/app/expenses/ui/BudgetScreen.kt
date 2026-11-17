@@ -61,6 +61,14 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.parseAmount
 import kotlinx.datetime.DayOfWeek
+import androidx.compose.foundation.layout.heightIn
+import app.expenses.core.domain.PaceLevel
+import androidx.compose.ui.semantics.heading
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.outlined.Edit
 
 @Composable
 private fun stateColor(state: BudgetState): Color = when (state) {
@@ -113,13 +121,10 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
                     )
                     Text("of " + overall.limit.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!hide) AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)))
-                if (budget.perDay != null && !budget.billsUseItAll) {
-                    val perDayExact = privately("about ${budget.perDay} a day from your budget")
-                    Text("about ${budget.perDay.wholeAmounts()} a day from your budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_per_day").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(perDayExact) })
-                } else if (budget.billsUseItAll) {
-                    Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
-                }
+                if (!hide) AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
+                // UI S5: where the spending stands against "today" in words (the figure a day moved to the Home card's top: one "a day" figure, not two)
+                Text(paceWord(overall), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(overall.pace), modifier = Modifier.testTag("budget_pace_word"))
+                if (budget.billsUseItAll) Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
                 if (budget.categoriesNeedingAttention > 0) {
                     Text(
                         if (budget.categoriesNeedingAttention == 1) "1 category budget is near or over its limit" else "${budget.categoriesNeedingAttention} category budgets are near or over their limit",
@@ -150,6 +155,8 @@ fun BudgetScreen(
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editingOverall by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    var showNoLimit by rememberSaveable { mutableStateOf(false) }
     val target = if (editingOverall) budget.overall else budget.categories.firstOrNull { it.categoryId == editing }
     if (target != null) {
         LimitDialog(
@@ -160,19 +167,174 @@ fun BudgetScreen(
             onDismiss = { editing = null; editingOverall = false },
         )
     }
-    Scaffold(topBar = { ScreenHeader("Budget", onBack, "budget_back") }) { padding ->
+    if (settings) BudgetSettingsDialog(budget, onSetPeriod, onShiftStartDay, onShiftCustomDays, onRollover) { settings = false }
+    val withLimit = budget.categories.filter { it.limit != null }
+    val withoutLimit = budget.categories.filter { it.limit == null }
+    Scaffold(topBar = {
+        ScreenHeader("Budget", onBack, "budget_back", actions = {
+            androidx.compose.material3.IconButton(onClick = { settings = true }, modifier = Modifier.testTag("budget_settings")) {
+                androidx.compose.material3.Icon(Icons.Outlined.Edit, contentDescription = "Budget settings: period, carry over, start day")
+            }
+        })
+    }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            item(key = "ring") { BudgetRingCard(budget, onClick = { editingOverall = true }) }
+            item(key = "limits_title") {
+                Text("LIMITS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp).semantics { heading() })
+                if (withLimit.isEmpty()) Text(
+                    if (budget.overall.limit == null) "Set a limit for everything above, or for one category below." else "No category has a limit yet. Pick one below to give it a limit of its own.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("budget_no_limits_hint"),
+                )
+            }
+            items(withLimit, key = { "l" + (it.categoryId ?: "") }) { line ->
+                LimitRow(line, budget.elapsed, onClick = { editing = line.categoryId })
+                HorizontalDivider(Modifier.padding(start = 68.dp))
+            }
+            if (withoutLimit.isNotEmpty()) item(key = "no_limit_toggle") {
+                val n = withoutLimit.size
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).clip(Radius.M).clickable(onClickLabel = if (showNoLimit) "Hide them" else "Show them") { showNoLimit = !showNoLimit }
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 14.dp, vertical = 12.dp).testTag("budget_no_limit_toggle"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(if (showNoLimit) "Categories without a limit" else if (n == 1) "1 more category has no limit" else "$n more categories have no limit", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(if (showNoLimit) "Hide" else "Show", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            if (showNoLimit) items(withoutLimit, key = { "n" + (it.categoryId ?: "") }) { line ->
+                Row(Modifier.fillMaxWidth().clickable { editing = line.categoryId }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("budget_row_${line.categoryId ?: "overall"}"), verticalAlignment = Alignment.CenterVertically) {
+                    CategoryAvatar(line.name, line.name, Modifier.padding(end = 12.dp), size = 32.dp)
+                    Text(line.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text("No limit", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                HorizontalDivider(Modifier.padding(start = 60.dp))
+            }
+        }
+    }
+}
+
+/**
+ * The top of the Budget screen (UI S5): a ring of how much of the limit is used with a tick where "today" is, the amount left in its middle, the state in words and the one sentence. The ring is drawn
+ * in the draw phase from one animated value; while Hide amounts is on it is not drawn (its sweep would show the figure). Without an overall limit it is a short invitation to set one. Tapping it
+ * opens the limit of everything (`budget_row_overall`).
+ */
+@Composable
+private fun BudgetRingCard(budget: BudgetUi, onClick: () -> Unit) {
+    val overall = budget.overall
+    val hide = LocalHideAmounts.current
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
+    Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().clip(Radius.L).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .clickable(onClickLabel = "Change the limit", onClick = onClick).padding(16.dp).testTag("budget_row_overall"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (overall.limit == null) {
+            Text("No limit for everything yet", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("budget_ring_empty"))
+            Text("Pick one amount for ${budget.periodName} and see what is left, and what you can spend a day.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Set a limit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            return@Column
+        }
+        val reduce = LocalReduceMotion.current
+        val fill by androidx.compose.animation.core.animateFloatAsState((overall.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_ring")
+        val color by androidx.compose.animation.animateColorAsState(paceColor(overall.pace), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_ring_color")
+        val track = MaterialTheme.colorScheme.surface
+        val tick = MaterialTheme.colorScheme.onSurface
+        val amount = overall.note.substringBeforeLast(' ')
+        val word = overall.note.substringAfterLast(' ')
+        val exact = privately(overall.note + " of " + overall.limit)
+        val ringBox: @Composable () -> Unit = {
+            Box(Modifier.size(136.dp).testTag("budget_ring"), contentAlignment = Alignment.Center) {
+                if (!hide) androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    val stroke = 14.dp.toPx()
+                    val inset = stroke / 2 + 4.dp.toPx()
+                    val arc = androidx.compose.ui.geometry.Size(size.width - 2 * inset, size.height - 2 * inset)
+                    drawArc(track, 0f, 360f, false, androidx.compose.ui.geometry.Offset(inset, inset), arc, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                    if (fill > 0f) drawArc(color, -90f, 360f * fill, false, androidx.compose.ui.geometry.Offset(inset, inset), arc, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                    // "today": a short line across the ring at the share of the period gone
+                    val a = (-90.0 + 360.0 * budget.elapsed.coerceIn(0f, 1f)) * kotlin.math.PI / 180.0
+                    val r = arc.width / 2f
+                    val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+                    val inner = r - stroke * 0.8f
+                    val outer = r + stroke * 0.8f
+                    drawLine(tick.copy(alpha = 0.85f), androidx.compose.ui.geometry.Offset(c.x + (kotlin.math.cos(a) * inner).toFloat(), c.y + (kotlin.math.sin(a) * inner).toFloat()), androidx.compose.ui.geometry.Offset(c.x + (kotlin.math.cos(a) * outer).toFloat(), c.y + (kotlin.math.sin(a) * outer).toFloat()), strokeWidth = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp).testTag("budget_overall_note").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exact) }) {
+                    Text(amount.wholeAmounts(), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1, autoSize = amountFit(22), color = if (overall.pace == PaceLevel.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                    Text(word, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        val words: @Composable (Modifier) -> Unit = { mod ->
+            Column(mod, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    paceWord(overall), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(overall.pace),
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(paceColor(overall.pace).copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("budget_pace_word"),
+                )
+                if (budget.perDay != null) {
+                    val days = "${budget.daysLeft} ${if (budget.daysLeft == 1) "day" else "days"}"
+                    Text(
+                        when {
+                            budget.billsUseItAll -> "Bills still to come (${budget.upcoming}) use up what is left of your limit."
+                            budget.upcoming != null -> "After ${budget.upcoming} of repeating bills still to come, you can spend about ${budget.perDay} a day for the $days left."
+                            else -> "You can spend about ${budget.perDay} a day for the $days left. Repeating expenses without a fixed amount are not counted."
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("safe_to_spend"),
+                    )
+                }
+
+                Text(overall.spent.wholeAmounts() + " of " + overall.limit.wholeAmounts() + " · " + budget.range, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_range_line"))
+            }
+        }
+        if (stacked) { Box(Modifier.align(Alignment.CenterHorizontally)) { ringBox() }; words(Modifier.fillMaxWidth()) }
+        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) { ringBox(); words(Modifier.weight(1f)) }
+    }
+}
+
+/** One limit as a row (UI S5): the category's tile, "spent of limit", the bar with its tick for today and the state in words with what is left. */
+@Composable
+private fun LimitRow(line: BudgetLineUi, elapsed: Float, onClick: () -> Unit) {
+    val hide = LocalHideAmounts.current
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp).testTag("budget_row_${line.categoryId ?: "overall"}"), verticalAlignment = Alignment.Top) {
+        CategoryAvatar(line.name, line.name, Modifier.padding(end = 12.dp, top = 2.dp), size = 40.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // from 140% text the name has a line to itself: beside "₹906.00 of ₹15,000.00" it had room for two letters
+            if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f) Column {
+                Text(line.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
+                Text("${line.spent} of ${line.limit}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(line.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 2)
+                Text("${line.spent} of ${line.limit}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+            }
+            if (!hide) AnimatedBudgetBar(line, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = elapsed)
+            Row(Modifier.fillMaxWidth()) {
+                Text(paceWord(line), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(line.pace), modifier = Modifier.testTag("budget_row_word_${line.categoryId}"))
+                if (line.pace != PaceLevel.OVER) Text(" · ${line.note}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Period, carry over and the start day, behind the pencil (UI S5): they are set once, the limits are read every day. */
+@Composable
+private fun BudgetSettingsDialog(
+    budget: BudgetUi, onSetPeriod: (BudgetPeriod) -> Unit, onShiftStartDay: (Int) -> Unit, onShiftCustomDays: (Int) -> Unit, onRollover: (Boolean) -> Unit, onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("budget_settings_dialog"),
+        title = { Text("Budget settings") },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Carry over what is left")
                         Text(if (budget.rollover && budget.carriedText.isNotEmpty()) "${budget.carriedText} came over from last time, and is in the limit below." else "Whatever was not spent last time is added to this time's limit. It does not pile up beyond one period.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_carried"))
                     }
                     androidx.compose.material3.Switch(checked = budget.rollover, onCheckedChange = onRollover, modifier = Modifier.testTag("budget_rollover"))
                 }
-            }
-            item {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizontalDivider()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Period", style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
@@ -236,49 +398,9 @@ fun BudgetScreen(
                 }
                 HorizontalDivider()
             }
-            item {
-                BudgetRow(budget.overall, headline = true, onClick = { editingOverall = true })
-                if (budget.perDay != null) {
-                    val days = "${budget.daysLeft} ${if (budget.daysLeft == 1) "day" else "days"}"
-                    Text(
-                        when {
-                            budget.billsUseItAll -> "Bills still to come (${budget.upcoming}) use up what is left of your limit."
-                            budget.upcoming != null -> "After ${budget.upcoming} of repeating bills still to come, you can spend about ${budget.perDay} a day for the $days left."
-                            else -> "You can spend about ${budget.perDay} a day for the $days left. Repeating expenses without a fixed amount are not counted."
-                        },
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp).testTag("safe_to_spend"),
-                    )
-                }
-                HorizontalDivider()
-                Text("By category", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-            }
-            items(budget.categories, key = { it.categoryId ?: "" }) { line ->
-                BudgetRow(line, headline = false, onClick = { editing = line.categoryId })
-                HorizontalDivider()
-            }
-        }
-    }
-}
-
-@Composable
-private fun BudgetRow(line: BudgetLineUi, headline: Boolean, onClick: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp).testTag("budget_row_${line.categoryId ?: "overall"}"),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(line.name, style = if (headline) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(line.limit ?: "No limit", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (line.limit != null) {
-            BudgetBar(line)
-            Row(Modifier.fillMaxWidth()) {
-                Text("${line.spent} spent", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                Text(line.note, style = MaterialTheme.typography.bodySmall, color = if (line.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
+        },
+        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("budget_settings_done")) { Text("Done") } },
+    )
 }
 
 /** A short dialog, so it stays above the keyboard: one amount field and the buttons. */

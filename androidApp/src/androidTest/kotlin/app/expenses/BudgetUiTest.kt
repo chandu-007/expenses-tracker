@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -83,8 +84,18 @@ class BudgetUiTest {
         waitFor("budget_row_overall")
     }
 
-    /** Opens the limit dialog for a row, types [rupees] and saves. */
+    /** The period, carry over and start day are behind the pencil since UI S5. */
+    private fun openSettings() { compose.onNodeWithTag("budget_settings").performClick(); waitFor("budget_settings_dialog") }
+    private fun closeSettings() { compose.onNodeWithTag("budget_settings_done").performClick(); waitGone("budget_settings_dialog") }
+    private fun settingsTap(tag: String) { compose.onNodeWithTag(tag).performScrollTo(); compose.onNodeWithTag(tag).performClick() }
+
+    /** Opens the limit dialog for a row, types [rupees] and saves. A category without a limit is in the folded group (UI S5): it is shown first. */
     private fun setLimit(row: String, rupees: String) {
+        if (row != "overall" && compose.onAllNodes(hasTestTag("budget_row_$row"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithTag("budget_no_limit_toggle").performScrollTo(); compose.onNodeWithTag("budget_no_limit_toggle").performClick()
+            waitFor("budget_row_$row")
+        }
+        compose.onNodeWithTag("budget_row_$row").performScrollTo()
         compose.onNodeWithTag("budget_row_$row").performClick()
         waitFor("limit_amount")
         compose.onNodeWithTag("limit_amount").performTextInput(rupees)
@@ -104,7 +115,10 @@ class BudgetUiTest {
         compose.onNodeWithTag("budget_back").performClick()
         waitFor("budget_overall_note")
         compose.onNodeWithTag("budget_overall_note", useUnmergedTree = true).assertTextEquals("₹4,000.00 left of ₹5,000.00")
-        compose.onNodeWithTag("budget_per_day", useUnmergedTree = true).assertTextContains("a day", substring = true)
+        // UI S5: the one "a day" figure is on the month card, with how long it has to last
+        waitFor("hero_pace_line")
+        compose.onNodeWithTag("hero_pace_line", useUnmergedTree = true).assertTextContains("a day", substring = true)
+        compose.onNodeWithTag("hero_day_of", useUnmergedTree = true).assertTextContains("Day ", substring = true)
     }
 
     @Test
@@ -114,14 +128,16 @@ class BudgetUiTest {
         openBudget()
         setLimit("overall", "1000")
         compose.onNodeWithTag("budget_back").performClick()
-        waitFor("budget_per_day") // under the limit but near it: still gets a per-day figure
+        waitFor("hero_pace_line") // under the limit but near it: still gets a per-day figure
+        compose.onNodeWithTag("hero_pace_line", useUnmergedTree = true).assertTextContains("a day", substring = true)
         compose.onNodeWithTag("budget_summary").performClick()
         waitFor("budget_row_overall")
         setLimit("overall", "800")
         compose.onNodeWithTag("budget_back").performClick()
         waitForText("budget_overall_note", "₹100.00 over")
         compose.onNodeWithTag("budget_overall_note", useUnmergedTree = true).assertTextEquals("₹100.00 over of ₹800.00")
-        waitGone("budget_per_day")
+        waitForText("hero_pace_line", "Over by") // over the limit: the month card says by how much, not a day figure
+        compose.onNodeWithTag("budget_pace_word", useUnmergedTree = true).assertTextContains("Over by", substring = true)
     }
 
     @Test
@@ -168,44 +184,46 @@ class BudgetUiTest {
         launch()
         openBudget()
         setLimit("overall", "3000")
-        compose.onNodeWithTag("period_weekly").performClick()
+        openSettings()
+        settingsTap("period_weekly")
         waitForText("period_range", "–")
         assertEquals(BudgetPeriod.Weekly(kotlinx.datetime.DayOfWeek.MONDAY), period())
         launch()
         waitFor("budget_overall_note")
         compose.onNodeWithTag("budget_overall_note", useUnmergedTree = true).assertTextEquals("₹3,000.00 left of ₹3,000.00")
         compose.onNodeWithTag("budget_summary").performClick()
+        waitFor("budget_row_overall"); openSettings()
         waitFor("period_weekly")
         compose.onNodeWithTag("period_weekly").assertIsSelected()
     }
 
     @Test
     fun theFinancialYearFortnightAndHalfMonthPeriodsCanBeChosenAndAreNamedAndKept() {
-        launch(); openBudget()
-        compose.onNodeWithTag("period_yearly").performClick()
+        launch(); openBudget(); openSettings()
+        settingsTap("period_yearly")
         compose.waitUntil(10_000) { period() == BudgetPeriod.Yearly() }
         waitForText("period_range", "1 Apr"); waitForText("period_range", "31 Mar") // the financial year is April to March
-        compose.onNodeWithTag("period_semimonthly").performClick()
+        settingsTap("period_semimonthly")
         compose.waitUntil(10_000) { period() == BudgetPeriod.SemiMonthly }
-        compose.onNodeWithTag("period_biweekly").performClick()
+        settingsTap("period_biweekly")
         compose.waitUntil(10_000) { period() is BudgetPeriod.BiWeekly }
         val anchor = (period() as BudgetPeriod.BiWeekly).anchor
         assertEquals(kotlinx.datetime.DayOfWeek.MONDAY, anchor.dayOfWeek)
         launch(); waitFor("budget_summary")
-        compose.onNodeWithTag("budget_summary").performClick(); waitFor("period_biweekly")
+        compose.onNodeWithTag("budget_summary").performClick(); waitFor("budget_row_overall"); openSettings(); waitFor("period_biweekly")
         compose.onNodeWithTag("period_biweekly").assertIsSelected()
     }
 
     @Test
     fun aCustomLengthPeriodCanBeChosenLengthenedAndShortenedAndEveryQuickTapCounts() {
-        launch(); openBudget()
-        compose.onNodeWithTag("period_custom").performClick()
+        launch(); openBudget(); openSettings()
+        settingsTap("period_custom")
         compose.waitUntil(10_000) { period() is BudgetPeriod.EveryDays }
         assertEquals(10, (period() as BudgetPeriod.EveryDays).days)
         val vm = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
         repeat(5) { vm.shiftCustomDays(1) }
         compose.waitUntil(10_000) { (period() as? BudgetPeriod.EveryDays)?.days == 15 }
-        compose.onNodeWithTag("custom_days_down").performClick()
+        settingsTap("custom_days_down")
         compose.waitUntil(10_000) { (period() as? BudgetPeriod.EveryDays)?.days == 14 }
         waitForText("custom_days", "14")
         repeat(20) { vm.shiftCustomDays(-1) }
@@ -232,7 +250,8 @@ class BudgetUiTest {
     @Test
     fun aSalaryCycleRenamesThePeriodAndTheStartDayStaysBetween1And28() {
         launch()
-        openBudget()
+        openBudget(); openSettings()
+        compose.onNodeWithTag("start_day_down").performScrollTo()
         compose.onNodeWithTag("start_day_down").assertIsNotEnabled()
         repeat(24) { compose.onNodeWithTag("start_day_up").performClick() }
         waitForText("start_day", "25")
@@ -241,6 +260,7 @@ class BudgetUiTest {
         waitForText("start_day", "28")
         compose.onNodeWithTag("start_day_up").assertIsNotEnabled()
         compose.onNodeWithTag("start_day_down").assertIsEnabled()
+        closeSettings()
         compose.onNodeWithTag("budget_back").performClick()
         waitFor("budget_summary")
         compose.onNodeWithTag("budget_set_prompt", useUnmergedTree = true).assertTextContains("this cycle", substring = true)

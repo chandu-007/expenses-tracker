@@ -51,6 +51,15 @@ import app.expenses.BudgetLineUi
 import app.expenses.SparkUi
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BudgetState
+import app.expenses.BudgetUi
+import app.expenses.SafeToSpendUi
+import androidx.compose.foundation.layout.Row
+import app.expenses.core.domain.PaceMath
+import app.expenses.core.domain.PaceLevel
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.wholeAmounts
@@ -100,6 +109,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
     val feel = rememberFeel()
     val days = spark.days
     val n = days.size
+    val ghost = spark.ghost.takeIf { it.size == n }.orEmpty()
     // saved with the list item: scrolled off and back, the line is already drawn instead of drawing in again
     var played by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val reveal = remember { Animatable(if (reduce || played) 1f else 0f) }
@@ -133,7 +143,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
             .chartScrub(n, onScrub = { i -> active = true; touched = i; shownIndex = i; feel(Feel.TICK) }, onEnd = { active = false }, indexAt = ::pointIndex)
             .pointerInput(n) { detectTapGestures(onLongPress = { showTable = true }) },
     ) {
-        val maxMinor = (days.maxOfOrNull { it.minor } ?: 1L).coerceAtLeast(1L).toFloat()
+        val maxMinor = maxOf(days.maxOfOrNull { it.minor } ?: 1L, ghost.maxOrNull() ?: 0L).coerceAtLeast(1L).toFloat()
         Canvas(Modifier.fillMaxSize()) {
             val inset = 4.dp.toPx()
             val top = 18.dp.toPx()
@@ -155,7 +165,14 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
                 lineTo(px(0), bottom)
                 close()
             }
+            // last period, at the same days: a thin dashed line under this one (UI S5); it draws in with the line and is only ever read in the draw phase
+            val ghostPath = if (ghost.isEmpty()) null else Path().apply {
+                fun gy(i: Int) = bottom - (ghost[i].coerceAtLeast(0L) / maxMinor) * h
+                moveTo(px(0), gy(0))
+                for (i in 1 until n) { val midX = (px(i - 1) + px(i)) / 2f; cubicTo(midX, gy(i - 1), midX, gy(i), px(i), gy(i)) }
+            }
             clipRect(right = size.width * reveal.value) {
+                if (ghostPath != null) drawPath(ghostPath, color.copy(alpha = 0.55f), style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))))
                 drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.32f), color.copy(alpha = 0f)), startY = top, endY = bottom))
                 drawPath(line, color.copy(alpha = 0.95f), style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
@@ -170,7 +187,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
         val i = shownIndex
         if (i in 0 until n) {
             Text(
-                days[i].label,
+                days[i].label + (if (ghost.isNotEmpty()) " · ${spark.ghostName} ${Money(ghost[i], BaseCurrency.current).formatted()}" else ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -193,26 +210,83 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
     if (showTable) androidx.compose.material3.AlertDialog(
         onDismissRequest = { showTable = false },
         title = { Text("Spending over the last $n days") },
-        text = { ChartTable(listOf("Day", "Spent"), days.map { d -> TableLine(listOf(d.label.substringBefore(" · "), d.label.substringAfter(" · ", "")), d.label.replace(" · ", ": ")) }, "spark_table", Modifier.heightIn(max = 420.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) },
+        text = { ChartTable(if (ghost.isEmpty()) listOf("Day", "Spent") else listOf("Day", "Spent", spark.ghostName.replaceFirstChar { it.uppercase() }), days.mapIndexed { k, d -> TableLine(listOf(d.label.substringBefore(" · "), d.label.substringAfter(" · ", "")) + (if (ghost.isEmpty()) emptyList() else listOf(Money(ghost[k], BaseCurrency.current).formatted())), d.label.replace(" · ", ": ") + (if (ghost.isEmpty()) "" else ", ${spark.ghostName} ${Money(ghost[k], BaseCurrency.current).formatted()}")) }, "spark_table", Modifier.heightIn(max = 420.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { showTable = false }, modifier = Modifier.testTag("spark_table_close")) { Text("Close") } },
     )
 }
 
-/** Colour of a budget state: calm when fine, amber when near, red when over. Matches the budget screen. */
+/** Colour of a line's pace (UI S5): calm when on pace, amber when ahead of it (a projected overshoot), red only when over the limit. The word beside it says the same, so colour is never the only signal. */
 @Composable
-private fun budgetStateColor(state: BudgetState): Color = when (state) {
-    BudgetState.OK -> MaterialTheme.colorScheme.primary
-    BudgetState.NEAR -> Color(0xFFE08A00)
-    BudgetState.OVER -> MaterialTheme.colorScheme.error
+fun paceColor(pace: PaceLevel): Color = when (pace) {
+    PaceLevel.EARLY, PaceLevel.ON_PACE -> MaterialTheme.colorScheme.primary
+    PaceLevel.A_LITTLE_AHEAD, PaceLevel.AHEAD -> Color(0xFFB36B00)
+    PaceLevel.OVER -> MaterialTheme.colorScheme.error
 }
 
-/** [BudgetBar] that fills to its new value and shifts colour smoothly; instant under Reduce motion, and not animated on first composition. */
+/** The words for a budget line's pace: "On pace", "A little ahead", "Ahead of pace", "Over by ₹1,655" (the amount in whole units). */
+fun paceWord(line: BudgetLineUi): String = PaceMath.word(line.pace, line.note.removeSuffix(" over").wholeAmounts())
+
+/**
+ * The bar of a limit (UI S5): it fills to its new value and shifts colour smoothly (instant under Reduce motion, not animated on first composition) and, when [elapsed] is given, a thin tick marks how much
+ * of the period has gone ("today"); [todayLabel] writes the word over the tick. Colour follows the pace ([paceColor]). The fill and the tick are read while drawing.
+ */
 @Composable
-fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
+fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier, elapsed: Float = -1f, todayLabel: Boolean = false) {
     val reduce = LocalReduceMotion.current
     val progress by animateFloatAsState((line.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_fill")
-    val color by animateColorAsState(budgetStateColor(line.state), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_color")
-    LinearProgressIndicator(progress = { progress }, color = color, modifier = modifier.fillMaxWidth())
+    val color by animateColorAsState(paceColor(line.pace), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_color")
+    val tick = MaterialTheme.colorScheme.onSurface
+    Box(Modifier.fillMaxWidth().padding(top = if (todayLabel && elapsed >= 0f) 14.dp else 0.dp)) {
+        LinearProgressIndicator(progress = { progress }, color = color, modifier = modifier.fillMaxWidth())
+        if (elapsed >= 0f) androidx.compose.foundation.layout.Spacer(
+            Modifier.matchParentSize().drawBehind {
+                val x = size.width * elapsed.coerceIn(0f, 1f)
+                drawLine(tick.copy(alpha = 0.8f), Offset(x, -3.dp.toPx()), Offset(x, size.height + 3.dp.toPx()), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            },
+        )
+        if (todayLabel && elapsed >= 0f) Text(
+            "today", style = NumberStyle.Chart, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+            modifier = Modifier.layout { m, c ->
+                val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
+                layout(0, 0) { p.place((c.maxWidth * elapsed.coerceIn(0f, 1f) - p.width / 2f).coerceIn(0f, (c.maxWidth - p.width).coerceAtLeast(0).toFloat()).roundToInt(), -p.height - 5.dp.roundToPx()) }
+            },
+        )
+    }
+}
+
+/**
+ * The line at the foot of the month card (UI S5, owner decision D7): ONE "a day" figure and how long it has to last: "₹1,565 a day · 16 days to payday", from the budget; without a budget the balances' figure
+ * ("about ₹16,213 a day from your balances"); over the limit, the amount over. On the left "Day 14 of 30". The figure is drawn in whole units and the node says the exact one. Hide amounts masks it ([Text]).
+ */
+@Composable
+fun HeroPaceLine(budget: BudgetUi, safe: SafeToSpendUi?, onHero: Color, stacked: Boolean, modifier: Modifier = Modifier) {
+    val overall = budget.overall
+    val hasLimit = overall.limit != null
+    val over = hasLimit && overall.pace == PaceLevel.OVER
+    val perDay = budget.perDay
+    val right: String?
+    val exact: String?
+    when {
+        over -> { right = PaceMath.word(PaceLevel.OVER, overall.note.removeSuffix(" over").wholeAmounts()); exact = PaceMath.word(PaceLevel.OVER, overall.note.removeSuffix(" over")) }
+        hasLimit && perDay != null && !budget.billsUseItAll -> { right = PaceMath.heroLine(perDay.wholeAmounts(), budget.daysLeft, budget.endWord); exact = PaceMath.heroLine(perDay, budget.daysLeft, budget.endWord) }
+        hasLimit && budget.billsUseItAll -> { right = "bills still to come use what is left"; exact = right }
+        safe?.perDay != null -> { right = "${safe.perDay.wholeAmounts()} from your balances"; exact = "${safe.perDay} from your balances" }
+        else -> { right = null; exact = null }
+    }
+    val left = if (hasLimit && budget.periodDays > 0) "Day ${budget.daysIn} of ${budget.periodDays}" else null
+    if (left == null && right == null) return
+    val ink = onHero
+    val leftText: @Composable () -> Unit = { if (left != null) Text(left, style = MaterialTheme.typography.labelMedium, color = ink, maxLines = 1, modifier = Modifier.testTag("hero_day_of")) }
+    val rightText: @Composable (Modifier) -> Unit = { mod ->
+        if (right != null) {
+            val spoken = privately(exact!!)
+            Text(right, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink, modifier = mod.testTag("hero_pace_line").clearAndSetSemantics { text = AnnotatedString(spoken) })
+        }
+    }
+    if (stacked) Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) { leftText(); rightText(Modifier) }
+    else Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        leftText(); Box(Modifier.weight(1f)); rightText(Modifier)
+    }
 }
 
 /** Performs the limit haptic once when [over] turns true after the first composition. */

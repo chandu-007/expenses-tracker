@@ -1,5 +1,9 @@
 package app.expenses.ui
 
+import app.expenses.core.domain.PaceMath
+import app.expenses.core.domain.PaceLevel
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,12 +58,21 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
             Text(card.line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_line"))
         }
         if (!hide) {
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).testTag("home_trip_progress"),
-                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f),
-            )
+            // UI S5: with a trip budget the bar has a tick for how many of the trip's days are gone ("today") and the line below says where the spending stands against it in words
+            val pct = card.budgetPercent
+            val elapsed = if (pct != null && card.length > 0) (card.dayNumber.toFloat() / card.length).coerceIn(0f, 1f) else -1f
+            val level = if (pct != null && card.length > 0) PaceMath.level(pct.toLong(), 100L, elapsed, card.dayNumber, card.length) else null
+            val tick = MaterialTheme.colorScheme.onSecondaryContainer
+            Box(Modifier.fillMaxWidth()) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).testTag("home_trip_progress"),
+                    color = if (over) MaterialTheme.colorScheme.error else level?.let { paceColor(it) } ?: MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f),
+                )
+                if (elapsed >= 0f) Spacer(Modifier.matchParentSize().drawBehind { val x = size.width * elapsed; drawLine(tick.copy(alpha = 0.8f), androidx.compose.ui.geometry.Offset(x, -2.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height + 2.dp.toPx()), strokeWidth = 2.dp.toPx()) })
+            }
             if (card.budgetPercent != null && card.budgetText.isNotEmpty()) {
                 Text("${card.budgetPercent}% of ${card.budgetText} trip budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_budget"))
+                if (level != null && level != PaceLevel.EARLY) Text(PaceMath.word(level), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_pace"))
             }
         }
     }

@@ -295,7 +295,7 @@ data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
 
 /** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
 data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point ("₹250.00 more than last month so far"), or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "",
-    /** The chip beside the month total: "▲ +25%" or "▼ −30%"; empty when there is nothing to compare with or nothing changed. */ val comparePill: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
+    /** The chip beside the month total: "▲ +25%" or "▼ −30%"; empty when there is nothing to compare with or nothing changed. */ val comparePill: String = "", /** The same 14 days one period earlier (UI S5): the dashed ghost under the line; empty when there is nothing to compare with. */ val ghost: List<Long> = emptyList(), /** What the ghost is called ("last month"). */ val ghostName: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
@@ -412,7 +412,7 @@ val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLE
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 /** [kind] says which entries the category is offered for: expenses, income, or both (only for categories made before kinds existed that income already used). */
-data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, /** How many entries are on it (for the order of the form's tiles, most used first). */ val uses: Long = 0L, /** The glyph the person chose (a key of CategoryLook.GLYPHS), or null for the one the name suggests. */ val glyph: String? = null)
+data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, /** How many entries are on it (for the order of the form's tiles, most used first). */ val uses: Long = 0L, /** The glyph the person chose (a key of CategoryLook.GLYPHS), or null for the one the name suggests. */ val glyph: String? = null, /** UI S5: what this category took this budget period, in minor units (read only while the Categories screen is open; 0 until it arrives). */ val spentMinor: Long = 0L)
 
 /** An attachment as the editor lists it. */
 data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
@@ -438,6 +438,10 @@ data class BudgetLineUi(
     val note: String,
     val percent: Int,
     val state: BudgetState,
+    /** UI S5: the amounts in minor units and where the spending stands against the share of the period gone. */
+    val spentMinor: Long = 0L,
+    val limitMinor: Long = 0L,
+    val pace: app.expenses.core.domain.PaceLevel = app.expenses.core.domain.PaceLevel.EARLY,
 )
 
 /** Budget state for the current period. [perDay] is null without an overall limit. */
@@ -461,6 +465,13 @@ data class BudgetUi(
     val rollover: Boolean = false,
     /** What the overall limit gained from last period (e.g. "₹2,000.00"), or empty. */
     val carriedText: String = "",
+    /** UI S5: days of the period that have started (today counted), the length of the period, the share gone ("today" on the bars), and what its end is called ("payday", "month end"). */
+    val daysIn: Int = 0,
+    val periodDays: Int = 0,
+    val elapsed: Float = 0f,
+    val endWord: String = "",
+    /** Bills still to come, in minor units (0 when none). */
+    val upcomingMinor: Long = 0L,
 )
 
 /** A repeating expense waiting to be posted or skipped. [amount] is null when the amount differs each time and must be asked for. */
@@ -1416,6 +1427,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var accountRowsCache: List<AccountRowUi> = emptyList()
     private var sparkCache: SparkUi = SparkUi()
     private var categoryUsageCache: Map<String, Long> = emptyMap()
+    private var categorySpendCache: Map<String, Long> = emptyMap()
     /** How many entries each category is on, read once (two grouped reads of indexes) and kept up to date as entries are saved: the order of the entry form's category tiles. */
     @Volatile private var tileUses: Map<String, Long> = emptyMap()
     @Volatile private var tileUsesRead = false
@@ -1458,18 +1470,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 val safe = if (balances != null && wantSafe) safeToSpendUi(ok, accountList, balances, todayLocal(), inr) else null
                 val usage = if (categoriesOpen) ok.categories.list().associate { it.id to ok.categories.usage(it.id) } else categoryUsageCache
                 if (!tileUsesRead) { tileUses = ok.categories.useCounts(); tileUsesRead = true }
-                Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok))
+                // what each category took this budget period, one grouped read, only while the Categories screen is open (a subcategory's own total is under its parent's row)
+                val spend = if (categoriesOpen) {
+                    val today = todayLocal(); val cur = ok.budgets.period().containing(today)
+                    buildMap<String, Long> { ok.reports.breakdown(cur, kotlinx.datetime.TimeZone.currentSystemDefault(), inr).forEach { r -> r.categoryId?.let { put(it, r.total.minorUnits) }; r.children.forEach { c -> c.categoryId?.let { put(it, c.total.minorUnits) } } } }
+                } else categorySpendCache
+                Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok), spend)
             } ?: return@launch
-            nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; sparkCache = figures.spark; figuresReady = true
+            nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; categorySpendCache = figures.spend; sparkCache = figures.spark; figuresReady = true
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
-                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage) }) ?: st
+                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage, spentMinor = figures.spend[c.id] ?: c.spentMinor) }) ?: st
                 }
             }
         }
     }
 
-    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi, val safe: SafeToSpendUi?, val categorise: Int)
+    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi, val safe: SafeToSpendUi?, val categorise: Int, val spend: Map<String, Long>)
 
     /**
      * How many expenses have no category, for Home's "N expenses have no category" card: 0 when the card is not wanted (fewer than [UncategorisedNudge.MIN_COUNT], or "Not now" in the last week, which
@@ -1496,6 +1513,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         // this period against the last one at the same point in it
         val budgetPeriod = ok.budgets.period()
         var comparePill = ""
+        var ghostName = ""
+        var ghostShift = 0
         val compare = PeriodCompare.lastName(budgetPeriod)?.let { last ->
             val cur = budgetPeriod.containing(today)
             val before = budgetPeriod.containing(cur.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
@@ -1505,6 +1524,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             val earlier = ok.reports.spent(DatePeriod(before.start, comparableEnd), zone, inr).minorUnits
             // the same two figures give the sentence and the chip beside the total ("▲ +158%")
             comparePill = PeriodCompare.pill(now, earlier).orEmpty()
+            // the ghost under the line: the same 14 days, one period earlier (a month back for a month; the length of the period before for the others)
+            ghostName = last
+            ghostShift = before.start.daysUntil(cur.start)
             PeriodCompare.sentence(now, earlier, last) { Money(it, inr).formatted() }
         }.orEmpty()
         // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
@@ -1519,11 +1541,17 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             }.filter { m -> m.values.sum() > 0 }
             if (earlier.size < 2) null else SpendingInsight.best(now.map { (name, minor) -> InsightLine(name, minor, earlier.sumOf { m -> m[name] ?: 0L } / earlier.size) }) { Money(it, inr).formatted() }
         }.orEmpty()
+        // one more small read (14 days, the same index as the line itself): only when there is something to compare with
+        val ghost = if (ghostShift <= 0) emptyList() else {
+            val before = ok.reports.spendPoints(DatePeriod(first.minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY), today.plus(1, kotlinx.datetime.DateTimeUnit.DAY).minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr)
+                .groupBy { dateOfMillis(it.atMillis).epochDay() }.mapValues { (_, v) -> v.sumOf { it.minor } }
+            (0..13).map { i -> before[first.plus(i, kotlinx.datetime.DateTimeUnit.DAY).minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY).toEpochDays()] ?: 0L }.takeIf { g -> g.any { it > 0 } }.orEmpty()
+        }
         return SparkUi((0..13).map { i ->
             val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
             val minor = perDay[d.toEpochDays()] ?: 0L
             SparkDayUi(d.toEpochDays(), minor, dayFmt.format(localDateOfEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
-        }, compare, insight, comparePill)
+        }, compare, insight, comparePill, ghost, if (ghost.isEmpty()) "" else ghostName)
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>, balances: Map<AccountId, Money>): List<AccountRowUi> {
@@ -4819,7 +4847,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
             categories = ok.templates.settingsWithPrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX).associate { it.first.removePrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX) to it.second }.let { glyphs ->
-                cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind, tileUses[it.id] ?: 0L, glyphs[it.id]?.takeIf { g -> g in app.expenses.core.domain.CategoryLook.GLYPHS }) }
+                cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind, tileUses[it.id] ?: 0L, glyphs[it.id]?.takeIf { g -> g in app.expenses.core.domain.CategoryLook.GLYPHS }, categorySpendCache[it.id] ?: 0L) }
             },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
@@ -4842,6 +4870,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun budgetUi(ok: AppContainer.Opened.Ok, status: BudgetStatus, cats: List<app.expenses.core.domain.Category>): BudgetUi {
         val byScope = status.progress.associateBy { it.categoryId }
         val names = cats.associate { it.id to it.name }
+        val todayB = todayLocal()
+        val daysInB = app.expenses.core.domain.PaceMath.daysIn(status.period, todayB)
+        val elapsedB = app.expenses.core.domain.PaceMath.elapsed(status.period, todayB)
+        val upcomingB = status.safeToSpend?.upcoming?.minorUnits ?: 0L
         fun line(categoryId: String?, name: String): BudgetLineUi {
             val p = byScope[categoryId]
             return BudgetLineUi(
@@ -4851,6 +4883,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 note = p?.let { if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left" else "${Money(-it.remaining.minorUnits, inr).formatted()} over" }.orEmpty(),
                 percent = p?.usedPercent ?: 0,
                 state = p?.state ?: BudgetState.OK,
+                spentMinor = p?.spent?.minorUnits ?: 0L,
+                limitMinor = p?.limit?.minorUnits ?: 0L,
+                pace = if (p == null) app.expenses.core.domain.PaceLevel.EARLY else app.expenses.core.domain.PaceMath.level(p.spent.minorUnits, p.limit.minorUnits, elapsedB, daysInB, status.period.days, if (categoryId == null) upcomingB else 0L),
             )
         }
         // Only categories that serve expenses can carry a limit (one that already has a limit stays, so it can still be removed).
@@ -4878,6 +4913,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             categoriesNeedingAttention = status.progress.count { it.categoryId != null && it.state != BudgetState.OK },
             rollover = ok.budgets.rollover(),
             carriedText = status.carried[null]?.formatted().orEmpty(),
+            daysIn = daysInB, periodDays = status.period.days, elapsed = elapsedB,
+            endWord = app.expenses.core.domain.PaceMath.endWord(period), upcomingMinor = upcomingB,
         )
     }
 

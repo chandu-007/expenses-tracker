@@ -34,6 +34,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.expenses.GoalRowUi
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
 import app.expenses.GoalsUi
 
 /** Things to save up for: each with how far along it is and, with a date, what to put aside each month. */
@@ -68,23 +84,57 @@ fun GoalsScreen(
                 }
             }
             items(rows, key = { it.id }) { g ->
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("goal_${g.name}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(g.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text("${g.percent}%", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("goal_percent_${g.name}"))
-                    }
-                    LinearProgressIndicator(progress = { g.percent / 100f }, modifier = Modifier.fillMaxWidth())
-                    Text("${g.savedText} of ${g.targetText} · ${g.leftText}" + if (g.dueText.isNotEmpty()) " · ${g.dueText}" else "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("goal_line_${g.name}"))
-                    if (g.monthlyText.isNotEmpty()) Text(g.monthlyText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("goal_monthly_${g.name}"))
-                    if (g.accountName.isNotEmpty()) Text("Follows ${g.accountName}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (g.accountId.isEmpty()) TextButton(onClick = { adjusting = g.id }, modifier = Modifier.testTag("goal_add_${g.name}")) { Text("Add or take out") }
-                        TextButton(onClick = { editing = g.id }, modifier = Modifier.testTag("goal_edit_${g.name}")) { Text("Edit") }
-                        TextButton(onClick = { deleting = g.id }, modifier = Modifier.testTag("goal_remove_${g.name}")) { Text("Remove") }
-                    }
+                GoalCard(g, onAdd = { adjusting = g.id }, onEdit = { editing = g.id }, onRemove = { deleting = g.id })
+            }
+        }
+    }
+}
+
+/**
+ * One goal (UI S5): a ring of how far along it is with a flag in the middle, the saved amount large, what is left and by when, "Add or take out" as the one button and Edit and Remove behind the three dots.
+ * The ring is drawn from one animated value (at once under Reduce motion); the percentage is also written, so the ring is never the only signal.
+ */
+@Composable
+private fun GoalCard(g: GoalRowUi, onAdd: () -> Unit, onEdit: () -> Unit, onRemove: () -> Unit) {
+    val reduce = LocalReduceMotion.current
+    val fill by animateFloatAsState((g.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "goal_ring")
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val accent = MaterialTheme.colorScheme.primary
+    var menu by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(14.dp).testTag("goal_${g.name}"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val stroke = 9.dp.toPx()
+                    val inset = stroke / 2
+                    val arc = Size(size.width - stroke, size.height - stroke)
+                    drawArc(track, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
+                    if (fill > 0f) drawArc(accent, -90f, 360f * fill, false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
+                }
+                Icon(Icons.Outlined.Flag, contentDescription = null, tint = accent, modifier = Modifier.size(26.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(g.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2)
+                    Text("${g.percent}%", style = MaterialTheme.typography.titleMedium, color = accent, modifier = Modifier.padding(start = 8.dp).testTag("goal_percent_${g.name}"))
+                }
+                Text(g.savedText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = amountFit(22), modifier = Modifier.testTag("goal_saved_${g.name}"))
+            }
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.testTag("goal_more_${g.name}")) { Icon(Icons.Outlined.MoreVert, contentDescription = "More for ${g.name}: edit or remove") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() }, modifier = Modifier.testTag("goal_edit_${g.name}"))
+                    DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onRemove() }, modifier = Modifier.testTag("goal_remove_${g.name}"))
                 }
             }
         }
+        Text("${g.savedText} of ${g.targetText} · ${g.leftText}" + if (g.dueText.isNotEmpty()) " · ${g.dueText}" else "", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("goal_line_${g.name}"))
+        if (g.monthlyText.isNotEmpty()) Text(g.monthlyText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("goal_monthly_${g.name}"))
+        if (g.accountName.isNotEmpty()) Text("Follows ${g.accountName}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (g.accountId.isEmpty()) Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("goal_add_${g.name}")) { Text("Add or take out") }
     }
 }
 

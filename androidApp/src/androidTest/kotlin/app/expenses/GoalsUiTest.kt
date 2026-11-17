@@ -67,7 +67,7 @@ class GoalsUiTest {
         waitFor("goal_Laptop")
         compose.waitUntil(10_000) { textOf("goal_percent_Laptop") == "25%" }
         assertTrue(!has("goal_add_Laptop"), "an account's money moves with the account: no hand adjustments")
-        tap("goal_edit_Laptop"); compose.onNodeWithTag("goal_target", useUnmergedTree = true).performTextClearance(); type("goal_target", "40000"); tap("goal_save")
+        tap("goal_more_Laptop"); tap("goal_edit_Laptop"); compose.onNodeWithTag("goal_target", useUnmergedTree = true).performTextClearance(); type("goal_target", "40000"); tap("goal_save")
         compose.waitUntil(10_000) { textOf("goal_percent_Laptop") == "50%" }
     }
 
@@ -77,6 +77,6 @@ class GoalsUiTest {
         tap("goal_new"); tap("goal_save"); waitFor("goal_problem")
         type("goal_name", "X"); tap("goal_save"); compose.waitUntil(10_000) { textOf("goal_problem").contains("how much") }
         type("goal_target", "100"); tap("goal_save"); waitFor("goal_X")
-        tap("goal_remove_X"); tap("goal_delete_ok"); compose.waitUntil(10_000) { !has("goal_X") && has("goals_empty") }
+        tap("goal_more_X"); tap("goal_remove_X"); tap("goal_delete_ok"); compose.waitUntil(10_000) { !has("goal_X") && has("goals_empty") }
     }
 }

@@ -410,9 +410,11 @@ fun EntryListScreen(
                             }
                             if (large && pill != null) ComparePill(pill, onHero, Modifier.padding(top = 6.dp))
                             val compareExact = privately(state.spark.compare)
-                            if (state.spark.compare.isNotEmpty()) Text(state.spark.compare.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).testTag("month_compare").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(compareExact) })
-                            if (!dense && state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.9f), modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
+                            if (state.spark.compare.isNotEmpty()) Text(state.spark.compare.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 2.dp).testTag("month_compare").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(compareExact) })
+                            if (!dense && state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
                             if (!dense && !state.hideAmounts && !state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 8.dp), height = 40.dp)
+                            // UI S5 (owner decision D7): ONE "a day" figure, with how long it has to last: "₹1,565 a day · 16 days to payday"
+                            HeroPaceLine(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onHero, dense, Modifier.padding(top = 6.dp))
                         }
                     }
                     // the two money tiles come right under the month card while Budget is the first block of the person's layout (the default); moved lower in Customise home, they stay where the person put them

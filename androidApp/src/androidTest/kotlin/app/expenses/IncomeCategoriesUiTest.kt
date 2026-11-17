@@ -162,6 +162,7 @@ class IncomeCategoriesUiTest {
     @Test
     fun theBudgetScreenOffersNoIncomeCategoryForALimit() {
         launch(); tap("budget_summary"); waitFor("budget_row_overall")
+        tap("budget_no_limit_toggle") // the categories without a limit are folded (UI S5)
         for (id in expenseIds) {
             // the list is long now: the overall row leaves the screen as it scrolls, so the list is found as the screen's scrollable, not by that row
             compose.onAllNodes(hasScrollAction(), useUnmergedTree = true).onFirst().performScrollToNode(hasTestTag("budget_row_$id"))
