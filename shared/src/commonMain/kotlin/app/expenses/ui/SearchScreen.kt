@@ -337,13 +337,13 @@ fun SearchScreen(
                                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = 14.dp))
+                            if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else EntryTile(row.title, row.category, row.kind, Modifier.padding(end = 14.dp))
                             Column(Modifier.weight(1f)) {
                                 MatchText(row.title, text, style = MaterialTheme.typography.bodyLarge, maxLines = resultLines)
                                 MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)
                             }
                             val flow = flowOf(row.kind, row.inflow)
-                            Text(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow))
+                            MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow))
                         }
                     }
                     }

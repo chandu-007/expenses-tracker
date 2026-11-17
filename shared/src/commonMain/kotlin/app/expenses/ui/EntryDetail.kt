@@ -134,7 +134,7 @@ fun EntryDetailScreen(
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // the tile, the merchant, what it was and the amount in the middle, as the mock-up has it
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    CategoryAvatar(title, d.kind.label, size = 56.dp)
+                    EntryTile(title, if (d.kind == DraftKind.EXPENSE || d.kind == DraftKind.INCOME) categoryName.orEmpty() else "", d.kind.name, size = 56.dp)
                     Text(title, style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).testTag("detail_title"))
                     Text(sub, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("detail_sub"))
                     CappedFontScale(LARGE_TEXT_SCALE) {

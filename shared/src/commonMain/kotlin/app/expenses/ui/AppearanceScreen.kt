@@ -22,6 +22,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +40,7 @@ import app.expenses.core.domain.ThemeMode
 /** Light or dark, an accent colour, and how tight the lists are. Changes apply at once. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}) {
+fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}) {
     Scaffold(topBar = { ScreenHeader("Appearance", onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
@@ -58,6 +60,13 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             SegmentedChoice(Density.entries.map { Segment(it, it.label, "density_${it.name}") }, current.density, { onChange(current.copy(density = it)) })
             Text("Motion", style = MaterialTheme.typography.labelMedium)
             SegmentedChoice(listOf("off" to "Off", "quick" to "Quick", "relaxed" to "Relaxed", "slow" to "Slow").map { (key, label) -> Segment(key, label, "motion_$key") }, motionSpeed, onMotionSpeed)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = showSpendingRed, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onShowSpendingRed).testTag("spend_red_row"), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Show spending in red", style = MaterialTheme.typography.bodyLarge)
+                    Text("Off: money you spend is in the ordinary text colour with a minus sign, and red is kept for what is wrong (over a limit, overdue). On: spending is red.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.Switch(checked = showSpendingRed, onCheckedChange = null, modifier = Modifier.testTag("spend_red_switch"))
+            }
             Details("appearance_details") {
                 Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Compact fits more entries on the screen: the rows of the list, search and report entries are about a third tighter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

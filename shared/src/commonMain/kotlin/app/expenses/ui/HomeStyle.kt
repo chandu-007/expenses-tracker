@@ -85,18 +85,6 @@ fun dayLabel(epochDay: Long, today: LocalDate = todayLocal()): String {
     }
 }
 
-/** A rounded tinted tile with the category's initial; the tint is the same for the same name every time (a small fixed palette, all pale enough for dark text). */
-@Composable
-fun CategoryAvatar(name: String, fallback: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 40.dp) {
-    val label = name.ifBlank { fallback }
-    val tint = AVATAR_TINTS[label.lowercase().hashCode().mod(AVATAR_TINTS.size)]
-    Box(modifier.size(size).clip(RoundedCornerShape(size * 0.34f)).background(tint), contentAlignment = Alignment.Center) {
-        Text(label.trim().take(1).uppercase(), color = Color(0xFF1B1B1F), fontWeight = FontWeight.SemiBold)
-    }
-}
-
-private val AVATAR_TINTS = listOf(Color(0xFFBFE3D0), Color(0xFFC9DAF8), Color(0xFFF4D9B5), Color(0xFFE5CFF0), Color(0xFFF6C9CF), Color(0xFFD7E6A8), Color(0xFFB9E2E8), Color(0xFFE8DDB5))
-
 /**
  * The heading above each day's entries: the day, and at the right what was spent that day ([total], already signed, null when the day is not complete yet or had no spending). The pair reads as one heading
  * to a screen reader ("Today, -₹1,112.00"). The total is drawn with [Text], so Hide amounts masks it.
@@ -248,15 +236,19 @@ fun flowOf(kind: String, inflow: Boolean): Flow3 = when {
     else -> Flow3.OUT
 }
 
+/** Whether spending is drawn in red (the Appearance switch "Show spending in red"; off by default: the ordinary text colour with a minus sign). */
+val LocalSpendingRed = androidx.compose.runtime.compositionLocalOf { false }
+
 /**
- * The colour of an amount: red for money out, green for money in, the ordinary text colour for a transfer. The shades are chosen per theme so each reads at
- * 4.5:1 or better on that theme's background (the light ones are darker, the dark ones lighter than the plain red and green).
+ * The colour of an amount (UI S3): money in is green, with a plus sign; money out is the ordinary text colour with a minus sign, because the sign already says which way it went and a list that is all red makes red
+ * mean nothing; a transfer is the ordinary text colour. Red is kept for what is wrong (over a limit, overdue, failed), drawn by those screens, and the person can switch spending back to red under Appearance
+ * ([LocalSpendingRed]). The greens and reds are chosen per theme so each reads at 4.5:1 or better on that theme's background.
  */
 @Composable
 fun amountColor(flow: Flow3): Color {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     return when (flow) {
-        Flow3.OUT -> if (dark) Color(0xFFFF8A80) else Color(0xFFB3261E)
+        Flow3.OUT -> if (!LocalSpendingRed.current) MaterialTheme.colorScheme.onSurface else if (dark) Color(0xFFFF8A80) else Color(0xFFB3261E)
         Flow3.IN -> if (dark) Color(0xFF6FD3A0) else Color(0xFF17744A)
         Flow3.MOVE -> MaterialTheme.colorScheme.onSurface
     }

@@ -124,7 +124,7 @@ class BackupStore(
             replaced = q.exportReplaced().executeAsList().map { BackupReplaced(it.entry_id, it.replaced_by, it.reason) },
             trips = ledger.trips.all().sortedWith(compareBy({ it.startDay }, { it.id })).map { BackupTrip(it.id, it.name, it.tag, it.startDay, it.endDay, it.enabled, it.dailyBudgetMinor) },
             settings = (SETTINGS + app.expenses.core.domain.CurrencyChoices.ALL.map { RATE_PREFIX + it.code } + q.allCardTerms().executeAsList().map { CARD_LIMIT_PREFIX + it.account_id } +
-                q.settingsWithPrefix(app.expenses.core.domain.PayeeAliases.PREFIX).executeAsList().map { it.key }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
+                q.settingsWithPrefix(app.expenses.core.domain.PayeeAliases.PREFIX).executeAsList().map { it.key } + q.settingsWithPrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX).executeAsList().map { it.key }).mapNotNull { k -> q.settingValue(k).executeAsOneOrNull()?.takeIf { it.isNotEmpty() }?.let { k to it } }.toMap(),
         )
     }
 
@@ -306,6 +306,9 @@ class BackupStore(
             if (aliasesHere.problemFor(a.from, a.to, a.fromLabel, a.toLabel) != null) continue
             q.putSetting(k, app.expenses.core.domain.PayeeAliases.encode(a)); aliasesHere = aliasesHere.with(a)
         }
+        // The glyph the person chose for a category (`cat_glyph:<id>`) comes back only for a category that is here under the same id, only a glyph this app has, and never over one chosen on this phone.
+        for ((k, v) in data.settings) if (k.startsWith(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX) && q.categoryById(k.removePrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX)).executeAsOneOrNull() != null &&
+            v in app.expenses.core.domain.CategoryLook.GLYPHS && q.settingValue(k).executeAsOneOrNull() == null) q.putSetting(k, v)
         // Files last, once their entries are here. Each is checked again inside this transaction: it may have been taken, or its entry may be deleted here.
         val attached = LinkedHashSet<String>()
         for (a in data.attachments) {
@@ -397,7 +400,7 @@ class BackupStore(
         /** The only settings a backup carries: the notification choices. What was already shown is per device and is not restored. */
         val SETTINGS = listOf("notif_bills", "notif_budgets", "notif_quiet_on", "notif_quiet_start", "notif_quiet_end", "notif_bill_hour", "home_layout", "hide_amounts", "appearance", "base_currency", "capture_extra_roots",
             "goals", "budget_rollover", "notif_recap", "notif_near_percent", "notif_pace", "notif_wrapup", "notif_ahead3", "notif_ahead1", "notif_card_statement", "notif_card_limit",
-            "safe_to_spend_on_home", "sinking_funds_on")
+            "safe_to_spend_on_home", "sinking_funds_on", "show_spending_red")
 
         /** The accounts the app makes by itself on its first start (see AppContainer): `cash` and `bank`. */
         val FIRST_START_ACCOUNTS = setOf("cash", "bank")

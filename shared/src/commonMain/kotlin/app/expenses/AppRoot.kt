@@ -319,6 +319,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(
                     app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
                     app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
+                    app.expenses.ui.LocalSpendingRed provides s.showSpendingRed,
+                    app.expenses.ui.LocalCategoryLooks provides androidx.compose.runtime.remember(s.categories) { app.expenses.ui.CategoryLooks.of(s.categories) },
                 ) {
                 androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(s.motionSpeed) }
                 // the tour: the app opens each part for real, and a layer on top explains it
@@ -699,7 +701,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 9 -> {
                         BackHandler { appearing = false }
-                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed)
+                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed)
                     }
                     k == 10 -> {
                         BackHandler { customisingHome = false }
@@ -729,6 +731,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onDelete = viewModel::deleteCategory,
                             onAddSuggested = viewModel::addSuggestedCategories,
                             stopped = stoppedSimilar, onAskAgain = viewModel::askAgain,
+                            lookNotice = s.categoryLookNotice, onLookNoticeSeen = viewModel::dismissCategoryLookNotice,
                         )
                     }
                     k == 13 -> {

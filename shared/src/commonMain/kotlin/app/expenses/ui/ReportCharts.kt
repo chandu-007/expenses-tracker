@@ -49,12 +49,12 @@ import androidx.compose.ui.unit.sp
 import app.expenses.ReportMode
 import app.expenses.ReportUi
 
-/** Colours for slices and bars whose category has none of its own. Mid-tone, so they read on both the light and the dark theme. */
-private val PALETTE = listOf(0xFF5C6BC0, 0xFF26A69A, 0xFFFFA726, 0xFFEC407A, 0xFF66BB6A, 0xFF29B6F6, 0xFF8D6E63, 0xFFAB47BC).map { Color(it) }
+/** Colours for slices and bars whose category has none of its own (UI S3): the 12 category slot hues, the first seven colour-blind-safe (Okabe-Ito), so a chart and the tiles beside it agree. Mid-tone, so they read on both themes. */
+private val PALETTE = app.expenses.core.domain.CategoryLook.SLOT_RGB.map { Color(0xFF000000.toInt() or it) }
 private val OTHERS = Color(0xFF9E9E9E)
 
 /** The colour of the [index]th thing in a report: its own when it has one, otherwise one from the palette. */
-fun reportColor(own: Long?, index: Int): Color = own?.let { Color(it) } ?: PALETTE[index % PALETTE.size]
+fun reportColor(own: Long?, index: Int, categoryId: String? = null): Color = own?.let { Color(it) } ?: categoryId?.let { PALETTE[app.expenses.core.domain.CategoryLook.slot(it)] } ?: PALETTE[index % PALETTE.size]
 
 /** One slice of the breakdown ring. [share] is a whole percent; [onClick] is null for the "others" slice. */
 data class Slice(val key: String, val name: String, val share: Int, val color: Color, val onClick: (() -> Unit)?)

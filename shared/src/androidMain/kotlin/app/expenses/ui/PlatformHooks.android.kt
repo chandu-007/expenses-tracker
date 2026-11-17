@@ -37,6 +37,9 @@ fun hapticConstant(feel: Feel, sdk: Int): Int = when (feel) {
     Feel.LIMIT -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
     Feel.TICK -> HapticFeedbackConstants.CLOCK_TICK
     Feel.SELECT -> HapticFeedbackConstants.LONG_PRESS // a long press that starts choosing: the platform's own meaning
+    // a swipe crossing its commit point: Android 14 has the pair made for it, before that a tick
+    Feel.THRESHOLD -> if (sdk >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE else HapticFeedbackConstants.CLOCK_TICK
+    Feel.THRESHOLD_OFF -> if (sdk >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE else HapticFeedbackConstants.CLOCK_TICK
 }
 
 @Composable

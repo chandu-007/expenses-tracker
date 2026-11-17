@@ -96,7 +96,8 @@ object Motion {
 val LocalReduceMotion = compositionLocalOf { false }
 
 /** The few moments the app answers with a touch. Each is a different feel, so a person learns what happened without looking. */
-enum class Feel { SAVE, UNDO, LIMIT, PAID, TICK, SELECT }
+/** [THRESHOLD] is a swipe crossing the point where it will act (UI S3), [THRESHOLD_OFF] crossing back before letting go. */
+enum class Feel { SAVE, UNDO, LIMIT, PAID, TICK, SELECT, THRESHOLD, THRESHOLD_OFF }
 
 // ---- shared-element ("container transform") transitions ----
 

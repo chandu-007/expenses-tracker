@@ -175,7 +175,7 @@ class CategoriesTest {
         launch(); waitForText("· Fun")
         openManager()
         compose.onNodeWithTag("cat_row_Fun").performClick()
-        compose.onNodeWithTag("cat_hidden").performClick()
+        compose.onNodeWithTag("cat_hidden").performScrollTo().performClick() // below the colours and the icon picker (UI S3): scroll to it
         compose.onNodeWithTag("cat_save").performClick()
         waitForText("hidden")
         compose.onNodeWithTag("categories_back").performClick(); compose.closeMore()

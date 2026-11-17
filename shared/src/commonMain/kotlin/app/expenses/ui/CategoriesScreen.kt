@@ -42,6 +42,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,7 +64,8 @@ import app.expenses.core.domain.CategoryKind
 import app.expenses.core.domain.CategoryRules
 
 /** Colours offered for categories. Optional: a category without one is simply shown without a dot. */
-val CATEGORY_COLORS: List<Long> = listOf(0xFFE53935, 0xFFFB8C00, 0xFFFDD835, 0xFF43A047, 0xFF00ACC1, 0xFF1E88E5, 0xFF8E24AA, 0xFF6D4C41)
+/** The colours offered for a category: the 12 slot hues (UI S3), the first seven being the colour-blind-safe Okabe-Ito ones. "None" keeps the slot the app gives it. */
+val CATEGORY_COLORS: List<Long> = app.expenses.core.domain.CategoryLook.SLOT_RGB.map { 0xFF000000L or it.toLong() }
 
 /** The shared rules need the plain domain type; the screens carry a little extra (usage). */
 internal fun List<CategoryUi>.asDomain(): List<Category> = mapIndexed { i, c -> Category(c.id, c.name, c.parentId, c.colorArgb, i, c.hidden, c.kind) }
@@ -79,7 +85,7 @@ fun CategoriesScreen(
     categories: List<CategoryUi>,
     onBack: () -> Unit,
     onCreate: (name: String, parentId: String?, colorArgb: Long?, kind: CategoryKind) -> Unit,
-    onUpdate: (id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) -> Unit,
+    onUpdate: (id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?, glyph: String?) -> Unit,
     onMove: (id: String, direction: Int) -> Unit,
     onMerge: (fromId: String, intoId: String) -> Unit,
     onDelete: (id: String) -> Unit,
@@ -88,6 +94,9 @@ fun CategoriesScreen(
     /** Names the person told the app to stop offering a category for: (key, name). */
     stopped: List<Pair<String, String>> = emptyList(),
     onAskAgain: (String) -> Unit = {},
+    /** True once for a ledger that had categories before they got glyphs and colours (UI S3): a line at the top says so until the person taps "Got it". */
+    lookNotice: Boolean = false,
+    onLookNoticeSeen: () -> Unit = {},
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -104,7 +113,7 @@ fun CategoriesScreen(
     if (editedCategory != null) {
         CategoryEditorScreen(
             category = editedCategory, categories = categories, domain = domain,
-            onSave = { name, color, hidden, parent -> onUpdate(editedCategory.id, name, color, hidden, parent); editing = null },
+            onSave = { name, color, hidden, parent, glyph -> onUpdate(editedCategory.id, name, color, hidden, parent, glyph); editing = null },
             onMerge = { into -> onMerge(editedCategory.id, into); editing = null },
             onDelete = { onDelete(editedCategory.id); editing = null },
             onSetKind = { kind, done -> onSetKind(editedCategory.id, kind, done) },
@@ -134,6 +143,10 @@ fun CategoriesScreen(
         floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("New category") }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+        if (lookNotice) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).inlineCard(MaterialTheme.colorScheme.primary).padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp).testTag("look_notice"), verticalAlignment = Alignment.CenterVertically) {
+            Text("New look: every category now has an icon and a colour of its own. Tap a category to change them.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onLookNoticeSeen, modifier = Modifier.heightIn(min = 48.dp).testTag("look_notice_ok")) { Text("Got it") }
+        }
         KindTabs(incomeTab = incomeTab, onSelect = { incomeTab = it })
         val shown = categories.filter { it.kind.serves(incomeTab) }
         LazyColumn(Modifier.fillMaxSize().testTag("categories_list"), contentPadding = PaddingValues(bottom = 88.dp)) {
@@ -145,8 +158,7 @@ fun CategoriesScreen(
                     Modifier.fillMaxWidth().clickable { editing = c.id }.padding(start = (16 + 28 * level).dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("cat_row_${c.id}"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ColorDot(c.colorArgb, 14)
-                    if (c.colorArgb != null) Spacer(Modifier.size(10.dp))
+                    CategoryTilePreview(c.id, c.name, c.colorArgb, c.glyph, size = 36.dp, modifier = Modifier.padding(end = 12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                         val note = buildList {
@@ -263,7 +275,7 @@ private fun CategoryEditorScreen(
     category: CategoryUi,
     categories: List<CategoryUi>,
     domain: List<Category>,
-    onSave: (name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) -> Unit,
+    onSave: (name: String, colorArgb: Long?, hidden: Boolean, parentId: String?, glyph: String?) -> Unit,
     onMerge: (intoId: String) -> Unit,
     onDelete: () -> Unit,
     onSetKind: (kind: CategoryKind, onDone: (String?) -> Unit) -> Unit,
@@ -272,6 +284,7 @@ private fun CategoryEditorScreen(
     var kindProblem by remember(category.id) { mutableStateOf<String?>(null) }
     var name by rememberSaveable(category.id) { mutableStateOf(category.name) }
     var color by rememberSaveable(category.id) { mutableStateOf(category.colorArgb) }
+    var glyph by rememberSaveable(category.id) { mutableStateOf(category.glyph) }
     var hidden by rememberSaveable(category.id) { mutableStateOf(category.hidden) }
     var parentId by rememberSaveable(category.id) { mutableStateOf(category.parentId) }
     var merging by rememberSaveable(category.id) { mutableStateOf(false) }
@@ -312,7 +325,7 @@ private fun CategoryEditorScreen(
         topBar = { ScreenHeader("Edit category", onBack, "cat_cancel", backLabel = "Cancel") },
         bottomBar = {
             Button(
-                onClick = { onSave(name, color, hidden, parentId) },
+                onClick = { onSave(name, color, hidden, parentId, glyph) },
                 enabled = nameError == null && parentError == null,
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).testTag("cat_save"),
             ) { Text("Save") }
@@ -324,6 +337,11 @@ private fun CategoryEditorScreen(
                 isError = nameError != null, supportingText = { if (nameError != null) Text(nameError) },
                 modifier = Modifier.fillMaxWidth().testTag("cat_name"),
             )
+            // the tile as it will look, with the glyph and colour chosen below
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CategoryTilePreview(category.id, name.ifBlank { category.name }, color, glyph)
+                Text("How it looks in lists", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text("Colour", style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { color = null }, modifier = Modifier.testTag("swatch_none")) { Text(if (color == null) "None ✓" else "None") }
@@ -333,6 +351,19 @@ private fun CategoryEditorScreen(
                             .border(if (color == c) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
                             .clickable { color = c }.testTag("swatch_$i").semantics { contentDescription = "Colour ${i + 1}" },
                     )
+                }
+            }
+            Text("Icon", style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { glyph = null }, modifier = Modifier.testTag("glyph_auto")) { Text(if (glyph == null) "Automatic ✓" else "Automatic") }
+                app.expenses.core.domain.CategoryLook.GLYPHS.forEach { g ->
+                    Box(
+                        Modifier.size(48.dp).clip(Radius.S).background(if (glyph == g) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                            .border(if (glyph == g) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, Radius.S)
+                            .selectable(selected = glyph == g, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = { glyph = g })
+                            .testTag("glyph_$g").semantics { contentDescription = g },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(categoryGlyph(g), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp)) }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,5 +400,15 @@ private fun CategoryEditorScreen(
             }
             if (deleteError != null) Text(deleteError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("cat_delete_reason"))
         }
+    }
+}
+
+/** A category's tile drawn from its own parts (before they are saved): the glyph the person chose or the one its name suggests, on the colour they chose or its slot. */
+@Composable
+internal fun CategoryTilePreview(id: String, name: String, colorArgb: Long?, glyph: String?, size: androidx.compose.ui.unit.Dp = 48.dp, modifier: Modifier = Modifier) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val tile = remember(id, colorArgb, dark) { if (colorArgb != null) app.expenses.core.domain.CategoryLook.tileOfHue((colorArgb and 0xFFFFFF).toInt(), dark) else app.expenses.core.domain.CategoryLook.tileFor(app.expenses.core.domain.CategoryLook.slot(id), dark) }
+    Box(modifier.size(size).clip(if (size >= 36.dp) Radius.M else Radius.S).background(Color(0xFF000000.toInt() or tile.container)).testTag("cat_tile_$id"), contentAlignment = Alignment.Center) {
+        Icon(categoryGlyph(glyph ?: app.expenses.core.domain.CategoryLook.defaultGlyph(name)), contentDescription = null, tint = Color(0xFF000000.toInt() or tile.glyph), modifier = Modifier.size(size * 0.56f))
     }
 }

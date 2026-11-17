@@ -128,7 +128,7 @@ fun ReportsScreen(
             item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             item {
                 val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.mapIndexed { i, r ->
-                    Slice(r.categoryId ?: "none", r.name, r.share, reportColor(r.colorArgb, i)) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
+                    Slice(r.categoryId ?: "none", r.name, r.share, reportColor(r.colorArgb, i, r.categoryId)) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
                 } else report.groupRows.filter { !it.negative }.mapIndexed { i, r ->
                     Slice(r.key ?: "none", r.name, r.share, reportColor(null, i)) {
                         onDrill(when (report.group) { ReportGroup.ACCOUNT -> DrillTarget.InAccount(r.key!!); ReportGroup.TAG -> r.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged; else -> DrillTarget.AtMerchant(r.key.orEmpty()) }, null, null, r.name)
@@ -159,8 +159,8 @@ fun ReportsScreen(
                 HorizontalDivider()
             }
             if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows, key = { _, r -> r.categoryId ?: "" }) { i, row ->
-                CategoryReportRow(row, indent = false, color = reportColor(row.colorArgb, i), onDrill = onDrill)
-                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = reportColor(row.colorArgb, i).copy(alpha = 0.7f), onDrill = onDrill) }
+                CategoryReportRow(row, indent = false, color = reportColor(row.colorArgb, i, row.categoryId), onDrill = onDrill)
+                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = reportColor(row.colorArgb, i, row.categoryId).copy(alpha = 0.7f), onDrill = onDrill) }
                 HorizontalDivider()
             }
         }

@@ -107,6 +107,10 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -536,6 +540,13 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
             if (value == SwipeToDismissBoxValue.EndToStart) { onDelete(row); true } else false
         },
     )
+    // a tick the moment the swipe passes the point where letting go would delete, and another when it comes back
+    val feelSwipe = rememberFeel()
+    var pastThreshold by remember { mutableStateOf(false) }
+    LaunchedEffect(dismiss.targetValue) {
+        val past = dismiss.targetValue == SwipeToDismissBoxValue.EndToStart
+        if (past != pastThreshold) { if (!(past && dismiss.currentValue == SwipeToDismissBoxValue.EndToStart)) feelSwipe(if (past) Feel.THRESHOLD else Feel.THRESHOLD_OFF); pastThreshold = past }
+    }
     // a row that has just been added glows in the accent colour and settles over a second, so the eye finds it
     val flash = remember { androidx.compose.animation.core.Animatable(0f) }
     val reduceMotion = LocalReduceMotion.current
@@ -545,8 +556,19 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         enableDismissFromStartToEnd = false,
         enableDismissFromEndToStart = !selecting,
         backgroundContent = {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp), contentAlignment = Alignment.CenterEnd) {
-                Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
+            // swipe v2 (UI S3): the background goes from the card's colour to the error container as the finger travels, and the icon and its word grow from 80% to full size; all read while drawing, so
+            // the row is not recomposed on every frame of the drag. A resting row does not compose it at all (the card covers it): only the flip to "being dragged" does, which keeps the list light on a fling
+            val dragging by remember { derivedStateOf { dismiss.dismissDirection != SwipeToDismissBoxValue.Settled } }
+            if (dragging) {
+                val surface = MaterialTheme.colorScheme.surfaceVariant
+                val danger = MaterialTheme.colorScheme.errorContainer
+                fun travelled() = if (dismiss.dismissDirection == SwipeToDismissBoxValue.Settled) 0f else dismiss.progress.coerceIn(0f, 1f)
+                Box(Modifier.fillMaxSize().drawBehind { drawRect(androidx.compose.ui.graphics.lerp(surface, danger, travelled())) }.padding(horizontal = 24.dp), contentAlignment = Alignment.CenterEnd) {
+                    Row(Modifier.graphicsLayer { val k = 0.8f + 0.2f * travelled(); scaleX = k; scaleY = k; alpha = 0.4f + 0.6f * travelled() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
+                        androidx.compose.material3.Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
             }
         },
         modifier = modifier.entryCardClip(pos).tappedContainer(row.id).testTag("row_${row.title}"),
@@ -556,16 +578,26 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         // Home's headings say the day: the row says the account and the category (a row with neither keeps its date)
         val detail = row.detail.ifEmpty { row.subtitle }
         val amount: @Composable () -> Unit = {
-            Text(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
+            MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
         }
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
                 .combinedClickable(onClick = { if (selecting) onToggle() else { tappedEntry?.id = row.id; onOpen(row) } }, onLongClick = onLongPress)
-                .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics { selected = isSelected },
+                .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics {
+                    selected = isSelected
+                    // the swipe's action for a screen reader, which cannot swipe (the long press and the bulk bar are the other ways)
+                    customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction("Delete") { onDelete(row); true })
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selecting) Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else CategoryAvatar(row.category, row.title, Modifier.padding(end = if (large) 10.dp else 14.dp), size = if (large) 32.dp else 40.dp)
+            // choosing: the tile crossfades into the checkbox (120 ms; at once under Reduce motion)
+            val tileSize = if (large) 32.dp else 40.dp
+            androidx.compose.animation.Crossfade(selecting, Modifier.padding(end = if (large) 10.dp else 14.dp), animationSpec = if (reduceMotion) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(120), label = "tileOrCheck") { choosing ->
+                Box(Modifier.size(tileSize), contentAlignment = Alignment.Center) {
+                    if (choosing) Checkbox(checked = isSelected, onCheckedChange = null) else EntryTile(row.title, row.category, row.kind, size = tileSize)
+                }
+            }
             if (!large) {
                 Column(Modifier.weight(1f)) {
                     Text(row.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)

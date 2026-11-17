@@ -412,7 +412,7 @@ val ACCOUNT_TYPE_LABELS = linkedMapOf("BANK" to "Bank", "CASH" to "Cash", "WALLE
 
 /** A category as the screens need it. [usage] is how many items refer to it (needed to decide whether it can be deleted). */
 /** [kind] says which entries the category is offered for: expenses, income, or both (only for categories made before kinds existed that income already used). */
-data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, /** How many entries are on it (for the order of the form's tiles, most used first). */ val uses: Long = 0L)
+data class CategoryUi(val id: String, val name: String, val parentId: String?, val colorArgb: Long?, val hidden: Boolean, val usage: Long, val kind: app.expenses.core.domain.CategoryKind = app.expenses.core.domain.CategoryKind.EXPENSE, /** How many entries are on it (for the order of the form's tiles, most used first). */ val uses: Long = 0L, /** The glyph the person chose (a key of CategoryLook.GLYPHS), or null for the one the name suggests. */ val glyph: String? = null)
 
 /** An attachment as the editor lists it. */
 data class AttachmentUi(val id: String, val name: String, val sizeText: String, val mime: String)
@@ -727,6 +727,10 @@ sealed interface UiState {
         val spark: SparkUi = SparkUi(),
         /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
         val reduceMotion: Boolean = false,
+        /** Appearance: spending drawn in red (off: the ordinary text colour with a minus sign; red is kept for over a limit, overdue and failed). */
+        val showSpendingRed: Boolean = false,
+        /** True for a ledger that had entries before categories got glyphs and colours of their own, until the person taps "Got it" at the top of Categories (UI S3). */
+        val categoryLookNotice: Boolean = false,
         /** "off", "quick", "relaxed" or "slow": how long the app's movements take. */
         val motionSpeed: String = "relaxed",
         val smsCapture: Boolean,
@@ -804,6 +808,8 @@ private const val SETTING_APPEARANCE = "appearance"
 private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOAN")
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
 private const val SETTING_REDUCE_MOTION = "reduce_motion"
+private const val SETTING_SPEND_RED = "show_spending_red"
+private const val SETTING_LOOK_NOTICE = "category_look_notice"
 private const val SETTING_MOTION_SPEED = "motion_speed"
 private const val SETTING_SIMILAR_OFF = "similar_off:"
 private const val SIMILAR_DELAY_MS = 1_200L
@@ -1365,8 +1371,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     /** Applies all the edits of the category dialog as one change: either every part is saved or none. */
-    fun updateCategory(id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?) = withStore { ok ->
+    fun updateCategory(id: String, name: String, colorArgb: Long?, hidden: Boolean, parentId: String?, glyph: String? = null) = withStore { ok ->
         ok.db.transaction {
+            // the glyph is a setting under the category's id (UI S3): none chosen, or the one the name suggests, keeps no setting
+            val key = app.expenses.core.domain.CategoryLook.GLYPH_PREFIX + id
+            if (glyph == null || glyph !in app.expenses.core.domain.CategoryLook.GLYPHS) ok.templates.removeSetting(key) else ok.templates.putSetting(key, glyph)
             ok.categories.rename(id, name)
             ok.categories.setColor(id, colorArgb)
             ok.categories.setHidden(id, hidden)
@@ -2007,6 +2016,23 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** More, then How to use this app: every page, and nothing about it is remembered. */
     /** Appearance: less motion. Takes effect at once, on every screen. */
     /** [speed] is "off", "quick", "relaxed" or "slow". Off is Reduce motion: everything changes at once. */
+    /**
+     * Whether Categories says, until "Got it", that categories have glyphs and colours of their own now (UI S3): only for a ledger that already has entries. A ledger with none (a new install, or an empty one) is marked as told
+     * at once, so the line never greets someone who never saw the old letters.
+     */
+    private fun categoryLookNotice(ok: AppContainer.Opened.Ok): Boolean {
+        if (ok.templates.setting(SETTING_LOOK_NOTICE) != null) return false
+        if (ok.db.schemaQueries.entryCountEver().executeAsOne()) return true
+        ok.templates.putSetting(SETTING_LOOK_NOTICE, "1")
+        return false
+    }
+
+    /** Appearance: draw spending in red (on) or in the ordinary text colour (off, the default). */
+    fun setShowSpendingRed(on: Boolean) = withStore { ok -> ok.templates.putSetting(SETTING_SPEND_RED, if (on) "1" else "0"); refresh(ok) }
+
+    /** "Got it" on the line at the top of Categories about the new look (UI S3): never shown again. */
+    fun dismissCategoryLookNotice() = withStore { ok -> ok.templates.putSetting(SETTING_LOOK_NOTICE, "1"); refresh(ok) }
+
     fun setMotionSpeed(speed: String) = withStore { ok ->
         ok.templates.putSetting(SETTING_REDUCE_MOTION, if (speed == "off") "1" else "0")
         if (speed != "off") ok.templates.putSetting(SETTING_MOTION_SPEED, speed)
@@ -4783,6 +4809,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             setupCard = setupCardUi(ok),
             spark = sparkCache,
             reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
+            showSpendingRed = ok.templates.setting(SETTING_SPEND_RED) == "1",
+            categoryLookNotice = categoryLookNotice(ok),
             motionSpeed = if (ok.templates.setting(SETTING_REDUCE_MOTION) == "1") "off" else ok.templates.setting(SETTING_MOTION_SPEED) ?: "relaxed",
             smsCapture = ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
@@ -4790,7 +4818,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             autoExport = autoExportUi(ok),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },
             // Usage (which decides whether Delete is offered) is worked out in the background only while the categories screen is open.
-            categories = cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind, tileUses[it.id] ?: 0L) },
+            categories = ok.templates.settingsWithPrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX).associate { it.first.removePrefix(app.expenses.core.domain.CategoryLook.GLYPH_PREFIX) to it.second }.let { glyphs ->
+                cats.map { CategoryUi(it.id, it.name, it.parentId, it.colorArgb, it.hidden, categoryUsageCache[it.id] ?: 0L, it.kind, tileUses[it.id] ?: 0L, glyphs[it.id]?.takeIf { g -> g in app.expenses.core.domain.CategoryLook.GLYPHS }) }
+            },
             templates = ok.templates.list().map { TemplateUi(it.id, it.name, it.amount?.formatted(), it.category.value, it.account.value, it.merchant ?: "") },
             lastCategory = lastCategory,
             lastIncomeCategory = lastIncomeCategory,
