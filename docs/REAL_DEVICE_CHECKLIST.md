@@ -259,3 +259,12 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] Text size 200%: the Add form header does not cut "New expense", the category tiles are wide enough for "Groceries", the kind control puts "Loan" on a second row instead of cutting it; the pad and Save stay on screen and the form scrolls above them.
 - [ ] Hide amounts on: the Add form hides "= ₹…" and the amount in words, the Save button's amount, and the detail's amount and "above your usual" line.
 - [ ] iPhone lock screen with "Show Previews: When Unlocked": a budget, card or bill notice shows "Open the app to see it", not an amount (the iPhone was only compiled for this).
+
+## UI S3 (Slice 116): what only a phone can show
+- [ ] Android phone and iPhone: the Home list at arm's length: do the tiles tell Food from Fun from Groceries at a glance (icon and colour), is a long list calmer with spending in the ordinary text colour, and is the minus sign enough to tell out from in? If you miss red, More, Appearance, "Show spending in red".
+- [ ] iPhone: every icon draws (the glyph set is 42 Material icons from the shared library; the simulator build links, nothing was seen on a phone): Categories, tap Food, the Icon grid; a custom category named Coffee, Pets or Gym gets a matching icon by itself.
+- [ ] Android phone: swipe a row slowly: the Delete word and icon grow, the background turns pink, a tick is felt at the point where letting go deletes and another coming back; the same on an iPhone (a softer tick).
+- [ ] Colour-blind eyes (or a simulator on the phone): the first seven category colours stay apart; a screenshot of Reports (the ring) and Home.
+- [ ] TalkBack / VoiceOver: a row offers "Delete" as an action, a category tile is not read (the row names the category), the Icon grid reads each icon's name and which one is chosen, the "Show spending in red" row reads as a switch.
+- [ ] Text size 200%: the Categories editor (the colour and icon grids wrap, "Got it" is reachable), the Home rows (the tile is 32 dp, the amount goes under the words).
+- [ ] After an update from 0.13.x or 0.14.0: every category changed colour once; the line at the top of Categories is shown until "Got it".

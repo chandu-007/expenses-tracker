@@ -293,3 +293,39 @@ The p50 and p90 of every interaction are the same within a few percent (Home fli
 **Timing classes A/B** (`RefreshBudgetTest`, `PerformanceBudgetTest`, `HomeListTest`; 16 tests per run; API 26 emulator, cold boot with `-wipe-data` and `emulator_setup.sh` before every run; order head, S2, S2, head, head, S2 = 3 runs each; host load 5 to 12 at the starts, swap 5.3 to 5.4 GB; head = 0.14.0 `8b4a2ac`, S2 = `c74b8c0`; raw files and the comparison in `~/Documents/personal/expenses_builds/ui_s2/frames/ab_timing_api26`). The first head run failed 7 of the 16 tests (the absolute phone budgets, as the budget tests do on this emulator in a loaded moment) and the other 5 runs passed 16 of 16: the budget tests pass on S2 in all 3 runs and on the head in 2 of 3. Medians of the 3 runs of each build for the 23 figures the tests print (min to max in the raw file): **none is more than 1.3 times worse for S2; the ratios run from 0.63 to 1.07**. The figures closest to the S2 work: save to new row and total visible at 100k 3.90 ms (head) against 4.00 (S2); rebuild after the row is shown 16.0 against 15.1; whole save path 3.83 against 3.55; save one expense end to end (p95 of 40) 11.06 against 8.25; recent 50 0.28 against 0.30; account balances over the whole ledger 25.5 against 25.8. S2 changes nothing in the save path's storage except one grouped read of the category indexes done once in the background (`CategoryStore.useCounts`) and one counter update per saved entry.
 
 **Cold start** (`am start -W`, `TotalTime`, 7 starts after each of the 3 runs, on the 100k-entry ledger the tests leave, API 26): head median 297 ms (277 to 1,346, 21 starts), S2 median 302 ms (272 to 419, 21 starts): the same.
+
+## UI S3 measured (Slice 116, 2026-11-17): glyph tiles, neutral amounts, swipe row v2
+
+**Setup, said plainly.** `FrameLogDriveTest` (seeded 1,500-entry ledger, 5 repetitions per interaction, debug builds), API 34 emulator, cold boot with `-wipe-data` and `tools/emulator_setup.sh` before EVERY run, the script waiting for a 1-minute load under 9, Gradle daemons stopped. Head = `origin/main` `c899c13` (S2) with the frame logger test, built from a separate worktree. Two series of 3 alternating runs each (rounds `s3 head`, `head s3`, `s3 head`). **This host was much slower than in the S2 series** (memory swap 8 to 13 GB, other applications open): the same Home fling that had a 17 ms median on 16 November has a 100 to 150 ms median today on the unchanged head. Only the alternating comparison means anything; nothing here is a phone number. Raw runs and the scripts: `~/Documents/personal/expenses_builds/ui_s3/frames/`.
+
+**Series 1, the first S3 build (`s3f`).** Home fling: head 215 frames, p50 103.0 / p90 542.8 / p99 1,501.5 ms, 112 over 100 ms; S3 209 frames, 131.8 / 671.9 / 2,662.0, 140 over 100 ms (per round p50: head 100.4, 103.0, 107.1; S3 119.1, 136.9, 131.8). A real difference on this host, in all three rounds.
+
+**What was tried.** (1) `FlingProbe` (throwaway, never committed): one process, the Home fling repeated per variant with parts of the row switched off by a static flag, 5 repetitions: the monogram lookup, the glyph icon, `MoneyText`, the whole tile: every variant between 115 and 134 ms median (the full row 134): none blamed alone. (2) The same with the swipe row's new parts (crossfade, custom action, haptic effect, the drawn background) and a rotated order, 8 repetitions per variant (median of p50, ms): full row 145, no crossfade 143, no custom action 163, no haptic effect 142, plain background 128, all swipe parts off 132, everything off (swipe and tile) 107. Noisy (a repetition varies by 20 ms or more), the direction is: the swipe background and the tile together. (3) **The change made:** `SwipeToDismissBox` composes its background for every row, resting or not; the background is now composed only while the row is being dragged (`derivedStateOf` on the dismiss direction, the card covers it at rest). Behaviour is the same: a drag shows it from the first pixel.
+
+**Series 2, the final build (`s3g`)** (the same 3 alternating runs): Home fling p50 head 138.0 / 150.5 / 111.1 and S3 137.3 / 123.8 / 108.0 ms per round; totals head 209 frames, 138.0 / 754.2 / 2,027.8 ms (p50 / p90 / p99), 130 over 100 ms; S3 214 frames, 123.8 / 743.2 / 1,275.8, 139 over 100 ms: **the same as the head within the noise.**
+
+| Interaction (series 2) | head: frames, p50 / p90 / p99, over 100 ms | S3 (`s3g`): same |
+|---|---|---|
+| Home fling | 209, 138.0 / 754.2 / 2,027.8, 130 | 214, 123.8 / 743.2 / 1,275.8, 139 |
+| Home to entry | 164, 29.9 / 67.0 / 706.8, 8 | 155, 23.8 / 55.4 / 502.7, 4 |
+| Detail to Edit | 125, 23.7 / 37.1 / 403.2, 3 | 74, 26.0 / 62.1 / 480.1, 5 |
+| Add open | 126, 28.0 / 53.0 / 660.0, 6 | 104, 24.2 / 57.8 / 434.0, 6 |
+| Add close | 97, 26.0 / 52.2 / 467.1, 4 | 99, 23.2 / 46.5 / 484.2, 5 |
+| tab switch: Home to Reports | 101, 28.6 / 50.6 / 454.8, 4 | 83, 26.3 / 80.0 / 521.0, 8 |
+| Reports tab switches | 641, 32.6 / 101.1 / 318.1, 65 | 549, 33.8 / 134.7 / 334.4, 97 |
+| tab switch: Home to More | 182, 26.6 / 81.6 / 251.2, 13 | 168, 26.2 / 123.7 / 502.1, 21 |
+| tab switch: More to Home | 129, 28.4 / 91.9 / 233.8, 12 | 130, 29.5 / 115.6 / 235.8, 18 |
+| Search results scroll | 163, 100.6 / 406.0 / 1,084.7, 84 | 159, 109.4 / 349.7 / 610.1, 89 |
+| the four tab switches | 480, 25.2 / 80.3 / 398.8, 35 | 474, 27.0 / 103.6 / 469.9, 43 |
+
+**Reading it.**
+- The Home fling is equal to the head after the change (and was 25% slower in p50 before it). The fling with S3's icons on every row is NOT worse than the head within what this host can show.
+- **Not clean:** the Reports tab switches have more frames over 100 ms and a higher p90 for S3 than for the head in BOTH series (97 against 65 and p90 134.7 against 101.1 ms in series 2; 85 against 70 in series 1). Series 2 is one-sided for the other tab switches too (Home to Reports 8 against 4, Home to More 21 against 13, More to Home 18 against 12, the four 43 against 35; Reports to Home 2 against 4 is the exception); series 1 was mixed (Home to More 12 against 14, the four 41 against 48). The p99 ranges of the runs overlap. The only change on Reports is a colour lookup by category id. A heavier Home composition on the way back (the tile is an icon vector on every row) is the likely cause, **[INFERENCE: not proved]**.
+- Add open and Add close: 6 and 6, 4 and 5 frames over 100 ms (head, S3), the same as S2 within the noise; Home to entry 8 against 4.
+- **Not measured:** the 100,000-row Home scroll after the rows got tiles; a phone.
+
+**Timing classes A/B** (`RefreshBudgetTest`, `PerformanceBudgetTest`, `HomeListTest`; 16 tests per run; API 26 emulator, cold boot with `-wipe-data` and `emulator_setup.sh` before every run; order head, S3, S3, head, head, S3 = 3 runs each; host load 4 to 11 at the starts, swap 11 to 13 GB). Of the 21 figures printed in every one of the 6 runs, 19 agree within 1.1 times in the medians; the two others are sub-4 ms storage searches (search with no match 0.41 against 0.69 ms, a rare merchant 1.9 against 3.2 ms; the ranges overlap: 0.41 to 0.42 against 0.42 to 0.71; S3 changes no storage query). Both builds fail 5 to 7 of the 16 tests, the absolute phone budgets, because the host is loaded (the base's first run failed 7 in the S2 series for the same reason). Raw: `~/Documents/personal/expenses_builds/ui_s3/frames/timing_api26`.
+
+**Cold start** (`am start -W`, `TotalTime`, 7 starts after each of 3 runs, API 26): head median 789 ms (346 to 1,731, 21 starts), S3 median 805 ms (664 to 1,401, 21 starts): the same within the spread (the S2 series had 297 and 302 ms on a quiet host).
+
+**Release APK size:** 57,310,813 bytes against 57,294,429 for S2 (+16,384 bytes, +0.03%). The iPhone app size was not measured.
