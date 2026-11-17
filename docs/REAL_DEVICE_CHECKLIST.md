@@ -278,3 +278,13 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] Reduce motion on (Appearance, Motion: Off, or the phone's setting): the bars are at full height at once and the bubble appears without animation.
 - [ ] Text size 200%: Reports (the legend rows put the share and the amount under the name; the bubble and the table stay readable), the Trip summary bars with the table.
 - [ ] Feel: Reports open and scroll, and switching between "By period", "By year" and the groupings, on an older phone: is it as smooth as before?
+
+## UI S5 (Slice 118): what only a phone can show
+- [ ] Android phone and iPhone: Home, the month card's foot: is "Day 17 of 30 · ₹3,338 a day · 14 days to month end" readable on the gradient at arm's length (small text on the hero was measured 2.9 to 6.1:1 in the audit: nothing was measured again)? Does it read as ONE figure, not two? Set the start day to your payday (Budget, the pencil) and see "to payday".
+- [ ] The budget tile's bar with its "today" tick: is the tick easy to see on the bar, and does "A little ahead" in amber feel descriptive, not a scolding? Is the first-two-days "Just started" fine?
+- [ ] The dashed line under the 14-day line: does it help or is it noise? Drag a finger along the line: the pill says the same day last month.
+- [ ] The Budget screen: the ring, the tick on it, the folded "more categories have no limit" group, the pencil (Period, Carry over, Starts on day).
+- [ ] Drag: press and hold a category's handle and move it; the same for Customise home. Is the long press about right (not too long), is there a felt tick when it picks up and one per place passed (iPhone: softer)? Do the arrows still work?
+- [ ] TalkBack / VoiceOver: the pace word is read with the limit; the goal's ring is not the only way to hear the percentage; the handle is announced with "or use the arrows"; "How is this worked out?" opens the sum.
+- [ ] Hide amounts on: the month card's line, the tile, the Budget ring and the limits show no figure; the ring and the bars are not drawn.
+- [ ] Text size 200%: the month card's foot stacks, the Budget ring sits above its words, the goals and categories rows stay readable.

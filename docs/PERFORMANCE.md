@@ -355,3 +355,39 @@ The p50 and p90 of every interaction are the same within a few percent (Home fli
 **Cold start** (`am start -W`, `TotalTime`, 7 starts after each of 3 runs, API 26): head median 1,001 ms (752 to 2,522, 21 starts), S4 median 936 ms (798 to 3,842, 21 starts): the same within the spread (a loaded host: 297 ms on a quiet one in the S2 series).
 
 **Release APK size:** 57,327,197 bytes against 57,310,813 for S3 (+16,384 bytes, +0.03%). The iPhone app size was not measured.
+
+## UI S5 measured (Slice 118, 2026-11-18): pace on the month card, Budget, Goals, Categories
+
+**Setup, said plainly.** A throwaway test, `HomeDriveTest` (a copy of `FrameLogDriveTest` with a budget set, so the month card, its pace line and the budget tile are all drawn; it measures the Home fling, Home to a first entry, Home to Budget and back, and the tab switches; kept in `~/Documents/personal/expenses_builds/ui_s5/frames/` with the raw files), was run against the base (`head`, S4 plus the test) and S5 (`s5f`, the S5 code plus the test), on the API 26 emulator, cold boot with `-wipe-data` and `emulator_setup.sh` before every run, order alternating. Two series: three rounds (head, s5f / s5f, head / head, s5f) and four rounds. **The host was loaded the whole time** (load average 5 to 9 on this Mac, other sessions working; the Home fling alone shows a median frame of 100 to 143 ms in both builds, where a quiet host gives 17 ms), so the figures say "the same", not "faster". The Gradle daemons were stopped before each series.
+
+**Series 1 (3 rounds each; frames, p50 / p90 / p99 ms, frames over 100 ms, summed over the runs of one round shown as the median per run):**
+
+| Interaction | head | S5 |
+|---|---|---|
+| Home fling | 340, 125.9 / 636.2 / 1,577.9, 223 | 333, 125.5 / 650.8 / 1,402.6, 213 |
+| Home to entry | 228, 23.6 / 42.7 / 422.7, 7 | 211, 25.5 / 48.7 / 490.5, 9 |
+| Home to Budget | 110, 25.5 / 83.8 / 421.9, 7 | 85, 25.7 / 100.5 / 391.9, 9 |
+| Budget back to Home | 143, 21.7 / 51.7 / 449.2, 7 | 121, 24.1 / 67.7 / 506.5, 8 |
+| tab switch, the four | 688, 26.5 / 107.6 / 451.7, 82 | 664, 26.3 / 116.7 / 398.3, 84 |
+
+**Series 2 (4 rounds each):**
+
+| Interaction | head | S5 |
+|---|---|---|
+| Home fling | 332, 134.1 / 669.0 / 2,215.6, 216 | 332, 131.1 / 671.9 / 1,399.7, 213 |
+| Home to entry | 209, 24.1 / 52.0 / 574.8, 9 | 208, 25.3 / 58.3 / 533.2, 11 |
+| Home to Budget | 114, 25.3 / 70.7 / 438.2, 9 | 87, 28.5 / 87.5 / 392.7, 8 |
+| Budget back to Home | 131, 24.9 / 70.3 / 499.1, 7 | 118, 21.8 / 57.2 / 378.2, 8 |
+| tab switch, the four | 657, 26.8 / 118.3 / 439.4, 77 | 669, 26.2 / 116.1 / 379.2, 73 |
+
+**Reading it.**
+- **No regression shown, nothing proved better.** The Home fling (the screen that now carries one more row on the month card, the ghost line and a tick on the tile's bar) has 223 / 227 / 205 frames over 100 ms for head against 206 / 225 / 213 for S5 in series 1, and 216 against 213 in series 2: the same.
+- **One figure leaned the wrong way in series 1, and did not in series 2.** Home to entry: frames over 100 ms per run 7 / 6 / 7 for head against 7 / 9 / 10 for S5 in series 1; in series 2 the median was 9 against 11 with S5's p99 lower. Taken together (7 runs each) the two builds are inside each other's spread. The cause was not looked for further; it is listed under "not measured".
+- Home to Budget has fewer frames in the S5 runs (85 to 87 against 110 to 114): the count is the frames the transition drew, not a speed, and the reason was not examined (the S5 Budget screen has fewer rows composed at first: the group without limits is folded).
+- **Not measured:** recomposition counts (no Layout Inspector here), the 100,000-row Home scroll, any real-device number, and the first entry's position on Home in dp (read from the pictures instead: the first entry is on the first screen at 393 and 360 dp, 100% text).
+
+**Timing classes A/B** (`RefreshBudgetTest`, `PerformanceBudgetTest`, `HomeListTest`; 16 tests per run; API 26 emulator, cold boot with `-wipe-data` before every run; order head, s5f, s5f, head, head, s5f; the host loaded as above). **Both builds fail the same 6 to 7 timing-limit tests in every run**: the limits are phone budgets divided by 4 and this loaded host misses them with the base build as much as with S5 (for example "save one expense end to end p95" 17.9 ms against its 12.5 ms limit on head). So the figures are compared, not the pass counts. Median of 3 runs each, head against S5: save to a new row, p50 12.6 against 12.6 ms, p95 26.7 against 37.3 ms (head 26.7 / 24.9 / 29.9, S5 43.8 / 37.3 / 29.5: two of three S5 runs higher); the rest of the screen after the row, p50 48.8 against 50.4 ms, p95 95.1 against 82.7 ms; whole save path p50 8.84 against 10.14 ms; account balances over 100,000 entries 57.7 against 60.3 ms; category totals over 10 years 125.1 against 130.3 ms. **Read plainly:** the save path is a little slower in S5 in these runs (the p95 of the save to a new row and the whole save path p50), inside the noise of a loaded host but in the same direction twice; the one extra read in S5's slow figures (the ghost line's 14 days, one period earlier) runs after the new row is on screen. Not chased further in this slice.
+
+**Cold start** (`am start -W`, `TotalTime`, 7 starts after each of 3 runs, API 26): head median 801 ms (382 to 1,441, 21 starts), S5 median 888 ms (369 to 1,532, 21 starts): the same within the spread of a loaded host (about 4 to 1 between the fastest and slowest start in each).
+
+**Release APK size:** 57,359,965 bytes against 57,327,197 for S4 (+32,768 bytes, +0.06%). The iPhone app size was not measured.
