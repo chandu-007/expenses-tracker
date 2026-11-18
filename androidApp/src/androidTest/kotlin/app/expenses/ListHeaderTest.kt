@@ -32,8 +32,9 @@ class ListHeaderTest {
     private val container get() = (context.applicationContext as ExpensesApp).container
     private var scenario: ActivityScenario<MainActivity>? = null
 
+    /** On a brand-new ledger the month card waits behind the first-run welcome (UI S6); this test is about the header with data, so the welcome is put away. */
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } }
     }
 
     @Before fun fresh() = resetApp()
