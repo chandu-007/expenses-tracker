@@ -4,6 +4,7 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import app.expenses.core.domain.AttachmentRules
 import app.expenses.core.domain.Notice
+import app.expenses.core.domain.sync.NodeId
 import app.expenses.core.storage.AutoCopyProtection
 import app.expenses.core.storage.ByteSink
 import app.expenses.core.storage.ByteSource
@@ -31,8 +32,6 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIDevice
 import platform.UIKit.UIPasteboard
 import platform.UniformTypeIdentifiers.UTType
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 /**
  * The iPhone implementation of [Platform].
@@ -45,7 +44,7 @@ import kotlin.uuid.Uuid
  * Not on iPhone, and said so by the capability flags: SMS and notification capture (a Shortcuts automation and pasting stand in: [supportsShortcutsCapture]), the widget, automatic export to a folder. Reminders are local notifications ([IosNotifications]).
  * [host] supplies the Swift-only crypto behind passphrase-protected backups.
  */
-@OptIn(ExperimentalForeignApi::class, ExperimentalUuidApi::class)
+@OptIn(ExperimentalForeignApi::class)
 class IosPlatform(host: IosHostServices) : Platform {
     /** The Keychain item with the key of passphrase-protected automatic copies ([AutoExportKeys.PROTECT]); readable after the first unlock, this device only. */
     override val secretStore: SecretStore = IosSecretStore(host)
@@ -86,9 +85,10 @@ class IosPlatform(host: IosHostServices) : Platform {
         AutoCopyProtection.disable(secretStore)
     }
 
+    /** Kept in the app's defaults; a stored value that is not a usable id is replaced and a usable one is kept ([NodeId]). */
     override fun nodeId(): String {
         val defaults = NSUserDefaults.standardUserDefaults
-        return defaults.stringForKey("node_id") ?: Uuid.random().toString().take(8).also { defaults.setObject(it, forKey = "node_id") }
+        return NodeId.loadOrCreate(read = { defaults.stringForKey("node_id") }) { defaults.setObject(it, forKey = "node_id") }
     }
 
     private fun urlOf(uri: String): NSURL = NSURL.URLWithString(uri)?.takeIf { it.scheme != null } ?: NSURL.fileURLWithPath(uri)

@@ -81,9 +81,8 @@ object EncryptedDriver {
         if (dbExists) throw DatabaseKeyUnavailableException("A database exists but its key file is missing")
 
         val passphrase = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        val tmp = File(keyFile.parentFile, "$WRAPPED_FILE.tmp")
-        tmp.writeBytes(KeystoreWrap.wrap(KeystoreWrap.newKey(KEY_ALIAS), passphrase))
-        check(tmp.renameTo(keyFile)) { "Could not store the wrapped database key" }
+        // synced to the disk before the database is made: a key file left empty by a power cut made the new database unreadable ([DurableFiles])
+        DurableFiles.replace(keyFile, KeystoreWrap.wrap(KeystoreWrap.newKey(KEY_ALIAS), passphrase))
         return passphrase
     }
 }

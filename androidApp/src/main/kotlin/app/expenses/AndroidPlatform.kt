@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.cash.sqldelight.db.SqlDriver
 import app.expenses.core.domain.Notice
+import app.expenses.core.domain.sync.NodeId
 import app.expenses.core.storage.BackupFile
 import app.expenses.core.storage.ByteSink
 import app.expenses.core.storage.ByteSource
@@ -19,16 +20,17 @@ import app.expenses.core.storage.AutoCopyProtection
 import app.expenses.core.storage.EncryptedDriver
 import app.expenses.core.storage.KeystoreSecretStore
 import app.expenses.core.storage.SealPrimitives
+import app.expenses.core.storage.DurableFiles
 import app.expenses.core.storage.SecretStore
 import java.io.File
 import java.lang.ref.WeakReference
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** One lock for the whole process: [AndroidPlatform] is made in more than one place, and only one of them may make the node id. */
+private val nodeIdLock = Any()
+
 /** Everything the shared code needs from Android, backed by the classes that were already here. */
-@OptIn(ExperimentalUuidApi::class)
 class AndroidPlatform(context: Context) : Platform {
     private val context: Context = context.applicationContext ?: context
 
@@ -69,9 +71,14 @@ class AndroidPlatform(context: Context) : Platform {
         AutoCopyProtection.disable(secretStore)
     }
 
-    override fun nodeId(): String {
-        val f = File(context.noBackupFilesDir, "node_id")
-        return if (f.exists()) f.readText() else Uuid.random().toString().take(8).also { f.writeText(it) }
+    /**
+     * Read and made under one lock for the whole process, so two callers never both make one. A new id is written durably ([DurableFiles]): a power cut leaves
+     * either no file (a new id is made next time) or the whole id, never the empty file that a plain write left and that stopped the app at start-up (in
+     * [app.expenses.core.domain.sync.HlcClock]) until its data was cleared. A file that holds no usable id is replaced ([NodeId]); a usable one is kept.
+     */
+    override fun nodeId(): String = synchronized(nodeIdLock) {
+        val file = File(context.noBackupFilesDir, "node_id")
+        NodeId.loadOrCreate(read = { if (file.exists()) file.readText() else null }) { DurableFiles.replace(file, it.toByteArray(Charsets.US_ASCII)) }
     }
 
     override fun readBytes(uri: String): ByteArray =
