@@ -288,3 +288,15 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] TalkBack / VoiceOver: the pace word is read with the limit; the goal's ring is not the only way to hear the percentage; the handle is announced with "or use the arrows"; "How is this worked out?" opens the sum.
 - [ ] Hide amounts on: the month card's line, the tile, the Budget ring and the limits show no figure; the ring and the bars are not drawn.
 - [ ] Text size 200%: the month card's foot stacks, the Budget ring sits above its words, the goals and categories rows stay readable.
+
+## UI S6 (Slice 119): what only a phone can show
+- [ ] A truly new install (Android and iPhone): the welcome fits one screen with Skip visible; is the Example month clearly "not mine" (ribbon, dashed line, half strength)? Tap an Example row: Add opens filled in and nothing is saved until you save. "Hide example" and the first real entry both remove it.
+- [ ] "Show me around": five stops, each on its real screen; Skip always in reach; the full tour in More still works. No tour starts on its own.
+- [ ] TalkBack / VoiceOver on the welcome: the Example is announced only as "Example month, not your data" with "Hide example" after it; the tick on "All cleared" is not read as a button.
+- [ ] To review with real bank texts: Add / Skip as the pair, "Change" opens the rest; "N to go" counts down; "All cleared" appears only at zero, never while a text is waiting; the "not reviewed" dot on Home and Search rows for a captured expense with no category.
+- [ ] The Home chip "Last bank text seen ...": right time text; amber after five quiet days; tap opens "Why isn't capture working?". iPhone: counts texts that arrived through the Shortcut.
+- [ ] The tick (Save, Paid, All cleared, Backup done): is 280 ms about right, and does the Save/Paid feel (not a new one) land with it? Reduce motion: the tick is simply there.
+- [ ] Notifications: "Occasional milestones" on, then add entries: a calm card appears, with no figure in it and Hide amounts on; "Pause nudges": a week hides the suggestion cards, a due bill still shows; nothing in any notice shows an amount with Hide amounts or App lock on.
+- [ ] Verify it yourself: is the "permissions we do not have" list correct for the build you installed (Play build: no text-message permission)? Airplane-mode steps: the app works with the phone offline.
+- [ ] Your data: "Last backup: ..." reads right after a real backup and after a restore.
+- [ ] Text size 200% and 360 dp: the welcome, tips, review cards, Verify page and the Pause/milestone rows stay readable with no word squeezed to a column.
