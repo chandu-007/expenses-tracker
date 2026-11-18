@@ -22,6 +22,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -40,7 +43,7 @@ import app.expenses.core.domain.ThemeMode
 /** Light or dark, an accent colour, and how tight the lists are. Changes apply at once. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}) {
+fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}, onShowTipsAgain: () -> Unit = {}) {
     Scaffold(topBar = { ScreenHeader("Appearance", onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
@@ -66,6 +69,11 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
                     Text("Off: money you spend is in the ordinary text colour with a minus sign, and red is kept for what is wrong (over a limit, overdue). On: spending is red.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 androidx.compose.material3.Switch(checked = showSpendingRed, onCheckedChange = null, modifier = Modifier.testTag("spend_red_switch"))
+            }
+            var tipsBack by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            Column(Modifier.fillMaxWidth()) {
+                TextButton(onClick = { onShowTipsAgain(); tipsBack = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("tips_reset")) { Text("Show tips again") }
+                if (tipsBack) Text("Done. Each tip will show once more, the next time you open its screen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("tips_reset_done").semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
             }
             Details("appearance_details") {
                 Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -78,6 +78,7 @@ object Capture {
             val arrived = java.time.Instant.ofEpochMilli(receivedAt).atZone(zone).toLocalDate()
             val today = kotlinx.datetime.LocalDate(arrived.year, arrived.monthValue, arrived.dayOfMonth)
             val verdict = if (emailNames == null) CaptureClassifier.classify(sender, body, extra, today) else CaptureClassifier.classifyEmail(emailNames, body, extra, today)
+            MessageIngest.noteBankText(ok, verdict, now)
             val outcome = when (val r = verdict) {
                 is CaptureOutcome.Bill -> {
                     val b = billOf(r, source, sender, receivedAt, body, arrived)

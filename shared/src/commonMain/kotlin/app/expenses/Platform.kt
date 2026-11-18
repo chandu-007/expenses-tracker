@@ -30,6 +30,7 @@ import kotlin.time.Clock
  *   backup        backupCipher: BackupCipher
  *   auto-export   runAutoExport(container, folderUri, nowMillis, force), secretStore (the key of passphrase-protected automatic copies)
  *   capture       captureChanges: Flow<Unit>, isSmsPermissionGranted(), supportsShortcutsCapture, readClipboardText(), openExternalUrl(url)
+ *   privacy       declaredPermissions() (Android: the manifest's list; null on iPhone)
  *   about         appVersionText, osVersionText, deviceModelText (for the feedback email; empty by default)
  *   signing       signingExpiresAtMillis (iPhone test builds: when the free-signed install stops opening; null elsewhere)
  *   notification  notificationsAllowed(), showNotices(notices), notificationTimingNote
@@ -165,6 +166,12 @@ interface Platform {
 
     /** When a build signed with a free Apple ID stops opening, in epoch milliseconds; null when it does not expire or cannot be told (Android, simulator, App Store). */
     val signingExpiresAtMillis: Long? get() = null
+
+    /**
+     * Every permission this installed app declares in its manifest (the app's own private ones left out), read from the system now, for the "Verify it yourself" page; null where the platform has no such list
+     * (iPhone: access is asked for when used, and the App Privacy Report shows what was used).
+     */
+    fun declaredPermissions(): List<String>? = null
 
     /** Whether the system will show our notifications at all. */
     fun notificationsAllowed(): Boolean

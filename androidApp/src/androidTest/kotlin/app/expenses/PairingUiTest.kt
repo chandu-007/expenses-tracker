@@ -101,7 +101,7 @@ class PairingUiTest {
         ingest("AX-HDFCBK-S", "Rs.5,000.00 withdrawn at ATM 12345 on 05-10-26 from A/c XX1234", 9_000_000)
         launch(); openInbox(); val card = idAt(5_000); val atm = idAt(9_000_000)
         waitFor("inbox_$card"); assertTrue(!has("inbox_pair_$card"), "no card account to pair with")
-        waitFor("inbox_pair_$atm"); tap("inbox_plain_$atm")
+        waitFor("inbox_pair_$atm"); tap("inbox_change_$atm"); tap("inbox_plain_$atm")
         compose.waitUntil(10_000) { !has("inbox_pair_$atm") }
         tap("inbox_add_$atm"); compose.waitUntil(10_000) { !has("inbox_$atm") }
         val e = entries().single(); assertEquals("EXPENSE", e.kind); assertEquals(500_000, e.amount_minor)

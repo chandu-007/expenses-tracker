@@ -43,7 +43,7 @@ class SafeToSpendUiTest {
     private val inr = Currency.INR
     private fun rupees(r: Long) = Money(r * 100, inr).formatted()
 
-    @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } } }
+    @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1"); it.templates.putSetting("welcome_dismissed", "1") } } }
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

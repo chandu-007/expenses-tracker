@@ -219,12 +219,21 @@ object Guide {
 
     fun fullPlan(): GuidePlan = GuidePlan(GuideMode.MANUAL, steps)
 
+    /** The stops of "Show me around" on the welcome card, by id: the home screen, adding, reports, capture and where the data can be backed up. */
+    val shortIds: List<String> = listOf("home", "add", "reports", "capture", "data")
+
+    /**
+     * "Show me around", chosen by the person on the welcome card: five stops only. It is a first-run tour (finishing it offers the guided capture setup, as the long one did) and is never started on its own.
+     */
+    fun shortPlan(pages: List<GuideStep> = steps): GuidePlan = GuidePlan(GuideMode.FIRST_RUN, shortIds.mapNotNull { id -> pages.firstOrNull { it.id == id } })
+
     /**
      * What to offer when the app opens. [seen] is the guide version the person last finished or skipped (null: never), and [offForUpdates] is their choice to
-     * be left alone after updates. Null means offer nothing.
+     * be left alone after updates. Null means offer nothing. A first install ([seen] null) is offered nothing either: the tour is opt-in there ([shortPlan]), and the caller records that the current version counts as seen,
+     * so that later updates offer only the newer pages.
      */
     fun planOnOpen(seen: Int?, offForUpdates: Boolean, pages: List<GuideStep> = steps, version: Int = VERSION): GuidePlan? {
-        if (seen == null) return GuidePlan(GuideMode.FIRST_RUN, pages)
+        if (seen == null) return null
         if (seen >= version || offForUpdates) return null
         val fresh = pages.filter { it.since > seen }
         return if (fresh.isEmpty()) null else GuidePlan(GuideMode.WHATS_NEW, fresh)

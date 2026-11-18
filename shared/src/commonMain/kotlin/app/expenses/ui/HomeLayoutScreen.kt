@@ -56,6 +56,7 @@ fun HomeLayoutScreen(layout: HomeLayout, onChange: (HomeLayout) -> Unit, onBack:
         var dragDy by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
         val rowHeights = remember { HashMap<HomeSection, Float>() }
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
+            TipSlot("home_layout")
             Text("Choose what the home screen shows and move blocks: press and hold the handle and drag, or use the arrows. The headline total and the list of entries are always there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             layout.order.forEachIndexed { i, section ->
                 Row(Modifier.fillMaxWidth().zIndex(if (dragging == section) 1f else 0f).graphicsLayer { translationY = if (dragging == section) dragDy else 0f; shadowElevation = if (dragging == section) 12f else 0f }.background(if (dragging == section) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent).onSizeChanged { rowHeights[section] = it.height.toFloat() }.padding(horizontal = 16.dp, vertical = 4.dp).testTag("home_row_${section.name}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

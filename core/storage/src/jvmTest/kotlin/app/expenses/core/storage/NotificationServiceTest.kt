@@ -163,6 +163,21 @@ class NotificationServiceTest {
         assertEquals("due 25 Oct · Tap to add it", n.text)
     }
 
+    @Test
+    fun pauseNudgesHoldsBackASuggestionButNeverADueBillAndTheSuggestionComesBackWhenItEnds() {
+        bill("rent")
+        billStore.add(found("b1"))
+        val pausedUntil = today.atStartOfDayIn(zone).toEpochMilliseconds() + 7 * 86_400_000L
+        db.schemaQueries.putSetting(app.expenses.core.domain.NudgePause.SETTING, pausedUntil.toString())
+        val paused = withBills.check(today, noon, zone).notices.map { it.kind }
+        assertTrue(NoticeKind.BILL_DUE in paused, "a bill due today is a commitment: $paused")
+        assertTrue(NoticeKind.BILL_FOUND !in paused, "a bill found in a message is only a suggestion: $paused")
+        db.schemaQueries.putSetting(app.expenses.core.domain.NudgePause.SETTING, "0")
+        assertTrue(withBills.check(today, noon, zone).notices.any { it.kind == NoticeKind.BILL_FOUND }, "nothing held back was recorded as sent")
+        db.schemaQueries.putSetting(app.expenses.core.domain.NudgePause.SETTING, pausedUntil.toString())
+        assertTrue(withBills.check(LocalDate(2026, 10, 15), noon, zone).notices.any { it.kind == NoticeKind.BILL_FOUND }, "after the pause is over")
+    }
+
     // ---- F-01: no amount in any notice with Hide amounts or the App lock on ----
 
     private val digitOrRupee = Regex("[0-9₹]")

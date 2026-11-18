@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,11 +58,14 @@ fun CalendarScreen(state: CalendarUi?, onBack: () -> Unit, onShift: (Int) -> Uni
     Scaffold(topBar = { ScreenHeader("Calendar", onBack, "calendar_back") }) { pad ->
         if (state == null) return@Scaffold
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            TipSlot("calendar")
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { onShift(-1) }, modifier = Modifier.testTag("cal_prev").semantics { contentDescription = "Previous month" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(state.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("cal_month"))
                     Text("Spent ${state.total}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("cal_total"))
+                    // UI S6 (U-16): how many past days of the month had no spending, in words; the ring on those days is the picture of the same thing
+                    state.noSpendSummary?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("calendar_no_spend_summary")) }
                 }
                 TextButton(onClick = { onShift(1) }, modifier = Modifier.testTag("cal_next").semantics { contentDescription = "Next month" }) { Text("›", style = MaterialTheme.typography.headlineMedium) }
             }
@@ -121,7 +127,7 @@ private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onCli
     val reduce = LocalReduceMotion.current
     val picked = MaterialTheme.colorScheme.secondaryContainer
     val highlight by animateColorAsState(if (selected) picked.copy(alpha = 0.6f) else picked.copy(alpha = 0f), Motion.tween(reduce, Motion.CHIP, Motion.EaseOut), label = "calSelected")
-    val description = "${c.day}, " + (if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
+    val description = "${c.day}, " + (if (c.noSpend) "no spending" else if (c.spentMinor == 0L) "nothing spent" else "spent ${c.spent}") + (if (c.bills > 0) ", ${c.bills} ${if (c.bills == 1) "bill" else "bills"} due" else "")
     Column(
         modifier.height(56.dp).padding(1.dp).clip(Radius.XS).background(shade)
             .background(highlight)
@@ -129,7 +135,11 @@ private fun Cell(c: CalendarCellUi, selected: Boolean, modifier: Modifier, onCli
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(c.day.toString(), style = MaterialTheme.typography.labelMedium, color = if (c.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
-        Text(c.spent, style = NumberStyle.Chart, maxLines = 1, modifier = Modifier.testTag("cal_amount_${c.day}"))
+        // a no-spend day has an empty amount: its line holds the small ring instead (a drawn circle, steady, no motion; the cell's words say "no spending")
+        Box(contentAlignment = Alignment.Center) {
+            Text(c.spent, style = NumberStyle.Chart, maxLines = 1, modifier = Modifier.testTag("cal_amount_${c.day}"))
+            if (c.noSpend) Box(Modifier.size(10.dp).border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f), CircleShape).testTag("calendar_no_spend_${c.day}"))
+        }
         if (c.bills > 0) Text("•", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, modifier = Modifier.testTag("cal_bill_dot_${c.day}"))
     }
 }

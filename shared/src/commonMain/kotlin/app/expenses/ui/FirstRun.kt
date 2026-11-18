@@ -16,27 +16,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.expenses.core.domain.BackupNudge
 
 /**
- * Shown in place of the empty list on a fresh install. One main action (add the first expense), a way in for people who already have data
- * (a bank statement, or a backup from another phone), and one honest sentence about where the data lives. No steps, no tutorial: it goes
- * away by itself with the first entry, or with Skip.
+ * Shown in place of the empty list on a fresh install. One main action (add the first expense), a way in for people who already have data (a bank statement, or a backup from another phone), an opt-in tour,
+ * and two short, honest lines about where the data lives and what that means for a backup. No steps, no tutorial: it goes away by itself with the first entry, or with Skip. The Example month is drawn
+ * under it (see [ExampleMonthBlock]), so Skip is on the first screen.
  */
 @Composable
-fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> Unit) {
+fun WelcomeCard(onAdd: () -> Unit, onImportOrRestore: () -> Unit, onSkip: () -> Unit, onTour: () -> Unit = {}) {
     // an item of Home's scrolling page, so Skip stays reachable on a short screen or with large text
-    Column(Modifier.fillMaxWidth().padding(24.dp).testTag("welcome"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Welcome", style = MaterialTheme.typography.headlineSmall)
-        Text("Add your first expense: an amount is all it takes. You can sort it into a category later.", style = MaterialTheme.typography.bodyLarge)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp).testTag("welcome"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Let's note your first expense", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+        Text("Type an amount. That's it. Sort it later.", style = MaterialTheme.typography.bodyLarge)
         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().testTag("welcome_add")) { Text("Add my first expense") }
-        OutlinedButton(onClick = onImportOrRestore, modifier = Modifier.fillMaxWidth().testTag("welcome_import")) { Text("I already have data: import or restore") }
-        Text(
-            "Everything stays on this phone. There is no account, and nothing is sent anywhere. That also means uninstalling the app deletes it, " +
-                "so make a backup from More, then Your data, now and then.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("welcome_privacy"),
-        )
+        OutlinedButton(onClick = onImportOrRestore, modifier = Modifier.fillMaxWidth().testTag("welcome_import")) { Text("I already have data") }
+        TextButton(onClick = onTour, modifier = Modifier.fillMaxWidth().testTag("welcome_tour")) { Text("Show me around") }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Stays on this phone. No account. Nothing is sent anywhere.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("welcome_privacy"))
+            Text(
+                "Uninstalling the app deletes it, so back up now and then: More, then Your data.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("welcome_backup"),
+            )
+        }
         TextButton(onClick = onSkip, modifier = Modifier.testTag("welcome_skip")) { Text("Skip") }
     }
 }

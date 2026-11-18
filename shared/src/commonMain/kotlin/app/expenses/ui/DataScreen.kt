@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import app.expenses.DataUi
 import app.expenses.fileCountText
 import app.expenses.todayLocal
+import app.expenses.nowMillis
+import app.expenses.core.domain.BackupStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -191,9 +193,19 @@ fun DataScreen(
         androidx.compose.runtime.LaunchedEffect(state.status) { if (state.status != null) dataScroll.animateScrollTo(0) }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(dataScroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SigningNotice()
+            // N-23: how safe the data is, in one calm line (no colour of warning, no amounts): when the last backup was made and how many entries were added since.
+            // Shown once the setting and the count are read (a moment after the page opens), so "No backup yet" is never drawn for a ledger that has one.
+            val backupLine = remember(state.backup) { BackupStatus.text(nowMillis(), state.backup.lastAt, state.backup.countAtBackup, state.backup.liveCount) }
+            if (state.backup.liveCount != null) Text(backupLine, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_status_line"))
             if (state.busy) CircularProgressIndicator(Modifier.testTag("data_busy"))
+            val feel = rememberFeel()
+            LaunchedEffect(state.backupDone, state.status) { if (state.backupDone) feel(Feel.SAVE) }
             state.status?.let {
-                Text(it, color = if (state.statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("data_status"))
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // the tick is the picture only: the confirmation's words are beside it and are what a screen reader reads
+                    if (state.backupDone && !state.statusIsError) SuccessCheck(Modifier.padding(top = 2.dp).testTag("backup_done_check"), key = it)
+                    Text(it, color = if (state.statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }.testTag("data_status"))
+                }
             }
 
             Text("Spreadsheet", style = MaterialTheme.typography.titleMedium)

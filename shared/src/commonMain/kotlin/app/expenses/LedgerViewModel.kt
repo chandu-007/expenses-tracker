@@ -13,6 +13,10 @@ import app.expenses.core.domain.Currency
 import app.expenses.core.domain.HomeNudge
 import app.expenses.core.domain.HomeNudges
 import app.expenses.core.domain.NudgeSnooze
+import app.expenses.core.domain.Milestone
+import app.expenses.core.domain.Milestones
+import app.expenses.core.domain.NoSpendDays
+import app.expenses.core.domain.NudgePause
 import app.expenses.core.domain.Money
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticeKind
@@ -176,6 +180,8 @@ data class RowUi(val seq: Long, val id: String, val title: String, val subtitle:
     val currency: String = "",
     /** The subtitle without the date: Home's headings say the day, so its rows say only the account and the category (the subtitle keeps the date for Search). Empty: use the subtitle. */
     val detail: String = "",
+    /** UI S6: came from a text, notification or imported statement and has no category yet (the expense is not reviewed): a small dot shows on its row. Costs nothing: it reads the entry already loaded. */
+    val unreviewed: Boolean = false,
 )
 data class AccountUi(val id: String, val name: String, val type: String = "")
 
@@ -622,12 +628,14 @@ data class SearchUi(
 )
 
 /** One day cell of the calendar. [spent] is a short label (empty when nothing was spent). */
-data class CalendarCellUi(val day: Int, val epochDay: Long, val spent: String, val spentMinor: Long, val bills: Int, val level: Int, val isToday: Boolean)
+data class CalendarCellUi(val day: Int, val epochDay: Long, val spent: String, val spentMinor: Long, val bills: Int, val level: Int, val isToday: Boolean, /** UI S6: a past day of this month with no spending, after the ledger's first entry (the Calendar draws a small ring). */ val noSpend: Boolean = false)
 
 /** What the calendar shows: the month grid, its total, and the picked day's entries and bills. */
 data class CalendarUi(
     val label: String, val offset: Int, val blanks: Int, val cells: List<CalendarCellUi>, val total: String,
     val selectedEpochDay: Long?, val dayTitle: String, val dayTotal: String, val dayLines: List<DrillLine>, val dayBills: List<String>,
+    /** UI S6: "6 no-spend days this month", or null when the month has none (see [NoSpendDays]). */
+    val noSpendSummary: String? = null,
 )
 
 enum class ReportMode { PERIOD, YEAR, FINANCIAL_YEAR, CUSTOM }
@@ -676,6 +684,9 @@ data class PendingRestoreUi(
 /** The photos and files a backup would carry: how many, how large together, and whether the switch for including them is on. */
 data class BackupFilesUi(val count: Int = 0, val bytes: Long = 0, val include: Boolean = true)
 
+/** What the backup status line at the top of Your data is made from: [lastAt] (epoch ms, null when no backup was made), the entries it held, the entries there are now. */
+data class BackupStatusUi(val lastAt: Long? = null, val countAtBackup: Long = 0, val liveCount: Long? = null)
+
 /** State of the Data screen. [status] is the outcome of the last action; [needsPassphrase] asks for the passphrase of an encrypted backup. */
 data class DataUi(
     val busy: Boolean = false,
@@ -684,6 +695,10 @@ data class DataUi(
     val needsPassphrase: Boolean = false,
     val pending: PendingRestoreUi? = null,
     val files: BackupFilesUi = BackupFilesUi(),
+    /** When the last backup was made (null: never), how many entries it held, and how many entries there are now: read when Your data opens (one count) and after a backup or restore. Behind [app.expenses.core.domain.BackupStatus]'s line. */
+    val backup: BackupStatusUi = BackupStatusUi(),
+    /** The status is the confirmation of a backup that was saved and checked: Your data draws a tick beside it. */
+    val backupDone: Boolean = false,
 )
 
 /**
@@ -715,6 +730,8 @@ sealed interface UiState {
         val hiddenOlder: Int,
         /** True on a fresh install where nothing has ever been recorded, until the user adds something or skips it. */
         val showWelcome: Boolean,
+        /** True while the welcome card shows and the person has not chosen "Hide example": the dimmed Example month is drawn below it. It is only a drawing and is never stored. */
+        val showExample: Boolean,
         /** True when it is time to remind the user to make a backup. */
         val showBackupNudge: Boolean,
         val notifications: NotificationPrefs,
@@ -735,6 +752,8 @@ sealed interface UiState {
         val firstWeek: List<FirstWeekItem> = emptyList(),
         /** The guided capture setup's Home card (see [CaptureSetup.nudgeCount]): where the person stands, or null when it should not show. */
         val setupCard: app.expenses.core.domain.SetupState? = null,
+        /** UI S6: the capture heartbeat chip ("Last bank text seen yesterday 8:14 pm"), or null when capture is off or no bank text was ever seen. */
+        val captureHeartbeat: app.expenses.core.domain.CaptureHeartbeat.Chip? = null,
         val spark: SparkUi = SparkUi(),
         /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
         val reduceMotion: Boolean = false,
@@ -771,6 +790,12 @@ sealed interface UiState {
         val categoriseNudge: Int = 0,
         /** The cards of Home that were put off with "Not now", and when and about how many (see [HomeNudges]); the card shown is the first that is not put off. */
         val nudgeSnoozes: Map<HomeNudge, NudgeSnooze> = emptyMap(),
+        /** UI S6: the Pause nudges setting, epoch milliseconds until which nudges are paused ([NudgePause.FOREVER] until turned back on); 0 when not paused. Home and More read it with the clock (see [NudgePause]). */
+        val nudgesPausedUntil: Long = 0L,
+        /** UI S6: the person turned "Occasional milestones" on (off by default; see [Milestones]). */
+        val milestonesOn: Boolean = false,
+        /** UI S6: the milestone Home may show now (worked out with the slow figures, never on the save path), or null. */
+        val milestone: Milestone? = null,
         /** The person turned on putting yearly bills aside month by month (it is taken off safe to spend). */
         val sinkingFunds: Boolean = false,
         /** Travel mode: the trip that is on today, for the card under Home's summary (informational, not a nudge: docs/HOME_NUDGES.md); null when none is. */
@@ -818,6 +843,8 @@ private const val SETTING_APPEARANCE = "appearance"
 /** The order accounts are shown in: where money sits first, then cards, then loans; by name within each. */
 private val ACCOUNT_ORDER = listOf("BANK", "CASH", "WALLET", "CREDIT_CARD", "LOAN")
 private const val SETTING_WELCOME_DISMISSED = "welcome_dismissed"
+/** "1": the person chose "Hide example" on the welcome screen. */
+private const val SETTING_EXAMPLE_HIDDEN = "example_hidden"
 private const val SETTING_REDUCE_MOTION = "reduce_motion"
 private const val SETTING_SPEND_RED = "show_spending_red"
 private const val SETTING_LOOK_NOTICE = "category_look_notice"
@@ -920,7 +947,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         viewModelScope.launch(BACKGROUND) {
             _state.value = UiState.Opening
             when (val o = container.startFresh()) {
-                is AppContainer.Opened.Ok -> container.write { ok -> refresh(ok) }
+                is AppContainer.Opened.Ok -> container.write { ok -> loadTips(ok); refresh(ok) }
                 is AppContainer.Opened.KeyLost -> _state.value = UiState.KeyLost(o.message)
             }
         }
@@ -1026,7 +1053,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         else if (u.recurringId != null) ok.recurring.undo(u.recurringId, kotlinx.datetime.LocalDate.fromEpochDays(u.recurringDay))
         else if (u.balanceFix != null) {
             val f = u.balanceFix
-            balanceNote = if (ok.balanceFixes.undo(f.accountId, f.deltaMinor, f.atMillis, inr)) { accountRowsCache = freshAccountRows(ok); "Put the balance back." } else "The balance could not be put back: the account has changed since."
+            balanceNote = if (ok.balanceFixes.undo(f.accountId, f.deltaMinor, f.atMillis, inr)) { accountRowsCache = freshAccountRows(ok); "Put the balance back." } else "Could not put the balance back: the account has changed since."
         }
         else if (u.unarchiveAccountId != null) ok.db.schemaQueries.accountById(u.unarchiveAccountId).executeAsOneOrNull()?.let { row -> ok.store.saveAccount(Account(AccountId(row.id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, false)) }
         else if (u.restore) EntryActions(ok).restore(u.entryId) else EntryActions(ok).undo(u.entryId)
@@ -1434,6 +1461,10 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private var categoriesOpen = false
     private var nudgeCache = false
     private var categoriseCache = 0
+    private val milestoneFigures = MilestoneFigures()
+    private var milestoneCache: Milestone? = null
+    /** The milestone the person just said "Thanks" to: kept out of a figure pass that was already running when they did. */
+    private var milestoneAcked: String? = null
     private var safeCache: SafeToSpendUi? = null
     private var figuresReady = false
     private var accountsOpen = false
@@ -1453,6 +1484,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val wait = if (accountsOpen || categoriesOpen || !figuresReady) 0L else BALANCES_DEBOUNCE_MS
         balancesJob = viewModelScope.launch(BACKGROUND) {
             kotlinx.coroutines.delay(wait)
+            var milestoneNext: Milestone? = null
             val figures = container.write { ok ->
                 val live = ok.db.schemaQueries.entryCount().executeAsOne()
                 val nudge = BackupNudge.shouldShow(
@@ -1475,13 +1507,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     val today = todayLocal(); val cur = ok.budgets.period().containing(today)
                     buildMap<String, Long> { ok.reports.breakdown(cur, kotlinx.datetime.TimeZone.currentSystemDefault(), inr).forEach { r -> r.categoryId?.let { put(it, r.total.minorUnits) }; r.children.forEach { c -> c.categoryId?.let { put(it, c.total.minorUnits) } } } }
                 } else categorySpendCache
+                milestoneNext = milestoneFigures.next(ok, nowMillis(), systemZone())?.takeIf { m -> m.id != milestoneAcked }
                 Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok), spend)
             } ?: return@launch
             nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; categorySpendCache = figures.spend; sparkCache = figures.spark; figuresReady = true
+            milestoneCache = milestoneNext
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
                     (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage, spentMinor = figures.spend[c.id] ?: c.spentMinor) }) ?: st
                 }
+                _state.update { st -> (st as? UiState.Ready)?.copy(milestone = milestoneNext) ?: st }
             }
         }
     }
@@ -1646,7 +1681,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun clearCardTerms(accountId: String) = withStore { ok ->
         val name = ok.db.schemaQueries.accountById(accountId).executeAsOneOrNull()?.name
         ok.cards.clear(accountId); ok.cards.setCreditLimit(accountId, null); refresh(ok)
-        say("Removed the billing dates, the reminders and the credit limit" + (name?.let { " of $it" } ?: "") + ".")
+        say("Cleared card dates, reminders and limit" + (name?.let { " for $it" } ?: "") + ".")
     }
 
     /** Sets (or, with empty text, removes) a card's credit limit, for the "near the limit" notice. Text that is not a positive amount removes it. */
@@ -1682,7 +1717,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         require(!archived || ok.db.schemaQueries.selectAccounts().executeAsList().count { it.archived == 0L && it.id != id } > 0) { "Keep at least one active account." }
         ok.store.saveAccount(Account(AccountId(id), row.name, AccountType.valueOf(row.type), inr, row.opening_minor, archived))
         if (archived) refresh(ok, undo = UndoUi(id, "Archived ${row.name}. Its entries stay.", unarchiveAccountId = id)) // Undo here, or Restore from the Archived list later
-        else { refresh(ok); say("${row.name} is back in the pickers.") }
+        else { refresh(ok); say("${row.name} restored.") }
     }
 
     fun deleteAccount(id: String) = withStore { ok ->
@@ -1896,7 +1931,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val title = ok.expects.waiting().firstOrNull { it.entryId == entryId }?.title
         if (ok.expects.close(entryId)) {
             refresh(ok)
-            _waitingUndo.value = ScreenUndo("close:$entryId", "Not expecting ${title ?: "it"} back any more")
+            _waitingUndo.value = ScreenUndo("close:$entryId", "Not expecting ${title ?: "it"} back")
         }
     }
 
@@ -1935,11 +1970,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private val _captureSettings = MutableStateFlow(CaptureSettingsUi(false, ""))
     val captureSettings: StateFlow<CaptureSettingsUi> get() = _captureSettings
 
-    fun loadInbox() = withStore { ok ->
-        // waiting texts that the rules now read as bills (0.7.1) move to Bills before the list is shown
-        if (MessageIngest.reclassifyWaiting(ok) > 0) refresh(ok)
-        _inbox.value = inboxRows(ok)
+    fun loadInbox() {
+        _inboxLoaded.value = false
+        withStore { ok ->
+            // waiting texts that the rules now read as bills (0.7.1) move to Bills before the list is shown
+            if (MessageIngest.reclassifyWaiting(ok) > 0) refresh(ok)
+            _inbox.value = inboxRows(ok)
+            _inboxLoaded.value = true
+        }
     }
+
+    private val _inboxLoaded = MutableStateFlow(false)
+
+    /** UI S6: false from the moment To review is asked to load until its list has been read, so "All cleared" is never said about a list that has not arrived. */
+    val inboxLoaded: StateFlow<Boolean> get() = _inboxLoaded
 
     fun loadCaptureSettings() = withStore { ok ->
         // the capture log keeps 90 days: the newest event of any outcome is the last time something arrived
@@ -2019,6 +2063,25 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     // ---- the guide ----
 
+    /** The ids of the one-time tips already seen. Until the store has been read it holds every id, so no tip can flash up before the truth is known. */
+    private val _tipsSeen = MutableStateFlow(app.expenses.core.domain.Tips.IDS)
+    val tipsSeen: StateFlow<Set<String>> get() = _tipsSeen
+
+    private fun loadTips(ok: AppContainer.Opened.Ok) { _tipsSeen.value = app.expenses.core.domain.Tips.decode(ok.templates.setting(app.expenses.core.domain.Tips.SETTING)) }
+
+    /** Remembers a tip as seen (on "Got it", and when its screen is left); it is never shown again. */
+    fun markTipSeen(id: String) {
+        if (id in _tipsSeen.value) return
+        _tipsSeen.value = _tipsSeen.value + id // at once, so the card goes away with the tap
+        viewModelScope.launch(BACKGROUND) { container.write { ok -> ok.templates.putSetting(app.expenses.core.domain.Tips.SETTING, app.expenses.core.domain.Tips.encode(_tipsSeen.value)) } }
+    }
+
+    /** Brings every tip back, to be shown once each again (Appearance, "Show tips again"). */
+    fun resetTips() {
+        _tipsSeen.value = emptySet()
+        viewModelScope.launch(BACKGROUND) { container.write { ok -> ok.templates.putSetting(app.expenses.core.domain.Tips.SETTING, "") } }
+    }
+
     private val _guide = MutableStateFlow<app.expenses.core.domain.GuidePlan?>(null)
     /** The guide being shown, or null. Set when the app opens (first time, or after an update), or by the person from More. */
     val guide: StateFlow<app.expenses.core.domain.GuidePlan?> get() = _guide
@@ -2035,6 +2098,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun offerGuide(ok: AppContainer.Opened.Ok) {
         if (guideDeferred) return
         val seen = ok.templates.setting(GuideSettings.SEEN)?.toIntOrNull()
+        // a first install gets no tour on its own ("Show me around" on the welcome card is the way in): the current version counts as seen, so later updates offer only the newer pages
+        if (seen == null) { ok.templates.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString()); _guide.value = null; return }
         val plan = app.expenses.core.domain.Guide.planOnOpen(seen, ok.templates.setting(GuideSettings.OFF) == "1")
         _guide.value = plan
         // an update that added nothing to show is not shown again either
@@ -2068,6 +2133,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     }
 
     fun openGuide() { _guide.value = app.expenses.core.domain.Guide.fullPlan() }
+
+    /** "Show me around" on the welcome card: the five-stop tour, chosen by the person. Finishing it goes through [finishGuide], which offers the guided capture setup. */
+    fun startTour() { _guide.value = app.expenses.core.domain.Guide.shortPlan() }
 
     /** After an update the person asked for the whole guide, not just what is new. */
     fun showWholeGuide() { _guide.update { it?.copy(steps = app.expenses.core.domain.Guide.steps) } }
@@ -2407,7 +2475,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         if (!record) return@write "Turn on entering the payment: there is no message to mark, so this is how it is paid."
                         if (cardAccountId.isEmpty() || payFromId.isEmpty()) return@write "Choose the account it was paid from."
                         val draft = EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, "Card bill payment", nowMillis())
-                        try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
+                        try { ok.store.atomically { EntryActions(ok).save(draft) } } catch (e: IllegalArgumentException) { return@write e.message ?: "Could not record that. Try again." }
                         billsChanged(ok, "Recorded the payment to the card")
                         return@write null
                     }
@@ -2421,7 +2489,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                         val draft = if (isCard) EntryDraft(null, DraftKind.TRANSFER, amountText, "", emptyList(), payFromId, cardAccountId, b.title, nowMillis())
                         else EntryDraft(null, DraftKind.EXPENSE, amountText, billsCategory, emptyList(), payFromId, "", b.title, nowMillis())
                         // a bill paid is not spending on a trip: no Travel mode tag
-                        entryId = try { ok.store.atomically { EntryActions(ok).save(draft, tripTag = false) } } catch (e: IllegalArgumentException) { return@write e.message ?: "That could not be recorded." }
+                        entryId = try { ok.store.atomically { EntryActions(ok).save(draft, tripTag = false) } } catch (e: IllegalArgumentException) { return@write e.message ?: "Could not record that. Try again." }
                     }
                     // the bill's words are cleared once it is paid, so an entry recorded from it keeps them first
                     if (entryId != null) b.body?.let { ok.origins.put(entryId, app.expenses.core.storage.OriginStore.kindOf(b.source, b.sender), b.sender, it, b.receivedAt) }
@@ -2431,7 +2499,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     _billUndo.value = ScreenUndo("$BILL_PAY_UNDO:$id", if (record) "Recorded ${b.title}" else "Marked ${b.title} as paid")
                     null
                 }
-            } catch (e: Exception) { if (e is IllegalArgumentException) e.message ?: "That could not be saved." else "That could not be saved. Try again." }
+            } catch (e: Exception) { if (e is IllegalArgumentException) e.message ?: "Could not save that." else "Could not save that. Try again." }
             withContext(Dispatchers.Main) { onDone(problem) }
         }
     }
@@ -2757,11 +2825,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             // an account the choice created is removed again only while it has no entries (the text may have been added to it since); then everything stays as it is, and the person is told
             val created = held.createdAccountId
             if (created != null && ok.store.accountUsage(AccountId(created)) > 0) {
-                _state.update { st -> (st as? UiState.Ready)?.copy(message = "That account already has entries, so it stays. You can archive it from More, Accounts.") ?: st }
+                _state.update { st -> (st as? UiState.Ready)?.copy(message = "It has entries, so it stays. Archive it in More, Accounts.") ?: st }
             } else {
                 if (held.before == null) ok.templates.removeSetting(held.key) else ok.templates.putSetting(held.key, held.before)
                 created?.let { id ->
-                    try { ok.looks.save(AccountLook(id)); ok.store.deleteAccount(AccountId(id)) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+                    try { ok.looks.save(AccountLook(id)); ok.store.deleteAccount(AccountId(id)) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "Could not undo that.") ?: st } }
                 }
             }
             _inbox.value = inboxRows(ok); refresh(ok)
@@ -2839,7 +2907,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val held = madeTransfer?.takeIf { it.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
         madeTransfer = null
         withStore { ok ->
-            try { ok.transfers.undoReplace(held) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            try { ok.transfers.undoReplace(held) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "Could not undo that.") ?: st } }
             _inbox.value = inboxRows(ok); refresh(ok)
         }
     }
@@ -3072,7 +3140,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val held = heldAdd?.takeIf { it.adds.itemId == itemId } ?: return // taken now: the bar clears it as soon as it is gone
         heldAdd = null
         withStore { ok ->
-            try { ok.captureAdds.undo(held.adds) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "That could not be undone.") ?: st } }
+            try { ok.captureAdds.undo(held.adds) } catch (e: IllegalArgumentException) { _state.update { st -> (st as? UiState.Ready)?.copy(message = e.message ?: "Could not undo that.") ?: st } }
             held.settings.asReversed().forEach { (key, before) -> if (before == null) ok.templates.removeSetting(key) else ok.templates.putSetting(key, before) }
             _inbox.value = inboxRows(ok); refresh(ok)
         }
@@ -3196,7 +3264,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     is RulesHeld.Alias -> ok.captureRules.restoreAlias(held.from, held.before)
                 }
                 null
-            } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            } catch (e: IllegalArgumentException) { e.message ?: "Could not undo that." }
             _rules.value = ruleRows(ok); _learned.value = learnedRows(ok); _aliases.value = aliasRows(ok); _inbox.value = inboxRows(ok)
             if (held is RulesHeld.Filing) refresh(ok)
             if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
@@ -3249,7 +3317,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val held = heldAlias?.takeIf { it.from == from } ?: return // taken now: the bar clears it as soon as it is gone
         heldAlias = null
         withStore { ok ->
-            val problem = try { ok.captureRules.restoreAlias(held.from, held.before); null } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            val problem = try { ok.captureRules.restoreAlias(held.from, held.before); null } catch (e: IllegalArgumentException) { e.message ?: "Could not undo that." }
             _aliases.value = aliasRows(ok); _learned.value = learnedRows(ok); _inbox.value = inboxRows(ok)
             if (problem != null) _state.update { st -> (st as? UiState.Ready)?.copy(message = problem) ?: st }
         }
@@ -3258,7 +3326,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun addCaptureRule(pattern: String, categoryId: String, onDone: (String?) -> Unit) {
         viewModelScope.launch(BACKGROUND) {
             val problem = try {
-                container.write { ok -> ok.captureRules.add(Uuid.random().toString(), pattern, categoryId); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok); say("Rule added. New payments with \"${pattern.trim()}\" in them get this category."); null }
+                container.write { ok -> ok.captureRules.add(Uuid.random().toString(), pattern, categoryId); _rules.value = ruleRows(ok); _inbox.value = inboxRows(ok); say("Rule added for \"${pattern.trim()}\"."); null }
             } catch (e: IllegalArgumentException) { e.message }
             withContext(Dispatchers.Main) { onDone(problem) }
         }
@@ -3306,7 +3374,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val extra = ok.templates.setting(CaptureKeys.SETTING_EXTRA_ROOTS).orEmpty().split('\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.associateWith { it }
         val handedOver = platform.supportsShortcutsCapture
         _health.value = CaptureHealth.report(counts, now, handedOver || ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1", handedOver || permissionGranted, SenderRules.BUILT_IN + extra)
-        say("Added $root. Its next texts will be read.") // said when it is done, not when it was asked for
+        say("Added $root. Its texts will be read.") // said when it is done, not when it was asked for
     }
 
     /** Gives the payee in this text a name of your own ("Chandu" for a phone-number address); every later text for the same address shows it. A blank name takes it off. */
@@ -3394,6 +3462,29 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         refresh(ok)
     }
 
+    // ---- Pause nudges and occasional milestones (UI S6) ----
+
+    /** Pauses nudges for [choice], or turns them back on (null). The setting holds the time until which they are paused (see [NudgePause]). */
+    fun pauseNudges(choice: NudgePause.Choice?) = withStore { ok ->
+        ok.templates.putSetting(NudgePause.SETTING, if (choice == null) "0" else NudgePause.until(choice, nowMillis(), systemZone()).toString())
+        refresh(ok)
+    }
+
+    /** The "Occasional milestones" switch (off by default). Turning it off takes the card away at once; turning it on has the figures look for one. */
+    fun setMilestonesOn(on: Boolean) = withStore { ok ->
+        ok.templates.putSetting(Milestones.ON_SETTING, if (on) "1" else "0")
+        if (!on) milestoneCache = null
+        refresh(ok)
+    }
+
+    /** "Thanks" on the milestone card: it is kept as seen, today, and the card goes. */
+    fun acknowledgeMilestone(id: String) = withStore { ok ->
+        MilestoneFigures.acknowledge(ok, id, todayLocal().toEpochDays())
+        milestoneAcked = id
+        milestoneCache = null
+        refresh(ok)
+    }
+
     // ---- home layout ----
 
     /** Saves which home blocks are shown and in what order; takes effect at once. */
@@ -3407,6 +3498,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "Skip" on the first-run card: it is not shown again. */
     fun dismissWelcome() = withStore { ok ->
         ok.templates.putSetting(SETTING_WELCOME_DISMISSED, "1")
+        refresh(ok)
+    }
+
+    /** "Hide example" under the welcome card: the Example month is not drawn again, after a restart either. Nothing else changes: the example was never data. */
+    fun hideExample() = withStore { ok ->
+        ok.templates.putSetting(SETTING_EXAMPLE_HIDDEN, "1")
         refresh(ok)
     }
 
@@ -3627,7 +3724,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             } catch (e: app.expenses.core.domain.XlsReader.Unreadable) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
-                _import.value = ImportUi(active = true, error = "That file could not be read. Check that it is a bank statement (CSV, Excel or PDF).")
+                _import.value = ImportUi(active = true, error = "Could not read that file. Pick a bank statement (CSV, Excel or PDF).")
             }
         }
     }
@@ -3658,7 +3755,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             } catch (e: IllegalArgumentException) {
                 _import.value = ImportUi(active = true, error = e.message)
             } catch (e: Exception) {
-                _import.value = ImportUi(active = true, error = "That file could not be read. Check that it is a bank statement (CSV, Excel or PDF).")
+                _import.value = ImportUi(active = true, error = "Could not read that file. Pick a bank statement (CSV, Excel or PDF).")
             }
         }
     }
@@ -3845,7 +3942,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     _import.update { it.copy(busy = false, result = ImportResultUi(r.imported, r.alreadyThere, Money(r.spendingMinor, inr).formatted(), Money(r.incomeMinor, inr).formatted(), r.matchedExisting, r.transfers, Money(r.transferMinor, inr).formatted())) }
                 }
             } catch (e: Exception) {
-                _import.update { it.copy(busy = false, error = "Nothing was imported. Nothing in your entries changed. Try again.") }
+                _import.update { it.copy(busy = false, error = "Import failed. Your entries are unchanged. Try again.") }
             }
         }
     }
@@ -4006,7 +4103,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
         val since = today.minus(400, kotlinx.datetime.DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
         val samples = ok.db.schemaQueries.expenseSamples(inr.code, since).executeAsList().map { SubscriptionSample(it.name.orEmpty(), dateOfMillis(it.occurred_at).epochDay().toInt(), it.amount_minor) }
-        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt(), ok.captureRules.aliases()).firstOrNull { it.key == key } ?: return@withStore say("That one is not a subscription any more.")
+        val sub = SubscriptionFinder.find(samples, today.toEpochDays().toInt(), ok.captureRules.aliases()).firstOrNull { it.key == key } ?: return@withStore say("That is no longer a subscription.")
         if (ok.recurring.list().any { it.name.trim().lowercase() == sub.name.trim().lowercase() }) return@withStore say("${sub.name} is already in Repeating expenses.")
         // the latest charge is looked up by the merchant as it was written on it (the finder's key may be a clean name for several spellings)
         val latest = ok.db.schemaQueries.latestExpenseNamed(inr.code, sub.lastName.trim().lowercase()).executeAsOneOrNull() ?: return@withStore say("Could not set up ${sub.name}. Add it under Repeating expenses by hand.")
@@ -4018,7 +4115,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         ok.recurring.save(RecurringItem(Uuid.random().toString(), sub.name, Money(sub.amountMinor, inr), category?.let(::CategoryId), AccountId(latest.account_id ?: return@withStore say("Could not set up ${sub.name}. Add it under Repeating expenses by hand.")), sub.name, Schedule(unit, every, start)))
         _subscriptions.value = subscriptionsUi(ok)
         refresh(ok)
-        say("Added ${sub.name} to Repeating expenses. You will be reminded when it is due.")
+        say("Added ${sub.name} to Repeating expenses. Reminders are on.")
     }
 
     // ---- the rates chosen last for each foreign currency ----
@@ -4214,7 +4311,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     fun ignoreSubscription(key: String) = withStore { ok ->
         val now = ok.templates.setting(SETTING_SUBS_IGNORED).orEmpty().split('\n').filter { it.isNotBlank() }
         ok.templates.putSetting(SETTING_SUBS_IGNORED, (now + key).distinct().joinToString("\n")); _subscriptions.value = subscriptionsUi(ok)
-        say("Hidden from this list. The button at the bottom of this page shows it again.")
+        say("Hidden. Show it again with the button at the bottom.")
     }
 
     fun showIgnoredSubscriptions() = withStore { ok -> ok.templates.putSetting(SETTING_SUBS_IGNORED, ""); _subscriptions.value = subscriptionsUi(ok) }
@@ -4287,7 +4384,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         if (rows.isEmpty()) return@withStore
         val moves = rows.map { r -> if (group == "own") EntryActions.TransferMove(r.id, r.toId, r.partnerId) else EntryActions.TransferMove(r.id, toAccount) }
         val r = try { EntryActions(ok).makeCandidateTransfers(moves) } catch (e: IllegalArgumentException) {
-            _transferCandidates.value = transferCandidatesUi(ok, "Nothing was changed. The transfers could not be made.")
+            _transferCandidates.value = transferCandidatesUi(ok, "Could not make the transfers. Nothing changed.")
             return@withStore
         }
         val made = if (r.changed == 0) "Made no transfers" else "Made ${r.changed} ${if (r.changed == 1) "transfer" else "transfers"}"
@@ -4313,7 +4410,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     held.second.undoRestore.forEach { EntryActions(ok).restore(it) }
                 }
                 "Put back ${held.second.changed} ${if (held.second.changed == 1) "entry" else "entries"} as they were."
-            } catch (e: IllegalArgumentException) { e.message ?: "That could not be undone." }
+            } catch (e: IllegalArgumentException) { e.message ?: "Could not undo that." }
             refresh(ok)
             _transferCandidates.value = transferCandidatesUi(ok, notice)
         }
@@ -4357,15 +4454,19 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val selected = r.selectedEpochDay?.let { kotlinx.datetime.LocalDate.fromEpochDays(it) }?.takeIf { it in period }
         val lines = selected?.let { ok.reports.drill(DatePeriod(it, it.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr, DrillTarget.All, 200) }.orEmpty()
         val dayFmt = DatePattern("EEEE, d MMM")
+        // UI S6: the past days of this month without spending, from the ledger's first entry on (one indexed read)
+        val firstEntryDay = ok.db.schemaQueries.firstEntryAt().executeAsOne().MIN?.let { app.expenses.core.domain.dateOf(it, zone).toEpochDays() }
+        val quiet = NoSpendDays.of(m.days.map { it.date.toEpochDays() to it.spentMinor }, today.toEpochDays(), firstEntryDay).toSet()
         return CalendarUi(
             label = DatePattern("MMMM yyyy").format(LocalDate(year, month, 1)), offset = r.offset, blanks = m.leadingBlanks,
-            cells = m.days.map { CalendarCellUi(it.date.dayOfMonth, it.date.toEpochDays(), if (it.spentMinor == 0L) "" else Money(it.spentMinor, inr).compact(), it.spentMinor, it.bills, it.level, it.isToday) },
+            cells = m.days.map { CalendarCellUi(it.date.dayOfMonth, it.date.toEpochDays(), if (it.spentMinor == 0L) "" else Money(it.spentMinor, inr).compact(), it.spentMinor, it.bills, it.level, it.isToday, noSpend = it.date.toEpochDays() in quiet) },
             total = Money(m.totalSpentMinor, inr).formatted(),
             selectedEpochDay = selected?.toEpochDays(),
             dayTitle = selected?.let { dayFmt.format(localDateOfEpochDay(it.toEpochDays())) }.orEmpty(),
             dayTotal = selected?.let { Money(m.days[it.dayOfMonth - 1].spentMinor, inr).formatted() }.orEmpty(),
             dayLines = lines,
             dayBills = due.filter { it.date == selected }.map { b -> b.item.name + (b.item.amount?.let { " ${it.formatted()}" } ?: " (amount each time)") },
+            noSpendSummary = NoSpendDays.summary(quiet.size, if (r.offset == 0) null else DatePattern("MMMM yyyy").format(LocalDate(year, month, 1))),
         )
     }
 
@@ -4467,16 +4568,16 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     // ---- export, backup and restore ----
 
     /** Runs a file action off the main thread, showing "working" and then its outcome. A [BackupException] message is written for the user. */
-    private fun dataAction(block: suspend () -> String) {
-        _data.update { it.copy(busy = true, status = null, statusIsError = false) }
+    private fun dataAction(backupDone: Boolean = false, block: suspend () -> String) {
+        _data.update { it.copy(busy = true, status = null, statusIsError = false, backupDone = false) }
         viewModelScope.launch(BACKGROUND) {
             try {
                 val message = block()
-                _data.update { it.copy(busy = false, status = message, statusIsError = false) }
+                _data.update { it.copy(busy = false, status = message, statusIsError = false, backupDone = backupDone) }
             } catch (e: BackupException) {
-                _data.update { it.copy(busy = false, status = e.message, statusIsError = true) }
+                _data.update { it.copy(busy = false, status = e.message, statusIsError = true, backupDone = false) }
             } catch (e: Exception) {
-                _data.update { it.copy(busy = false, status = "That did not work. Nothing was changed. Try again.", statusIsError = true) }
+                _data.update { it.copy(busy = false, status = "That did not work. Nothing changed. Try again.", statusIsError = true, backupDone = false) }
             }
         }
     }
@@ -4488,8 +4589,13 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** How many photos and files a backup would carry and whether the switch is on: read when the Data screen opens and after anything that changes them. */
     fun loadBackupFiles() {
         viewModelScope.launch(BACKGROUND) {
-            val files = container.write { ok -> ok.backup.attachmentTotals().let { BackupFilesUi(it.count, it.bytes, ok.templates.setting(BackupKeys.INCLUDE_FILES) != "0") } } ?: return@launch
-            _data.update { it.copy(files = files) }
+            val (files, backup) = container.write { ok ->
+                val totals = ok.backup.attachmentTotals()
+                BackupFilesUi(totals.count, totals.bytes, ok.templates.setting(BackupKeys.INCLUDE_FILES) != "0") to BackupStatusUi(
+                    ok.templates.setting(DataTransfer.SETTING_BACKUP_AT)?.toLongOrNull(), ok.templates.setting(DataTransfer.SETTING_BACKUP_COUNT)?.toLongOrNull() ?: 0L, ok.db.schemaQueries.entryCount().executeAsOne(),
+                )
+            } ?: return@launch
+            _data.update { it.copy(files = files, backup = backup) }
         }
     }
 
@@ -4505,8 +4611,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun savedFilesText(f: DataTransfer.FilesSaved) = (if (f.included > 0) ", ${fileCountText(f.included)} (${AttachmentRules.sizeText(f.includedBytes)})" else "")
     private fun savedFilesNote(f: DataTransfer.FilesSaved) = f.notes().takeIf { it.isNotEmpty() }?.let { " Note: ${it.joinToString("; ")}." }.orEmpty()
 
-    fun createBackup(uri: String, passphrase: String?) = dataAction {
+    fun createBackup(uri: String, passphrase: String?) = dataAction(backupDone = true) {
         val saved = actions.backup(uri, passphrase)
+        loadBackupFiles() // the status line at the top of Your data says "Last backup: just now" from the setting the backup just wrote
         container.write { ok -> refresh(ok) } // the first-week checklist on Home ticks "backup" from this
         "Backup saved and checked: ${saved.counts.entries} entries, ${saved.counts.categories} categories${savedFilesText(saved.files)}" +
             (if (saved.encrypted) ", protected by your passphrase." else ". It is not encrypted; keep it somewhere private.") + savedFilesNote(saved.files)
@@ -4608,7 +4715,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         _data.update { it.copy(pending = null, needsPassphrase = false) }
     }
 
-    fun dismissDataStatus() = _data.update { it.copy(status = null) }
+    fun dismissDataStatus() = _data.update { it.copy(status = null, backupDone = false) }
 
     // ---- notifications ----
 
@@ -4637,7 +4744,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun plainMessage(e: Throwable): String {
         val m = e.message?.trim().orEmpty()
         val technical = m.isEmpty() || listOf("Failed requirement", "Exception", "java.", "kotlin.", "SQL", "constraint", "null", "Check failed").any { m.contains(it, ignoreCase = false) }
-        return if (technical) "That did not work. Nothing was changed. Try again." else m
+        return if (technical) "That did not work. Nothing changed. Try again." else m
     }
 
     // ---- budgets ----
@@ -4811,6 +4918,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         scheduleSlowFigures()
         seenSignature = container.dataSignature(ok) // read inside the write lock, after everything this rebuild wrote: anything that moves it later happened without this screen
         refreshCount++
+        val welcome = !ok.db.schemaQueries.entryCountEver().executeAsOne() && ok.templates.setting(SETTING_WELCOME_DISMISSED) != "1"
         _state.value = UiState.Ready(
             rows = rowsOf(loaded),
             periodSpend = spent.formatted(),
@@ -4819,7 +4927,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             due = dueUi(ok, today),
             notifications = ok.notifications.prefs(),
             // 'ever' counts deleted entries too: someone who added something and deleted it is not new to the app.
-            showWelcome = !ok.db.schemaQueries.entryCountEver().executeAsOne() && ok.templates.setting(SETTING_WELCOME_DISMISSED) != "1",
+            showWelcome = welcome,
+            showExample = welcome && ok.templates.setting(SETTING_EXAMPLE_HIDDEN) != "1",
             showBackupNudge = nudgeCache,
             hiddenOlder = ok.recurring.hiddenOlder(today),
             recurring = recurringUi(ok, today),
@@ -4835,6 +4944,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             billPeek = billPeek(ok),
             firstWeek = firstWeekUi(ok, accounts),
             setupCard = setupCardUi(ok),
+            captureHeartbeat = captureHeartbeatUi(ok),
             spark = sparkCache,
             reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
             showSpendingRed = ok.templates.setting(SETTING_SPEND_RED) == "1",
@@ -4860,6 +4970,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             waiting = waitingSummary(ok, inr),
             categoriseNudge = categoriseCache,
             nudgeSnoozes = nudgeSnoozes(ok),
+            nudgesPausedUntil = ok.templates.setting(NudgePause.SETTING)?.toLongOrNull() ?: 0L,
+            milestonesOn = ok.templates.setting(Milestones.ON_SETTING) == "1",
+            milestone = milestoneCache,
             sinkingFunds = ok.templates.setting(SETTING_SINKING_FUNDS) == "1",
             tripCard = tripCard,
             tripWindows = tripsOn.map { TripWindowUi(it.id, it.name, it.tag, it.startDay, it.endDay) },
@@ -4955,6 +5068,18 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         ))
     }
 
+    /**
+     * UI S6: Home's capture heartbeat chip. One setting is read first (the time the last bank text was seen); with none, nothing else is read. Capture counts as on when a capture switch is on,
+     * and on iPhone once a message has come through a Shortcut (which is what the setting records there). Null: no chip.
+     */
+    private fun captureHeartbeatUi(ok: AppContainer.Opened.Ok): app.expenses.core.domain.CaptureHeartbeat.Chip? {
+        val t = ok.templates
+        val last = t.setting(CaptureKeys.SETTING_LAST_SEEN)?.toLongOrNull() ?: return null
+        val shortcut = platform.supportsShortcutsCapture
+        val on = shortcut || listOf(CaptureKeys.SETTING_SMS_ON, CaptureKeys.SETTING_NOTIF_ON, CaptureKeys.SETTING_EMAIL_ON).any { t.setting(it) == "1" }
+        return app.expenses.core.domain.CaptureHeartbeat.chip(nowMillis(), last, on, systemZone(), shortcut)
+    }
+
     /** The guided setup's Home card: the setting is read first (one value), and only a setup that was offered or begun looks any further. Null: nothing to show. */
     private fun setupCardUi(ok: AppContainer.Opened.Ok): app.expenses.core.domain.SetupState? {
         val state = app.expenses.core.domain.SetupState.decode(ok.templates.setting(CaptureSetupKeys.STATE))
@@ -5029,6 +5154,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             minor = e.amount_minor,
             currency = e.currency,
             detail = rest.removePrefix(" · "),
+            unreviewed = e.kind == "EXPENSE" && (e.source == "sms" || e.source == app.expenses.core.storage.StatementImporter.SOURCE) && (firstCategory[e.id] ?: e.category_id) == null,
         )
     }
 
@@ -5041,7 +5167,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 // Through the write lock like every other refresh: a load that read the data before an automatic post but published after the
                 // post's own refresh would overwrite the screen with stale totals.
                 is AppContainer.Opened.Ok -> {
-                    container.write { ok -> MessageIngest.reclassifyWaiting(ok); refresh(ok); offerGuide(ok); loadRates(ok) }; platform.trace("open: first page loaded")
+                    container.write { ok -> MessageIngest.reclassifyWaiting(ok); loadTips(ok); refresh(ok); offerGuide(ok); loadRates(ok) }; platform.trace("open: first page loaded")
                     viewModelScope.launch(BACKGROUND) { platform.captureChanges.collect { container.write { ok -> _inbox.value = inboxRows(ok); refresh(ok) } } }
                     // Once at start, before anything can be adding a file: copies that were interrupted before their record was written.
                     container.write { ok -> attachmentFiles.sweep(ok.attachments.allIds()) }

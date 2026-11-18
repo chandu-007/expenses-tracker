@@ -201,7 +201,7 @@ fun SearchScreen(
                 TextButton(onClick = {
                     picker.selectedDateMillis?.let { ms -> val d = ms.floorDiv(86_400_000L); if (which == "from") changed(r = SearchRange.ANY, fd = d) else changed(r = SearchRange.ANY, td = d) }
                     pickingDay = null
-                }, modifier = Modifier.testTag("search_date_ok")) { Text("OK") }
+                }, modifier = Modifier.testTag("search_date_ok")) { Text("Done") }
             },
             dismissButton = { TextButton(onClick = { pickingDay = null }) { Text("Cancel") } },
         ) { DatePicker(state = picker) }
@@ -266,6 +266,7 @@ fun SearchScreen(
             else ScreenHeader("Search", onBack, "search_back")
         }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            TipSlot("search")
             // What stays in place (it does not scroll away): the box and the Filters button, the one row of filters, and the summary line. Under them only the results move.
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // one rounded bar: a magnifier, what is typed, and a way to clear it
@@ -337,7 +338,11 @@ fun SearchScreen(
                                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp)) else EntryTile(row.title, row.category, row.kind, Modifier.padding(end = 14.dp))
+                            if (selected.isNotEmpty()) androidx.compose.material3.Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+                            else if (row.unreviewed) Box(Modifier.padding(end = 14.dp)) {
+                                EntryTile(row.title, row.category, row.kind)
+                                UnreviewedDot(row.id, Modifier.align(Alignment.TopEnd))
+                            } else EntryTile(row.title, row.category, row.kind, Modifier.padding(end = 14.dp))
                             Column(Modifier.weight(1f)) {
                                 MatchText(row.title, text, style = MaterialTheme.typography.bodyLarge, maxLines = resultLines)
                                 MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)

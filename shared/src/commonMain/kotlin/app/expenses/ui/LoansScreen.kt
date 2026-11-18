@@ -119,7 +119,7 @@ fun LoansScreen(
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         EmptyArt(EmptyKind.LOANS, Modifier.padding(top = 8.dp))
                         Text(
-                            "Nobody yet. When you lend money, or borrow some, add it here and the app keeps track of who owes what, including part payments.",
+                            "Nobody yet. Add money you lend or borrow, and the app tracks who owes what, part payments included.",
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("loans_empty"),
                         )
                     }

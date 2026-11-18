@@ -92,7 +92,7 @@ fun ReportsScreen(
                         if (which == "from") onRange(day, e) else onRange(s, day)
                     }
                     pickingRange = null
-                }, modifier = Modifier.testTag("range_ok")) { Text("OK") }
+                }, modifier = Modifier.testTag("range_ok")) { Text("Done") }
             },
             dismissButton = { TextButton(onClick = { pickingRange = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
@@ -108,6 +108,7 @@ fun ReportsScreen(
         if (waitedLong) Box(Modifier.size(1.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite; contentDescription = "Reports loaded" }.testTag("reports_loaded_announcement"))
         val colors = rememberChartColors(report)
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item(key = "tip") { TipSlot("reports") }
             item {
                 SegmentedChoice(
                     listOf(Segment(ReportMode.PERIOD, "By period", "mode_period"), Segment(ReportMode.YEAR, "By year", "mode_year"), Segment(ReportMode.FINANCIAL_YEAR, "Financial year", "mode_fy"), Segment(ReportMode.CUSTOM, "Any dates", "mode_custom")),
@@ -153,7 +154,7 @@ fun ReportsScreen(
                 if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals. Names you counted as one shop (More, Capture, Category rules) are added together.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { EmptyArt(EmptyKind.REPORTS) }
-                    Text("Nothing spent in this period. Pick another period above, or add an expense.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
+                    Text("Nothing spent in this period. Pick another period above.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
                 }
             }
             if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { _, row ->

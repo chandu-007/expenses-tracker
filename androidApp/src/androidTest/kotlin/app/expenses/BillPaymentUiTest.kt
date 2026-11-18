@@ -229,7 +229,9 @@ class BillPaymentUiTest {
         accounts(); ingest(owner, now)
         showInbox(); val id = idAt(now); waitFor("inbox_billpay_not_$id")
         assertTrue(!has("inbox_kinds_$id") && !has("inbox_add_$id"), "a bill payment card has no type chips and no plain Add")
-        tapUntil("inbox_billpay_not_$id") { has("inbox_kinds_$id") }
+        tapUntil("inbox_billpay_not_$id") { has("inbox_change_$id") }
+        assertTrue(!has("inbox_kinds_$id"), "the type chips are under Change")
+        tapUntil("inbox_change_$id") { has("inbox_kinds_$id") }
         waitFor("inbox_add_$id"); assertTrue(!has("inbox_billpay_question_$id"))
         assertTrue(textOf("inbox_add_$id").startsWith("Add"), textOf("inbox_add_$id"))
         tapUntil("inbox_add_$id") { status(id) == InboxStatus.CONFIRMED }

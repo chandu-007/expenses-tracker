@@ -68,6 +68,7 @@ fun CategoriseScreen(
             when {
                 s == null -> Text("Looking for expenses with no category...", style = MaterialTheme.typography.bodyMedium)
                 s.done -> Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.testTag("categorise_done")) {
+                    if (s.filed > 0) SuccessCheck(size = 40.dp)
                     Text(if (s.filed == 0 && s.skipped == 0) "Every expense has a category." else "All done.", style = MaterialTheme.typography.titleLarge)
                     Text(
                         (if (s.filed > 0) "Filed ${s.filed} ${if (s.filed == 1) "expense" else "expenses"}." else "") + (if (s.skipped > 0) " Left ${s.skipped} as they were." else ""),
@@ -77,7 +78,7 @@ fun CategoriseScreen(
                 }
                 else -> {
                     val item = s.current!!
-                    Text("${s.left} left", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("categorise_left"))
+                    ReviewProgress(s.left, s.left + s.filed + s.skipped, wordsTag = "categorise_left") // the words keep the tag the old "N left" had
                     Column(
                         Modifier.fillMaxWidth().standardCard().padding(16.dp).testTag("categorise_item_${item.id}"),
                         verticalArrangement = Arrangement.spacedBy(4.dp),

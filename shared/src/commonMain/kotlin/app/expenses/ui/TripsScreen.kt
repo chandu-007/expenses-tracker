@@ -220,7 +220,7 @@ private fun TripForm(row: TripRowUi?, key: String, tags: List<String>, onSave: T
                 TextButton(onClick = {
                     picker.selectedDateMillis?.let { ms -> val d = ms.floorDiv(86_400_000L); if (which == "start") start = d else end = d; problem = null }
                     picking = null
-                }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_date_ok")) { Text("OK") }
+                }, modifier = Modifier.heightIn(min = 48.dp).testTag("trip_date_ok")) { Text("Done") }
             },
             dismissButton = { TextButton(onClick = { picking = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } },
         ) { DatePicker(state = picker) }

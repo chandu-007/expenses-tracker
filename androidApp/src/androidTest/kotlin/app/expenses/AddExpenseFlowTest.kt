@@ -44,7 +44,8 @@ class AddExpenseFlowTest {
 
     @Test
     fun addingAnExpenseShowsItInTheListAndTheMonthTotalWithIndianGrouping() {
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹0.00")
+        // a fresh install shows the welcome, not a 0.00 month card above it: the month total appears with the first entry
+        assert(compose.onAllNodes(hasTestTag("month_spend")).fetchSemanticsNodes().isEmpty()) { "no month card above the welcome" }
         compose.onNodeWithTag("add").performClick()
         compose.onNodeWithTag("save").assertIsNotEnabled()
         compose.onNodeWithTag("amount").performTextInput("1234567.5")

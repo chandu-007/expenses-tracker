@@ -112,6 +112,7 @@ object MessageIngest {
                     return@write MessageResult(CaptureEventOutcome.NOT_A_TRANSACTION, wording(CaptureEventOutcome.NOT_A_TRANSACTION))
                 }
             }
+            noteBankText(ok, verdict, now)
             var detail: String? = null
             val outcome = when (verdict) {
                 is CaptureOutcome.Bill -> {
@@ -221,4 +222,15 @@ object MessageIngest {
 
     /** The words kept on a pending item, as on Android: an email can be long. */
     const val BODY_CAP = 2000
+
+    /**
+     * UI S6: the heartbeat. When a message that is a bank's reaches capture (a transaction, a bill, or a bank's one-time password, declined or non-transaction text) the time is kept as
+     * `capture_last_seen_at`, a timestamp and nothing else, so Home can say when the last one was seen. A text from a person or from a sender that is not on the list does not count. One
+     * settings write; call inside the write lock.
+     */
+    fun noteBankText(ok: AppContainer.Opened.Ok, verdict: CaptureOutcome, now: Long) {
+        val bank = verdict is CaptureOutcome.Transaction || verdict is CaptureOutcome.Bill ||
+            (verdict is CaptureOutcome.Ignored && verdict.headerRoot != null && (verdict.reason == IgnoreReason.OTP || verdict.reason == IgnoreReason.NOT_A_TRANSACTION || verdict.reason == IgnoreReason.DECLINED))
+        if (bank) ok.templates.putSetting(CaptureKeys.SETTING_LAST_SEEN, now.toString())
+    }
 }

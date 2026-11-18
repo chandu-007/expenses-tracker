@@ -93,7 +93,9 @@ class InboxKindUiTest {
     private fun openInbox() { compose.openMore(); tap("open_inbox"); waitFor("inbox_back") }
     private fun show() { launch(); openInbox() }
     private fun tapUndo() { compose.waitUntil(10_000) { compose.onAllNodes(hasText("Undo"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }; compose.onAllNodes(hasText("Undo"), useUnmergedTree = true)[0].performClick() }
-    private fun toTransfer(id: String, other: String) { tapUntil("inbox_kind_${id}_TRANSFER") { selected("inbox_kind_${id}_TRANSFER") }; tapUntil("inbox_other_${id}_$other") { selected("inbox_other_${id}_$other") } }
+    /** Expense / Income / Transfer live under Change on a To review card (UI S6): open it once (a lost tap is repeated; open already counts as done). */
+    private fun openKinds(id: String) { tapUntil("inbox_change_$id") { has("inbox_kinds_$id") } }
+    private fun toTransfer(id: String, other: String) { openKinds(id); tapUntil("inbox_kind_${id}_TRANSFER") { selected("inbox_kind_${id}_TRANSFER") }; tapUntil("inbox_other_${id}_$other") { selected("inbox_other_${id}_$other") } }
     private fun addAndWait(id: String) { tapUntil("inbox_add_$id") { status(id) == InboxStatus.CONFIRMED } }
     /** The Add all dialog's text, with the dialog left open. */
     private fun addAllText(): String { tapUntil("inbox_add_all") { has("inbox_add_all_text") }; return textOf("inbox_add_all_text") }
@@ -103,12 +105,12 @@ class InboxKindUiTest {
     fun everyOrdinaryCardHasTheTypeChipsWithTheTextsOwnTypeSelectedAndTransferAsksForTheOtherAccount() {
         val d = idAt(ingest(out("randomshop@okaxis", "450.00"))); val c = idAt(ingest(inn("ravi@ybl", "3,000.00")))
         show()
-        waitFor("inbox_kinds_$d")
+        openKinds(d)
         assertTrue(selected("inbox_kind_${d}_EXPENSE") && !selected("inbox_kind_${d}_INCOME") && !selected("inbox_kind_${d}_TRANSFER"))
         tapUntil("inbox_kind_${d}_TRANSFER") { selected("inbox_kind_${d}_TRANSFER") }
         assertTrue(!selected("inbox_kind_${d}_EXPENSE")); assertEquals("To account", textOf("inbox_other_label_$d"))
         assertTrue(has("inbox_other_${d}_savings") && !has("inbox_other_${d}_bank"), "the text's own account is not offered as the other end")
-        waitFor("inbox_kinds_$c")
+        openKinds(c)
         assertTrue(selected("inbox_kind_${c}_INCOME") && !selected("inbox_kind_${c}_EXPENSE") && !selected("inbox_kind_${c}_TRANSFER"))
         tapUntil("inbox_kind_${c}_TRANSFER") { selected("inbox_kind_${c}_TRANSFER") }
         assertEquals("From account", textOf("inbox_other_label_$c"))
@@ -136,7 +138,7 @@ class InboxKindUiTest {
     @Test
     fun aCreditMadeATransferComesFromTheChosenAccountIntoTheTextsOwnAccount() {
         val id = idAt(ingest(inn("ravi@ybl", "3,000.00"))); show()
-        tapUntil("inbox_kind_${id}_TRANSFER") { selected("inbox_kind_${id}_TRANSFER") }
+        openKinds(id); tapUntil("inbox_kind_${id}_TRANSFER") { selected("inbox_kind_${id}_TRANSFER") }
         assertEquals("From account", textOf("inbox_other_label_$id"))
         toTransfer(id, "savings"); compose.onNodeWithTag("inbox_add_$id").assertTextEquals("Add as transfer")
         addAndWait(id)
@@ -149,13 +151,13 @@ class InboxKindUiTest {
     fun anAtmTextStartsAsACashWithdrawalWithOneCashAccountAndWithTwoItStartsAsAnExpenseThatPicksNothingForYou() {
         val one = idAt(ingest(atm)); show()
         assertTrue(textOf("inbox_pair_$one").contains("cash withdrawal"), textOf("inbox_pair_$one"))
-        assertTrue(selected("inbox_kind_${one}_TRANSFER"))
+        openKinds(one); assertTrue(selected("inbox_kind_${one}_TRANSFER"))
         addAndWait(one)
         val e = entries().single(); assertEquals("TRANSFER", e.kind); assertEquals("bank", e.account_id); assertEquals("cash", e.counter_account_id)
         assertEquals(emptyList(), rules(), "a transfer read from the words is not something the person taught")
         runBlocking { container.write { it.store.saveAccount(Account(AccountId("cash2"), "Wallet", AccountType.CASH, Currency.INR)) } }
         val two = idAt(ingest(atm.replace("2,000.00", "2,100.00"))); show()
-        waitFor("inbox_kinds_$two")
+        openKinds(two)
         assertTrue(selected("inbox_kind_${two}_EXPENSE") && !has("inbox_pair_$two"), "with two Cash accounts it is an expense until the person says")
         tapUntil("inbox_kind_${two}_TRANSFER") { selected("inbox_kind_${two}_TRANSFER") }
         waitFor("inbox_other_${two}_cash"); waitFor("inbox_other_${two}_cash2")
@@ -206,7 +208,7 @@ class InboxKindUiTest {
         seedRule(3)
         val first = idAt(ingest(out("rahul@okbank", "1,300.00"))); show()
         waitFor("inbox_transfer_learned_$first")
-        tapUntil("inbox_kind_${first}_EXPENSE") { selected("inbox_kind_${first}_EXPENSE") }
+        openKinds(first); tapUntil("inbox_kind_${first}_EXPENSE") { selected("inbox_kind_${first}_EXPENSE") }
         addAndWait(first)
         assertEquals("EXPENSE", entries().single().kind); assertEquals("savings|3|1", rules().single().second)
         val next = idAt(ingest(out("rahul@okbank", "1,600.00")))
@@ -255,7 +257,7 @@ class InboxKindUiTest {
         val at = t0; debitAddedAsTransfer(at)
         val c = idAt(ingest(inn("rahul@okbank", "2,500.00", acct = "5678"), at + 600_000)); show()
         waitFor("inbox_otherleg_$c"); tapUntil("inbox_leg_apart_$c") { !has("inbox_otherleg_$c") }
-        waitFor("inbox_add_$c"); assertTrue(!has("inbox_join_$c") && has("inbox_kinds_$c"))
+        waitFor("inbox_add_$c"); openKinds(c); assertTrue(!has("inbox_join_$c") && has("inbox_kinds_$c"))
     }
 
     @Test

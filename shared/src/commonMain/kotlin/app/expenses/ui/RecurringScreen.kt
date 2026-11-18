@@ -193,7 +193,7 @@ fun RecurringScreen(
                 item {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         EmptyArt(EmptyKind.GENERIC, Modifier.padding(top = 8.dp))
-                        Text("Nothing repeats yet. Tap + to add rent, a subscription or a bill.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("recurring_empty"))
+                        Text("Nothing repeats yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("recurring_empty"))
                     }
                 }
             }
@@ -225,7 +225,7 @@ private fun DatePickDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDi
     val picker = rememberDatePickerState(initialSelectedDateMillis = initial.toEpochDays() * MILLIS_PER_DAY)
     DatePickerDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { onPick(LocalDate.fromEpochDays(it.floorDiv(MILLIS_PER_DAY))) }; onDismiss() }) { Text("OK") } },
+        confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { onPick(LocalDate.fromEpochDays(it.floorDiv(MILLIS_PER_DAY))) }; onDismiss() }) { Text("Done") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     ) { DatePicker(state = picker) }
 }

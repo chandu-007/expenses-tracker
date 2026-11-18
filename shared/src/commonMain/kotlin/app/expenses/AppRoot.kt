@@ -233,6 +233,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             val learnedUndo by viewModel.learnedUndo.collectAsStateWithLifecycle(context = MAIN)
             val payeeAliases by viewModel.payeeAliases.collectAsStateWithLifecycle(context = MAIN)
             val inboxRows by viewModel.inbox.collectAsStateWithLifecycle(context = MAIN)
+            val inboxLoaded by viewModel.inboxLoaded.collectAsStateWithLifecycle(context = MAIN)
             val captureSettings by viewModel.captureSettings.collectAsStateWithLifecycle(context = MAIN)
             val skippedSenders by viewModel.skippedSenders.collectAsStateWithLifecycle(context = MAIN)
             val sms = host.rememberSmsPermission { granted -> viewModel.setSmsCapture(granted); if (!granted) viewModel.say("Android did not allow it, so bank texts are not being read.") }
@@ -274,6 +275,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             var searchTo by rememberSaveable { mutableStateOf<Long?>(null) }
             // Travel mode: the trips page (from More) and the summary of one trip (from the page, or from Home's card)
             var tripsOpen by rememberSaveable { mutableStateOf(false) }
+            // "Verify it yourself" (from More, or from the Privacy page, which Back then returns to)
+            var verifying by rememberSaveable { mutableStateOf(false) }
+            var verifyFromPrivacy by rememberSaveable { mutableStateOf(false) }
             var tripSummaryOf by rememberSaveable { mutableStateOf<String?>(null) }
             var securing by rememberSaveable { mutableStateOf(false) }
             val lock = host.lock
@@ -313,6 +317,8 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
             // closing the add form without saving deletes the files chosen for it (a save takes them first)
             LaunchedEffect(adding) { if (!adding) viewModel.discardStaged() }
 
+            val tipsSeen by viewModel.tipsSeen.collectAsStateWithLifecycle(context = MAIN)
+            val tourForTips by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
             if (locked) LockedScreen(lockMessage) { lock.requestUnlock() } else when (val s = state) {
                 UiState.Opening -> OpeningScreen()
                 is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
@@ -320,6 +326,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
                     app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
                     app.expenses.ui.LocalSpendingRed provides s.showSpendingRed,
+                    app.expenses.ui.LocalTips provides androidx.compose.runtime.remember(tipsSeen, tourForTips == null && !s.showWelcome) { app.expenses.ui.TipsContext(tipsSeen, tourForTips == null && !s.showWelcome, viewModel::markTipSeen) },
                     app.expenses.ui.LocalCategoryLooks provides androidx.compose.runtime.remember(s.categories) { app.expenses.ui.CategoryLooks.of(s.categories) },
                 ) {
                 androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(s.motionSpeed) }
@@ -335,6 +342,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     viewModel.watchBills(false); viewModel.watchLoans(false); viewModel.closeSearch(); viewModel.closeCalendar(); viewModel.closeSubscriptions(); viewModel.closeTransferCandidates(); viewModel.closeGoals(); viewModel.closeReports(); viewModel.cancelRestore()
                     viewModel.closeEditor(); viewModel.closeHistory()
                     tripsOpen = false; tripSummaryOf = null; viewModel.closeTrips(); viewModel.closeTripSummary()
+                    verifying = false; verifyFromPrivacy = false
                 }
                 // the guided setup opens at the step the person left it on (the first step when it was never begun or is finished)
                 val openSetup = {
@@ -468,6 +476,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     history != null, false, false, inboxOpen, healthOpen, privacyOpen, rulesOpen, captureOpen, currencyOpen, appearing,
                     customisingHome, managingAccounts, managingCategories, securing, searching, calendaring, reporting, yourData, alerts, repeating, budgeting, adding, loansOpen, billsOpen, subscribing, goaling, transferring, categorising,
                     checkupOpen, setupOpen, earlierOpen, tripSummaryOf != null, tripsOpen,
+                    verifying,
                 )
                 // The entry editor is the pane beside the list on a wide window, but only while Home or Search (the two screens with a list to put it beside) is what is showing: opened from the calendar,
                 // a report or another screen it is a full screen over that screen on a wide window too, and Back returns to that screen.
@@ -530,7 +539,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                     // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
                     if (!app.expenses.ui.rememberKeyboardOpen()) {
-                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge, onAdd = addFromBar, addTag = "bar_add")
+                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge && !app.expenses.core.domain.NudgePause.isPaused(s.nudgesPausedUntil, nowMillis()), onAdd = addFromBar, addTag = "bar_add")
                     }
                 }
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
@@ -552,7 +561,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     k == 2 -> if (editorFull) editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
                         BackHandler { inboxOpen = false }
-                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onOpenCheckup = { inboxOpen = false; checkupOpen = true }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
+                        InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, loaded = inboxLoaded, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onOpenCheckup = { inboxOpen = false; checkupOpen = true }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
                     }
                     k == 4 -> {
                         BackHandler { healthOpen = false }
@@ -565,7 +574,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         BackHandler { privacyOpen = false }
                         // read again whenever the app returns from the system's settings, so a permission given there shows at once
                         val privacy = app.expenses.ui.rememberResumeState { host.privacyRows() }
-                        PrivacyScreen(privacy.value, host.canUseInternet, onBack = { privacyOpen = false })
+                        PrivacyScreen(privacy.value, host.canUseInternet, onBack = { privacyOpen = false }, onVerify = { privacyOpen = false; verifyFromPrivacy = true; verifying = true })
                     }
                     k == 6 -> {
                         BackHandler { rulesOpen = false }
@@ -680,6 +689,12 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onUndo = viewModel::undoTripTagging, onUndoGone = viewModel::tripUndoGone,
                         )
                     }
+                    k == 33 -> {
+                        val closeVerify = { verifying = false; if (verifyFromPrivacy) { verifyFromPrivacy = false; privacyOpen = true } }
+                        BackHandler { closeVerify() }
+                        val asked = app.expenses.ui.rememberResumeState { host.privacyRows() }
+                        app.expenses.ui.VerifyScreen(asked.value, onBack = closeVerify)
+                    }
                     k == 30 -> {
                         BackHandler { earlierOpen = false }
                         val pickers = app.expenses.ui.rememberFilePickers()
@@ -701,7 +716,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 9 -> {
                         BackHandler { appearing = false }
-                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed)
+                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed, onShowTipsAgain = viewModel::resetTips)
                     }
                     k == 10 -> {
                         BackHandler { customisingHome = false }
@@ -843,7 +858,10 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 18 -> {
                         BackHandler { alerts = false }
-                        NotificationSettingsScreen(prefs = s.notifications, onChange = viewModel::updateNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false })
+                        NotificationSettingsScreen(
+                            prefs = s.notifications, onChange = viewModel::updateNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false },
+                            nudgesPausedUntil = s.nudgesPausedUntil, onPause = viewModel::pauseNudges, milestonesOn = s.milestonesOn, onMilestones = viewModel::setMilestonesOn,
+                        )
                     }
                     k == 19 -> {
                         BackHandler { repeating = false }
@@ -961,7 +979,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onSetHomePeriod = viewModel::setHomePeriod,
                         onOpenSecurity = { securing = true },
                         onDismissWelcome = viewModel::dismissWelcome,
+                        onStartTour = viewModel::startTour,
+                        onHideExample = viewModel::hideExample,
+                        onExampleRow = { r -> prefillCategory = null; prefillAccount = null; prefillNote = r.merchant; prefillAmount = app.expenses.core.domain.Money(r.minor, BaseCurrency.current).toPlainString(); adding = true },
                         onSnoozeBackupNudge = viewModel::snoozeBackupNudge,
+                        onMilestoneThanks = viewModel::acknowledgeMilestone,
                         onOpenCategorise = { categorising = true; viewModel.openCategorise() },
                         onSnoozeCategorise = viewModel::snoozeCategoriseNudge,
                         onSnoozeNudge = viewModel::snoozeNudge,
@@ -980,6 +1002,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenInbox = { inboxOpen = true; viewModel.loadInbox() },
                         onOpenCapture = { captureOpen = true; viewModel.loadCaptureSettings() },
                         onOpenPrivacy = { privacyOpen = true },
+                        onOpenVerify = { verifyFromPrivacy = false; verifying = true },
                         onOpenSetup = { openSetup() }, onHideSetup = viewModel::hideSetupCard,
                         onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )

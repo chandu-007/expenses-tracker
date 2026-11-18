@@ -96,7 +96,7 @@ data class PermissionRow(val name: String, val granted: Boolean, val why: String
 /** What this app can see on the phone, what it does with it, and what leaves the phone (read from the app's own declared permissions). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrivacyScreen(permissions: List<PermissionRow>, canUseInternet: Boolean, onBack: () -> Unit) {
+fun PrivacyScreen(permissions: List<PermissionRow>, canUseInternet: Boolean, onBack: () -> Unit, onVerify: (() -> Unit)? = null) {
     Scaffold(topBar = { ScreenHeader("Privacy: what this app can see", onBack, "privacy_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (canUseInternet) "This app is allowed to use the internet." else "This app has no permission to use the internet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("privacy_internet"))
@@ -112,6 +112,7 @@ fun PrivacyScreen(permissions: List<PermissionRow>, canUseInternet: Boolean, onB
             if (permissions.isEmpty()) Text("It asks for none.")
             HorizontalDivider()
             Text("You can take any permission back in the phone's settings; the app keeps working without it, except the feature that needs it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (onVerify != null) OutlinedButton(onClick = onVerify, modifier = Modifier.testTag("privacy_verify")) { Text("Verify it yourself") }
         }
     }
 }

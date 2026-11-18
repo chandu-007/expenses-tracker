@@ -178,6 +178,7 @@ fun BudgetScreen(
         })
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item(key = "tip") { TipSlot("budget") }
             item(key = "ring") { BudgetRingCard(budget, onClick = { editingOverall = true }) }
             item(key = "limits_title") {
                 Text("LIMITS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp).semantics { heading() })

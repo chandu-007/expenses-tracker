@@ -45,7 +45,7 @@ class EditDeleteTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } }
     }
 
     @Before fun fresh() = resetApp()

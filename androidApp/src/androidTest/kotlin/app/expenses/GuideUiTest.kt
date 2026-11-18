@@ -24,7 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The interactive tour: it opens each real screen, can be skipped at any point, is offered on a first install and after an update, and reopens from More. */
+/** The interactive tour: it opens each real screen, can be skipped at any point, is chosen on a first install ("Show me around", five stops) and offered after an update, and reopens from More (every stop). */
 @RunWith(AndroidJUnit4::class)
 class GuideUiTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -43,7 +43,9 @@ class GuideUiTest {
     private fun tap(tag: String) { waitFor(tag); val n = compose.onNodeWithTag(tag, useUnmergedTree = true); runCatching { n.performScrollTo() }; n.performClick() } // a tile on the More page may be below the fold
     private fun launch(action: String? = null): ActivityScenario<MainActivity> { compose.waitForIdle(); scenario?.close(); return ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java).also { if (action != null) it.action = action }).also { scenario = it } }
     private fun firstVisit() = put(GuideSettings.SEEN, "")
-    private fun onStop(n: Int) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("guide_counter") and androidx.compose.ui.test.hasText("$n of ${Guide.steps.size}", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    /** The whole tour, asked for from More (the home screen's month card is shown, so the welcome has been put away). */
+    private fun startFullTour() { put("welcome_dismissed", "1"); launch(); waitFor("add"); compose.openMore(); tap("open_guide"); waitFor("guide") }
+    private fun onStop(n: Int, of: Int = Guide.steps.size) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("guide_counter") and androidx.compose.ui.test.hasText("$n of $of", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
     /** A tag that only the real screen a stop is about has. */
     private fun screenTag(t: GuideTarget?) = when (t) {
@@ -58,8 +60,8 @@ class GuideUiTest {
     private val everyScreenTag get() = (GuideTarget.entries.map { screenTag(it) } + "month_spend").toSet()
 
     @Test
-    fun theTourOpensTheRealScreenForEveryStopAndOnlyThatOneAndHighlightsWhatItPointsAt() {
-        firstVisit(); launch(); waitFor("guide")
+    fun theFullTourFromMoreOpensTheRealScreenForEveryStopAndOnlyThatOneAndHighlightsWhatItPointsAt() {
+        startFullTour()
         for ((i, step) in Guide.steps.withIndex()) {
             onStop(i + 1)
             compose.onNodeWithTag("guide_title", useUnmergedTree = true).assertTextContains(step.title, substring = true)
@@ -72,17 +74,25 @@ class GuideUiTest {
             if (i < Guide.steps.lastIndex) tap("guide_next") else tap("guide_done")
         }
         gone("guide")
+        // a tour asked for by the person records nothing and does not lead into the guided setup (only the first-run tour does)
         assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN)); assertNull(setting(GuideSettings.OFF))
-        // a tour gone through to its end leads into the guided capture setup (which is skippable at once and leaves a card on Home)
-        waitFor("setup_screen"); tap("setup_close")
         waitFor("month_spend"); assertTrue(everyScreenTag.minus("month_spend").none { has(it) }, "finishing leaves the app on the home screen")
-        assertEquals("OFFERED:PERMISSION", setting("capture_setup"))
+        assertTrue(!has("setup_screen"))
         launch(); waitFor("add"); assertTrue(!has("guide"), "finished: it does not come back")
     }
 
     @Test
-    fun skipOnTheFirstStopEndsTheTourAtOnceAndItIsNotOfferedAgain() {
-        firstVisit(); launch(); waitFor("guide")
+    fun aFirstInstallIsOfferedNoTourOnItsOwnAndItIsRecordedAsSeenSoUpdatesOfferOnlyWhatIsNew() {
+        firstVisit(); launch(); waitFor("welcome"); waitFor("welcome_tour")
+        assertTrue(!has("guide"), "no tour on a first install: it is opt-in")
+        compose.waitUntil(10_000) { setting(GuideSettings.SEEN) == Guide.VERSION.toString() }
+        launch(); waitFor("welcome_tour"); assertTrue(!has("guide"))
+    }
+
+    @Test
+    fun skipOnTheFirstStopOfTheChosenTourEndsItAtOnceAndItIsNotOfferedAgain() {
+        firstVisit(); launch(); waitFor("welcome_tour")
+        tap("welcome_tour"); waitFor("guide"); onStop(1, of = Guide.shortPlan().steps.size)
         tap("guide_skip"); gone("guide"); waitFor("add")
         assertEquals(Guide.VERSION.toString(), setting(GuideSettings.SEEN))
         launch(); waitFor("add"); assertTrue(!has("guide"))
@@ -90,7 +100,7 @@ class GuideUiTest {
 
     @Test
     fun skippingFromInsideAScreenReturnsToTheHomeScreenAndRecordsIt() {
-        firstVisit(); launch(); waitFor("guide")
+        startFullTour()
         val bills = Guide.steps.indexOfFirst { it.id == "bills" }
         repeat(bills) { i -> tap("guide_next"); onStop(i + 2) }
         waitFor("bills_back")
@@ -100,7 +110,7 @@ class GuideUiTest {
 
     @Test
     fun tryItEndsTheTourAndLeavesYouOnTheScreenItWasShowing() {
-        firstVisit(); launch(); waitFor("guide")
+        startFullTour()
         val bills = Guide.steps.indexOfFirst { it.id == "bills" }
         repeat(bills) { i -> tap("guide_next"); onStop(i + 2) }
         waitFor("bills_back"); tap("guide_try"); gone("guide")
@@ -110,7 +120,7 @@ class GuideUiTest {
 
     @Test
     fun backReturnsToTheEarlierStopAndItsScreen() {
-        firstVisit(); launch(); waitFor("guide")
+        startFullTour()
         tap("guide_next"); tap("guide_next"); onStop(3); waitFor("amount") // the add form
         tap("guide_back"); onStop(2); gone("amount"); waitFor("add")
     }
@@ -141,6 +151,7 @@ class GuideUiTest {
 
     @Test
     fun moreOffersTheTourAnytimeStartingFromHomeWithoutTheUpdateChoiceAndClosingItChangesNothingStored() {
+        put("welcome_dismissed", "1")
         put(GuideSettings.SEEN, "0"); put(GuideSettings.OFF, "1") // an old version seen, and updates switched off: nothing is shown on its own
         launch(); waitFor("add"); assertTrue(!has("guide")); compose.openMore(); tap("open_guide"); waitFor("guide")
         waitFor("month_spend") // the More page was closed: the tour starts on the home screen, where the month card is (the Add button is in the bar of the More page too)
@@ -151,25 +162,26 @@ class GuideUiTest {
 
     @Test
     fun openingTheAppToAddAnExpenseNeverLandsInTheTourAndTheTourWaitsForAPlainLaunch() {
-        firstVisit(); launch(MainActivity.ACTION_ADD_EXPENSE)
+        put(GuideSettings.SEEN, "0") // an update is waiting to be shown
+        launch(MainActivity.ACTION_ADD_EXPENSE)
         waitFor("amount"); assertTrue(!has("guide"), "a widget or tile tap goes straight to the add form")
-        assertTrue(setting(GuideSettings.SEEN).isNullOrEmpty(), "and the tour is not counted as seen")
+        assertEquals("0", setting(GuideSettings.SEEN), "and the tour is not counted as seen")
         launch(); waitFor("guide")
     }
 
     @Test
     fun aBillNotificationOpensBillsNotTheTour() {
-        firstVisit(); launch(MainActivity.ACTION_OPEN_BILLS)
+        put(GuideSettings.SEEN, "0"); launch(MainActivity.ACTION_OPEN_BILLS)
         waitFor("bills_back"); assertTrue(!has("guide"))
         launch(); waitFor("guide")
     }
 
     @Test
     fun aTapOnTheWidgetWhileTheTourIsShowingTakesYouToTheAddFormAndTheTourWaits() {
-        firstVisit(); launch(); waitFor("guide")
+        put(GuideSettings.SEEN, "0"); launch(); waitFor("guide")
         scenario!!.onActivity { a -> a.startActivity(Intent(a, MainActivity::class.java).setAction(MainActivity.ACTION_ADD_EXPENSE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
         waitFor("amount"); gone("guide")
-        assertTrue(setting(GuideSettings.SEEN).isNullOrEmpty())
+        assertEquals("0", setting(GuideSettings.SEEN))
     }
 
     @Test

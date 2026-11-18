@@ -333,7 +333,7 @@ fun EntryFormScreen(
                         draft = draft.copy(occurredAt = millisOf(pickerDate(utc), time, zone))
                     }
                     pickingDate = false
-                }) { Text("OK") }
+                }) { Text("Done") }
             },
             dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
         ) { DatePicker(state = picker) }
@@ -830,7 +830,7 @@ private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currenc
         }
         left?.let { l ->
             Text(
-                when { l == 0L -> "All assigned"; l > 0 -> "${Money(l, currency).formatted()} left to assign"; else -> "${Money(-l, currency).formatted()} too much" },
+                when { l == 0L -> "All assigned"; l > 0 -> "${Money(l, currency).formatted()} left to assign"; else -> "${Money(-l, currency).formatted()} over" },
                 style = MaterialTheme.typography.bodySmall, color = if (l < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("split_left"),
             )

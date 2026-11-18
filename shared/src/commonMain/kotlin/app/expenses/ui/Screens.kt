@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.CurrencyRupee
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CompareArrows
@@ -52,6 +53,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.outlined.Close
 import app.expenses.core.domain.HomeNudge
 import app.expenses.core.domain.HomeNudges
+import app.expenses.core.domain.NudgePause
 import app.expenses.core.domain.DayEntry
 import app.expenses.core.domain.wholeAmounts
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -187,6 +189,7 @@ fun EntryListScreen(
     onOpenInbox: () -> Unit,
     onOpenCapture: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenVerify: () -> Unit,
     /** The guided capture setup (Home's card and More), hiding that card for good, the capture checkup, and "Bring in earlier spending". */
     onOpenSetup: () -> Unit = {},
     onHideSetup: () -> Unit = {},
@@ -195,7 +198,13 @@ fun EntryListScreen(
     onOpenSearch: () -> Unit,
     onOpenSecurity: () -> Unit,
     onDismissWelcome: () -> Unit,
+    /** The welcome card's "Show me around" (the five-stop tour), the Example month's "Hide example" and a tap on one of its expense rows (it opens Add filled in). */
+    onStartTour: () -> Unit = {},
+    onHideExample: () -> Unit = {},
+    onExampleRow: (app.expenses.core.domain.ExampleRow) -> Unit = {},
     onSnoozeBackupNudge: () -> Unit,
+    /** UI S6: "Thanks" on the milestone card (the id of the milestone shown). */
+    onMilestoneThanks: (String) -> Unit = {},
     /** "Review" on the Home card that says how many expenses have no category, and its "Not now". */
     onOpenCategorise: () -> Unit = {},
     onSnoozeCategorise: () -> Unit = {},
@@ -231,6 +240,8 @@ fun EntryListScreen(
     val listItems = remember(state.rows) { buildList<Any> { var last = Long.MIN_VALUE; for (r in state.rows) { if (r.day != last) { add(r.day); last = r.day }; add(r) } } }
     // the account Home is narrowed to, if any
     val filtered = state.accountRows.firstOrNull { it.id == state.homeAccountId }
+    // the first-run screen: a brand-new install shows the welcome, and the month card, "Set a budget" and the safe-to-spend tiles above it say nothing yet (they come back after Skip or the first entry)
+    val firstRun = state.showWelcome && state.rows.isEmpty() && filtered == null
     // the page's own items before the entries: the top block, and while an account is chosen its bar
     val lead = if (filtered != null) 2 else 1
     LaunchedEffect(listState, listItems, lead) {
@@ -270,9 +281,13 @@ fun EntryListScreen(
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(it) else it); onMessageShown() }
     }
+    // UI S6: while Pause nudges is on, Home's suggestions, the backup reminder and the milestone card wait (a due bill does not: NudgePause)
+    val nudgesPaused = NudgePause.isPaused(state.nudgesPausedUntil, app.expenses.nowMillis())
     LaunchedEffect(state.undo) {
         val undo = state.undo ?: return@LaunchedEffect
-        val result = snackbar.showSnackbar(if (state.hideAmounts) AmountMask.mask(undo.text) else undo.text, actionLabel = "Undo", duration = SnackbarDuration.Long)
+        // an entry just added is answered with a drawn tick beside the words (UI S6); the other bars (a deleted entry, a changed type) are as before
+        val saved = undo.reveal && !undo.restore
+        val result = snackbar.showSnackbar(StatusVisuals(if (state.hideAmounts) AmountMask.mask(undo.text) else undo.text, "Undo", SnackbarDuration.Long, tick = saved))
         if (result == SnackbarResult.ActionPerformed) { feel(Feel.UNDO); onUndo(undo) }
         onUndoDismissed()
     }
@@ -289,7 +304,7 @@ fun EntryListScreen(
     androidx.compose.runtime.LaunchedEffect(tourMore) { tourMore?.let { onMoreChange(it); if (it) onMoreShown() } }
     BackHandler(enabled = moreOpen && selected.isEmpty()) { onMoreChange(false) }
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar) { data -> StatusSnackbar(data) } },
         bottomBar = {
             if (selected.isNotEmpty()) BulkBar(
                 selected.size, state.categories, state.accounts,
@@ -306,7 +321,7 @@ fun EntryListScreen(
             else HomeBar(
                 selected = if (moreOpen) "More" else "Home",
                 onHome = { onMoreChange(false) }, onSearch = { onMoreChange(false); onOpenSearch() }, onReports = { onMoreChange(false); onOpenReports() },
-                onMore = { onMoreChange(!moreOpen) }, moreBadge = state.showBackupNudge,
+                onMore = { onMoreChange(!moreOpen) }, moreBadge = state.showBackupNudge && !nudgesPaused,
                 // the Add button sits in the middle of the bar (it used to float over the list); the More page has it too
                 onAdd = { onMoreChange(false); onAdd() }, addTag = "add",
             )
@@ -332,7 +347,7 @@ fun EntryListScreen(
             }
             MorePage(
                 Modifier.padding(padding), nudges,
-                reminder = if (state.showBackupNudge) ({ BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge) }) else null,
+                reminder = if (state.showBackupNudge && !nudgesPaused) ({ BackupNudgeCard(onBackUp = onOpenData, onLater = onSnoozeBackupNudge) }) else null,
                 sections = listOf(
                     MoreSection("Inbox and bills", teal.top, teal.bottom, listOf(
                         MoreRow("open_inbox", Icons.Outlined.Inbox, "To review", if (state.inboxPending > 0) "${state.inboxPending} waiting for you" else "Nothing waiting", onClick = onOpenInbox),
@@ -367,6 +382,7 @@ fun EntryListScreen(
                         MoreRow("toggle_privacy", if (state.hideAmounts) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (state.hideAmounts) "Show amounts" else "Hide amounts", "Replace every figure with dots", switchOn = state.hideAmounts, onClick = onToggleHideAmounts),
                         MoreRow("open_security", Icons.Outlined.Lock, "App lock", "Fingerprint, face or your phone's PIN", onClick = onOpenSecurity),
                         MoreRow("open_privacy", Icons.Outlined.PrivacyTip, "Privacy: what this app can see", "Permissions in plain words", onClick = onOpenPrivacy),
+                        MoreRow("more_verify", Icons.Outlined.VerifiedUser, "Verify it yourself", "What this app cannot do, and how to check", onClick = onOpenVerify),
                         MoreRow("open_data", Icons.Outlined.Backup, "Your data: export and backup", "Excel, CSV, backup and restore", onClick = onOpenData),
                     )),
                     MoreSection("Help", amber.top, amber.bottom, listOf(
@@ -392,7 +408,7 @@ fun EntryListScreen(
                 Column(Modifier.fillMaxWidth().testTag("home_top")) {
                     // Option B: the month card is short. The figure in whole units (the semantics keep the exact amount), the change against last month as a chip beside the label (under the figure at large text),
                     // one sentence, and a small graph (not at large text, in a two-pane list pane, or while amounts are hidden: its shape would show the figures)
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
+                    if (!firstRun) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
                         if (supportsBlur) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures
                         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp)) {
                             val pill = state.spark.comparePill.takeIf { it.isNotEmpty() && !state.hideAmounts }
@@ -421,12 +437,14 @@ fun EntryListScreen(
                     val sections = state.homeLayout.visible()
                     val moneyFirst = sections.firstOrNull() == HomeSection.BUDGET
                     val moneyTiles: @Composable () -> Unit = { HomeMoneyTiles(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onOpenBudget, onOpenSafe = { safeOpen = true }) }
-                    if (moneyFirst) moneyTiles()
+                    if (moneyFirst && !firstRun) moneyTiles()
                     // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
                     state.tripCard?.let { TripHomeCard(it) { onOpenTrip(it.id) } }
+                    // the capture heartbeat: when the last bank text was seen; amber after a quiet stretch; one tap opens "Why isn't capture working?". Information, not a nudge (docs/HOME_NUDGES.md)
+                    state.captureHeartbeat?.let { CaptureHeartbeatChip(it, onOpenCheckup) }
                     // One card at a time, the first of HomeNudges' order that is not put off; what else is waiting is one line under it (see docs/HOME_NUDGES.md)
                     val bills = state.billPeek
-                    val nudgeCounts = homeNudgeCounts(state)
+                    val nudgeCounts = homeNudgeCounts(state).filterKeys { !nudgesPaused || it !in NudgePause.HOME_PAUSED }
                     val shownNudges = HomeNudges.visible(nudgeCounts, state.nudgeSnoozes, app.expenses.nowMillis())
                     val card = HomeNudges.card(shownNudges)
                     fun notNow(n: HomeNudge) = { onSnoozeNudge(n, nudgeCounts[n] ?: 0) }
@@ -451,9 +469,11 @@ fun EntryListScreen(
                             modifier = Modifier.padding(horizontal = 16.dp).clip(Radius.XS).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
                         )
                     }
+                    // UI S6 (D2): at most one calm milestone, only when the person opted in and nudges are not paused; one line, a tick, "Thanks". Not a nudge: it asks for nothing and is not in "Also waiting"
+                    state.milestone?.takeIf { state.milestonesOn && !nudgesPaused }?.let { m -> MilestoneCard(m.text, onThanks = { onMilestoneThanks(m.id) }) }
                     sections.forEach { section ->
                         when (section) {
-                            HomeSection.BUDGET -> if (!moneyFirst) moneyTiles()
+                            HomeSection.BUDGET -> if (!moneyFirst && !firstRun) moneyTiles()
                             HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                             // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
                             HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) }, onOpenAccounts = onManageAccounts)
@@ -510,12 +530,16 @@ fun EntryListScreen(
                             }
                         }
                     } else if (state.showWelcome) {
-                        WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome)
+                        Column(Modifier.fillMaxWidth()) {
+                            WelcomeCard(onAdd = onAdd, onImportOrRestore = onOpenData, onSkip = onDismissWelcome, onTour = onStartTour)
+                            // below the buttons, so Skip is on the first screen; only a drawing: it is never stored (see ExampleMonthBlock)
+                            if (state.showExample) ExampleMonthBlock(state.baseCurrency, onRow = onExampleRow, onHide = onHideExample)
+                        }
                     } else {
                         Box(Modifier.fillParentMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 EmptyArt(EmptyKind.HOME, Modifier.size(140.dp))
-                                Text("No expenses yet. Tap Add to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("No expenses yet. Tap Add.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -597,7 +621,11 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
             val tileSize = if (large) 32.dp else 40.dp
             androidx.compose.animation.Crossfade(selecting, Modifier.padding(end = if (large) 10.dp else 14.dp), animationSpec = if (reduceMotion) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(120), label = "tileOrCheck") { choosing ->
                 Box(Modifier.size(tileSize), contentAlignment = Alignment.Center) {
-                    if (choosing) Checkbox(checked = isSelected, onCheckedChange = null) else EntryTile(row.title, row.category, row.kind, size = tileSize)
+                    if (choosing) Checkbox(checked = isSelected, onCheckedChange = null) else {
+                        EntryTile(row.title, row.category, row.kind, size = tileSize)
+                        // from a text or an import and still without a category: a small dot (its words, "not reviewed", are in its description)
+                        if (row.unreviewed) UnreviewedDot(row.id, Modifier.align(Alignment.TopEnd))
+                    }
                 }
             }
             if (!large) {
@@ -667,7 +695,7 @@ private fun InboxBanner(state: UiState.Ready, onOpen: () -> Unit, onNotNow: () -
     val peek = state.inboxPeek
     NudgeCard(
         tag = "inbox_banner", title = "${state.inboxPending} to review", titleTag = "inbox_banner_title",
-        line = if (peek.outText.isNotEmpty()) "${peek.outText} out · ${peek.inText} in, found in your texts" else null, lineTag = null,
+        line = if (peek.outText.isNotEmpty()) "${peek.outText} out · ${peek.inText} in, from bank texts" else null, lineTag = null,
         actionLabel = "Review", actionTag = "inbox_banner_open", onAction = onOpen,
         dismissTag = "nudge_notnow_inbox", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, wholeCardOpens = true,
     )
@@ -692,7 +720,7 @@ private fun BillsBanner(peek: app.expenses.BillPeekUi, onOpen: () -> Unit, onNot
         tag = "bills_banner",
         title = if (peek.newCount > 0) (if (peek.newCount == 1) "1 new bill found" else "${peek.newCount} new bills found") else if (peek.dueThisWeek > 0) (if (peek.dueThisWeek == 1) "1 bill due this week" else "${peek.dueThisWeek} bills due this week") else "Bills coming up",
         titleTag = "bills_banner_title",
-        line = if (peek.newCount > 0) "Found in your messages. Add them to be reminded." else if (peek.dueThisWeek > 0) listOfNotNull(peek.weekTotal.takeIf { it.isNotEmpty() }?.let { "$it in all" }, "Overdue ones are included".takeIf { overdue }).joinToString(". ").ifEmpty { null } else "Due in the next two weeks",
+        line = if (peek.newCount > 0) "Found in bank texts. Add them to be reminded." else if (peek.dueThisWeek > 0) listOfNotNull(peek.weekTotal.takeIf { it.isNotEmpty() }?.let { "$it in all" }, "Overdue ones are included".takeIf { overdue }).joinToString(". ").ifEmpty { null } else "Due in the next two weeks",
         lineTag = "bills_banner_line",
         actionLabel = if (peek.newCount > 0) "Add" else "Open", actionTag = "bills_banner_open", onAction = onOpen,
         dismissTag = "nudge_notnow_bills", dismissLabel = "Not now: hide for today", onDismiss = onNotNow, wholeCardOpens = true,

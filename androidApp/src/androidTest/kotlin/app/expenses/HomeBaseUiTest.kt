@@ -59,7 +59,7 @@ class HomeBaseUiTest {
     @Before fun fresh() {
         shell("settings put system font_scale 1.0")
         androidx.work.WorkManager.getInstance(context).cancelAllWork().result.get()
-        runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1"); it.templates.putSetting("welcome_dismissed", "1") } }
     }
     @After fun cleanUp() {
         compose.waitForIdle(); scenario?.close()
@@ -114,7 +114,7 @@ class HomeBaseUiTest {
     @Test
     fun everyNudgeIsOneCardWithOneCloseButtonOfAtLeast48dpAndTheCloseTakesItAway() {
         for ((card, close) in closers) {
-            runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1") } }
+            runBlocking { container.startFresh(); container.write { it.templates.putSetting("first_week_dismissed", "1"); it.templates.putSetting("welcome_dismissed", "1") } }
             seedNudge(card)
             launch(); waitFor(card); waitFor(close)
             // ONE close button: a button with a close description inside the card, and no other control that puts it away (no "Not now" / "Hide" text buttons)

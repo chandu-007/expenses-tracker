@@ -8,6 +8,8 @@ object CaptureKeys {
     const val SETTING_EXTRA_ROOTS = "capture_extra_roots"
     const val SETTING_SMS_ON = "capture_sms_on"
     const val SETTING_EMAIL_ON = "capture_email_on"
+    /** UI S6 (U-11): epoch milliseconds when the last bank text, notification or Shortcut message reached capture. A timestamp only; nothing of the message is kept. */
+    const val SETTING_LAST_SEEN = "capture_last_seen_at"
 }
 
 /** Settings keys and constants of automatic export. */

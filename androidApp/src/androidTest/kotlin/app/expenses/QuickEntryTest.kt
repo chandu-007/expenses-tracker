@@ -28,7 +28,7 @@ class QuickEntryTest {
 
     /** The database is shared by the whole app process, so close it before deleting its files. */
     private fun resetApp() {
-        kotlinx.coroutines.runBlocking { (context.applicationContext as ExpensesApp).container.startFresh() }
+        kotlinx.coroutines.runBlocking { val c = (context.applicationContext as ExpensesApp).container; c.startFresh(); c.write { it.templates.putSetting("welcome_dismissed", "1") } }
     }
     private var scenario: ActivityScenario<MainActivity>? = null
 

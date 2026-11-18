@@ -11,6 +11,8 @@ import app.expenses.core.domain.DueItem
 import app.expenses.core.domain.Notice
 import app.expenses.core.domain.NoticePlanner
 import app.expenses.core.domain.NoticePrivacy
+import app.expenses.core.domain.NudgePause
+import app.expenses.core.domain.startOfDay
 import app.expenses.core.domain.NotificationPrefs
 import app.expenses.core.domain.formatted
 import app.expenses.core.storage.db.ExpensesDb
@@ -113,8 +115,11 @@ class NotificationService(
         } else null
         val prefs = prefs0
         val hide = q.settingValue("hide_amounts").executeAsOneOrNull() == "1" || hideText
+        // Pause nudges (UI S6): the notices that are only suggestions wait; a due bill or card, budget alerts and the recap the person asked for do not (see NudgePause). Nothing held back is recorded as sent.
+        val pausedUntil = q.settingValue(NudgePause.SETTING).executeAsOneOrNull()?.toLongOrNull()
+        val paused = NudgePause.isPaused(pausedUntil, startOfDay(today, zone) + minuteOfDay * 60_000L)
         return CheckResult(posted, NoticePlanner.plan(prefs, today, minuteOfDay, bills, standings, sent(), cardsDue(today, zone), if (prefs.recap) recapDue(today, zone, currency) else null, foundBills(hide), trackedBills(hide),
-            pace = pace, wrapUp = wrapUp, statements = cardStatements(today, zone), limits = cardLimits(today, zone), cleared = cardsCleared(today, zone)).map { NoticePrivacy.masked(it, hide) })
+            pace = pace, wrapUp = wrapUp, statements = cardStatements(today, zone), limits = cardLimits(today, zone), cleared = cardsCleared(today, zone)).filter { !(paused && NudgePause.pausesNotice(it.kind)) }.map { NoticePrivacy.masked(it, hide) })
     }
 
     /**

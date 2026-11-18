@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import app.expenses.core.domain.NudgePause
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -50,7 +51,7 @@ private fun TimeRow(label: String, minute: Int, tag: String, enabled: Boolean, o
 }
 
 @Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, detail: String, checked: Boolean, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 16.dp)) { // room before the switch, so a long line at a large text size never runs into it
             Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -62,7 +63,11 @@ private fun SwitchRow(title: String, detail: String, checked: Boolean, tag: Stri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((NotificationPrefs) -> NotificationPrefs) -> Unit, onSendTest: () -> Unit, onBack: () -> Unit) {
+fun NotificationSettingsScreen(
+    prefs: NotificationPrefs, onChange: ((NotificationPrefs) -> NotificationPrefs) -> Unit, onSendTest: () -> Unit, onBack: () -> Unit,
+    /** UI S6: Pause nudges (the stored time; 0 when not paused) and the Occasional milestones opt-in. */
+    nudgesPausedUntil: Long = 0L, onPause: (NudgePause.Choice?) -> Unit = {}, milestonesOn: Boolean = false, onMilestones: (Boolean) -> Unit = {},
+) {
     val platform = LocalPlatform.current
     // The user may change this in system settings and come back: read again whenever the app returns to the foreground and right after the permission question closes.
     val allowedState = rememberResumeState { platform.notificationsAllowed() }
@@ -71,10 +76,17 @@ fun NotificationSettingsScreen(prefs: NotificationPrefs, onChange: ((Notificatio
 
     Scaffold(topBar = { ScreenHeader("Notifications", onBack, "notif_back") }) { padding ->
         if (!platform.supportsNotifications) {
-            Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp).testTag("notif_unavailable"))
+            // the pause and the milestones are about Home, which the iPhone build has too: only the notices are not there
+            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                PauseAndMilestones(nudgesPausedUntil, onPause, milestonesOn, onMilestones)
+                HorizontalDivider()
+                Text(NOT_ON_IPHONE, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("notif_unavailable"))
+            }
             return@Scaffold
         }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            PauseAndMilestones(nudgesPausedUntil, onPause, milestonesOn, onMilestones)
+            HorizontalDivider()
             if (!allowed) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("notif_blocked")) {
                     Text("Notifications are turned off for this app, so nothing below will reach you.", color = MaterialTheme.colorScheme.error)

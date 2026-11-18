@@ -8,14 +8,17 @@ import kotlin.test.assertTrue
 
 class GuideTest {
     @Test
-    fun aFirstVisitOffersEveryPageAndIsTheFirstRun() {
-        val plan = assertNotNull(Guide.planOnOpen(null, offForUpdates = false))
-        assertEquals(GuideMode.FIRST_RUN, plan.mode); assertEquals(Guide.steps, plan.steps)
+    fun aFirstVisitIsOfferedNoTourOnItsOwnWhetherOrNotUpdatesWereTurnedOff() {
+        assertNull(Guide.planOnOpen(null, offForUpdates = false)); assertNull(Guide.planOnOpen(null, offForUpdates = true))
     }
 
     @Test
-    fun aFirstVisitIsOfferedEvenIfUpdatesWereTurnedOffBecauseNothingWasSeenYet() {
-        assertEquals(GuideMode.FIRST_RUN, Guide.planOnOpen(null, offForUpdates = true)?.mode)
+    fun theShortTourIsFiveStopsFromTheExistingPagesInOrderAndIsAFirstRunTour() {
+        val plan = Guide.shortPlan()
+        assertEquals(GuideMode.FIRST_RUN, plan.mode); assertEquals(5, plan.steps.size)
+        assertEquals(listOf("home", "add", "reports", "capture", "data"), plan.steps.map { it.id })
+        assertTrue(plan.steps.all { it in Guide.steps }, "no new wording: the stops are the existing pages")
+        assertTrue(plan.steps.none { it.id == "welcome" || it.id == "done" })
     }
 
     @Test

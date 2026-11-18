@@ -96,7 +96,7 @@ fun BillsScreen(
         val state = rememberDatePickerState()
         DatePickerDialog(
             onDismissRequest = { dating = null },
-            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { ms -> onSetDue(id, ms.floorDiv(86_400_000L)) }; dating = null }, modifier = Modifier.testTag("bill_date_ok")) { Text("OK") } },
+            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { ms -> onSetDue(id, ms.floorDiv(86_400_000L)) }; dating = null }, modifier = Modifier.testTag("bill_date_ok")) { Text("Done") } },
             dismissButton = { TextButton(onClick = { dating = null }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
     }
@@ -106,7 +106,7 @@ fun BillsScreen(
                 EmptyArt(EmptyKind.BILLS, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                 Text("No bills yet.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("bills_empty"))
                 Text(
-                    "When a bank text or alert says a bill is due (a card statement, electricity, mobile, an EMI, an insurance premium), it shows up here and we remind you.",
+                    "Bills found in your bank texts show up here, and we remind you before they are due.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (onSetUpCapture != null) OutlinedButton(onClick = onSetUpCapture, modifier = Modifier.padding(top = 12.dp).testTag("bills_empty_setup")) { Text("Set up reading texts") }
@@ -243,28 +243,17 @@ private fun PayDialog(
     )
 }
 
-/** A small check that draws itself beside a bill's amount the moment it becomes paid, then leaves (about 600 ms). Not shown under Reduce motion. */
+/**
+ * The shared drawn tick ([SuccessCheck]) beside a bill's amount the moment it becomes paid, then it leaves (about 1.2 s). Under Reduce motion the tick is there complete at once (UI S6).
+ * The result is said in words by the card itself ("Paid ..."), so a screen reader needs nothing from the picture.
+ */
 @Composable
 private fun PaidCheck(id: String, modifier: Modifier = Modifier) {
-    val reduce = LocalReduceMotion.current
-    var visible by remember(id) { mutableStateOf(!reduce) }
+    var visible by remember(id) { mutableStateOf(true) }
     if (!visible) return
-    val progress = remember(id) { Animatable(0f) }
     LaunchedEffect(id) {
-        progress.animateTo(1f, tween(400, easing = Motion.EaseOut))
-        delay(200)
+        delay(1_200)
         visible = false
     }
-    val color = MaterialTheme.colorScheme.primary
-    Canvas(modifier.size(18.dp).testTag("bill_paid_check_$id")) {
-        val path = Path().apply {
-            moveTo(size.width * 0.15f, size.height * 0.55f)
-            lineTo(size.width * 0.4f, size.height * 0.8f)
-            lineTo(size.width * 0.85f, size.height * 0.25f)
-        }
-        val measure = PathMeasure().apply { setPath(path, false) }
-        val part = Path()
-        measure.getSegment(0f, measure.length * progress.value, part, true)
-        drawPath(part, color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-    }
+    SuccessCheck(modifier.testTag("bill_paid_check_$id"), size = 18.dp, key = id)
 }

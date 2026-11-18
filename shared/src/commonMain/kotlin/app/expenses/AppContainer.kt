@@ -157,7 +157,7 @@ class AppContainer(private val platform: Platform) {
                 maintenanceChanges = 0L
                 platform.resetDatabase()
                 // someone who wipes their ledger already knows the app: the guide is for a first install and for updates, not for starting over
-                doOpen().also { opened = it; (it as? Opened.Ok)?.templates?.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString()) }
+                doOpen().also { opened = it; (it as? Opened.Ok)?.templates?.let { t -> t.putSetting(GuideSettings.SEEN, app.expenses.core.domain.Guide.VERSION.toString()); t.putSetting(app.expenses.core.domain.Tips.SETTING, app.expenses.core.domain.Tips.encode(app.expenses.core.domain.Tips.IDS)) } }
             }
         }
     }

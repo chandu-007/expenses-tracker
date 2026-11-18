@@ -154,6 +154,7 @@ fun CategoriesScreen(
         floatingActionButton = { androidx.compose.material3.ExtendedFloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("new_category"), icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Add, contentDescription = null) }, text = { Text("New category") }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+        TipSlot("categories")
         if (lookNotice) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).inlineCard(MaterialTheme.colorScheme.primary).padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 4.dp).testTag("look_notice"), verticalAlignment = Alignment.CenterVertically) {
             Text("New look: every category now has an icon and a colour of its own. Tap a category to change them.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onLookNoticeSeen, modifier = Modifier.heightIn(min = 48.dp).testTag("look_notice_ok")) { Text("Got it") }

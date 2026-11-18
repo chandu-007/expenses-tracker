@@ -176,7 +176,7 @@ private fun QuickAdd(accounts: List<AccountUi>, categories: List<CategoryUi>, on
         val picker = rememberDatePickerState(initialSelectedDateMillis = utcMidnightMillis(date))
         DatePickerDialog(
             onDismissRequest = { pickingDate = false },
-            confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { day = pickerDate(it).epochDay() }; pickingDate = false }, modifier = Modifier.testTag("earlier_spending_date_ok")) { Text("OK") } },
+            confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { day = pickerDate(it).epochDay() }; pickingDate = false }, modifier = Modifier.testTag("earlier_spending_date_ok")) { Text("Done") } },
             dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
         ) { DatePicker(state = picker) }
     }

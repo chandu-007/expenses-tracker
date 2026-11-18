@@ -69,7 +69,9 @@ class OnboardingTest {
     fun aFreshInstallOffersToAddTheFirstExpenseAndTheFirstExpenseTakesThreeSteps() {
         launch()
         waitFor("welcome")
-        waitAnyText("uninstalling the app deletes it") // the honest sentence about where the data lives
+        waitAnyText("Stays on this phone. No account. Nothing is sent anywhere.")
+        waitAnyText("Uninstalling the app deletes it") // the honest sentence about where the data lives, in its own smaller line
+        waitFor("welcome_backup")
         val started = System.nanoTime()
         compose.onNodeWithTag("welcome_add").performClick()          // step 1
         waitFor("amount")
@@ -90,6 +92,7 @@ class OnboardingTest {
         compose.onNodeWithTag("welcome_skip").performClick()
         waitGone("welcome")
         waitAnyText("No expenses yet")
+        assertTrue(!present("example_month"), "Skip takes the example away with the welcome")
         assertEquals("1", setting("welcome_dismissed"))
         launch()
         waitAnyText("No expenses yet")

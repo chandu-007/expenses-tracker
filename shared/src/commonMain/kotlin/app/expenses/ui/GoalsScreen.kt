@@ -77,6 +77,7 @@ fun GoalsScreen(
     Scaffold(topBar = { ScreenHeader("Savings goals", onBack, "goals_back") }) { padding ->
         if (state == null) return@Scaffold
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("goals_list"), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
+            item(key = "tip") { TipSlot("goals") }
             item {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (rows.isEmpty()) Text("Nothing to save for yet. A goal is a target, like a trip or a laptop. Put money towards it by hand, or let it follow a savings account.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("goals_empty"))

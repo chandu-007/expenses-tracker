@@ -65,7 +65,7 @@ class AppLockTest {
     private fun clearLockPrefs() = context.getSharedPreferences("app_lock", Context.MODE_PRIVATE).edit().clear().commit()
 
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } }
     }
 
     @Before fun fresh() {

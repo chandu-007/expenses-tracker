@@ -161,6 +161,9 @@ class AndroidPlatform(context: Context) : Platform {
     override val osVersionText: String get() = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     override val deviceModelText: String get() = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL else "${Build.MANUFACTURER} ${Build.MODEL}"
 
+    /** The permissions of the installed app's own manifest as the system lists them (GET_PERMISSIONS needs no permission): what the "Verify it yourself" page checks its claims against. */
+    override fun declaredPermissions(): List<String>? = try { PermissionNotes.declared(context) } catch (_: PackageManager.NameNotFoundException) { null }
+
     override fun notificationsAllowed(): Boolean = Notifier.canShow(context)
     override fun showNotices(notices: List<Notice>): List<Notice> = Notifier.show(context, notices)
 

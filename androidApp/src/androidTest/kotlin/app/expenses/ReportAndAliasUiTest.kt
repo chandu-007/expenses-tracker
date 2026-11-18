@@ -92,7 +92,8 @@ class ReportAndAliasUiTest {
         ingest("AX-HDFCBK-S", missed, 5_000)
         launch(); compose.openMore(); tap("open_inbox"); waitFor("inbox_back")
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
-        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_text_toggle_$id"))
+        compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_change_$id"))
+        tap("inbox_change_$id"); compose.onNodeWithTag("inbox_list", useUnmergedTree = true).performScrollToNode(hasTestTag("inbox_text_toggle_$id"))
         tap("inbox_text_toggle_$id"); tap("inbox_report_$id"); waitFor("report_preview")
         val shown = textOf("report_preview")
         assertTrue(shown.contains("The app: added to To review as money out, read by the generic rules (low confidence)"), shown)

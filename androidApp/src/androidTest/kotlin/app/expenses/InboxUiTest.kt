@@ -85,7 +85,7 @@ class InboxUiTest {
         ingest(to("9704849321@yescred", "100000000004"), 1_000)
         launch(); openInbox()
         val first = idAt(1_000)
-        waitFor("inbox_$first"); tap("inbox_name_btn_$first")
+        waitFor("inbox_$first"); tap("inbox_change_$first"); tap("inbox_name_btn_$first")
         compose.onNodeWithTag("inbox_name_$first", useUnmergedTree = true).performTextInput("Chandu"); tap("inbox_name_ok_$first")
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Chandu"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         tap("inbox_add_$first"); compose.waitUntil(10_000) { has("inbox_empty") }
@@ -145,7 +145,7 @@ class InboxUiTest {
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
         waitFor("inbox_$id")
         assertTrue(!has("inbox_text_$id"), "the original text is hidden at first")
-        tap("inbox_text_toggle_$id"); waitFor("inbox_text_$id")
+        tap("inbox_change_$id"); tap("inbox_text_toggle_$id"); waitFor("inbox_text_$id")
         compose.onNodeWithTag("inbox_text_$id", useUnmergedTree = true).assertTextContains("debited from A/c XX1234", substring = true)
     }
 
@@ -153,7 +153,7 @@ class InboxUiTest {
     fun aTextReadTheWrongWayRoundCanBeTurnedBeforeItIsAddedAndThenBecomesIncome() {
         ingest(debit, 5_000); launch(); openInbox()
         val id = runBlocking { container.write { it.inbox.list().single().id } }!!
-        waitFor("inbox_$id"); assertTrue(has("inbox_flip_$id"))
+        waitFor("inbox_$id"); assertTrue(!has("inbox_flip_$id"), "the other direction is under Change"); tap("inbox_change_$id"); waitFor("inbox_flip_$id")
         assertTrue(compose.onAllNodes(hasTestTag("inbox_amount_$id") and androidx.compose.ui.test.hasText("-₹1,250.00"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "money out shows its minus before it is turned")
         tap("inbox_flip_$id")
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("inbox_amount_$id") and androidx.compose.ui.test.hasText("+", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }

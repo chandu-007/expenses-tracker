@@ -44,7 +44,7 @@ class RecurringUiTest {
     private val today: LocalDate = java.time.LocalDate.now().let { LocalDate(it.year, it.monthValue, it.dayOfMonth) }
 
     private fun resetApp() {
-        runBlocking { container.startFresh() }
+        runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } }
     }
 
     /** The less frequent places are in the "More" menu on the list. */
