@@ -74,9 +74,8 @@ fun VerifyScreen(asked: List<PermissionRow>, onBack: () -> Unit) {
                     Text("3. Everything works as it did. Nothing in this app waits for a connection, because it does not use one.", style = MaterialTheme.typography.bodyMedium)
                 }
 
-                VerifyCard("How this app is paid for", Modifier.testTag("verify_paid")) {
-                    Text("There are no ads, and no loans or cards to sell you. Nothing about you is sold or shared: your data stays on this phone, so there is nothing to sell.", style = MaterialTheme.typography.bodyMedium)
-                    Text("Everything in the app today is free, including export and backup. If paid features ever come, they would be for things that cost money to run, such as syncing between phones. Export stays free.", style = MaterialTheme.typography.bodyMedium)
+                VerifyCard("Free to use", Modifier.testTag("verify_free")) {
+                    Text("Expenses is free. There are no ads, no subscriptions and no in-app purchases, and you do not need an account.", style = MaterialTheme.typography.bodyMedium)
                 }
 
                 VerifyCard("One more thing", Modifier.testTag("verify_fraud")) {

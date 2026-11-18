@@ -71,7 +71,7 @@ class UiS6VerifyTest {
     @Test
     fun moreHasAVerifyRowThatOpensThePageAndBackReturnsToMoreAndFromThePrivacyPageBackReturnsThere() {
         launch(); compose.openMore(); tap("more_verify"); waitFor("verify_screen")
-        for (tag in listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_paid", "verify_fraud")) assertTrue(has(tag), "$tag is on the page")
+        for (tag in listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_free", "verify_fraud")) assertTrue(has(tag), "$tag is on the page")
         tap("verify_back"); waitFor("more_page"); assertFalse(has("verify_screen"))
         // from the privacy page: the page opens, and Back returns to the privacy page it was opened from
         tap("open_privacy"); waitFor("privacy_internet"); tap("privacy_verify"); waitFor("verify_screen")
@@ -99,14 +99,15 @@ class UiS6VerifyTest {
     }
 
     @Test
-    fun theAirplaneModeStepsHowItIsPaidForAndTheFraudLineArePresentAndTheWordsAreCalm() {
+    fun theAirplaneModeStepsTheFreeToUseLineAndTheFraudLineArePresentAndTheWordsAreCalm() {
         openVerify()
         val steps = texts("verify_airplane")
         assertTrue(steps.any { it.startsWith("1.") && it.contains("airplane mode") } && steps.any { it.startsWith("2.") } && steps.any { it.startsWith("3.") }, "three steps: $steps")
-        val paid = textOf("verify_paid")
-        assertTrue(paid.contains("no ads") && paid.contains("sold or shared"), paid)
+        assertEquals(listOf("Free to use", "Expenses is free. There are no ads, no subscriptions and no in-app purchases, and you do not need an account."), texts("verify_free"))
+        // the app is free: nothing on the page speaks of paying for it
+        for (pay in listOf("paid for", "paid features", "premium", "pro version", "price")) assertFalse(textOf("verify_free").contains(pay, ignoreCase = true), pay)
         assertTrue(texts("verify_fraud").any { it == "We never ask for your OTP, PIN or password. Neither does your bank by text or call." })
-        val all = listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_paid", "verify_fraud").joinToString(" ") { textOf(it) }
+        val all = listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_free", "verify_fraud").joinToString(" ") { textOf(it) }
         assertFalse(all.contains("!"), "no exclamation marks")
         for (scare in listOf("danger", "hack", "attack", "scam alert", "warning", "threat")) assertFalse(all.contains(scare, ignoreCase = true), scare)
     }
@@ -116,7 +117,7 @@ class UiS6VerifyTest {
         shell("settings put system font_scale 2.0")
         openVerify()
         val root = node("verify_screen").fetchSemanticsNode().size
-        for (tag in listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_paid", "verify_fraud")) {
+        for (tag in listOf("verify_not_have", "verify_ask", "verify_airplane", "verify_free", "verify_fraud")) {
             runCatching { node(tag).performScrollTo() }
             val size = node(tag).fetchSemanticsNode().size
             assertTrue(size.width <= root.width && size.height > 0, "$tag fits the width at 200%: ${size.width} of ${root.width}")
