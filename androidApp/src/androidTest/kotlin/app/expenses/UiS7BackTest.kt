@@ -121,6 +121,7 @@ class UiS7BackTest {
         first.performTouchInput { longClick() }
         waitFor("search_selection_clear"); waitFor("bulk_bar"); compose.waitForIdle(); SystemClock.sleep(500)
         backKey(); gone("search_selection_clear"); assertTrue(has("search_results"), "Back cleared the selection and stayed in Search")
+        if (android.os.Build.VERSION.SDK_INT < 30) return // the keyboard of the focused search field cannot be told apart before Android 11, so the panel and the last Back are checked from Android 11 (the selection's Back above ran on both)
         tap("search_filters_button"); waitFor("filters_apply")
         backKey(); gone("filters_apply"); assertTrue(has("search_results"), "Back closed the panel and stayed in Search")
         backKey(); gone("search_results"); waitFor("add")
