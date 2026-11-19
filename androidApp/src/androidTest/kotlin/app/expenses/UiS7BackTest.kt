@@ -63,7 +63,8 @@ class UiS7BackTest {
     /** The system keyboard takes the first Back (it closes itself), as it always did: so a test that typed into a field presses Back until the keyboard is gone, and only then tests the screen's own Back. */
     private fun imeVisible(): Boolean {
         var v = false
-        scenario!!.onActivity { a -> v = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true }
+        scenario!!.onActivity { a -> v = if (android.os.Build.VERSION.SDK_INT >= 30) androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            else (a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).isAcceptingText }
         return v
     }
     private fun hideKeyboard() { repeat(3) { if (imeVisible()) backKey() } ; assertTrue(!imeVisible(), "the keyboard is closed") }
@@ -108,7 +109,7 @@ class UiS7BackTest {
     @Test
     fun backInSearchClearsASelectionFirstThenClosesAnOpenFiltersPanelThenLeavesSearch() {
         expense("a", "Alpha"); expense("b", "Bravo")
-        launch(); tap("open_search"); waitFor("search_text"); tap("search_kind_expense") // a chip, not typing: no keyboard to take the first Back
+        launch(); tap("open_search"); waitFor("search_text"); tap("search_kind_expense"); hideKeyboard() // a chip, not typing; the search field has focus though, and its keyboard takes the first Back as it always did
         waitFor("search_results")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         val first = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)[0]
