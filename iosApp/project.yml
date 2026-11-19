@@ -67,6 +67,9 @@ targets:
       path: Resources/ExpensesWidget-Info.plist
       properties:
         CFBundleDisplayName: Expenses
+        # The app's MARKETING_VERSION and CURRENT_PROJECT_VERSION (settings.base above): an extension must carry the app's version and build.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -87,6 +90,8 @@ targets:
       path: Resources/ExpensesShare-Info.plist
       properties:
         CFBundleDisplayName: Expenses
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
