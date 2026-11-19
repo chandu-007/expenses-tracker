@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
