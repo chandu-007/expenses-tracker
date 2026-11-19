@@ -129,7 +129,9 @@ def manifest_components(apk):
 # The debug-only frame logger (UI S0 F-15): BuildConfig.FRAME_LOG is a constant false outside the debug build, so R8 must remove FrameLog, FrameProbe's wiring and FrameStats. If any of them is reachable in a release build,
 # a measuring tool would ship (and run an extra frame listener on every phone), so this check fails.
 LOGGER_CLASSES = ["app.expenses.FrameLog", "app.expenses.ui.FrameProbe", "app.expenses.core.domain.FrameStats", "app.expenses.FrameLogDriveTest"]
-LOGGER_STRINGS = ["addOnFrameMetricsAvailableListener", "OnFrameMetricsAvailableListener", "FRAMELOG_RESULT"]
+# Not "addOnFrameMetricsAvailableListener" any more (UI S7 U-21): the release build now has ONE frame listener of its own, SlowFrameWatch, which lets a phone that stutters switch to simple visuals; it never writes a log line.
+# What only the logger has is its result line and its classes (above), so those are what this check looks for.
+LOGGER_STRINGS = ["FRAMELOG_RESULT"]
 
 
 def debug_logger_leftovers(apk, mapping):
