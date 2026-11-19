@@ -99,9 +99,10 @@ actual fun SlowFrameWatch(onSlow: () -> Unit) {
 actual fun systemReduceTransparency(): Boolean {
     val context = LocalContext.current
     val config = androidx.compose.ui.platform.LocalConfiguration.current
+    // the APPLICATION context's UiModeManager: the one of an activity registers a listener with the system that holds the activity, and every recreation leaked one (found by RecreateStressTest running out of memory: 150 recreations kept 150 activities)
     return remember(context, config) {
         runCatching {
-            val level = if (Build.VERSION.SDK_INT >= 34) (context.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).contrast else 0f
+            val level = if (Build.VERSION.SDK_INT >= 34) (context.applicationContext.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).contrast else 0f
             level > 0f || Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1
         }.getOrDefault(false)
     }
