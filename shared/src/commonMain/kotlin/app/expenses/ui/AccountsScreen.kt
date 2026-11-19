@@ -88,7 +88,7 @@ fun AccountsScreen(
                 // for the third and fourth of them to be in view when they are spread (AccountTilesUiTest reads where each one is).
                 Column(Modifier.padding(16.dp, if (safeToSpend != null) 8.dp else 16.dp, 16.dp, if (safeToSpend != null) 0.dp else 16.dp)) {
                     Text("Net worth", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    MoneyText(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, rolling = true, modifier = Modifier.testTag("net_worth"))
+                    MoneyText(Money(net, BaseCurrency.current).formatted(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("net_worth"))
                     if (safeToSpend == null) Text("Balances start from the opening balance you set, then follow your entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (safeToSpend != null) SafeToSpendLine(safeToSpend, "safe_to_spend_line", onClick = { safeOpen = true }, compact = true)
