@@ -67,7 +67,12 @@ class UiS7BackTest {
             else (a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).isAcceptingText }
         return v
     }
-    private fun hideKeyboard() { repeat(3) { if (imeVisible()) backKey() } ; assertTrue(!imeVisible(), "the keyboard is closed") }
+    private fun hideKeyboard() {
+        // Android 11 and later say whether the keyboard is showing; before that the only sign is that a field has focus, which stays true after the keyboard closes: one Back, no more
+        if (android.os.Build.VERSION.SDK_INT < 30) { if (imeVisible()) backKey(); return }
+        repeat(3) { if (imeVisible()) backKey() }
+        assertTrue(!imeVisible(), "the keyboard is closed")
+    }
     private fun backKey() { shell("input keyevent KEYCODE_BACK"); SystemClock.sleep(700) }
     /** Back as the activity's dispatcher gets it. */
     private fun backDispatch() { scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }; SystemClock.sleep(300) }
