@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.HapticFeedbackConstants
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -101,7 +102,10 @@ class UiS7DeviceTest {
         val down = SystemClock.uptimeMillis()
         fun event(action: Int, x: Float, y: Float) = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0).also { it.source = InputDevice.SOURCE_TOUCHSCREEN }
         ua.injectInputEvent(event(MotionEvent.ACTION_DOWN, x0, y0), true)
-        for (i in 1..steps) { Thread.sleep(8); val f = i / steps.toFloat(); ua.injectInputEvent(event(MotionEvent.ACTION_MOVE, x0 + (x1 - x0) * f, y0 + (y1 - y0) * f), true) }
+        // the system decides at the first movement that this is a back gesture: a small first move, a pause, then the swipe
+        ua.injectInputEvent(event(MotionEvent.ACTION_MOVE, x0 + 40f, y0), true); Thread.sleep(150)
+        for (i in 1..steps) { Thread.sleep(16); val f = i / steps.toFloat(); ua.injectInputEvent(event(MotionEvent.ACTION_MOVE, x0 + (x1 - x0) * f, y0 + (y1 - y0) * f), true) }
+        Thread.sleep(400) // hold at the end: the gesture is judged from where the finger is when it lifts
         ua.injectInputEvent(event(MotionEvent.ACTION_UP, x1, y1), true)
     }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -116,6 +120,12 @@ class UiS7DeviceTest {
     private fun setting(key: String) = runBlocking { container.write { it.templates.setting(key) } }
     private fun put(key: String, value: String) { runBlocking { container.write { it.templates.putSetting(key, value) } } }
     private fun spend(id: String, minor: Long) = runBlocking { container.write { it.store.save(Expense(EntryId(id), System.currentTimeMillis() - 3_600_000, AccountId("cash"), Money(minor, Currency.INR))) } }
+    private fun monthText() = runCatching { node("month_spend").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString { it.text } }.getOrNull()
+    private fun waitProbe(what: String, cond: () -> Boolean) {
+        try { compose.waitUntil(10_000, cond) } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("$what: rolls ${OdometerProbe.rolls}, fades ${OdometerProbe.fades}, last '${OdometerProbe.last}', month figure '${monthText()}', entries ${runBlocking { container.write { it.db.schemaQueries.entryCount().executeAsOne() } }}", e)
+        }
+    }
     private fun addFive00() { tap("add"); waitFor("amount"); node("amount").performTextInput("500"); tap("save"); waitFor("add") }
     private fun appearance() { compose.openMore(); tap("open_appearance"); waitFor("haptics_row") }
 
@@ -151,7 +161,7 @@ class UiS7DeviceTest {
         launch(); compose.waitForIdle(); Thread.sleep(1_500)
         assertEquals(0, OdometerProbe.rolls, "nothing rolls when Home opens")
         addFive00()
-        compose.waitUntil(10_000) { OdometerProbe.rolls >= 1 }
+        waitProbe("no roll after the add") { OdometerProbe.rolls >= 1 }
         // ₹1,235 (or ₹1,234) becomes ₹1,735 (or ₹1,734): only the hundreds digit moved
         assertEquals("3:2>7", OdometerProbe.last)
         compose.waitUntil(10_000) { runCatching { node("month_spend").assertTextEquals("₹1,734.56"); true }.getOrDefault(false) }
@@ -162,7 +172,7 @@ class UiS7DeviceTest {
         put("reduce_motion", "1"); spend("x", 123_456)
         launch(); compose.waitForIdle(); Thread.sleep(1_000)
         addFive00()
-        compose.waitUntil(10_000) { OdometerProbe.fades >= 1 }
+        waitProbe("no cross-fade after the add") { OdometerProbe.fades >= 1 }
         assertEquals(0, OdometerProbe.rolls)
     }
 
@@ -191,7 +201,7 @@ class UiS7DeviceTest {
         launch(); appearance()
         BackProbe.reset()
         val m = context.resources.displayMetrics
-        swipe(2f, m.heightPixels / 2f, m.widthPixels * 0.7f, m.heightPixels / 2f, 60)
+        swipe(2f, m.heightPixels / 2f, m.widthPixels * 0.75f, m.heightPixels / 2f, 50)
         Thread.sleep(1_500)
         assertTrue(!has("appearance_back"), "the gesture did not go back: progress ${BackProbe.maxProgress}, committed ${BackProbe.committed}, cancelled ${BackProbe.cancelled}")
         assertTrue(BackProbe.maxProgress > 0.05f, "the gesture reported its progress (${BackProbe.maxProgress})")

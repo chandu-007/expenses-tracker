@@ -39,6 +39,12 @@ object OdometerProbe {
     @Volatile var last = ""
 }
 
+/**
+ * What the figures that opt in last showed, kept by the app root for as long as it lives (an activity): so Home, which leaves the screen while the Add form is open and comes back, can roll from the figure it last showed to the
+ * new one instead of starting again with the new one. A fresh start of the app has none, so nothing rolls on open.
+ */
+val LocalOdometerMemory = androidx.compose.runtime.compositionLocalOf<MutableMap<String, String>?> { null }
+
 private class Glyphs(val index: Int, val from: TextLayoutResult?, val to: TextLayoutResult)
 
 /**
@@ -60,17 +66,20 @@ fun OdometerText(
     maxLines: Int = Int.MAX_VALUE,
     softWrap: Boolean = true,
     money: Boolean = false,
+    /** A name under which [LocalOdometerMemory] keeps what this figure last showed, for a figure that leaves the screen and comes back; null for one that should never roll when its screen opens. */
+    memoryKey: String? = null,
 ) {
     val shown = privately(text)
+    val memory = LocalOdometerMemory.current
     val ink = color.takeOrElse { LocalContentColor.current }
     val base = if (fontWeight != null) style.copy(fontWeight = fontWeight) else style
     val reduce = LocalReduceMotion.current
     val simplified = LocalSimplified.current
-    val previous = remember { arrayOfNulls<String>(1) }
+    val previous = remember { arrayOf<String?>(memoryKey?.let { memory?.get(it) }) }
     val roll = remember(shown, simplified) {
         if (simplified) null else previous[0]?.let { old -> if (money) Odometer.between(old, shown) else Odometer.sameLength(old, shown) }
     }
-    SideEffect { previous[0] = shown }
+    SideEffect { previous[0] = shown; if (memoryKey != null) memory?.put(memoryKey, shown) }
     val progress = remember(shown) { Animatable(if (roll == null) 1f else 0f) }
     var doneFor by remember { mutableStateOf(shown) }
     LaunchedEffect(shown) {

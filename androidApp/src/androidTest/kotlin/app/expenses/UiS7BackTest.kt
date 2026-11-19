@@ -60,15 +60,14 @@ class UiS7BackTest {
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun shell(cmd: String) { android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).use { it.readBytes() } }
     /** Back as the Back key: through the system, which is what the button and the three-button bar send. */
-    /** The system keyboard takes the first Back (it closes itself), as it always did: so the tests that type close it first. */
-    private fun hideKeyboard() {
-        scenario!!.onActivity { a ->
-            if (android.os.Build.VERSION.SDK_INT >= 30) a.window.decorView.windowInsetsController?.hide(android.view.WindowInsets.Type.ime())
-            else (a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(a.window.decorView.windowToken, 0)
-        }
-        SystemClock.sleep(600)
+    /** The system keyboard takes the first Back (it closes itself), as it always did: so a test that typed into a field presses Back until the keyboard is gone, and only then tests the screen's own Back. */
+    private fun imeVisible(): Boolean {
+        var v = false
+        scenario!!.onActivity { a -> v = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true }
+        return v
     }
-    private fun backKey() { shell("input keyevent KEYCODE_BACK"); SystemClock.sleep(300) }
+    private fun hideKeyboard() { repeat(3) { if (imeVisible()) backKey() } ; assertTrue(!imeVisible(), "the keyboard is closed") }
+    private fun backKey() { shell("input keyevent KEYCODE_BACK"); SystemClock.sleep(700) }
     /** Back as the activity's dispatcher gets it. */
     private fun backDispatch() { scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }; SystemClock.sleep(300) }
     private fun entries() = runBlocking { container.write { it.db.schemaQueries.recentEntries(50).executeAsList() } }!!
@@ -79,7 +78,7 @@ class UiS7BackTest {
     @Test
     fun backFromTheAddFormWithTypedInputClosesItAndSavesNothing_byKeyAndByDispatcher() {
         for (press in listOf(::backKey, ::backDispatch)) {
-            launch(); tap("add"); waitFor("amount"); node("amount").performTextInput("777"); hideKeyboard()
+            launch(); tap("add"); waitFor("amount"); if (has("number_pad")) { tap("pad_7"); tap("pad_7"); tap("pad_7") } else { node("amount").performTextInput("777"); hideKeyboard() }
             press(); gone("amount"); waitFor("add")
             assertEquals(0, entries().size, "Back from the add form saved nothing")
         }
@@ -114,7 +113,7 @@ class UiS7BackTest {
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         val first = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)[0]
         first.performTouchInput { longClick() }
-        waitFor("search_selection_clear")
+        waitFor("search_selection_clear"); waitFor("bulk_bar"); compose.waitForIdle(); SystemClock.sleep(500)
         backKey(); gone("search_selection_clear"); assertTrue(has("search_results"), "Back cleared the selection and stayed in Search")
         tap("search_filters_button"); waitFor("filters_apply")
         backKey(); gone("filters_apply"); assertTrue(has("search_results"), "Back closed the panel and stayed in Search")

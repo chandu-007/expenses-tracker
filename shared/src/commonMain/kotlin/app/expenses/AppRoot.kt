@@ -331,6 +331,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 androidx.compose.runtime.CompositionLocalProvider(
                     app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
                     app.expenses.ui.LocalHapticsEnabled provides s.hapticsOn,
+                    app.expenses.ui.LocalOdometerMemory provides androidx.compose.runtime.remember { HashMap<String, String>() },
                     app.expenses.ui.LocalSimplified provides simplified,
                     app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
                     app.expenses.ui.LocalSpendingRed provides s.showSpendingRed,

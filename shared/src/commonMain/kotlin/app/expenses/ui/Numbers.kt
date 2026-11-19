@@ -83,12 +83,14 @@ fun MoneyText(
     maxLines: Int = 1,
     minFontSize: TextUnit = TextUnit.Unspecified,
     rolling: Boolean = false,
+    /** See [OdometerText]'s `memoryKey`. */
+    memoryKey: String? = null,
 ) {
     val shown = privately(text)
     val ink = color.takeOrElse { androidx.compose.material3.LocalContentColor.current }
     val built = remember(shown, ink) { moneyAnnotated(shown, paiseColor = ink.copy(alpha = 0.72f)) }
     if (minFontSize == TextUnit.Unspecified) {
-        if (rolling) OdometerText(text, modifier = modifier, style = style, color = color, maxLines = maxLines, money = true)
+        if (rolling) OdometerText(text, modifier = modifier, style = style, color = color, maxLines = maxLines, money = true, memoryKey = memoryKey)
         else androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style, maxLines = maxLines)
         return
     }
@@ -100,7 +102,7 @@ fun MoneyText(
             while (size > minFontSize.value && measurer.measure(built, style.copy(fontSize = size.sp), maxLines = 1, softWrap = false).size.width > widthPx) size -= 1f
             size.sp
         }
-        if (rolling) OdometerText(text, modifier = modifier, style = style.copy(fontSize = fitted), color = color, maxLines = maxLines, softWrap = false, money = true)
+        if (rolling) OdometerText(text, modifier = modifier, style = style.copy(fontSize = fitted), color = color, maxLines = maxLines, softWrap = false, money = true, memoryKey = memoryKey)
         else androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style.copy(fontSize = fitted), maxLines = maxLines, softWrap = false)
     }
 }

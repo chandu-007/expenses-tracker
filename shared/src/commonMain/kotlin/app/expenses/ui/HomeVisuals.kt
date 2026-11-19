@@ -86,7 +86,7 @@ fun RollingAmount(
         if (whole) finalText.wholeAmounts() else finalText,
         modifier = modifier.clearAndSetSemantics { text = AnnotatedString(announced) },
         color = color, style = if (fontWeight != null) style.copy(fontWeight = fontWeight) else style,
-        rolling = true,
+        rolling = true, memoryKey = "home_month",
     )
 }
 

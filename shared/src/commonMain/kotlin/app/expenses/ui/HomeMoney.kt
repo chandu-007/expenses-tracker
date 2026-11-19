@@ -71,6 +71,7 @@ fun SafeToSpendTile(ui: SafeToSpendUi, tag: String, onClick: () -> Unit, modifie
             ui.headline.wholeAmounts(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
             color = if (ui.nothingSpare) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag(tag + "_text").clearAndSetSemantics { text = AnnotatedString(headlineExact) },
+            memoryKey = if (tag.startsWith("home_")) tag else null,
         )
         // UI S5 (owner decision D7): the "a day" figure is on the month card, one figure only; here the sum is one tap away
         Text("How is this worked out?", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag(tag + "_how"))
