@@ -69,7 +69,7 @@ class UiS7BackTest {
     }
     private fun hideKeyboard() {
         // Android 11 and later say whether the keyboard is showing; before that the only sign is that a field has focus, which stays true after the keyboard closes: one Back, no more
-        if (android.os.Build.VERSION.SDK_INT < 30) { if (imeVisible()) backKey(); return }
+        if (android.os.Build.VERSION.SDK_INT < 30) return
         repeat(3) { if (imeVisible()) backKey() }
         assertTrue(!imeVisible(), "the keyboard is closed")
     }
@@ -114,13 +114,17 @@ class UiS7BackTest {
     @Test
     fun backInSearchClearsASelectionFirstThenClosesAnOpenFiltersPanelThenLeavesSearch() {
         expense("a", "Alpha"); expense("b", "Bravo")
-        launch(); tap("open_search"); waitFor("search_text"); tap("search_kind_expense"); hideKeyboard() // a chip, not typing; the search field has focus though, and its keyboard takes the first Back as it always did
+        launch(); tap("open_search"); waitFor("search_text"); tap("search_kind_expense") // a chip, not typing; the search field has focus though, and its keyboard (if it is up) takes the first Back as it always did
         waitFor("search_results")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         val first = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)[0]
         first.performTouchInput { longClick() }
         waitFor("search_selection_clear"); waitFor("bulk_bar"); compose.waitForIdle(); SystemClock.sleep(500)
-        backKey(); gone("search_selection_clear"); assertTrue(has("search_results"), "Back cleared the selection and stayed in Search")
+        // Android 11 and later say whether the keyboard is up, so one Back is exactly one step; before that a Back that the keyboard took shows as "nothing happened" and the next one is the screen's
+        hideKeyboard()
+        backKey()
+        if (android.os.Build.VERSION.SDK_INT < 30 && has("search_selection_clear")) { SystemClock.sleep(500); backKey() }
+        gone("search_selection_clear"); assertTrue(has("search_results"), "Back cleared the selection and stayed in Search")
         if (android.os.Build.VERSION.SDK_INT < 30) return // the keyboard of the focused search field cannot be told apart before Android 11, so the panel and the last Back are checked from Android 11 (the selection's Back above ran on both)
         tap("search_filters_button"); waitFor("filters_apply")
         backKey(); gone("filters_apply"); assertTrue(has("search_results"), "Back closed the panel and stayed in Search")
