@@ -122,6 +122,9 @@ fun BoxScope.HeroGlow(color: Color) {
     }
 }
 
+/** How tall the fade above the bottom bar is: the same as the bottom padding of the lists that scroll under it (UI S7). */
+private val SCROLL_EDGE = 24.dp
+
 /** Where the glass indicator of the bottom bar last rested, so a bar that appears on another screen starts there and glides on, as one bar would. */
 private object TabMemory { var index = 0f }
 
@@ -151,9 +154,19 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
     val glassTop = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
     val glassBottom = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
     val rim = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+    // UI S7 (U-22): the content slides under a soft fade above the bar instead of being cut off hard at its edge. The fade is the screen's own colour, drawn once (no blur), as tall as the lists' bottom padding, so the last
+    // row is clear of it at rest. A person who asked the phone for less transparency gets an opaque bar with a visible edge and no fade.
+    val opaque = systemReduceTransparency()
+    val screen = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().drawBehind {
+        if (!opaque) {
+            val h = SCROLL_EDGE.toPx()
+            drawRect(Brush.verticalGradient(listOf(Color.Transparent, screen.copy(alpha = 0.92f)), startY = -h, endY = 0f), topLeft = androidx.compose.ui.geometry.Offset(0f, -h), size = androidx.compose.ui.geometry.Size(size.width, h))
+        }
+    }.testTag(if (opaque) "bar_opaque" else "bar_glass")) {
+    androidx.compose.material3.Surface(color = if (opaque) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            androidx.compose.material3.HorizontalDivider(color = if (opaque) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
             CappedFontScale(BAR_MAX_FONT_SCALE) {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp)) {
@@ -183,6 +196,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
             }
             }
         }
+    }
     }
 }
 

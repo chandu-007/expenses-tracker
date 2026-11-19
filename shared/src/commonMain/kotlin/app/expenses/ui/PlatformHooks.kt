@@ -59,6 +59,14 @@ expect fun rememberOpenSecuritySettings(): () -> Unit
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
 
+/**
+ * The system Back gesture with its progress (UI S7, U-20): like [PlatformBackHandler], but while a finger-following back gesture runs [onProgress] gets how far it has gone (0 to 1) and whether it began at the left edge,
+ * [onCancel] runs if the person lets go without going back, and [onBack] when the back is committed. A Back that is all at once (the Back button, the three-button bar) is just [onBack]. Uses only what Compose and
+ * the platform already have (Android: the activity library's predictive back handler; iPhone: Compose's back handler): no new library.
+ */
+@Composable
+expect fun PlatformPredictiveBackHandler(enabled: Boolean, onProgress: (progress: Float, fromLeft: Boolean) -> Unit, onCancel: () -> Unit, onBack: () -> Unit)
+
 /** The dialog the guided tour draws in: full screen, with no dimming of its own (the tour paints its own scrim). */
 @Composable
 expect fun GuideDialog(onDismiss: () -> Unit, content: @Composable () -> Unit)

@@ -203,6 +203,22 @@ actual fun rememberOpenSecuritySettings(): () -> Unit {
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)
 
 @Composable
+actual fun PlatformPredictiveBackHandler(enabled: Boolean, onProgress: (progress: Float, fromLeft: Boolean) -> Unit, onCancel: () -> Unit, onBack: () -> Unit) {
+    val progress by rememberUpdatedState(onProgress)
+    val cancelled by rememberUpdatedState(onCancel)
+    val back by rememberUpdatedState(onBack)
+    androidx.activity.compose.PredictiveBackHandler(enabled) { events: kotlinx.coroutines.flow.Flow<androidx.activity.BackEventCompat> ->
+        try {
+            events.collect { progress(it.progress, it.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT) }
+            back()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            cancelled()
+            throw e
+        }
+    }
+}
+
+@Composable
 actual fun GuideDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false)) {
         // the dialog window dims what is behind it by itself; the tour does its own dimming, with a bright window around the control it points at

@@ -186,6 +186,23 @@ actual fun rememberOpenSecuritySettings(): () -> Unit = {
 @Composable
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.compose.ui.backhandler.BackHandler(enabled, onBack)
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+actual fun PlatformPredictiveBackHandler(enabled: Boolean, onProgress: (progress: Float, fromLeft: Boolean) -> Unit, onCancel: () -> Unit, onBack: () -> Unit) {
+    val progress = androidx.compose.runtime.rememberUpdatedState(onProgress)
+    val cancelled = androidx.compose.runtime.rememberUpdatedState(onCancel)
+    val back = androidx.compose.runtime.rememberUpdatedState(onBack)
+    androidx.compose.ui.backhandler.PredictiveBackHandler(enabled) { events: kotlinx.coroutines.flow.Flow<androidx.compose.ui.backhandler.BackEventCompat> ->
+        try {
+            events.collect { progress.value(it.progress, it.swipeEdge == androidx.compose.ui.backhandler.BackEventCompat.EDGE_LEFT) }
+            back.value()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            cancelled.value()
+            throw e
+        }
+    }
+}
+
 @Composable
 actual fun GuideDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, usePlatformInsets = false, scrimColor = Color.Transparent)) { content() }
