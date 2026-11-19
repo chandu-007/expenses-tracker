@@ -108,7 +108,7 @@ class UiS7BackTest {
     @Test
     fun backInSearchClearsASelectionFirstThenClosesAnOpenFiltersPanelThenLeavesSearch() {
         expense("a", "Alpha"); expense("b", "Bravo")
-        launch(); tap("open_search"); waitFor("search_text"); node("search_text").performTextInput("a"); hideKeyboard()
+        launch(); tap("open_search"); waitFor("search_text"); tap("search_kind_expense") // a chip, not typing: no keyboard to take the first Back
         waitFor("search_results")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         val first = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)[0]
