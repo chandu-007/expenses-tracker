@@ -300,3 +300,12 @@ For anything that fails: the screen, what you tapped, what you expected, and the
 - [ ] Verify it yourself: is the "permissions we do not have" list correct for the build you installed (Play build: no text-message permission)? Airplane-mode steps: the app works with the phone offline.
 - [ ] Your data: "Last backup: ..." reads right after a real backup and after a restore.
 - [ ] Text size 200% and 360 dp: the welcome, tips, review cards, Verify page and the Pause/milestone rows stay readable with no word squeezed to a column.
+
+## UI S7 (Slice 120): what only a phone can show
+- [ ] **Haptics, the whole table, on the owner's iPhone and one low-end Android with a weak motor:** a tab or tile press (very light), a save and a paid bill (the same confirm), Undo (soft, neutral: not the failure buzz it used to be), the one warning when an entry pushes a budget over its limit, a swipe row reaching its commit point and going back, scrubbing a chart (a tick per bar, not a hum), press and hold on a row and on a drag handle, a number-pad key. Does each feel like what it means? Haptics off under Appearance: silence everywhere.
+- [ ] The digit roll: add an expense with the month figure in view; only the digits that changed move, from below. Is it calm (about 0.4 s at the default speed) or showy? Hide amounts on: nothing moves. Reduce motion: a short cross-fade.
+- [ ] Back gesture (Android 14 or later; iPhone edge swipe): the screen follows the finger, springs back when let go, leaves from where it is when committed. Gesture navigation vs three buttons. **iPhone: does the edge swipe report progress at all?** (not verified: unknown whether Compose forwards it here).
+- [ ] Simplify for this phone: on a 2 to 3 GB phone is it chosen by itself (Appearance shows "Simplified for this phone")? Does Quick motion, no glow, no draw-in feel better or merely plainer? "Always" on a flagship, to see the difference.
+- [ ] The bar's soft edge: scrolling Home, Search and Reports under it, light and dark. High contrast on (Android) / Reduce Transparency on (iPhone): the bar is opaque with a visible edge.
+- [ ] First frame: a cold start (swipe the app away, open it): is the frame of Home there at once, and does the real Home replace it without a jump (the accent colour may differ for a person who chose another accent or Dark: the first frame is neutral)?
+- [ ] TalkBack / VoiceOver: nothing is announced from the first frame; the odometer figure reads as the final amount; Back with the gesture still works.
