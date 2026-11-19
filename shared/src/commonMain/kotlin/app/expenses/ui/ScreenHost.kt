@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import kotlin.concurrent.Volatile
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
@@ -55,6 +56,14 @@ class BackPreview {
 
 val LocalBackPreview = compositionLocalOf<BackPreview?> { null }
 
+/** What the back gesture did, for the tests: the furthest it got, and how many times it was committed or let go of. Nothing in the app reads it. */
+object BackProbe {
+    @Volatile var maxProgress = 0f
+    @Volatile var committed = 0
+    @Volatile var cancelled = 0
+    fun reset() { maxProgress = 0f; committed = 0; cancelled = 0 }
+}
+
 /** The key of the screen this part of the composition belongs to (set by [ScreenHost] around each screen); [Int.MIN_VALUE] outside one. */
 val LocalScreenKey = compositionLocalOf { Int.MIN_VALUE }
 
@@ -72,9 +81,9 @@ fun ScreenBackHandler(enabled: Boolean = true, onBack: () -> Unit) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     PlatformPredictiveBackHandler(
         enabled = on,
-        onProgress = { p, fromLeft -> preview.key = key; preview.fromLeft = fromLeft; preview.progress = p },
-        onCancel = { scope.launch { androidx.compose.animation.core.animate(preview.progress, 0f, animationSpec = tween(Motion.FEEDBACK * 2)) { v, _ -> preview.progress = v } } },
-        onBack = onBack,
+        onProgress = { p, fromLeft -> preview.key = key; preview.fromLeft = fromLeft; preview.progress = p; if (p > BackProbe.maxProgress) BackProbe.maxProgress = p },
+        onCancel = { BackProbe.cancelled++; scope.launch { androidx.compose.animation.core.animate(preview.progress, 0f, animationSpec = tween(Motion.FEEDBACK * 2)) { v, _ -> preview.progress = v } } },
+        onBack = { BackProbe.committed++; onBack() },
     )
 }
 
