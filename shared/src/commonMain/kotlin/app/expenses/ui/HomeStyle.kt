@@ -192,7 +192,7 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) Motion.REDUCED_MS else Motion.TAB), label = "tab tint",
     )
     Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Tab; this.selected = selected },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box {
@@ -211,7 +211,7 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
 @Composable
 private fun AddItem(onClick: () -> Unit, modifier: Modifier) {
     Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Button },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Button },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
@@ -261,13 +261,19 @@ fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
     Flow3.MOVE -> amount
 }
 
-/** Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. */
-fun Modifier.pressScale(onClick: () -> Unit, haptic: androidx.compose.ui.hapticfeedback.HapticFeedbackType? = null): Modifier = composed {
+/**
+ * Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. With [haptic] (UI S7: [Feel.PRESS] for the tabs and
+ * tiles) it gives that feel at the moment of touch-down, not when the finger lifts; a touch that turns into a scroll gives none, because the press is only reported once the touch is not a scroll.
+ */
+fun Modifier.pressScale(onClick: () -> Unit, haptic: Feel? = null): Modifier = composed {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, Motion.press(), label = "press")
-    val feedback = androidx.compose.ui.platform.LocalHapticFeedback.current
-    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { haptic?.let { feedback.performHapticFeedback(it) }; onClick() }
+    val feel by androidx.compose.runtime.rememberUpdatedState(rememberFeel())
+    if (haptic != null) LaunchedEffect(source, haptic) {
+        source.interactions.collect { if (it is androidx.compose.foundation.interaction.PressInteraction.Press) feel(haptic) }
+    }
+    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
 }
 
 /** A short rise-and-fade for the More page. */

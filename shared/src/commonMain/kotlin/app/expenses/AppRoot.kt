@@ -319,17 +319,26 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
 
             val tipsSeen by viewModel.tipsSeen.collectAsStateWithLifecycle(context = MAIN)
             val tourForTips by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
+            // UI S7: the app simplifies itself on a weak phone (a low-RAM phone, or one that has drawn slowly for long enough); the person's choice under Appearance wins (see Simplify)
+            val lowRamPhone = app.expenses.ui.rememberLowRamDevice()
+            var slowFrames by rememberSaveable { mutableStateOf(false) }
+            app.expenses.ui.SlowFrameWatch { slowFrames = true }
             if (locked) LockedScreen(lockMessage) { lock.requestUnlock() } else when (val s = state) {
                 UiState.Opening -> OpeningScreen()
                 is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(
+                is UiState.Ready -> {
+                val simplified = app.expenses.core.domain.Simplify.active(app.expenses.core.domain.Simplify.mode(s.simplifyMode), lowRamPhone, slowFrames)
+                androidx.compose.runtime.CompositionLocalProvider(
                     app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
+                    app.expenses.ui.LocalHapticsEnabled provides s.hapticsOn,
+                    app.expenses.ui.LocalSimplified provides simplified,
                     app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
                     app.expenses.ui.LocalSpendingRed provides s.showSpendingRed,
                     app.expenses.ui.LocalTips provides androidx.compose.runtime.remember(tipsSeen, tourForTips == null && !s.showWelcome) { app.expenses.ui.TipsContext(tipsSeen, tourForTips == null && !s.showWelcome, viewModel::markTipSeen) },
                     app.expenses.ui.LocalCategoryLooks provides androidx.compose.runtime.remember(s.categories) { app.expenses.ui.CategoryLooks.of(s.categories) },
                 ) {
-                androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(s.motionSpeed) }
+                // simplified: Quick motion (Reduce motion, "off", stays what it is)
+                androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(if (simplified && s.motionSpeed != "off") "quick" else s.motionSpeed) }
                 // the tour: the app opens each part for real, and a layer on top explains it
                 val guide by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
                 var tourIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -716,7 +725,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 9 -> {
                         BackHandler { appearing = false }
-                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed, onShowTipsAgain = viewModel::resetTips)
+                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed, onShowTipsAgain = viewModel::resetTips, hapticsOn = s.hapticsOn, onHaptics = viewModel::setHaptics, simplifyMode = s.simplifyMode, onSimplifyMode = viewModel::setSimplifyMode, simplifyLine = app.expenses.core.domain.Simplify.line(app.expenses.core.domain.Simplify.mode(s.simplifyMode), lowRamPhone, slowFrames))
                     }
                     k == 10 -> {
                         BackHandler { customisingHome = false }
@@ -1007,6 +1016,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )
                 } }
+                }
                 }
                 }
                 }

@@ -174,10 +174,12 @@ private fun NetworkMark(n: CardNetwork, accent: Color, ink: Color, compact: Bool
 @Composable
 fun WalletStack(accounts: List<AccountRowUi>, onOpen: (AccountRowUi) -> Unit, modifier: Modifier = Modifier) {
     val reduce = LocalReduceMotion.current
+    // simplified for a weak phone (UI S7): the cards move apart and together at once, with no spring
+    val simplified = LocalSimplified.current
     var expanded by rememberSaveable { mutableStateOf(accounts.size <= 1) }
     val open = remember { androidx.compose.animation.core.Animatable(if (expanded) 1f else 0f) }
-    androidx.compose.runtime.LaunchedEffect(expanded, reduce) {
-        if (reduce) open.snapTo(if (expanded) 1f else 0f) else open.animateTo(if (expanded) 1f else 0f, Motion.spring(dampingRatio = 0.78f, stiffness = 300f))
+    androidx.compose.runtime.LaunchedEffect(expanded, reduce, simplified) {
+        if (reduce || simplified) open.snapTo(if (expanded) 1f else 0f) else open.animateTo(if (expanded) 1f else 0f, Motion.spring(dampingRatio = 0.78f, stiffness = 300f))
     }
     BackHandler(enabled = expanded && accounts.size > 1) { expanded = false }
     val cardH = 168.dp

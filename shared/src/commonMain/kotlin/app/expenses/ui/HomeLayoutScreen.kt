@@ -68,8 +68,8 @@ fun HomeLayoutScreen(layout: HomeLayout, onChange: (HomeLayout) -> Unit, onBack:
                             var last = 0
                             fun steps(): Int { val h = rowHeights[section] ?: return 0; return (dragDy / h).let { if (it < 0) -kotlin.math.floor(-it + 0.5f).toInt() else kotlin.math.floor(it + 0.5f).toInt() }.coerceIn(-i, layout.order.size - 1 - i) }
                             detectDragGesturesAfterLongPress(
-                                onDragStart = { dragging = section; dragDy = 0f; last = 0; feel(Feel.SELECT) },
-                                onDrag = { change, amount -> change.consume(); dragDy += amount.y; val t = steps(); if (t != last) { last = t; feel(Feel.TICK) } },
+                                onDragStart = { dragging = section; dragDy = 0f; last = 0; feel(Feel.LONG_PRESS) },
+                                onDrag = { change, amount -> change.consume(); dragDy += amount.y; val t = steps(); if (t != last) { last = t; feel(Feel.STEP) } },
                                 onDragEnd = { val n = steps(); dragging = null; dragDy = 0f; if (n != 0) { var l = layout; repeat(kotlin.math.abs(n)) { l = l.move(section, if (n < 0) -1 else 1) }; onChange(l) } },
                                 onDragCancel = { dragging = null; dragDy = 0f },
                             )

@@ -35,6 +35,24 @@ object Odometer {
         return Roll(cells, up = signedValueGrew(o, n))
     }
 
+    /**
+     * The roll between two texts of the SAME length that are not just an amount (a tile's "₹46,733 left", "₹23,000 safe to spend until 30 Nov"): every place where both texts hold a digit and the digits differ rolls;
+     * anything else that differs (or a different length) changes at once. The direction is that of the first digit that changed. Null when nothing rolls.
+     */
+    fun sameLength(old: String, new: String): Roll? {
+        if (old == new || old.length != new.length) return null
+        val cells = ArrayList<Cell>()
+        var up = true
+        for (i in new.indices) {
+            val o = old[i]; val n = new[i]
+            if (o != n && o.isDigit() && n.isDigit()) { if (cells.isEmpty()) up = n > o; cells += Cell(i, o, n) }
+        }
+        // digits that turn into other characters or back (a masked figure) are not a roll
+        val otherChange = new.indices.any { old[it] != new[it] && !(old[it].isDigit() && new[it].isDigit()) }
+        if (cells.isEmpty() || otherChange) return null
+        return Roll(cells.reversed(), up)
+    }
+
     /** Whether the signed whole-number value of [n] is larger than that of [o]: by length, then digit by digit, with the minus sign turning it round. */
     private fun signedValueGrew(o: MoneyParts, n: MoneyParts): Boolean {
         val od = o.body.filter { it.isDigit() }.trimStart('0')

@@ -57,4 +57,20 @@ class OdometerTest {
         // from zero to money out: fell; from money out to zero: grew
         assertFalse(Odometer.between("₹0", "-₹1,000")!!.up)
     }
+
+    @Test
+    fun aSentenceOfTheSameLengthRollsItsChangedDigitsAndNothingElse() {
+        val r = Odometer.sameLength("₹46,733 left", "₹46,640 left")!!
+        assertEquals(setOf(Odometer.Cell(4, '7', '6'), Odometer.Cell(5, '3', '4'), Odometer.Cell(6, '3', '0')), r.cells.toSet())
+        assertFalse(r.up, "the first digit to change went from 7 to 6")
+        assertTrue(Odometer.sameLength("₹1,000 left", "₹1,010 left")!!.up)
+    }
+
+    @Test
+    fun aSentenceThatChangesLengthOrWordsOrIsMaskedRollsNothing() {
+        assertNull(Odometer.sameLength("₹999 left", "₹1,000 left"))
+        assertNull(Odometer.sameLength("₹46,733 left", "₹46,733 left"))
+        assertNull(Odometer.sameLength("₹46,733 left", "₹46,740 over"))
+        assertNull(Odometer.sameLength("₹46,733 left", "₹•••••• left"))
+    }
 }

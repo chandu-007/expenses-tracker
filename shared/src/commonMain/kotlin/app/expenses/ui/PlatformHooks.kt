@@ -7,9 +7,9 @@ import androidx.compose.runtime.Composable
  * A URI is a String everywhere in shared code (Android: a content Uri's toString(); iOS: a file URL's absoluteString).
  */
 
-/** A function that performs a [Feel]: a crisp confirm on saving (and for a paid bill), a soft neutral tap on Undo (it reverses something; it is not a failure), the one warning when a budget limit is crossed, a tick for the little things. */
+/** The platform's pattern for each [Feel] (Android: `View.performHapticFeedback`, no permission; iPhone: UIKit's feedback generators). Screens use [rememberFeel], which adds the Haptics switch and the scrub throttle. */
 @Composable
-expect fun rememberFeel(): (Feel) -> Unit
+expect fun rememberPlatformFeel(): (Feel) -> Unit
 
 /** Whether the phone itself has animations turned off (Android: animator scale 0; iPhone: Reduce Motion). */
 @Composable

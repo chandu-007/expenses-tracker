@@ -67,13 +67,12 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
- * The month total that rolls from its old value to the new one. What is painted counts through the in-between amounts, but the semantics (what tests and
- * screen readers read) carry the final [finalText] at all times. Nothing rolls on first composition, under Reduce motion, or while amounts are hidden.
+ * The month total, whose digits roll when it changes (UI S7: only the digits that changed, see [OdometerText]; it used to count through every amount in between). What is painted is the drawn figure; the semantics
+ * (what tests and screen readers read) carry the exact [finalText] at all times. Nothing rolls on first composition, under Reduce motion (a short cross-fade), while amounts are hidden, or on a phone simplified for weak hardware.
  */
 @Composable
 fun RollingAmount(
     finalText: String,
-    minor: Long,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     style: TextStyle = NumberStyle.Hero,
@@ -81,20 +80,13 @@ fun RollingAmount(
     /** Draw whole units ("₹31,822") while the semantics keep the exact [finalText] ("₹31,822.40"): what a screen reader says and what tests read is never rounded. */
     whole: Boolean = false,
 ) {
-    val reduce = LocalReduceMotion.current
-    val roll = remember { Animatable(minor.toFloat()) }
-    LaunchedEffect(minor) {
-        if (reduce) roll.snapTo(minor.toFloat())
-        else roll.animateTo(minor.toFloat(), tween(Motion.EMPHASIZED, easing = Motion.EaseOut))
-    }
-    val shown = roll.value.roundToLong().takeIf { roll.value != minor.toFloat() }
-        ?.let { Money(it, BaseCurrency.current).formatted() }.let { rolled -> (rolled ?: finalText).let { if (whole) it.wholeAmounts() else it } }
     val announced = privately(finalText)
     // the sign at 60% and the paise quiet (UI S1); the semantics keep the exact text
     MoneyText(
-        shown,
+        if (whole) finalText.wholeAmounts() else finalText,
         modifier = modifier.clearAndSetSemantics { text = AnnotatedString(announced) },
         color = color, style = if (fontWeight != null) style.copy(fontWeight = fontWeight) else style,
+        rolling = true,
     )
 }
 
@@ -112,9 +104,11 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
     val ghost = spark.ghost.takeIf { it.size == n }.orEmpty()
     // saved with the list item: scrolled off and back, the line is already drawn instead of drawing in again
     var played by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    val reveal = remember { Animatable(if (reduce || played) 1f else 0f) }
+    // simplified for a weak phone (UI S7): the line is simply there, it does not draw in
+    val still = reduce || LocalSimplified.current
+    val reveal = remember { Animatable(if (still || played) 1f else 0f) }
     LaunchedEffect(Unit) {
-        if (reduce) reveal.snapTo(1f) else if (!played) reveal.animateTo(1f, tween(Motion.EMPHASIZED, easing = Motion.EaseOut))
+        if (still) reveal.snapTo(1f) else if (!played) reveal.animateTo(1f, tween(Motion.EMPHASIZED, easing = Motion.EaseOut))
         played = true
     }
 
@@ -140,7 +134,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
             contentDescription = description
             customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction("Show as table") { showTable = true; true })
         }
-            .chartScrub(n, onScrub = { i -> active = true; touched = i; shownIndex = i; feel(Feel.TICK) }, onEnd = { active = false }, indexAt = ::pointIndex)
+            .chartScrub(n, onScrub = { i -> active = true; touched = i; shownIndex = i; feel(Feel.STEP) }, onEnd = { active = false }, indexAt = ::pointIndex)
             .pointerInput(n) { detectTapGestures(onLongPress = { showTable = true }) },
     ) {
         val maxMinor = maxOf(days.maxOfOrNull { it.minor } ?: 1L, ghost.maxOrNull() ?: 0L).coerceAtLeast(1L).toFloat()
@@ -295,7 +289,7 @@ fun LimitCrossedFeel(over: Boolean) {
     val feel = rememberFeel()
     var was by remember { mutableStateOf(over) }
     LaunchedEffect(over) {
-        if (over && !was) feel(Feel.LIMIT)
+        if (over && !was) feel(Feel.WARN)
         was = over
     }
 }

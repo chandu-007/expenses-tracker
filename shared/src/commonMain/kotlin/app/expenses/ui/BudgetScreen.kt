@@ -115,7 +115,8 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
                 val exact = privately(overall.note + " of " + overall.limit)
                 // one node says the exact sentence; what is drawn is the whole-unit figure over "of the limit" (both lines masked by Text)
                 Column(Modifier.testTag("budget_overall_note").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exact) }) {
-                    Text(
+                    // the digits of what is left roll when it changes (UI S7)
+                    OdometerText(
                         overall.note.wholeAmounts(), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     )

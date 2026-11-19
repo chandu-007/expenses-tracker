@@ -43,7 +43,7 @@ import app.expenses.core.domain.ThemeMode
 /** Light or dark, an accent colour, and how tight the lists are. Changes apply at once. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}, onShowTipsAgain: () -> Unit = {}) {
+fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}, onShowTipsAgain: () -> Unit = {}, hapticsOn: Boolean = true, onHaptics: (Boolean) -> Unit = {}, simplifyMode: String = "auto", onSimplifyMode: (String) -> Unit = {}, simplifyLine: String = "") {
     Scaffold(topBar = { ScreenHeader("Appearance", onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Theme", style = MaterialTheme.typography.labelMedium)
@@ -63,6 +63,18 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             SegmentedChoice(Density.entries.map { Segment(it, it.label, "density_${it.name}") }, current.density, { onChange(current.copy(density = it)) })
             Text("Motion", style = MaterialTheme.typography.labelMedium)
             SegmentedChoice(listOf("off" to "Off", "quick" to "Quick", "relaxed" to "Relaxed", "slow" to "Slow").map { (key, label) -> Segment(key, label, "motion_$key") }, motionSpeed, onMotionSpeed)
+            // UI S7 (D15): the app simplifies itself on a weak phone; the person can force it on or off, and the line says what is happening
+            Text("Simplify for this phone", style = MaterialTheme.typography.labelMedium)
+            SegmentedChoice(listOf("auto" to "Automatic", "on" to "Always", "off" to "Never").map { (key, label) -> Segment(key, label, "simplify_$key") }, simplifyMode, onSimplifyMode)
+            if (simplifyLine.isNotEmpty()) Text(simplifyLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("simplify_line"))
+            // UI S7 (D14): one switch for every haptic in the app
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = hapticsOn, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onHaptics).testTag("haptics_row"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Haptics", style = MaterialTheme.typography.bodyLarge)
+                    Text("A small tap for presses, saves and swipes. Off silences every one of them. The phone's own touch-feedback setting applies as well.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.Switch(checked = hapticsOn, onCheckedChange = null, modifier = Modifier.testTag("haptics_switch"))
+            }
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = showSpendingRed, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onShowSpendingRed).testTag("spend_red_row"), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Show spending in red", style = MaterialTheme.typography.bodyLarge)

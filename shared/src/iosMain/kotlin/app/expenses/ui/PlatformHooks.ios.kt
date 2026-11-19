@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import platform.Foundation.NSProcessInfo
@@ -32,37 +30,52 @@ import platform.UniformTypeIdentifiers.UTTypeFolder
 import platform.UniformTypeIdentifiers.UTTypeItem
 import platform.darwin.NSObject
 
-// UIKit's feedback generators for the two meanings Compose's HapticFeedbackType has no good iOS pattern for: Undo (a soft, neutral tap: it reverses something, it is not an error) and a limit crossed (the system's warning).
-// Made once and kept, as Compose keeps its own.
+// UIKit's feedback generators, one per kind, made once and kept (UI S7): selection for a press, a step and a key; impact soft for Undo, light for a swipe's threshold and medium for a press and hold; the
+// notification generator for a finished thing (success) and for the one warning. After each use the generator is prepared again, so the next tap has no first-tap delay.
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 private object UiKitFeel {
+    private val selection by lazy { platform.UIKit.UISelectionFeedbackGenerator() }
     private val soft by lazy { platform.UIKit.UIImpactFeedbackGenerator(platform.UIKit.UIImpactFeedbackStyle.UIImpactFeedbackStyleSoft) }
+    private val light by lazy { platform.UIKit.UIImpactFeedbackGenerator(platform.UIKit.UIImpactFeedbackStyle.UIImpactFeedbackStyleLight) }
+    private val medium by lazy { platform.UIKit.UIImpactFeedbackGenerator(platform.UIKit.UIImpactFeedbackStyle.UIImpactFeedbackStyleMedium) }
     private val notices by lazy { platform.UIKit.UINotificationFeedbackGenerator() }
-    fun undo() = soft.impactOccurred()
-    fun warning() = notices.notificationOccurred(platform.UIKit.UINotificationFeedbackType.UINotificationFeedbackTypeWarning)
+    fun selected() { selection.selectionChanged(); selection.prepare() }
+    fun undo() { soft.impactOccurred(); soft.prepare() }
+    fun threshold() { light.impactOccurred(); light.prepare() }
+    fun longPress() { medium.impactOccurred(); medium.prepare() }
+    fun success() { notices.notificationOccurred(platform.UIKit.UINotificationFeedbackType.UINotificationFeedbackTypeSuccess); notices.prepare() }
+    fun warning() { notices.notificationOccurred(platform.UIKit.UINotificationFeedbackType.UINotificationFeedbackTypeWarning); notices.prepare() }
 }
 
 @Composable
-actual fun rememberFeel(): (Feel) -> Unit {
-    val haptic = LocalHapticFeedback.current
-    return remember(haptic) {
-        { feel ->
-            when (feel) {
-                Feel.UNDO -> UiKitFeel.undo()
-                Feel.LIMIT -> UiKitFeel.warning()
-                Feel.SAVE, Feel.PAID -> haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                Feel.TICK -> haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                Feel.SELECT -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                Feel.THRESHOLD, Feel.THRESHOLD_OFF -> haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            }
+actual fun rememberPlatformFeel(): (Feel) -> Unit = remember {
+    val play: (Feel) -> Unit = { feel ->
+        when (feel) {
+            Feel.PRESS, Feel.STEP, Feel.KEY -> UiKitFeel.selected()
+            Feel.SAVE, Feel.PAID -> UiKitFeel.success()
+            Feel.UNDO -> UiKitFeel.undo()
+            Feel.WARN -> UiKitFeel.warning()
+            Feel.THRESHOLD, Feel.THRESHOLD_OFF -> UiKitFeel.threshold()
+            Feel.LONG_PRESS -> UiKitFeel.longPress()
         }
     }
+    play
 }
 
 @Composable
 actual fun systemAnimationsOff(): Boolean = remember { UIAccessibilityIsReduceMotionEnabled() }
 
 actual val supportsBlur: Boolean = true
+
+@Composable
+actual fun rememberLowRamDevice(): Boolean = remember { platform.Foundation.NSProcessInfo.processInfo.physicalMemory <= 3_300_000_000UL }
+
+/** The iPhone's frame times are not watched: it has no cheap equivalent of Android's frame metrics, and a phone that is slow on its own is caught by [rememberLowRamDevice]. */
+@Composable
+actual fun SlowFrameWatch(onSlow: () -> Unit) { }
+
+@Composable
+actual fun systemReduceTransparency(): Boolean = remember { platform.UIKit.UIAccessibilityIsReduceTransparencyEnabled() }
 
 @Composable
 actual fun rememberKeyboardOpen(): Boolean = WindowInsets.ime.getBottom(LocalDensity.current) > 0

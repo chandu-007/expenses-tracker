@@ -95,9 +95,16 @@ object Motion {
 /** True when the person asked for less motion (the switch under Appearance) or the phone's animations are off (Developer options, or Remove animations). */
 val LocalReduceMotion = compositionLocalOf { false }
 
-/** The few moments the app answers with a touch. Each is a different feel, so a person learns what happened without looking. */
-/** [THRESHOLD] is a swipe crossing the point where it will act (UI S3), [THRESHOLD_OFF] crossing back before letting go. */
-enum class Feel { SAVE, UNDO, LIMIT, PAID, TICK, SELECT, THRESHOLD, THRESHOLD_OFF }
+/**
+ * The app's one haptic vocabulary (UI S7, owner decision D14): each [Feel] means one thing and is played the same everywhere, so a person learns what happened without looking. What each is on a phone is in
+ * `hapticConstant` (Android) and `rememberPlatformFeel` (iPhone); the Haptics switch under Appearance silences all of them ([LocalHapticsEnabled]). Never played for typing, scrolling, rolling digits, widgets.
+ *
+ * - [PRESS]: a tab or tile touched (very light, on touch-down). [SAVE] and [PAID]: a thing finished (an entry saved, a bill paid, a text added, all reviewed, a backup made): once per action.
+ * - [UNDO]: Undo tapped (soft and neutral: it reverses something, it is not a failure). [WARN]: a budget limit crossed because of an entry just made (the one warning).
+ * - [THRESHOLD] and [THRESHOLD_OFF]: a swipe crossing the point where it will act, and crossing back before letting go. [STEP]: the finger moving to the next bar or day of a chart (at most one per 40 ms).
+ * - [LONG_PRESS]: a press and hold that starts choosing or dragging. [KEY]: a key of the app's own number pad.
+ */
+enum class Feel { PRESS, SAVE, PAID, UNDO, WARN, THRESHOLD, THRESHOLD_OFF, STEP, LONG_PRESS, KEY }
 
 // ---- shared-element ("container transform") transitions ----
 
