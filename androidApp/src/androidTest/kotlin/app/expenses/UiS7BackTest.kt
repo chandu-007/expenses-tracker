@@ -50,13 +50,24 @@ class UiS7BackTest {
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
-    private fun gone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
+    private fun gone(tag: String) { try { compose.waitUntil(10_000) { !has(tag) } } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+        val tags = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.TestTag), useUnmergedTree = true).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag] }
+        throw AssertionError("$tag is still there; the screen has: ${tags.take(40)}", e)
+    } }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
     private fun hold(tag: String) { waitFor(tag); node(tag).performTouchInput { longClick() } }
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
     private fun shell(cmd: String) { android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).use { it.readBytes() } }
     /** Back as the Back key: through the system, which is what the button and the three-button bar send. */
+    /** The system keyboard takes the first Back (it closes itself), as it always did: so the tests that type close it first. */
+    private fun hideKeyboard() {
+        scenario!!.onActivity { a ->
+            if (android.os.Build.VERSION.SDK_INT >= 30) a.window.decorView.windowInsetsController?.hide(android.view.WindowInsets.Type.ime())
+            else (a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(a.window.decorView.windowToken, 0)
+        }
+        SystemClock.sleep(600)
+    }
     private fun backKey() { shell("input keyevent KEYCODE_BACK"); SystemClock.sleep(300) }
     /** Back as the activity's dispatcher gets it. */
     private fun backDispatch() { scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }; SystemClock.sleep(300) }
@@ -68,7 +79,7 @@ class UiS7BackTest {
     @Test
     fun backFromTheAddFormWithTypedInputClosesItAndSavesNothing_byKeyAndByDispatcher() {
         for (press in listOf(::backKey, ::backDispatch)) {
-            launch(); tap("add"); waitFor("amount"); node("amount").performTextInput("777")
+            launch(); tap("add"); waitFor("amount"); node("amount").performTextInput("777"); hideKeyboard()
             press(); gone("amount"); waitFor("add")
             assertEquals(0, entries().size, "Back from the add form saved nothing")
         }
@@ -98,7 +109,7 @@ class UiS7BackTest {
     @Test
     fun backInSearchClearsASelectionFirstThenClosesAnOpenFiltersPanelThenLeavesSearch() {
         expense("a", "Alpha"); expense("b", "Bravo")
-        launch(); tap("open_search"); waitFor("search_text"); node("search_text").performTextInput("a")
+        launch(); tap("open_search"); waitFor("search_text"); node("search_text").performTextInput("a"); hideKeyboard()
         waitFor("search_results")
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         val first = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("a result") { n -> n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("result_") == true }, useUnmergedTree = true)[0]

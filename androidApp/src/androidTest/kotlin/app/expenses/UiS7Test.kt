@@ -106,7 +106,10 @@ class UiS7DeviceTest {
     }
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { has(tag) }
-    private fun gone(tag: String) = compose.waitUntil(10_000) { !has(tag) }
+    private fun gone(tag: String) { try { compose.waitUntil(10_000) { !has(tag) } } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+        val tags = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.TestTag), useUnmergedTree = true).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag] }
+        throw AssertionError("$tag is still there; the screen has: ${tags.take(40)}", e)
+    } }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun tap(tag: String) { waitFor(tag); runCatching { node(tag).performScrollTo() }; node(tag).performClick() }
     private fun launch() { compose.waitForIdle(); scenario?.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add") }
@@ -189,7 +192,8 @@ class UiS7DeviceTest {
         BackProbe.reset()
         val m = context.resources.displayMetrics
         swipe(2f, m.heightPixels / 2f, m.widthPixels * 0.7f, m.heightPixels / 2f, 60)
-        gone("appearance_back")
+        Thread.sleep(1_500)
+        assertTrue(!has("appearance_back"), "the gesture did not go back: progress ${BackProbe.maxProgress}, committed ${BackProbe.committed}, cancelled ${BackProbe.cancelled}")
         assertTrue(BackProbe.maxProgress > 0.05f, "the gesture reported its progress (${BackProbe.maxProgress})")
         assertEquals(1, BackProbe.committed)
         // the Back button (all at once) still goes back
@@ -208,7 +212,9 @@ class UiS7OpeningTest {
         compose.setContent { androidx.compose.material3.MaterialTheme { OpeningScreen() } }
         compose.waitForIdle()
         for (tag in listOf("add", "nav_home", "open_search", "open_reports", "more_menu", "month_spend", "bar_glass", "bar_opaque")) compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("Home"), useUnmergedTree = true).assertCountEquals(0)
+        // a screen reader gets the merged tree: the words of the ghost bar are cleared from it
+        compose.onAllNodes(hasText("Home")).assertCountEquals(0)
+        compose.onAllNodes(hasText("Search")).assertCountEquals(0)
         compose.onAllNodes(hasProgressBarRangeInfo(androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate), useUnmergedTree = true).assertCountEquals(0)
     }
 }
