@@ -9,4 +9,5 @@
     <color name="widget_positive">#FF6FD3A0</color>
     <color name="widget_negative">#FFFF8A80</color>
     <color name="widget_undo">#FF4A3A28</color>
+    <color name="widget_ahead">#FFFFB95C</color>
 </resources>

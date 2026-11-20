@@ -771,6 +771,8 @@ sealed interface UiState {
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
         val hideAmounts: Boolean,
+        /** UI S8: "Allow widgets" (App lock screen): off, the widgets, Lock Screen widgets and launcher shortcuts show nothing from the ledger. */
+        val widgetsAllowed: Boolean = true,
         val savedSearches: List<SavedSearchUi>,
         /** The words searched for lately, newest first, to offer again on the search screen. */
         val recentSearches: List<String>,
@@ -1039,6 +1041,17 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** One tap: records the template's expense right away. Templates without an amount are handled by the add screen. */
     fun quickAdd(templateId: String) = withStore { ok ->
         val added = EntryActions(ok).quickAdd(templateId) ?: return@withStore
+        refresh(ok, undo = UndoUi(added.entryId, added.text))
+    }
+
+    /**
+     * A quick entry's launcher shortcut (UI S8, Android): records it like [quickAdd], with its Undo, unless "Allow widgets" is off (the shortcuts follow that switch; one pinned to the home screen
+     * stays there and its tap is refused) or the entry is no longer saved.
+     */
+    fun quickAddFromShortcut(templateId: String) = withStore { ok ->
+        if (!app.expenses.core.domain.WidgetAccess.allowed(ok.templates.setting(app.expenses.core.domain.WidgetAccess.SETTING))) { say("Widgets and shortcuts are off. Turn them on under More, App lock."); return@withStore }
+        val added = EntryActions(ok).quickAdd(templateId)
+        if (added == null) { say("That quick entry is no longer saved."); return@withStore }
         refresh(ok, undo = UndoUi(added.entryId, added.text))
     }
 
@@ -3472,6 +3485,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         refresh(ok)
     }
 
+    /** UI S8: the "Allow widgets" switch (App lock screen). Off: widgets, Lock Screen widgets and launcher shortcuts show nothing from the ledger; see [app.expenses.core.domain.WidgetAccess]. */
+    fun setWidgetsAllowed(allowed: Boolean) = withStore { ok ->
+        ok.templates.putSetting(app.expenses.core.domain.WidgetAccess.SETTING, app.expenses.core.domain.WidgetAccess.value(allowed))
+        refresh(ok)
+    }
+
     // ---- Pause nudges and occasional milestones (UI S6) ----
 
     /** Pauses nudges for [choice], or turns them back on (null). The setting holds the time until which they are paused (see [NudgePause]). */
@@ -4964,6 +4983,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             simplifyMode = app.expenses.core.domain.Simplify.mode(ok.templates.setting(app.expenses.core.domain.Simplify.SETTING)).key,
             smsCapture = ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
+            widgetsAllowed = app.expenses.core.domain.WidgetAccess.allowed(ok.templates.setting(app.expenses.core.domain.WidgetAccess.SETTING)),
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),
             autoExport = autoExportUi(ok),
             tags = ok.store.tagsInUse(TAG_SUGGESTIONS).map { it.first },

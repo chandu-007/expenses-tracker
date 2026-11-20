@@ -64,6 +64,9 @@ fun SecurityScreen(
     onDisable: () -> Unit,
     onTimeout: (LockTimeout) -> Unit,
     onBack: () -> Unit,
+    /** UI S8: the "Allow widgets" switch (GLOBAL I31). */
+    widgetsAllowed: Boolean = true,
+    onWidgetsAllowed: (Boolean) -> Unit = {},
 ) {
     val openSecuritySettings = rememberOpenSecuritySettings()
     val platform = LocalPlatform.current
@@ -113,11 +116,23 @@ fun SecurityScreen(
             }
             Text(
                 "While locked the screens are blank, and this app is hidden from the recent-apps view and screenshots. " +
-                    "The home-screen widget, the quick-settings tile and notifications are not behind the lock: they only add an expense, show a short alert, or (the Mark paid button on a bill notice) mark a bill you are tracking as paid. " +
-                    "While the lock is on the widget keeps the month's total and every other figure hidden (it says so), and tapping its figure opens the app. " +
+                    "The home-screen widgets, the quick-settings tile, the launcher shortcuts and notifications are not behind the lock: they only add an expense, show a short alert, or (the Mark paid button on a bill notice) mark a bill you are tracking as paid. " +
+                    "While the lock is on the widgets keep the month's total, every other figure and the quick entries' amounts hidden (they say so), and tapping a figure opens the app. " +
                     "Your data is always encrypted on the phone, whether or not the lock is on.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // UI S8 (GLOBAL I31): one switch that takes everything of the ledger off the widgets, the Lock Screen widgets and the launcher shortcuts
+            Row(Modifier.fillMaxWidth().testTag("widgets_allowed_row"), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Allow widgets")
+                    Text(
+                        if (widgetsAllowed) "Widgets and shortcuts may show your quick entries, and your spending when you tap their eye."
+                        else "Widgets and shortcuts show nothing from your data; they only offer Add, which opens the app.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("widgets_allowed_line"),
+                    )
+                }
+                Switch(checked = widgetsAllowed, onCheckedChange = onWidgetsAllowed, modifier = Modifier.testTag("widgets_allowed_switch"))
+            }
         }
     }
 }

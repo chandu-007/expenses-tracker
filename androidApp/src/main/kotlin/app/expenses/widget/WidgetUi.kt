@@ -42,6 +42,8 @@ import app.expenses.core.domain.Accent
 import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.DeltaDirection
 import app.expenses.core.domain.WidgetCategoryBar
+import app.expenses.core.domain.PaceLevel
+import app.expenses.core.domain.WidgetBudget
 import app.expenses.core.domain.WidgetDelta
 import app.expenses.core.domain.WidgetHave
 import app.expenses.core.domain.WidgetRecent
@@ -71,6 +73,16 @@ internal object WidgetColors {
     val muted = ColorProvider(R.color.widget_muted)
     val positive = ColorProvider(R.color.widget_positive)
     val negative = ColorProvider(R.color.widget_negative)
+    /** UI S8: the pace word "A little ahead" / "Ahead of pace" (amber, 4.5:1 or better on the card in light and dark). */
+    val ahead = ColorProvider(R.color.widget_ahead)
+}
+
+/** The colour of a pace word: green on pace, amber ahead, red over, muted while the period has only just started. */
+internal fun paceColor(level: PaceLevel): androidx.glance.unit.ColorProvider = when (level) {
+    PaceLevel.EARLY -> WidgetColors.muted
+    PaceLevel.ON_PACE -> WidgetColors.positive
+    PaceLevel.A_LITTLE_AHEAD, PaceLevel.AHEAD -> WidgetColors.ahead
+    PaceLevel.OVER -> WidgetColors.negative
 }
 
 /** The accent as the widget draws it: a pill/bar drawable of that accent's colour and the colour of the text on it, both light and dark. Unknown keys fall back to the app's default (violet). */
@@ -255,13 +267,8 @@ private fun Card(model: WidgetModel, plan: app.expenses.core.domain.WidgetPlan, 
                         Chip(b, GlanceModifier.defaultWeight(), showDetail = (inner - 8 * (shown.size - 1)) / shown.size >= 96f)
                     }
                 }
-                if (plan.showHint) Text("Save a quick entry in the app to see it here", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 8.dp))
-                if (plan.showBudget) ins.budget?.let { b ->
-                    Column(GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
-                        Text(b.text, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1)
-                        Bar(inner, b.permille, over = b.over, height = 6.dp, accent = model.accent)
-                    }
-                }
+                if (plan.showHint && model.hiddenBy != HiddenBy.WIDGETS_OFF) Text("Save a quick entry in the app to see it here", style = TextStyle(color = WidgetColors.muted, fontSize = 12.sp), modifier = GlanceModifier.padding(top = 8.dp))
+                if (plan.showBudget) ins.budget?.let { b -> PaceBar(inner, b, model.accent, words = true) }
                 if (plan.categories > 0) {
                     Section("Where it went")
                     ins.categories.take(plan.categories).forEach { CategoryRow(it, inner, model.accent) }
@@ -334,12 +341,34 @@ private fun Section(title: String) {
     Text(title, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp, fontWeight = FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp))
 }
 
-/** A slim bar [widthDp] wide with [permille] of it filled; the fill is red when [over]. Drawn from two boxes, so its length is true to the width the widget really has. */
+/**
+ * The budget as the widgets draw it (UI S8): with [words], "₹5K left of ₹20K" and the pace word ("A little ahead") above the bar; the bar is the share of the limit spent, with a marker where today
+ * is in the period. A screen reader hears [WidgetBudget.spoken] (the exact amounts), once, for the whole bar.
+ */
 @Composable
-private fun Bar(widthDp: Float, permille: Int, over: Boolean, height: Dp, accent: Accent) {
+internal fun PaceBar(widthDp: Float, b: WidgetBudget, accent: Accent, words: Boolean) {
+    Column(GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
+        if (words) Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(b.text, style = TextStyle(color = WidgetColors.muted, fontSize = 11.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
+            b.pace?.let { Text(it.word, style = TextStyle(color = paceColor(it.level), fontSize = 11.sp, fontWeight = FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.padding(start = 6.dp)) }
+        }
+        Box(GlanceModifier.semantics { contentDescription = b.spoken }) { Bar(widthDp, b.permille, over = b.over, height = 6.dp, accent = accent, todayPermille = b.pace?.todayPermille) }
+    }
+}
+
+/**
+ * A slim bar [widthDp] wide with [permille] of it filled; the fill is red when [over]. Drawn from two boxes, so its length is true to the width the widget really has. [todayPermille] (UI S8) draws a
+ * 2 dp marker in the text colour at that point of the bar: where spending would be if it went evenly through the period.
+ */
+@Composable
+private fun Bar(widthDp: Float, permille: Int, over: Boolean, height: Dp, accent: Accent, todayPermille: Int? = null) {
     Box(GlanceModifier.padding(top = 3.dp)) {
         Box(GlanceModifier.width(widthDp.dp).height(height).background(ImageProvider(R.drawable.widget_track_bg))) {
             if (permille > 0) Box(GlanceModifier.width(maxOf(height.value, widthDp * permille / 1000f).dp).height(height).background(ImageProvider(if (over) R.drawable.widget_fill_over_bg else WidgetAccents.fill(accent)))) {}
+        }
+        if (todayPermille != null && widthDp > 4f) Row(GlanceModifier.width(widthDp.dp).height(height)) {
+            Spacer(GlanceModifier.width((widthDp * todayPermille / 1000f - 1f).coerceIn(0f, widthDp - 2f).dp))
+            Box(GlanceModifier.width(2.dp).height(height).background(WidgetColors.text)) {}
         }
     }
 }
@@ -369,8 +398,8 @@ private fun RecentRow(r: WidgetRecent) {
 
 /** The "✓ Chai ₹20 added  Undo" line shown for [UNDO_WINDOW_MILLIS] after a tap, one calm tonal pill 48 dp high: the words on the left, the Undo word on the right with a 48 dp target of its own (the whole of the right end, about 60 dp wide). */
 @Composable
-private fun Undo(u: WidgetUndo) {
-    Box(GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
+internal fun Undo(u: WidgetUndo, top: Dp = 6.dp) {
+    Box(GlanceModifier.fillMaxWidth().padding(top = top)) {
         Row(GlanceModifier.fillMaxWidth().height(TARGET.dp).background(ImageProvider(R.drawable.widget_undo_bg)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(u.text, style = TextStyle(color = WidgetColors.text, fontSize = 12.sp, fontWeight = FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.defaultWeight())
             Box(GlanceModifier.fillMaxHeight().padding(horizontal = 14.dp).clickable(actionRunCallback<UndoAction>(actionParametersOf(UNDO_ENTRY_ID to u.entryId))), contentAlignment = Alignment.Center) {

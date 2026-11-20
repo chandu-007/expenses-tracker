@@ -54,6 +54,8 @@ import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.RecentInput
 import app.expenses.core.domain.WidgetInsights
 import app.expenses.core.domain.WidgetSummary
+import app.expenses.core.domain.WidgetAccess
+import app.expenses.core.domain.WidgetFeeds
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Money
 import androidx.glance.currentState
@@ -96,6 +98,8 @@ data class WidgetUndo(val entryId: String, val text: String)
  * fit above the figure of a 2 x 2), [note] is the full sentence the bigger sizes add. Tapping either opens the app.
  */
 enum class HiddenBy(val caption: String, val note: String) {
+    /** UI S8: "Allow widgets" is off in the app (App lock screen): nothing from the ledger at all, no eye, no quick entries; Add still opens the app. */
+    WIDGETS_OFF("Widgets are off", "Widgets are off in the app (More, App lock). Tap to open the app."),
     APP_LOCK("App lock is on", "Amounts stay hidden while the App lock is on. Tap to open the app."),
     HIDE_AMOUNTS("Amounts hidden", "Hide amounts is on in the app (More). Tap to open the app."),
 }
@@ -135,7 +139,8 @@ internal object WidgetLog {
     fun processAgeMs(): Long = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime()
 }
 
-internal fun hiddenBy(hide: Boolean, locked: Boolean): HiddenBy? = if (locked) HiddenBy.APP_LOCK else if (hide) HiddenBy.HIDE_AMOUNTS else null
+/** Which setting of the app keeps the widgets masked, the strongest first: widgets not allowed at all, then the App lock, then Hide amounts. */
+internal fun hiddenBy(hide: Boolean, locked: Boolean, off: Boolean = false): HiddenBy? = if (off) HiddenBy.WIDGETS_OFF else if (locked) HiddenBy.APP_LOCK else if (hide) HiddenBy.HIDE_AMOUNTS else null
 
 /** The app's appearance setting (the key `LedgerViewModel` writes: mode;accent;density); the widget reads only the accent from it. */
 internal const val SETTING_APPEARANCE = "appearance"
@@ -209,21 +214,23 @@ class QuickAddWidget : GlanceAppWidget() {
         val data = try {
             container.write { ok ->
                 val hide = ok.templates.setting("hide_amounts") == "1"
-                fun shown(t: String) = if (hide) AmountMask.mask(t) else t
-                val buttons = ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS).map { WidgetButton(it.id, it.name, shown(it.amount!!.formatted())) }
+                val allowed = WidgetAccess.allowed(ok.templates.setting(WidgetAccess.SETTING))
+                // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see; nor (UI S8) the quick entries' amounts
+                val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
+                fun shown(t: String) = if (hide || locked) AmountMask.mask(t) else t
+                // widgets not allowed (UI S8): not one quick entry, so not one name
+                val buttons = if (!allowed) emptyList() else ok.templates.list().filter { it.amount != null }.take(MAX_BUTTONS).map { WidgetButton(it.id, it.name, shown(it.amount!!.formatted())) }
                 val zone = java.time.ZoneId.systemDefault()
                 val today = java.time.LocalDate.now(zone)
                 val first = today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
                 val currency = BaseCurrency.current
                 val byCategory = ok.store.spendByCategory(currency, from = first)
                 val spent = byCategory.values.fold(Money.zero(currency)) { a, m -> a + m }
-                // with the App lock on, the total of everything spent is not shown on the home screen, which anyone holding the unlocked phone can see
-                val locked = (context.applicationContext as ExpensesApp).lock.settings.value.enabled
-                val canToggle = !hide && !locked
+                val canToggle = allowed && !hide && !locked
                 val revealed = canToggle && ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) == "1"
                 // the rest of what the bigger sizes show is read only when it may be shown at all: a hidden widget costs what it always did
                 val insights = if (revealed) insights(ok, today, zone, currency, spent, byCategory) else WidgetInsights.NONE
-                WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = spent.minorUnits <= 0L && byCategory.isEmpty(), hiddenBy = hiddenBy(hide, locked), accent = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)).accent)
+                WidgetData(buttons, monthFigure(spent.formatted(), hide, locked, revealed), revealed, canToggle, insights, nothingYet = allowed && spent.minorUnits <= 0L && byCategory.isEmpty(), hiddenBy = hiddenBy(hide, locked, off = !allowed), accent = Appearances.decode(ok.templates.setting(SETTING_APPEARANCE)).accent)
             }
         } catch (e: CancellationException) {
             throw e
@@ -247,11 +254,14 @@ class QuickAddWidget : GlanceAppWidget() {
         val parents = categories.filter { it.parentId != null }.associate { it.id to it.parentId }
         val bar = WidgetSummary.topCategories(byCategory.mapKeys { it.key?.value }, parents, names, max = WidgetSummary.Room.MAX_CATEGORIES)
         val kToday = kotlinx.datetime.LocalDate(today.year, today.monthValue, today.dayOfMonth)
-        val overall = ok.budgets.status(kToday, kotlinx.datetime.TimeZone.currentSystemDefault(), currency).progress.firstOrNull { it.categoryId == null }
+        val status = ok.budgets.status(kToday, kotlinx.datetime.TimeZone.currentSystemDefault(), currency)
+        val overall = status.progress.firstOrNull { it.categoryId == null }
+        // UI S8: today's marker on the budget bar and the word beside it
+        val pace = overall?.let { WidgetFeeds.pace(it.spent, it.limit, status.period, kToday, status.safeToSpend?.upcoming) }
         val recent = ok.db.schemaQueries.recentEntries(12).executeAsList().filter { it.currency == currency.code }
             .map { RecentInput(it.kind, it.merchant ?: it.note, it.category_id?.let(names::get), Money(it.amount_minor, currency), it.occurred_at) }
         return WidgetSummary.insights(
-            revealed = true, delta = WidgetSummary.delta(spent, lastSoFar), budget = WidgetSummary.budget(overall?.limit, overall?.spent ?: Money.zero(currency)),
+            revealed = true, delta = WidgetSummary.delta(spent, lastSoFar), budget = WidgetSummary.budget(overall?.limit, overall?.spent ?: Money.zero(currency), pace),
             categories = bar, recent = WidgetSummary.recent(recent, System.currentTimeMillis(), kotlinx.datetime.TimeZone.currentSystemDefault(), WidgetSummary.Room.MAX_RECENT),
         )
     }
@@ -308,8 +318,15 @@ class QuickAddAction : ActionCallback {
         val templateId = parameters[TEMPLATE_ID]
         if (templateId == null) { WidgetLog.w("chip: tapped without a quick entry id, nothing done"); return }
         val container = (context.applicationContext as ExpensesApp).container
-        // with Hide amounts on the confirmation (the widget's undo line and the message) says "₹••••" like the chips do
-        val added = guarded("chip") { container.write { ok -> EntryActions(ok).quickAdd(templateId, maskAmount = ok.templates.setting("hide_amounts") == "1") } }
+        // with Hide amounts or (UI S8) the App lock on, the confirmation (the widget's undo line and the message) says "₹••••" like the chips do; with widgets not allowed a chip still on the screen adds nothing
+        var off = false
+        val added = guarded("chip") {
+            container.write { ok ->
+                if (!WidgetAccess.allowed(ok.templates.setting(WidgetAccess.SETTING))) { off = true; null }
+                else EntryActions(ok).quickAdd(templateId, maskAmount = ok.templates.setting("hide_amounts") == "1" || (context.applicationContext as ExpensesApp).lock.settings.value.enabled)
+            }
+        }
+        if (off) { WidgetLog.w("chip: widgets are not allowed, nothing added"); refreshWidgets(context); toast(context, "Widgets are off. Open the app to add."); return }
         if (added != null) {
             guarded("chip: remembering the undo", step = true) {
                 // one change of this widget's state: the confirmation line AND the order to read the new total, so the total and the line arrive together
@@ -392,6 +409,8 @@ class ToggleTotalAction : ActionCallback {
         val container = (context.applicationContext as ExpensesApp).container
         val nowShown = guarded("eye") {
             container.write { ok ->
+                // widgets not allowed (UI S8): an eye still on the screen changes nothing
+                if (!WidgetAccess.allowed(ok.templates.setting(WidgetAccess.SETTING))) return@write false
                 val show = ok.templates.setting(SETTING_WIDGET_SHOW_TOTAL) != "1"
                 ok.templates.putSetting(SETTING_WIDGET_SHOW_TOTAL, if (show) "1" else "0")
                 show
