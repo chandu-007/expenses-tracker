@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Add
@@ -140,10 +141,11 @@ private const val BAR_MAX_FONT_SCALE = 1.3f
  * [selected] names the tab that is current. A pane of glass (a lit, see-through pill) glides under the current tab on a spring and stretches a little while it
  * travels, then settles; the pane starts where it last rested, so moving between screens looks like one bar moving. [moreBadge] puts a small dot on More
  * (something there wants attention). [onAdd] is the Add button (null leaves the middle empty); its test tag is [addTag] (Home's is `add`, the tag the button had when it floated).
- * The other tags are the ones the actions had before. The labels grow with the text size only up to [BAR_MAX_FONT_SCALE].
+ * The other tags are the ones the actions had before. The labels grow with the text size only up to [BAR_MAX_FONT_SCALE]. UI S8 (backlog N-20): a long press on Add lists [quickEntries] (the saved
+ * quick entries with an amount); choosing one is [onQuickEntry] (recorded at once, with Undo, as on Home). With none saved, a long press does nothing more than a tap.
  */
 @Composable
-fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add") {
+fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add", quickEntries: List<BarQuickEntry> = emptyList(), onQuickEntry: (String) -> Unit = {}) {
     val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
     val reduce = LocalReduceMotion.current
     val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
@@ -190,7 +192,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
                     BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"))
-                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f).testTag(addTag)) else Spacer(Modifier.weight(1f))
+                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f), addTag, quickEntries, onQuickEntry) else Spacer(Modifier.weight(1f))
                     BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"))
                     BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge)
                 }
@@ -222,20 +224,41 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
     }
 }
 
-/** The Add button in the middle of the bar: a filled pill with a plus, the word "Add" under it. 56 dp high like the other places, so the touch area is well over 48 dp. */
+/** One saved quick entry offered by a long press on the bar's Add (UI S8): its template [id], [name] and formatted [amountText] (hidden by [Text] while Hide amounts is on). */
+data class BarQuickEntry(val id: String, val name: String, val amountText: String)
+
+/**
+ * The Add button in the middle of the bar: a filled pill with a plus, the word "Add" under it. 56 dp high like the other places, so the touch area is well over 48 dp. Its test tag is [tag]. A long press
+ * (UI S8) opens a short menu of [quick] entries (`bar_quick_menu`, one item `bar_quick_<id>` each); a screen reader offers it as the long-press action "Quick entries". The menu is composed only while open.
+ */
 @Composable
-private fun AddItem(onClick: () -> Unit, modifier: Modifier) {
-    Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Button },
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-    ) {
-        Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+private fun AddItem(onClick: () -> Unit, modifier: Modifier, tag: String, quick: List<BarQuickEntry>, onQuick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val feel = rememberFeel()
+    Box(modifier) {
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(Radius.M)
+                .pressScale(onClick, Feel.PRESS, onLongClick = if (quick.isEmpty()) null else ({ feel(Feel.LONG_PRESS); open = true }), onLongClickLabel = "Quick entries")
+                .semantics { role = Role.Button }.testTag(tag),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+        ) {
+            Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+            }
+            androidx.compose.material3.Text(
+                "Add", maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
+            )
         }
-        androidx.compose.material3.Text(
-            "Add", maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
-        )
+        if (open) androidx.compose.material3.DropdownMenu(expanded = true, onDismissRequest = { open = false }, modifier = Modifier.testTag("bar_quick_menu")) {
+            quick.forEach { q ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("${q.name}  ${q.amountText}", maxLines = 1) },
+                    onClick = { open = false; onQuick(q.id) },
+                    modifier = Modifier.testTag("bar_quick_${q.id}"),
+                )
+            }
+        }
     }
 }
 
@@ -280,7 +303,7 @@ fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
  * Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. With [haptic] (UI S7: [Feel.PRESS] for the tabs and
  * tiles) it gives that feel at the moment of touch-down, not when the finger lifts; a touch that turns into a scroll gives none, because the press is only reported once the touch is not a scroll.
  */
-fun Modifier.pressScale(onClick: () -> Unit, haptic: Feel? = null): Modifier = composed {
+fun Modifier.pressScale(onClick: () -> Unit, haptic: Feel? = null, onLongClick: (() -> Unit)? = null, onLongClickLabel: String? = null): Modifier = composed {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, Motion.press(), label = "press")
@@ -288,7 +311,10 @@ fun Modifier.pressScale(onClick: () -> Unit, haptic: Feel? = null): Modifier = c
     if (haptic != null) LaunchedEffect(source, haptic) {
         source.interactions.collect { if (it is androidx.compose.foundation.interaction.PressInteraction.Press) feel(haptic) }
     }
-    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
+    val scaled = this.graphicsLayer { scaleX = scale; scaleY = scale }
+    // UI S8: with [onLongClick] (the bar's Add) a long press is a second action, which a screen reader offers under [onLongClickLabel]
+    if (onLongClick == null) scaled.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
+    else scaled.combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onLongClickLabel = onLongClickLabel, onLongClick = onLongClick) { onClick() }
 }
 
 /** A short rise-and-fade for the More page. */

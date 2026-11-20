@@ -10,8 +10,11 @@ data class WidgetDelta(val direction: DeltaDirection, val arrow: String, val per
 
 enum class DeltaDirection { LESS, MORE, SAME }
 
-/** The overall monthly budget as one slim bar: [permille] of the limit used (0 to 1000, never more), [over] when the limit is passed, [text] like "₹5K left of ₹20K". */
-data class WidgetBudget(val permille: Int, val over: Boolean, val text: String)
+/**
+ * The overall monthly budget as one slim bar: [permille] of the limit used (0 to 1000, never more), [over] when the limit is passed, [text] like "₹5K left of ₹20K". UI S8: [pace] puts today's
+ * marker on the bar and a word beside it ("A little ahead"); [spoken] is what a screen reader says, with the exact amounts.
+ */
+data class WidgetBudget(val permille: Int, val over: Boolean, val text: String, val pace: WidgetPace? = null, val spoken: String = text)
 
 /** One of the top categories: its [name], [amountText] (short: ₹12.3K) and its share of the month's spending in [permille] (0 to 1000). */
 data class WidgetCategoryBar(val name: String, val amountText: String, val permille: Int)
@@ -73,14 +76,14 @@ object WidgetSummary {
         else WidgetDelta(DeltaDirection.MORE, "↑", text, "$text more than last month so far")
     }
 
-    /** The overall budget as a bar. Null without a limit. [spent] counts against it for the budget's own period. */
-    fun budget(limit: Money?, spent: Money): WidgetBudget? {
+    /** The overall budget as a bar. Null without a limit. [spent] counts against it for the budget's own period. [pace] (UI S8, see [WidgetFeeds.pace]) adds today's marker and the word. */
+    fun budget(limit: Money?, spent: Money, pace: WidgetPace? = null): WidgetBudget? {
         if (limit == null || limit.minorUnits <= 0) return null
         val used = spent.minorUnits.coerceAtLeast(0)
         val permille = if (used >= limit.minorUnits) 1000 else (used * 1000 / limit.minorUnits).toInt()
         val over = used > limit.minorUnits
         val text = if (over) "${Money(used - limit.minorUnits, limit.currency).compact()} over ${limit.compact()}" else "${Money(limit.minorUnits - used, limit.currency).compact()} left of ${limit.compact()}"
-        return WidgetBudget(permille, over, text)
+        return WidgetBudget(permille, over, text, pace, WidgetFeeds.spoken(spent, limit, pace))
     }
 
     /**

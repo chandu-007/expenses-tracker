@@ -77,6 +77,7 @@ class MainActivity : FragmentActivity() {
         if (savedInstanceState == null && intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest(1, it) }
         if (savedInstanceState == null && (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS || intent.action == Intent.ACTION_SEND)) viewModel.deferGuide()
         if (savedInstanceState == null) takeShared(intent)
+        if (savedInstanceState == null) takeQuickShortcut(intent)
         // Measurement builds only: `am start -n app.expenses/.MainActivity --ei seed_rows 100000`
         intent.getIntExtra("seed_rows", 0).takeIf { it > 0 && BuildConfig.SEEDING_ENABLED && savedInstanceState == null }?.let { viewModel.seed(it, full = intent.getBooleanExtra("seed_full", false)) }
 
@@ -85,12 +86,22 @@ class MainActivity : FragmentActivity() {
         // debug builds only (a constant false elsewhere): frame times per screen change and burst in the log, and a small box when started with `--ez frame_overlay true`
         FrameLog.install(this, showOverlay = intent.getBooleanExtra("frame_overlay", false))
         watchFold()
-        // the widgets draw the accent chosen here (More, Appearance): when it changes they are drawn again at once, not when the person next leaves the app
+        // the widgets draw the accent chosen here (More, Appearance), and (UI S8) follow Hide amounts and "Allow widgets", as do the launcher shortcuts: when one of them changes they are drawn again
+        // at once, not when the person next leaves the app. Only these settings: nothing here runs on a save.
         val appContext = applicationContext
         lifecycleScope.launch {
-            viewModel.state.map { (it as? app.expenses.UiState.Ready)?.appearance?.accent?.key }.filterNotNull().distinctUntilChanged().drop(1)
-                .collect { withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.expenses.widget.refreshWidgets(appContext) } } }
+            viewModel.state.map { (it as? app.expenses.UiState.Ready)?.let { s -> Triple(s.appearance.accent.key, s.hideAmounts, s.widgetsAllowed) } }.filterNotNull().distinctUntilChanged().drop(1)
+                .collect { withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.expenses.widget.refreshWidgets(appContext) }; LauncherShortcuts.publish(appContext) } }
         }
+    }
+
+    /** A quick entry's launcher shortcut (UI S8): records it once. Not again when the task is brought back from the recent apps with the same intent. */
+    private fun takeQuickShortcut(from: Intent) {
+        if (from.action != LauncherShortcuts.ACTION_QUICK_ADD || from.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val id = from.getStringExtra(LauncherShortcuts.EXTRA_TEMPLATE_ID) ?: return
+        from.removeExtra(LauncherShortcuts.EXTRA_TEMPLATE_ID)
+        viewModel.deferGuide()
+        viewModel.quickAddFromShortcut(id)
     }
 
     /** The fold that separates the window while a foldable is half open (null otherwise); read by the layout (WidePane.kt). */
@@ -130,9 +141,9 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         (application as ExpensesApp).lock.onStop(this)
-        // the widget shows this month's spending: bring it up to date when the person leaves the app
+        // the widget shows this month's spending: bring it up to date when the person leaves the app; the launcher shortcuts (UI S8) follow the quick entries the same way
         val appContext = applicationContext
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { app.expenses.widget.refreshWidgets(appContext) } }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { app.expenses.widget.refreshWidgets(appContext) }; LauncherShortcuts.publish(appContext) }
         val app = application as ExpensesApp
         app.appScope.launch { runCatching { app.container.maintain() } }
     }
@@ -245,6 +256,7 @@ class MainActivity : FragmentActivity() {
         if (intent.action == ACTION_PAY_CARD) intent.getStringExtra(EXTRA_CARD_ID)?.let { payCardRequests.value = PayCardRequest((payCardRequests.value?.n ?: 0) + 1, it) }
         if (intent.action == ACTION_ADD_EXPENSE || intent.action == ACTION_OPEN_BILLS || intent.action == Intent.ACTION_SEND) viewModel.deferGuide()
         takeShared(intent)
+        takeQuickShortcut(intent)
     }
 
     companion object {

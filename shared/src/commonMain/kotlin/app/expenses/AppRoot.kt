@@ -549,7 +549,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                     // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
                     if (!app.expenses.ui.rememberKeyboardOpen()) {
-                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge && !app.expenses.core.domain.NudgePause.isPaused(s.nudgesPausedUntil, nowMillis()), onAdd = addFromBar, addTag = "bar_add")
+                    // UI S8 (N-20): a long press on Add offers the first four saved quick entries that have an amount, recorded at once with Undo (the same call as a quick entry on Home)
+                    val barQuick = androidx.compose.runtime.remember(s.templates) { s.templates.mapNotNull { t -> t.amountText?.let { app.expenses.ui.BarQuickEntry(t.id, t.name, it) } }.take(4) }
+                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge && !app.expenses.core.domain.NudgePause.isPaused(s.nudgesPausedUntil, nowMillis()), onAdd = addFromBar, addTag = "bar_add", quickEntries = barQuick, onQuickEntry = viewModel::quickAdd)
                     }
                 }
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
@@ -766,6 +768,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onEnable = { lock.enable(it) }, onDisable = { lock.disable() },
                             onTimeout = { lock.setTimeout(it) },
                             onBack = { securing = false; lock.dismissMessage() },
+                            widgetsAllowed = s.widgetsAllowed, onWidgetsAllowed = viewModel::setWidgetsAllowed,
                         )
                     }
                     k == 14 -> {

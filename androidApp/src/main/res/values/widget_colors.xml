@@ -10,4 +10,6 @@
     <color name="widget_positive">#FF0F6B41</color>
     <color name="widget_negative">#FFA21F19</color>
     <color name="widget_undo">#FFFFE9D6</color>
+    <!-- UI S8: the pace word when spending is ahead of the period (6.3:1 on the card) -->
+    <color name="widget_ahead">#FF8A5300</color>
 </resources>
