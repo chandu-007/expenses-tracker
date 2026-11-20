@@ -19,6 +19,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -719,7 +720,8 @@ private fun NumberPad(onKey: (String) -> Unit) {
     val feel = rememberFeel()
     val reduce = LocalReduceMotion.current
     CappedFontScale(HEADER_TEXT_SCALE) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("number_pad"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // UI S9 (U-24): never wider than [WindowLayout.PAD_MAX_WIDTH_DP], centred (a 1,000 dp keypad on an unfolded foldable is a hard target); a phone's pad is narrower than that and unchanged
+        Column(Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = app.expenses.core.domain.WindowLayout.PAD_MAX_WIDTH_DP.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("number_pad"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PadRows.forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { key ->

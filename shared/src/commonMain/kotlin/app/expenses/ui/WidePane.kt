@@ -81,6 +81,19 @@ val LocalHinge = androidx.compose.runtime.compositionLocalOf<Hinge?> { null }
 @Composable
 private fun currentHinge(): Hinge? = WideLayoutTestHook.hinge ?: LocalHinge.current
 
+/**
+ * UI S9 (U-24): whether Home, Search and Reports are reached from the rail along the left edge ([HomeRail]) instead of the bar along the bottom: every two-pane window ([wide]), except while a fold
+ * runs top to bottom through it ([WindowLayout.usesRail]).
+ */
+@Composable
+fun rememberUsesRail(wide: Boolean): Boolean {
+    val vertical = currentHinge()?.vertical == true
+    return WindowLayout.usesRail(if (wide) WindowLayout.TWO_PANE else WindowLayout.PHONE, vertical)
+}
+
+/** UI S9: true while the rail is drawn by the app's root: the bar along the bottom ([HomeBar]) then draws nothing, so each place has one button. */
+val LocalNavRail = androidx.compose.runtime.compositionLocalOf { false }
+
 /** The root of the app, no taller than the part of the window above a fold that runs across it (table-top posture): the lower half is the table side. Otherwise the whole height. */
 @Composable
 fun Modifier.aboveHinge(): Modifier {
@@ -125,7 +138,7 @@ private class HeldEditable(var value: Editable?)
  * - [wide], any other screen: [content] centred, at most [WIDE_SCREEN_MAX_WIDTH] wide.
  */
 @Composable
-fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (Editable) -> Unit, moreOpen: Boolean = false, content: @Composable () -> Unit) {
+fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (Editable) -> Unit, moreOpen: Boolean = false, addPane: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     // [content] sits in the SAME place of the composition whether the window is wide or not (the first Box of the same Row, or the inner Box of the same two Boxes): only
     // modifiers change. So when the window changes size (a foldable unfolded or folded, a split screen resized) the screen is not rebuilt: its scroll position, typed text and
     // selection stay. (Moving it between different places would start it again, and Compose's own "movable content" crashed with a focused text field.)
@@ -138,7 +151,7 @@ fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (
     }
     // the More page with no entry open: one centred page, not a list-sized strip beside an empty "Select an entry". [content] stays the first child of the
     // Row in every case, so Home keeps its scroll position and selection when More is opened and closed. (More belongs to Home: Search has no such page.)
-    val alone = wide && key == ScreenKeys.HOME && moreOpen && editing == null
+    val alone = wide && key == ScreenKeys.HOME && moreOpen && editing == null && addPane == null
     val hinge = currentHinge()?.takeIf { it.vertical }
     Row(Modifier.fillMaxSize(), horizontalArrangement = if (wide) Arrangement.Center else Arrangement.Start) {
         Box(Modifier.then(if (wide) Modifier.listPaneWidth(alone, hinge).testTag("wide_list_pane") else Modifier.fillMaxWidth()).fillMaxHeight()) { content() }
@@ -146,7 +159,10 @@ fun WideFrame(wide: Boolean, key: Int, editing: Editable?, editor: @Composable (
             // a fold between the panes (half open like a book): the list on one side, the entry on the other, nothing drawn across it
             if (hinge != null && hinge.widthDp > 0f) androidx.compose.foundation.layout.Spacer(Modifier.width(hinge.widthDp.dp))
             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Box(Modifier.weight(1f).fillMaxHeight().testTag("wide_detail_pane")) { DetailPane(editing, editor) }
+            Box(Modifier.weight(1f).fillMaxHeight().testTag("wide_detail_pane")) {
+                // UI S9 (U-24): the Add form beside the list (its own tag, so a test can tell it from an open entry); otherwise the entry or the placeholder
+                if (addPane != null && key == ScreenKeys.HOME) Box(Modifier.fillMaxSize().testTag("wide_add_pane")) { addPane() } else DetailPane(editing, editor)
+            }
         }
     }
 }

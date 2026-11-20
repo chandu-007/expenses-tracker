@@ -58,5 +58,20 @@ enum class WindowLayout {
          * Under the 480 dp that gives, the layout is the phone's.
          */
         fun usableHeightDp(windowHeightDp: Float, hingeTopDp: Float?): Float = if (hingeTopDp != null && hingeTopDp > 0f && hingeTopDp < windowHeightDp) hingeTopDp else windowHeightDp
+
+        /** UI S9 (U-24): the navigation rail's width, where it replaces the bar along the bottom. */
+        const val RAIL_WIDTH_DP = 80
+
+        /** UI S9: the widest the Add form's number pad is drawn: a 1,000 dp keypad on an unfolded foldable (the audit's `add_expense_empty_w864f10l.png`) is a hard target. */
+        const val PAD_MAX_WIDTH_DP = 480
+
+        /**
+         * UI S9 (U-24): Home, Search and Reports are reached from a rail along the left edge instead of the bar along the bottom wherever the window has two panes, except while a fold runs top
+         * to bottom through it (half open like a book): there the panes are placed on either side of the hinge, measured from the window's left edge, and the bar keeps its place.
+         */
+        fun usesRail(layout: WindowLayout, verticalHinge: Boolean): Boolean = layout == TWO_PANE && !verticalHinge
+
+        /** UI S9 (U-24): the Add form opens in the pane beside the list (not over the whole window) when the window has two panes and no screen other than Home is open under it. */
+        fun addBesideList(layout: WindowLayout, adding: Boolean, otherScreenOpen: Boolean): Boolean = layout == TWO_PANE && adding && !otherScreenOpen
     }
 }

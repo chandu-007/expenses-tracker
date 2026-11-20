@@ -186,6 +186,9 @@ private class TypedDraft {
     fun forget() { identity = null; draft = null }
 }
 
+/** The identity under which what is typed in Add is kept while the window changes size (UI S9): there is one Add form at a time. */
+private val ADD_IDENTITY: List<Any?> = listOf("add")
+
 @Composable
 fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val platform = host.platform
@@ -193,8 +196,12 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val look = (themeState as? UiState.Ready)?.appearance ?: Appearance()
     val dark = Appearances.isDark(look.mode, isSystemInDarkTheme())
     SideEffect { host.onDarkChanged(dark) }
-    MaterialTheme(colorScheme = colorSchemeFor(look, dark), typography = androidx.compose.runtime.remember(platform) { app.expenses.ui.appTypography(platform.proportionalDigits) }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
-        androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform) {
+    // UI S9: the phone's high-contrast setting, and (only when "Wallpaper" is the accent) the phone's own colour; both read once per configuration
+    val highContrast = app.expenses.ui.systemHighContrast()
+    val wallpaper = if (look.accent.key == Appearances.WALLPAPER.key) app.expenses.ui.systemAccentRgb() else null
+    val scheme = androidx.compose.runtime.remember(look, dark, highContrast, wallpaper) { colorSchemeFor(look, dark, highContrast, wallpaper) }
+    MaterialTheme(colorScheme = scheme, typography = androidx.compose.runtime.remember(platform) { app.expenses.ui.appTypography(platform.proportionalDigits) }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
+        androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform, app.expenses.ui.LocalHighContrast provides highContrast) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
             // on a wide window (a tablet, an unfolded foldable) the app keeps a comfortable width in the middle instead of stretching every line across it
             // from WindowLayout.TWO_PANE (window at least 600 dp wide and 480 dp high): Home and the open entry side by side (see WidePane.kt); below it nothing differs from a phone
@@ -493,10 +500,16 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 // a trip's "See all entries" opens Search over the trip's own page: the trip pages do not count as a second screen, or an entry opened from those results would cover them instead of sitting beside them
                 val searchAlone = searching && screens.count { it } - (if (tripSummaryOf != null) 1 else 0) - (if (tripsOpen) 1 else 0) == 1
                 val editorFull = !wide || (screens.any { it } && !searchAlone)
+                // UI S9 (U-24): on a two-pane window Add opened from Home is the pane beside the list (Home stays the screen); opened over another screen (a loan, Bills) it covers that screen as before
+                val addBeside = history == null && editing == null && app.expenses.core.domain.WindowLayout.addBesideList(
+                    if (wide) app.expenses.core.domain.WindowLayout.TWO_PANE else app.expenses.core.domain.WindowLayout.PHONE, adding,
+                    otherScreenOpen = screens.withIndex().any { (i, open) -> open && i != app.expenses.ui.ScreenKeys.ADD_FORM },
+                )
                 val screenKey = when {
                     history != null -> 0
                     editing is Editable.Form && editorFull -> 1
                     editing is Editable.ReadOnly && editorFull -> 2
+                    addBeside -> app.expenses.ui.ScreenKeys.HOME
                     else -> screens.indexOf(true)
                 }
                 // a screen that is leaving is still drawn for a moment, after the state it was showing is gone: it keeps its last value
@@ -546,14 +559,48 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         Shortcut.SEARCH -> if (searching) searchFocus++ else goTab("Search")
                     }
                 }
+                // UI S8 (N-20): a long press on Add offers the first four saved quick entries that have an amount, recorded at once with Undo (the same call as a quick entry on Home)
+                val barQuick = androidx.compose.runtime.remember(s.templates) { s.templates.mapNotNull { t -> t.amountText?.let { app.expenses.ui.BarQuickEntry(t.id, t.name, it) } }.take(4) }
+                val barBadge = s.showBackupNudge && !app.expenses.core.domain.NudgePause.isPaused(s.nudgesPausedUntil, nowMillis())
                 val tabBar: @androidx.compose.runtime.Composable (String) -> Unit = { sel ->
                     // with the keyboard up the bar would float above it over nothing: it returns when the keyboard goes
                     if (!app.expenses.ui.rememberKeyboardOpen()) {
-                    // UI S8 (N-20): a long press on Add offers the first four saved quick entries that have an amount, recorded at once with Undo (the same call as a quick entry on Home)
-                    val barQuick = androidx.compose.runtime.remember(s.templates) { s.templates.mapNotNull { t -> t.amountText?.let { app.expenses.ui.BarQuickEntry(t.id, t.name, it) } }.take(4) }
-                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = s.showBackupNudge && !app.expenses.core.domain.NudgePause.isPaused(s.nudgesPausedUntil, nowMillis()), onAdd = addFromBar, addTag = "bar_add", quickEntries = barQuick, onQuickEntry = viewModel::quickAdd)
+                    app.expenses.ui.HomeBar(sel, onHome = { goTab("Home") }, onSearch = { goTab("Search") }, onReports = { goTab("Reports") }, onMore = { goTab("More") }, moreBadge = barBadge, onAdd = addFromBar, addTag = "bar_add", quickEntries = barQuick, onQuickEntry = viewModel::quickAdd)
                     }
                 }
+                // Add from Home (its own button, the rail's Add on Home): an entry open beside the list is closed first
+                val addFromHome: () -> Unit = { platform.trace("add: tapped"); if (editing != null) viewModel.closeEditor(); prefillCategory = null; prefillAccount = null; prefillNote = ""; adding = true }
+                // UI S9 (U-24): what is typed in Add is kept here while it is open, so when the window turns wide or narrow the form that appears in its new place (the pane, or the full screen) starts from it
+                val addTyped = androidx.compose.runtime.remember { TypedDraft() }
+                androidx.compose.runtime.LaunchedEffect(adding) { if (!adding) addTyped.forget() }
+                val addScreen: @androidx.compose.runtime.Composable () -> Unit = {
+                    ScreenBackHandler { adding = false }
+                    EntryFormScreen(
+                        restored = addTyped.of(ADD_IDENTITY), onDraft = { d -> addTyped.keep(ADD_IDENTITY, d) },
+                        title = "Add",
+                        attachments = stagedList, attachmentProblem = attachmentProblem, onAttach = viewModel::stageAttachment,
+                        onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
+                        onRemoveAttachment = { a -> viewModel.unstageAttachment(a.id) },
+                        start = prefillTransfer?.split('|')?.let { p -> EntryDraft(null, DraftKind.TRANSFER, p[2], "", emptyList(), p[0], p[1], p.getOrElse(3) { "" }, nowMillis()) } ?: prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, prefillAmount, prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
+                        kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
+                        usualCategory = viewModel::usualCategory,
+                        accounts = s.accounts,
+                        categories = s.categories,
+                        onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
+                        showTemplateOption = true,
+                        lastExpenseCategory = s.lastCategory, lastIncomeCategory = s.lastIncomeCategory,
+                        allTags = s.tags,
+                        people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
+                        lastRates = foreignRates,
+                        tripWindows = s.tripWindows,
+                        onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
+                        onSaveEach = { drafts, photo -> viewModel.saveEntries(drafts, photo); adding = false; prefillLoan = null; prefillTransfer = null },
+                        onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
+                    )
+                }
+                // UI S9 (U-24): on a two-pane window (no book fold) the bar along the bottom is a rail along the left edge, beside the screens that have the bar
+                val railMode = app.expenses.ui.rememberUsesRail(wide)
+                val railShown = railMode && (screenKey == app.expenses.ui.ScreenKeys.HOME || screenKey == app.expenses.ui.ScreenKeys.SEARCH || screenKey == 16)
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
                 // given the room, so the bar covers nothing and takes no touch)
                 androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalTappedEntry provides tappedEntry) {
@@ -562,7 +609,23 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     // Post and Skip on a repeating item offer an Undo; Bills (23) and Repeating expenses (19) are where they are pressed, and have no bar of their own; so is Accounts (11), where Archive offers one
                     undo = s.undo?.takeIf { screenKey == 11 || screenKey == 19 || screenKey == 23 }, onUndo = viewModel::undo, onUndoDismissed = viewModel::dismissUndo,
                 ) {
-                app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen) { when {
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+                if (railShown) {
+                    val onHome = screenKey == app.expenses.ui.ScreenKeys.HOME
+                    app.expenses.ui.HomeRail(
+                        selected = when (screenKey) { app.expenses.ui.ScreenKeys.SEARCH -> "Search"; 16 -> "Reports"; else -> if (moreOpen) "More" else "Home" },
+                        onHome = { if (onHome) moreOpen = false else goTab("Home") },
+                        onSearch = { moreOpen = false; goTab("Search") },
+                        onReports = { moreOpen = false; goTab("Reports") },
+                        onMore = { if (onHome) moreOpen = !moreOpen else goTab("More") },
+                        moreBadge = barBadge,
+                        onAdd = { if (onHome) { moreOpen = false; addFromHome() } else addFromBar() }, addTag = if (onHome) "add" else "bar_add",
+                        quickEntries = barQuick, onQuickEntry = viewModel::quickAdd,
+                    )
+                }
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxSize()) {
+                androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalNavRail provides railMode, app.expenses.ui.LocalLargeWindow provides wide) {
+                app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen, addPane = if (addBeside) addScreen else null) { when {
                     k == 0 -> {
                         val h = history ?: heldHistory.value!!
                         ScreenBackHandler { viewModel.closeHistory() }
@@ -903,30 +966,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onRollover = viewModel::setBudgetRollover,
                         )
                     }
-                    k == 21 -> {
-                        ScreenBackHandler { adding = false }
-                        EntryFormScreen(
-                            title = "Add",
-                            attachments = stagedList, attachmentProblem = attachmentProblem, onAttach = viewModel::stageAttachment,
-                            onOpenAttachment = { a -> host.openAttachment(viewModel.attachmentUri(a.id), a.mime) },
-                            onRemoveAttachment = { a -> viewModel.unstageAttachment(a.id) },
-                            start = prefillTransfer?.split('|')?.let { p -> EntryDraft(null, DraftKind.TRANSFER, p[2], "", emptyList(), p[0], p[1], p.getOrElse(3) { "" }, nowMillis()) } ?: prefillLoan?.split('|')?.let { p -> EntryDraft(null, DraftKind.LOAN, p[2], "", emptyList(), s.lastAccountId, "", "", nowMillis(), personId = p[0], gave = p[1] == "1") } ?: EntryDraft(null, DraftKind.EXPENSE, prefillAmount, prefillCategory ?: s.lastCategory, emptyList(), prefillAccount ?: s.lastAccountId, "", prefillNote, nowMillis()),
-                            kinds = listOf(DraftKind.EXPENSE, DraftKind.INCOME, DraftKind.TRANSFER, DraftKind.LOAN),
-                            usualCategory = viewModel::usualCategory,
-                            accounts = s.accounts,
-                            categories = s.categories,
-                            onCreateCategory = { name, parent, kind, done -> viewModel.createCategory(name, parent, null, kind, onCreated = done) },
-                            showTemplateOption = true,
-                            lastExpenseCategory = s.lastCategory, lastIncomeCategory = s.lastIncomeCategory,
-                            allTags = s.tags,
-                            people = people, onCreatePerson = { name, done -> viewModel.createPerson(name, done) },
-                            lastRates = foreignRates,
-                            tripWindows = s.tripWindows,
-                            onSave = { d, asTemplate -> viewModel.saveEntry(d, asTemplate); adding = false; prefillLoan = null; prefillTransfer = null },
-                            onSaveEach = { drafts, photo -> viewModel.saveEntries(drafts, photo); adding = false; prefillLoan = null; prefillTransfer = null },
-                            onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
-                        )
-                    }
+                    k == 21 -> addScreen()
                     k == 23 -> {
                         ScreenBackHandler { billsOpen = false; viewModel.watchBills(false) }
                         BillsScreen(
@@ -1020,6 +1060,9 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )
                 } }
+                } // LocalNavRail
+                } // the screens' box
+                } // the rail and the screens
                 }
                 }
                 }
@@ -1032,10 +1075,21 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     }
 }
 
-private fun colorSchemeFor(look: Appearance, dark: Boolean): androidx.compose.material3.ColorScheme {
+/**
+ * The theme's colours: the accent roles from the chosen accent (or, UI S9, the phone's wallpaper colour [systemAccent]), made readable in either theme; and, UI S9 (U-25, D18), the surfaces of the
+ * true-black theme and the stronger text and outlines of high contrast ([ThemeRoles.surfaces]: null, and Material's baseline unchanged, for anyone who chose neither). Money colours are not here.
+ */
+private fun colorSchemeFor(look: Appearance, dark: Boolean, highContrast: Boolean = false, systemAccent: Int? = null): androidx.compose.material3.ColorScheme {
     fun c(rgb: Int) = androidx.compose.ui.graphics.Color(0xFF000000.toInt() or rgb)
-    val primary = Appearances.primaryFor(look.accent, dark)
+    val primary = Appearances.primaryFor(Appearances.resolve(look.accent, systemAccent), dark)
     val base = if (dark) darkColorScheme() else lightColorScheme()
-    val container = Appearances.containerFor(primary, dark)
-    return base.copy(primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)))
+    val container = Appearances.containerFor(primary, dark, black = look.black)
+    val scheme = base.copy(primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)))
+    val r = app.expenses.core.domain.ThemeRoles.surfaces(dark, look.black, highContrast) ?: return scheme
+    return scheme.copy(
+        background = c(r.background), onBackground = c(r.onSurface), surface = c(r.surface), onSurface = c(r.onSurface),
+        surfaceVariant = c(r.surfaceVariant), onSurfaceVariant = c(r.onSurfaceVariant), outline = c(r.outline), outlineVariant = c(r.outlineVariant),
+        surfaceContainerLowest = c(r.containerLowest), surfaceContainerLow = c(r.containerLow), surfaceContainer = c(r.container), surfaceContainerHigh = c(r.containerHigh), surfaceContainerHighest = c(r.containerHighest),
+        surfaceDim = c(r.background), surfaceBright = c(r.containerHighest),
+    )
 }
