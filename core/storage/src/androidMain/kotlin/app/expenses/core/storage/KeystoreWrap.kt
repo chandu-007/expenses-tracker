@@ -15,6 +15,7 @@ import javax.crypto.spec.GCMParameterSpec
  */
 internal object KeystoreWrap {
     private const val KEYSTORE = "AndroidKeyStore"
+    private const val GCM_TAG_BYTES = 16
 
     fun existingKey(alias: String): SecretKey? =
         KeyStore.getInstance(KEYSTORE).apply { load(null) }.getKey(alias, null) as? SecretKey
@@ -42,8 +43,13 @@ internal object KeystoreWrap {
         return byteArrayOf(iv.size.toByte()) + iv + cipher.doFinal(plain)
     }
 
+    /**
+     * A blob too short to hold its length byte, the iv it names and the 16-byte tag (an empty or cut-short file, as a power cut left them before [DurableFiles]) is a
+     * [javax.crypto.AEADBadTagException], like any other blob the key does not open, so callers treat it as unreadable rather than as a passing failure.
+     */
     fun unwrap(key: SecretKey, blob: ByteArray): ByteArray {
-        val ivLen = blob[0].toInt()
+        val ivLen = if (blob.isEmpty()) 0 else blob[0].toInt()
+        if (ivLen <= 0 || blob.size < 1 + ivLen + GCM_TAG_BYTES) throw javax.crypto.AEADBadTagException("Malformed wrapped blob (${blob.size} bytes)")
         val iv = blob.copyOfRange(1, 1 + ivLen)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv)) }
         return cipher.doFinal(blob, 1 + ivLen, blob.size - 1 - ivLen)

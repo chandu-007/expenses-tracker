@@ -28,7 +28,8 @@ class KeystoreSecretStore(context: Context) : SecretStore {
     }
 
     /**
-     * No blob, or no Keystore key to open it with, or a blob the key does not open (a restored or changed phone): [SecretRead.NotFound], it will not come back. A Keystore
+     * No blob, or no Keystore key to open it with, or a blob the key does not open (a restored or changed phone) or that is empty or cut short (a power cut before
+     * the write was durable): [SecretRead.NotFound], it will not come back, and the next [put] replaces it. A Keystore
      * that fails some other way (the service is busy, a provider error, an I/O error) is [SecretRead.Unavailable]: try again later, change nothing.
      */
     @Synchronized

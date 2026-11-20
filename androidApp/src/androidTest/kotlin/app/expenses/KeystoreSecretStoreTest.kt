@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 class KeystoreSecretStoreTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
     private val dir = File(context.noBackupFilesDir, "secrets")
-    private val names = listOf("test_secret_new", "test_secret_old", "test_secret_twice")
+    private val names = listOf("test_secret_new", "test_secret_old", "test_secret_twice", "test_secret_empty", "test_secret_cut")
 
     @After fun tearDown() { val store = KeystoreSecretStore(context); names.forEach { store.delete(it) } }
 
@@ -67,6 +67,30 @@ class KeystoreSecretStoreTest {
         tmp.writeBytes(byteArrayOf(iv.size.toByte()) + iv + sealed)
         assertTrue(tmp.renameTo(target))
         assertContentEquals(secret, assertIs<SecretRead.Found>(KeystoreSecretStore(context).read("test_secret_old")).bytes)
+    }
+
+    @Test
+    fun anEmptyBlobReadsAsNotFoundAndThenAPutReplacesIt() {
+        wrapKey() // the key is there, so the read reaches the blob itself
+        dir.mkdirs()
+        File(dir, "test_secret_empty.bin").writeBytes(ByteArray(0))
+        val store = KeystoreSecretStore(context)
+        assertEquals(SecretRead.NotFound, store.read("test_secret_empty"), "an empty blob is gone for good, not a passing failure")
+        val secret = "after the power cut".encodeToByteArray()
+        store.put("test_secret_empty", secret)
+        assertContentEquals(secret, assertIs<SecretRead.Found>(store.read("test_secret_empty")).bytes)
+    }
+
+    @Test
+    fun aBlobCutShortAfterItsIvReadsAsNotFound() {
+        wrapKey()
+        dir.mkdirs()
+        // the length byte and a 12-byte iv, no ciphertext and no tag
+        File(dir, "test_secret_cut.bin").writeBytes(byteArrayOf(12) + ByteArray(12) { it.toByte() })
+        assertEquals(SecretRead.NotFound, KeystoreSecretStore(context).read("test_secret_cut"))
+        // a length byte that points past the end
+        File(dir, "test_secret_cut.bin").writeBytes(byteArrayOf(100, 1, 2, 3))
+        assertEquals(SecretRead.NotFound, KeystoreSecretStore(context).read("test_secret_cut"))
     }
 
     /** The store's Keystore key (alias `expenses_secrets_wrap_key`), made with the store's own parameters when it is not there yet. */
