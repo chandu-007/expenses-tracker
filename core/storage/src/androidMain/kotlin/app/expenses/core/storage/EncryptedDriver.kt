@@ -21,7 +21,8 @@ import java.security.SecureRandom
  * the default rollback-journal mode and 0.32 ms in WAL, with far less variation, and readers no longer wait for a writer.
  *
  * A key is only ever created together with a brand-new database. If a database file already exists and
- * the key is missing or unreadable, [create] throws [DatabaseKeyUnavailableException].
+ * the key is missing or unreadable, [create] throws [DatabaseKeyUnavailableException]. An empty key file with no
+ * database files at all is treated as no key file.
  */
 object EncryptedDriver {
     private const val KEY_ALIAS = "expenses_db_wrap_key"
@@ -66,7 +67,12 @@ object EncryptedDriver {
 
     private fun loadOrCreatePassphrase(context: Context, name: String): ByteArray {
         val keyFile = File(context.noBackupFilesDir, WRAPPED_FILE)
-        val dbExists = context.getDatabasePath(name).exists()
+        val db = context.getDatabasePath(name)
+        val dbExists = db.exists()
+        // an EMPTY key file with no database at all, not even its -wal/-shm/-journal (a power cut on a first launch, after the key file was made and before the
+        // database, from before the key was written durably) protects nothing: it is dropped and a new key made, as when there is no key file. A non-empty unreadable
+        // key file, or an empty one beside any database file, is never dropped.
+        if (keyFile.exists() && keyFile.length() == 0L && !dbExists && listOf("-wal", "-shm", "-journal").none { File(db.path + it).exists() }) keyFile.delete()
         if (keyFile.exists()) {
             val wrapKey = KeystoreWrap.existingKey(KEY_ALIAS)
                 ?: throw DatabaseKeyUnavailableException("The Keystore key that protects the database key is gone")

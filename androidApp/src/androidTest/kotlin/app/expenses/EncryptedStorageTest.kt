@@ -169,4 +169,45 @@ class EncryptedStorageTest {
         EncryptedDriver.reset(context, name)
         assertEquals(0L, open().schemaQueries.entryCount().executeAsOne())
     }
+
+    @Test
+    fun anEmptyKeyFileWithNoDatabaseIsReplacedAndANewDatabaseWorks() {
+        // a power cut on a first launch, before the key was written durably: the key file is there and empty, the database was never made
+        keyFile.writeBytes(ByteArray(0))
+        assertFalse(context.getDatabasePath(name).exists())
+        open().add("a", "Swiggy")
+        assertTrue(keyFile.length() > 0, "a new key was stored")
+        closeDriver()
+        val db = open()
+        assertEquals(1L, db.schemaQueries.entryCount().executeAsOne())
+        assertEquals("Swiggy", driver!!.string("SELECT merchant FROM entry WHERE id = 'a'"))
+    }
+
+    @Test
+    fun anEmptyKeyFileWithAnExistingDatabaseIsReportedNotReplaced() {
+        open().add("a", "Swiggy")
+        closeDriver()
+        keyFile.writeBytes(ByteArray(0))
+        assertFailsWith<DatabaseKeyUnavailableException> { EncryptedDriver.create(context, name) }
+        assertTrue(keyFile.exists() && keyFile.length() == 0L, "the key file is left as it was")
+    }
+
+    @Test
+    fun anEmptyKeyFileBesideOnlyALeftoverLogFileIsReportedNotReplaced() {
+        keyFile.writeBytes(ByteArray(0))
+        val wal = File(context.getDatabasePath(name).path + "-wal")
+        wal.parentFile!!.mkdirs(); wal.writeBytes(ByteArray(8) { 1 })
+        try {
+            assertFailsWith<DatabaseKeyUnavailableException> { EncryptedDriver.create(context, name) }
+            assertTrue(keyFile.exists() && keyFile.length() == 0L)
+        } finally { wal.delete() }
+    }
+
+    @Test
+    fun aNonEmptyUnreadableKeyFileWithNoDatabaseIsStillReported() {
+        keyFile.writeBytes(ByteArray(10) { 1 })
+        assertFalse(context.getDatabasePath(name).exists())
+        assertFailsWith<DatabaseKeyUnavailableException> { EncryptedDriver.create(context, name) }
+        assertEquals(10L, keyFile.length(), "never dropped")
+    }
 }
