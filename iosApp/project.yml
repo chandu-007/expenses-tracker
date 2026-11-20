@@ -18,6 +18,8 @@ targets:
     sources:
       - Sources
       - path: Resources
+      # UI S8: the Control Center control's intent opens the app, so the app must have it too (it is also in the widget extension, through its Widget folder)
+      - path: Widget/OpenNewExpenseIntent.swift
     entitlements:
       path: Resources/Expenses.entitlements
       properties:
