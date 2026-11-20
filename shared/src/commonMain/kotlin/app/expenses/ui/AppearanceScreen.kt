@@ -133,8 +133,9 @@ private fun AccentSwatch(rgb: Int, label: String, chosen: Boolean, tag: String, 
  */
 @Composable
 private fun AppearancePreview() {
+    // the tag comes first: clearAndSetSemantics clears whatever is chained after it (the tag was lost and every test waiting for it timed out)
     Column(
-        Modifier.fillMaxWidth().standardCard().padding(16.dp).clearAndSetSemantics { contentDescription = "Example of the look you chose, not your data" }.testTag("appearance_preview"),
+        Modifier.fillMaxWidth().standardCard().padding(16.dp).testTag("appearance_preview").clearAndSetSemantics { contentDescription = "Example of the look you chose, not your data" },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

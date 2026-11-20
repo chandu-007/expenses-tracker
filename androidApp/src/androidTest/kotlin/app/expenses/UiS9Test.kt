@@ -88,7 +88,8 @@ class UiS9ThemeTest {
         launch(); appearancePage()
         val said = node("appearance_preview").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString().orEmpty()
         assertEquals("Example of the look you chose, not your data", said)
-        assertTrue(compose.onAllNodes(hasTestTag("appearance_preview"), useUnmergedTree = true).fetchSemanticsNodes().single().children.isEmpty(), "its rows and figures are not read one by one")
+        // the merged tree is what a screen reader walks (the unmerged one still holds the drawn rows)
+        assertTrue(compose.onAllNodes(hasTestTag("appearance_preview")).fetchSemanticsNodes().single().children.isEmpty(), "its rows and figures are not read one by one")
         // the swatches are at least 48 dp now
         val swatch = node("accent_violet").fetchSemanticsNode().size
         val density = context.resources.displayMetrics.density
