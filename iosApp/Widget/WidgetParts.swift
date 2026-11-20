@@ -96,7 +96,7 @@ struct PaceBar: View {
             let w = g.size.width
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary).frame(height: 6)
-                Capsule().fill(fill).frame(width: max(6, w * CGFloat(pace.used) / 1000), height: 6).widgetAccentable()
+                Capsule().fill(barColor).frame(width: max(6, w * CGFloat(pace.used) / 1000), height: 6).widgetAccentable()
                 Rectangle().fill(.primary).frame(width: 2, height: 10).offset(x: min(max(0, w * CGFloat(pace.today) / 1000 - 1), max(0, w - 2)))
             }
             .frame(width: w, height: 10, alignment: .leading)
@@ -106,7 +106,7 @@ struct PaceBar: View {
         .accessibilityLabel(Text(pace.spoken))
     }
 
-    private var fill: Color {
+    private var barColor: Color {
         guard mode == .fullColor else { return .primary }
         return pace.level == "OVER" ? adaptive(light: rgb(0xA21F19), dark: rgb(0xFF8A80)) : appViolet
     }
