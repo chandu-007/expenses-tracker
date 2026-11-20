@@ -316,6 +316,8 @@ class WidgetDesignTest {
                 "widget_text" to "widget_surface", "widget_muted" to "widget_surface", "widget_text" to "widget_container", "widget_muted" to "widget_container",
                 "widget_positive" to "widget_container", "widget_negative" to "widget_container",
                 "widget_positive" to "widget_surface", "widget_negative" to "widget_surface", "widget_text" to "widget_undo",
+                // UI S8: the pace word when spending is ahead
+                "widget_ahead" to "widget_surface",
             )
             for ((fg, bg) in pairs) assertTrue(Appearances.contrast(c(fg), c(bg)) >= 4.5, "${if (night) "dark" else "light"}: $fg on $bg is ${Appearances.contrast(c(fg), c(bg))}")
         }

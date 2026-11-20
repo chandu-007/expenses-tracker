@@ -1,9 +1,9 @@
 package app.expenses
 
-import app.expenses.core.domain.AmountMask
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.Money
-import app.expenses.core.domain.formatted
+import app.expenses.core.domain.WidgetAccess
+import app.expenses.core.domain.WidgetFeeds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.TimeZone
@@ -29,13 +29,13 @@ object IosLinks {
 }
 
 /**
- * What the Today widget draws (Swift, WidgetKit, in iosApp/Widget): today's spending and what the budget leaves for each remaining day, as the Android widget
- * shows them. A widget cannot open the app's database, so the app writes these few strings into the App Group's preferences whenever its data changes
- * and asks the system to redraw ([IosHostServices.reloadWidgets]).
+ * What the iPhone's widgets draw (Swift, WidgetKit, in iosApp/Widget: Today, Quick add and, UI S8, the Lock Screen widgets): today's spending, what the budget leaves for each remaining day, the
+ * month, the budget's pace and the quick entries, as the Android widgets show them. A widget cannot open the app's database, so the app writes these few values into the App Group's preferences
+ * whenever its data changes and asks the system to redraw ([IosHostServices.reloadWidgets]). What is written is decided by [WidgetFeeds.of] (host-tested in core/domain); this only stores it.
  *
- * Privacy, as on Android: with Hide amounts or the App lock on, nothing but masked text is written. Where it differs: Android's widget asks the database
- * when it draws; here the real figures sit in the App Group's preferences (inside this app's own protected storage, not shared with other apps) for as
- * long as neither of those is on, and the eye on the widget only decides whether they are shown.
+ * Privacy, as on Android: with Hide amounts or the App lock on, nothing but masked text is written (and no pace: a bar's length is a figure); with "Allow widgets" off (UI S8) nothing at all.
+ * Where it differs: Android's widget asks the database when it draws; here the real figures sit in the App Group's preferences (inside this app's own protected storage, not shared with other
+ * apps) for as long as none of those is on, and the eye on the widget only decides whether they are shown.
  */
 internal object IosWidgetData {
     const val GROUP = "group.app.expenses.tracker.ios"
@@ -43,27 +43,37 @@ internal object IosWidgetData {
     suspend fun publish(container: AppContainer, lockEnabled: Boolean) {
         val defaults = NSUserDefaults(suiteName = GROUP) ?: return
         container.write { ok ->
-            val hide = ok.templates.setting("hide_amounts") == "1"
-            val canToggle = !hide && !lockEnabled
             val zone = TimeZone.currentSystemDefault()
             val today = Clock.System.now().toLocalDateTime(zone).date
             val currency = BaseCurrency.current
             val startOfDay = today.atStartOfDayIn(zone).toEpochMilliseconds()
             val spent = ok.store.spendByCategory(currency, from = startOfDay).values.fold(Money.zero(currency)) { a, m -> a + m }
-            val perDay = ok.budgets.status(today, zone, currency).safeToSpend?.takeIf { it.perDay.minorUnits > 0 }?.perDay
-            fun real(m: Money) = if (canToggle) m.formatted() else AmountMask.mask(m.formatted())
-            defaults.setObject(real(spent), forKey = "today_spent")
-            defaults.setObject(perDay?.let { real(it) + " a day left" } ?: "", forKey = "today_per_day")
-            defaults.setObject(AmountMask.mask(spent.formatted()), forKey = "today_spent_masked")
-            defaults.setObject(perDay?.let { AmountMask.mask(it.formatted()) + " a day left" } ?: "", forKey = "today_per_day_masked")
-            // the month's total and the quick entries for the Quick add widget (up to six, the amount masked while amounts are hidden)
+            val status = ok.budgets.status(today, zone, currency)
+            val overall = status.progress.firstOrNull { it.categoryId == null }
             val monthStart = today.let { kotlinx.datetime.LocalDate(it.year, it.month, 1) }.atStartOfDayIn(zone).toEpochMilliseconds()
             val month = ok.store.spendByCategory(currency, from = monthStart).values.fold(Money.zero(currency)) { a, m -> a + m }
-            defaults.setObject(real(month), forKey = "month_spent")
-            defaults.setObject(AmountMask.mask(month.formatted()), forKey = "month_spent_masked")
-            val buttons = ok.templates.list().filter { it.amount != null }.take(6).map { t -> listOf(t.id, t.name, if (hide) AmountMask.mask(t.amount!!.formatted()) else t.amount!!.formatted()).joinToString("\t") }
-            defaults.setObject(buttons, forKey = "quick_buttons")
-            defaults.setBool(canToggle, forKey = "can_toggle")
+            val f = WidgetFeeds.of(
+                allowed = WidgetAccess.allowed(ok.templates.setting(WidgetAccess.SETTING)), hide = ok.templates.setting("hide_amounts") == "1", locked = lockEnabled,
+                spentToday = spent, month = month, perDay = status.safeToSpend?.perDay, limit = overall?.limit, budgetSpent = overall?.spent ?: Money.zero(currency),
+                pace = overall?.let { WidgetFeeds.pace(it.spent, it.limit, status.period, today, status.safeToSpend?.upcoming) }, templates = ok.templates.list(),
+            )
+            defaults.setObject(f.todaySpent, forKey = "today_spent")
+            defaults.setObject(f.todayPerDay, forKey = "today_per_day")
+            defaults.setObject(f.todaySpentMasked, forKey = "today_spent_masked")
+            defaults.setObject(f.todayPerDayMasked, forKey = "today_per_day_masked")
+            defaults.setObject(f.monthSpent, forKey = "month_spent")
+            defaults.setObject(f.monthSpentMasked, forKey = "month_spent_masked")
+            defaults.setObject(f.buttons, forKey = "quick_buttons")
+            // UI S8: the budget's pace for the Quick add, Today and Lock Screen widgets (empty / -1 without a limit, or while anything hides the figures)
+            defaults.setObject(f.budgetLine, forKey = "budget_line")
+            defaults.setObject(f.budgetLeftShort, forKey = "budget_left_short")
+            defaults.setObject(f.paceWord, forKey = "pace_word")
+            defaults.setObject(f.paceLevel, forKey = "pace_level")
+            defaults.setObject(f.paceSpoken, forKey = "pace_spoken")
+            defaults.setInteger(f.paceUsedPermille.toLong(), forKey = "pace_used_permille")
+            defaults.setInteger(f.paceTodayPermille.toLong(), forKey = "pace_today_permille")
+            defaults.setBool(f.allowed, forKey = "widgets_allowed")
+            defaults.setBool(f.canToggle, forKey = "can_toggle")
             defaults.setObject(nowMillis().toString(), forKey = "published_at")
         }
         // the app's own data decided; the system redraws the widget from what was just written
@@ -76,6 +86,9 @@ object IosWidgetDebug {
 
     /** Turns Hide amounts on or off, as its switch in More does. */
     suspend fun setHideAmounts(host: IosHostServices, on: Boolean) { IosCore.get(host).container.write { it.templates.putSetting("hide_amounts", if (on) "1" else "0") } }
+
+    /** UI S8: turns "Allow widgets" on or off, as its switch on the App lock screen does. */
+    suspend fun setWidgetsAllowed(host: IosHostServices, on: Boolean) { IosCore.get(host).container.write { it.templates.putSetting(WidgetAccess.SETTING, WidgetAccess.value(on)) } }
 }
 
 /**

@@ -403,7 +403,10 @@ class QuickAddWidgetTest {
         runBlocking { container.write { it.templates.putSetting("widget_show_total", "1") } }
         val shown = runBlocking { widget.loadToday(context) }!!
         assertEquals("₹250.00", shown.spentToday, "today's 250 only, not yesterday's 9,000")
-        assertTrue(shown.perDayLine!!.endsWith(" a day left") && shown.perDayLine!!.any { it.isDigit() }, shown.perDayLine)
+        // UI S8: the per-day line says what keeps you on pace, and (shown) the budget's pace bar comes with it
+        assertTrue(shown.perDayLine!!.endsWith(" a day keeps you on pace") && shown.perDayLine!!.any { it.isDigit() }, shown.perDayLine)
+        assertNotNull(shown.budget?.pace, "the overall limit's pace bar, with today's marker")
+        assertNull(fresh.budget, "no bar while masked: its length is a figure")
         runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
         val hidden = runBlocking { widget.loadToday(context) }!!
         assertTrue(hidden.spentToday.none { it.isDigit() } && hidden.perDayLine!!.none { it.isDigit() } && !hidden.canToggle, "Hide amounts wins over the widget's switch")

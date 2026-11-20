@@ -324,6 +324,9 @@ fun EntryListScreen(
                 onMore = { onMoreChange(!moreOpen) }, moreBadge = state.showBackupNudge && !nudgesPaused,
                 // the Add button sits in the middle of the bar (it used to float over the list); the More page has it too
                 onAdd = { onMoreChange(false); onAdd() }, addTag = "add",
+                // UI S8 (N-20): a long press on Add offers the first four saved quick entries with an amount, recorded at once like a tap on them on Home
+                quickEntries = remember(state.templates) { state.templates.mapNotNull { t -> t.amountText?.let { BarQuickEntry(t.id, t.name, it) } }.take(4) },
+                onQuickEntry = { id -> state.templates.firstOrNull { it.id == id }?.let(onTemplate) },
             )
         },
     ) { padding ->
