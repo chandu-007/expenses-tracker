@@ -33,7 +33,6 @@ import app.expenses.ui.BackProbe
 import app.expenses.ui.Feel
 import app.expenses.ui.Motion
 import app.expenses.ui.OdometerProbe
-import app.expenses.ui.OpeningScreen
 import app.expenses.ui.hapticConstant
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -209,22 +208,5 @@ class UiS7DeviceTest {
         // the Back button (all at once) still goes back
         compose.openMore(); tap("open_appearance"); waitFor("haptics_row")
         shell("input keyevent KEYCODE_BACK"); gone("appearance_back")
-    }
-}
-
-/** UI S7: the first frame is the frame of Home with nothing to find or announce, and no spinner. */
-@RunWith(AndroidJUnit4::class)
-class UiS7OpeningTest {
-    @get:Rule val compose = createComposeRule()
-
-    @Test
-    fun theOpeningFrameDrawsHomesBarAndMonthCardWithoutTagsOrSemantics() {
-        compose.setContent { androidx.compose.material3.MaterialTheme { OpeningScreen() } }
-        compose.waitForIdle()
-        for (tag in listOf("add", "nav_home", "open_search", "open_reports", "more_menu", "month_spend", "bar_glass", "bar_opaque")) compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).assertCountEquals(0)
-        // a screen reader gets the merged tree: the words of the ghost bar are cleared from it
-        compose.onAllNodes(hasText("Home")).assertCountEquals(0)
-        compose.onAllNodes(hasText("Search")).assertCountEquals(0)
-        compose.onAllNodes(hasProgressBarRangeInfo(androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate), useUnmergedTree = true).assertCountEquals(0)
     }
 }

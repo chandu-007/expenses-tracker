@@ -123,8 +123,6 @@ fun BoxScope.HeroGlow(color: Color) {
     }
 }
 
-private fun Modifier.tagUnlessGhost(tag: String, ghost: Boolean): Modifier = if (ghost) this else testTag(tag)
-
 /** How tall the fade above the bottom bar is: the same as the bottom padding of the lists that scroll under it (UI S7). */
 private val SCROLL_EDGE = 24.dp
 
@@ -142,11 +140,10 @@ private const val BAR_MAX_FONT_SCALE = 1.3f
  * [selected] names the tab that is current. A pane of glass (a lit, see-through pill) glides under the current tab on a spring and stretches a little while it
  * travels, then settles; the pane starts where it last rested, so moving between screens looks like one bar moving. [moreBadge] puts a small dot on More
  * (something there wants attention). [onAdd] is the Add button (null leaves the middle empty); its test tag is [addTag] (Home's is `add`, the tag the button had when it floated).
- * The other tags are the ones the actions had before. The labels grow with the text size only up to [BAR_MAX_FONT_SCALE]. With [ghost] (the first frame, UI S7: the bar is drawn while the data is still opening) it has no tags and no semantics,
- * so a test or a screen reader finds nothing of it and only the real bar answers.
+ * The other tags are the ones the actions had before. The labels grow with the text size only up to [BAR_MAX_FONT_SCALE].
  */
 @Composable
-fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add", ghost: Boolean = false) {
+fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add") {
     val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
     val reduce = LocalReduceMotion.current
     val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
@@ -167,7 +164,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
             val h = SCROLL_EDGE.toPx()
             drawRect(Brush.verticalGradient(listOf(Color.Transparent, screen.copy(alpha = 0.92f)), startY = -h, endY = 0f), topLeft = androidx.compose.ui.geometry.Offset(0f, -h), size = androidx.compose.ui.geometry.Size(size.width, h))
         }
-    }.then(if (ghost) Modifier.clearAndSetSemantics { } else Modifier.testTag(if (opaque) "bar_opaque" else "bar_glass"))) {
+    }.testTag(if (opaque) "bar_opaque" else "bar_glass")) {
     androidx.compose.material3.Surface(color = if (opaque) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
             androidx.compose.material3.HorizontalDivider(color = if (opaque) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
@@ -191,11 +188,11 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
                     },
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).tagUnlessGhost("nav_home", ghost))
-                    BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).tagUnlessGhost("open_search", ghost))
-                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f).tagUnlessGhost(addTag, ghost)) else Spacer(Modifier.weight(1f))
-                    BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).tagUnlessGhost("open_reports", ghost))
-                    BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).tagUnlessGhost("more_menu", ghost), badge = moreBadge)
+                    BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
+                    BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"))
+                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f).testTag(addTag)) else Spacer(Modifier.weight(1f))
+                    BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"))
+                    BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge)
                 }
             }
             }

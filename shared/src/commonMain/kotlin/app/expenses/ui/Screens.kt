@@ -659,30 +659,9 @@ fun ReadOnlyEntryScreen(title: String, reason: String, onBack: () -> Unit, origi
     }
 }
 
-/**
- * The first frame while the data is still opening (UI S7, U-19): not a spinner but the frame of Home itself, drawn at once: the month card's outline with its figures still to come, and the bottom bar (without tags
- * or semantics: nothing here can be found or announced, and a tap does nothing). When the data is ready the real Home takes this place and its figures fade in. The accent and the theme live in the database that is
- * still opening, so the frame is neutral rather than the accent's gradient: a first frame in the wrong colour would flash.
- */
 @Composable
 fun OpeningScreen() {
-    val frame = MaterialTheme.colorScheme.surfaceVariant
-    val ink = MaterialTheme.colorScheme.onSurfaceVariant
-    Scaffold(
-        modifier = Modifier.clearAndSetSemantics { },
-        bottomBar = { HomeBar(selected = "Home", onHome = {}, onSearch = {}, onReports = {}, onMore = {}, onAdd = {}, ghost = true) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).clip(Radius.L).background(frame.copy(alpha = 0.7f))) {
-                Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(width = 120.dp, height = 14.dp).clip(Radius.XS).background(ink.copy(alpha = 0.16f)))
-                    Box(Modifier.size(width = 180.dp, height = 40.dp).clip(Radius.S).background(ink.copy(alpha = 0.12f)))
-                    Box(Modifier.size(width = 240.dp, height = 14.dp).clip(Radius.XS).background(ink.copy(alpha = 0.10f)))
-                    Box(Modifier.fillMaxWidth().height(40.dp).clip(Radius.S).background(ink.copy(alpha = 0.06f)))
-                }
-            }
-        }
-    }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 }
 
 @Composable
