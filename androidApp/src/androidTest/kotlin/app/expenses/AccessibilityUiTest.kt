@@ -375,6 +375,50 @@ class AccessibilityUiTest {
     @Test
     fun theAddFormsTripChip() { seedTrip(); launch(); tap("add"); waitFor("amount"); check("Add form with the trip chip", "trip_chip") }
 
+    // ---- UI S9 (U-25): the same checks in the dark theme, the true-black theme and high contrast, at twice the text size ----
+
+    private fun shell(cmd: String) { android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).use { it.readBytes() } }
+
+    /** Runs [block] with the app's theme set to [appearance] and the phone's text at [fontScale]; puts the text size and high contrast back afterwards whatever happens. */
+    private fun themed(appearance: String, fontScale: Float = 2.0f, highContrast: Boolean = false, block: () -> Unit) {
+        runBlocking { container.write { it.templates.putSetting("appearance", appearance) } }
+        shell("settings put system font_scale $fontScale")
+        if (highContrast) shell("settings put secure high_text_contrast_enabled 1")
+        try { block() } finally {
+            compose.waitForIdle(); scenario?.close(); scenario = null
+            shell("settings put system font_scale 1.0"); shell("settings put secure high_text_contrast_enabled 0")
+        }
+    }
+
+    @Test
+    fun darkAtTwiceTheTextSizeHomeTheAddFormAndMore() = themed("DARK;violet;COMFORTABLE") {
+        seedHome(); launch()
+        check("Dark 200%: Home", "add")
+        tap("add"); waitFor("save"); check("Dark 200%: Add form", "amount")
+        compose.onNodeWithTag("cancel", useUnmergedTree = true).performClick(); waitFor("add")
+        compose.openMore(); check("Dark 200%: More", "more_page")
+    }
+
+    @Test
+    fun trueBlackAtTwiceTheTextSizeHomeAndAppearance() = themed("DARK;teal;COMFORTABLE;BLACK") {
+        seedHome(); launch()
+        check("Black 200%: Home", "add")
+        compose.openMore(); tap("open_appearance"); check("Black 200%: Appearance", "appearance_preview")
+    }
+
+    @Test
+    fun lightAtTwiceTheTextSizeTheAppearancePageAndYourData() = themed("LIGHT;orange;COMPACT") {
+        seedHome(); launch()
+        compose.openMore(); tap("open_appearance"); check("Light 200%: Appearance", "appearance_preview")
+        tap("appearance_back"); tap("open_data"); check("Light 200%: Your data", "data_summary")
+    }
+
+    @Test
+    fun highContrastInLightAndDarkHome() {
+        themed("LIGHT;violet;COMFORTABLE", fontScale = 1.0f, highContrast = true) { seedHome(); launch(); check("High contrast, light: Home", "add") }
+        themed("DARK;violet;COMFORTABLE", fontScale = 1.0f, highContrast = true) { launch(); check("High contrast, dark: Home", "add") }
+    }
+
     companion object {
         /** Every finding seen in this process, by screen, check, type and element (the same finding is reported again on every action). */
         private val found = java.util.concurrent.ConcurrentHashMap<String, Finding>()

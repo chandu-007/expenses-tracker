@@ -65,6 +65,11 @@ object WideLayoutTestHook {
     var heightDp: Int? by mutableStateOf<Int?>(null)
     /** A fold to pretend the window has (null: the real one, from [LocalHinge]). */
     var hinge: Hinge? by mutableStateOf<Hinge?>(null)
+    /**
+     * UI S9: with the width forced, whether the rail is drawn too. Off by default, so the tests written before the rail keep the phone-sized window they measure (a forced two-pane layout inside a
+     * 393 dp emulator has no 80 dp to spare); the rail's own tests turn it on. A real wide window (`wm size`) always gets the rail.
+     */
+    var rail: Boolean by mutableStateOf(false)
 }
 
 /**
@@ -87,6 +92,7 @@ private fun currentHinge(): Hinge? = WideLayoutTestHook.hinge ?: LocalHinge.curr
  */
 @Composable
 fun rememberUsesRail(wide: Boolean): Boolean {
+    if (WideLayoutTestHook.widthDp != null && !WideLayoutTestHook.rail) return false
     val vertical = currentHinge()?.vertical == true
     return WindowLayout.usesRail(if (wide) WindowLayout.TWO_PANE else WindowLayout.PHONE, vertical)
 }
