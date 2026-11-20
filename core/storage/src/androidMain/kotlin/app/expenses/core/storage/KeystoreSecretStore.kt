@@ -22,10 +22,9 @@ class KeystoreSecretStore(context: Context) : SecretStore {
     override fun put(name: String, secret: ByteArray) {
         val target = file(name)
         dir.mkdirs()
-        val tmp = File(dir, "${target.name}.tmp")
-        tmp.writeBytes(KeystoreWrap.wrap(KeystoreWrap.newKey(ALIAS), secret))
-        // a rename replaces the old blob whole: a failure before it leaves the old secret as it was
-        check(tmp.renameTo(target)) { "Could not store the wrapped secret" }
+        // written whole to `<name>.bin.tmp` and synced, then renamed over the old blob and the folder synced ([DurableFiles]): after a failure or a power cut the
+        // blob is either the old secret or the whole new one, never an empty file. The blob's format is unchanged, so blobs written before still read.
+        DurableFiles.replace(target, KeystoreWrap.wrap(KeystoreWrap.newKey(ALIAS), secret))
     }
 
     /**
