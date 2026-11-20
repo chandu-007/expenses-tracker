@@ -59,7 +59,7 @@ in the file is always the next unused one. Change `versionName` to match what th
 ## 5. Upload only the SMS Play bundle
 `./gradlew :androidApp:bundlePlaySms` makes `androidApp/build/outputs/bundle/playSms/androidApp-playSms.aab` (application id `io.github.chandu007.expenses`, the Play
 build WITH the text permission: see `docs/PLAY_SMS_DECLARATION.md`). Upload that file and no other: not the APK, not `bundlePlay`, not the debug or benchmark builds.
-Closed testing first; production only after the SMS declaration is approved.
+Open testing first (the testing track in use; the SMS declaration is accepted), then production as a staged rollout of about 20%: see `docs/PLAY_LISTING.md`, "Release steps".
 
 ## 6. On a phone before telling anyone
 The smoke test runs on an emulator, never on hardware. On a real phone, with the build that will be uploaded (or its APK):

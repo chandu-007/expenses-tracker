@@ -1,6 +1,6 @@
 # Google Play: what to enter in Play Console
 
-Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is already taken on Play by another developer; the directly installed APK keeps `app.expenses`, so existing testers keep their data, but the Play app and the APK are two different apps on a phone). Build the file to upload with `./gradlew :androidApp:bundlePlay` (output `androidApp/build/outputs/bundle/play/androidApp-play.aab`). It is the release build without the SMS permission and without the text receiver (checked in the built manifest); everything else is identical.
+Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is already taken on Play by another developer; the directly installed APK keeps `app.expenses`, so existing testers keep their data, but the Play app and the APK are two different apps on a phone). Build the file to upload with `./gradlew :androidApp:bundlePlaySms` (output `androidApp/build/outputs/bundle/playSms/androidApp-playSms.aab`): the release build WITH the SMS permission and the text receiver, under the accepted SMS declaration (`docs/PLAY_SMS_DECLARATION.md`, `docs/RELEASE_CHECKLIST.md` step 5). Upload that file and no other. `./gradlew :androidApp:bundlePlay` (the same build without the SMS permission and the text receiver, checked in the built manifest) is only the fallback if the declaration is ever withdrawn.
 
 ## Store listing (draft, English India)
 - **App name** (30 max): `Expenses: private tracker`
@@ -17,6 +17,13 @@ Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is alre
   - Export to CSV or Excel at any time, free. Encrypted backups with your own passphrase.
   - App lock with your fingerprint, face or screen lock. Hide amounts with one tap.
   Private by design: no account, no ads, no tracking, and the app has no internet permission, so it cannot send your data anywhere.
+
+  **Draft for the owner (2026-11-21, not yet in Play Console; see `docs/RELEASE_READINESS.md` section 3).** The description above predates Slices 103 to 120 and does not mention text capture, which the SMS declaration needs the listing to state (`docs/PLAY_SMS_DECLARATION.md:28-31`).
+  - Proposed short description (72 of 80): `Free, private expense tracker that reads your bank alerts on your phone.`
+  - Add to the full description, near the top: "Reads your bank's text alerts (with your permission) to find payments and bills, on your phone only. Nothing is sent anywhere; every found item waits in To review until you approve it. Optional: payment-app notifications (Google Pay, PhonePe, Paytm, BHIM) and bank alert emails (Gmail, Outlook, Yahoo Mail)."
+  - Add one line each: "Add with the amount first; the keypad does sums (450+800)." "Travel mode: a trip tags its own spending." "Charts you can drag to read, or view as a table." "Budget pace: see whether you are on pace, and a daily figure to month end or payday." "Every category has its own icon and colour." "Two panes on foldables and tablets." "Verify it yourself: the app shows the permissions it does not have." "Free: no ads, no subscriptions, no in-app purchases."
+  - Replace "Accounts shown as cards" with "Accounts at a glance, with card dues ("owed · due in 6 d")".
+  - Screenshots and the feature graphic: retake after the UI slices (every screen changed since 2026-11-14).
 - **Category:** Finance. **Tags:** Expense tracker, Budgeting. **Contact email / website / privacy policy URL:** yours; policy text in `docs/PRIVACY_POLICY.md`, hostable page `docs/site/privacy.html`.
 - **Graphics you must supply:** icon 512x512 PNG; feature graphic 1024x500; at least 2 phone screenshots (8 allowed). Screenshots can be taken on the emulator or the phone; I can generate them with made-up data if you ask.
 
@@ -36,10 +43,11 @@ Package name on Play: **`io.github.chandu007.expenses`** (`app.expenses` is alre
 - **Prominent disclosure:** the Capture screen explains what is read, before the switch and before Android's settings page; keep it unchanged.
 
 ## Release steps
-1. Complete **Set up your app** and **Store listing** above.
-2. **Test and release > Testing > Internal testing:** create a release, upload the `.aab`, accept Play App Signing (the keystore used by `bundlePlay` becomes your upload key: keep `EXPENSES_STORE_FILE` safe and backed up), add testers by email, and share the opt-in link. No waiting period.
-3. **Closed testing** (needed to unlock production for a new personal account): at least **12 testers opted in for 14 days in a row**, then **Apply for production** on the Dashboard. See Google's page: https://support.google.com/googleplay/android-developer/answer/14151465
-4. Registration of the package for Android developer verification (free limited-distribution or full account) is separate: see `docs/ANDROID_INSTALL.md`.
+The app is in production (0.10.6, code 39) and open testing is the testing track in use (0.13.0, code 42). For each release:
+1. Update the **Store listing** if the release changes what it describes (above), and the hosted privacy policy BEFORE uploading (`docs/site/privacy.html`, published from `main` by GitHub Pages).
+2. **Test and release > Testing > Open testing:** create a release, upload the `bundlePlaySms` `.aab` with the next unused `versionCode`, paste the release notes, send for review, then install it from Play on a phone and check it.
+3. **Production:** promote the same release with a **staged rollout of about 20%**; watch Android vitals and reviews for 2 to 3 days, then raise to 50% and 100%; halt the rollout if crashes or ANRs rise.
+4. Play App Signing: the keystore used by the bundle tasks is the upload key: keep `EXPENSES_STORE_FILE` safe and backed up. Registration of the package for Android developer verification is separate: see `docs/ANDROID_INSTALL.md`.
 
 ## Limits to know
 - The ordinary Play build (`bundlePlay`) has no SMS reading (the SMS build, `bundlePlaySms`, does, once its declaration is approved); the "Capture from texts" tile reads "Capture from payment apps" there. Wording elsewhere that mentions texts (the To review help line, bills help, capture health) still says "texts" in the Play build.
