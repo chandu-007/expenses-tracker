@@ -10,12 +10,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEAM="${TEAM:-9V2G5RH624}"
-# The simulator the tests run on: an iPhone 17 on iOS 26.5, chosen by its id. Two simulators may carry the same name, and a destination by name is then refused as ambiguous; the first one
+# The simulator the tests run on: an iPhone 17 on the installed iOS simulator runtime (Xcode 27: iOS 27.2; was 26.5), chosen by its id. Two simulators may carry the same name, and a destination by name is then refused as ambiguous; the first one
 # that is booted, else the first available, is used (their ids sort booted before shut down).
 simulator() {
   xcrun simctl list devices available -j | python3 -c '
 import json, sys
-found = sorted((d["state"] != "Booted", d["udid"]) for rt, ds in json.load(sys.stdin)["devices"].items() if rt.endswith("iOS-26-5") for d in ds if d["name"] == "iPhone 17")
+found = sorted((d["state"] != "Booted", d["udid"]) for rt, ds in json.load(sys.stdin)["devices"].items() if rt.split(".")[-1].startswith("iOS-") for d in ds if d["name"] == "iPhone 17")
 if not found: sys.exit(1)
 print(found[0][1])'
 }
@@ -31,7 +31,7 @@ SIM_SIGN=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIG
 
 mode="${1:-test}"
 case "$mode" in
-  test|unit|build) DEST="id=$(simulator)" || { echo "no iPhone 17 simulator with iOS 26.5 is available" >&2; exit 1; } ;;
+  test|unit|build) DEST="id=$(simulator)" || { echo "no iPhone 17 simulator is available (xcodebuild -downloadPlatform iOS installs the runtime)" >&2; exit 1; } ;;
 esac
 case "$mode" in
   test)
