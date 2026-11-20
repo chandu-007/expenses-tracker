@@ -334,7 +334,7 @@ fun SearchScreen(
                         val pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi)
                         Row(
                             Modifier.animateItem().entryCardClip(pos).fillMaxWidth().entryCardFill(pos, isSelected)
-                                .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else { onRemember(text); onOpen(row) } }, onLongClick = { if (selected.isEmpty()) feel(Feel.SELECT); selected = selected.toggled(row.id) })
+                                .combinedClickable(onClick = { if (selected.isNotEmpty()) selected = selected.toggled(row.id) else { onRemember(text); onOpen(row) } }, onLongClick = { if (selected.isEmpty()) feel(Feel.LONG_PRESS); selected = selected.toggled(row.id) })
                                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).testTag("result_${row.id}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

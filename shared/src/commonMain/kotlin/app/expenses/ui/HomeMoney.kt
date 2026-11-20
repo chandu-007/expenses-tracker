@@ -67,10 +67,11 @@ fun SafeToSpendTile(ui: SafeToSpendUi, tag: String, onClick: () -> Unit, modifie
     ) {
         val headlineExact = privately(ui.headline)
         // drawn in whole units; the node says the exact headline ("₹23,000.00 safe to spend until 30 Nov") to a screen reader and to the tests
-        Text(
+        OdometerText(
             ui.headline.wholeAmounts(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
             color = if (ui.nothingSpare) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag(tag + "_text").clearAndSetSemantics { text = AnnotatedString(headlineExact) },
+            memoryKey = if (tag.startsWith("home_")) tag else null,
         )
         // UI S5 (owner decision D7): the "a day" figure is on the month card, one figure only; here the sum is one tap away
         Text("How is this worked out?", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag(tag + "_how"))

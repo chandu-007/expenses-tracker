@@ -409,7 +409,7 @@ fun EntryListScreen(
                     // Option B: the month card is short. The figure in whole units (the semantics keep the exact amount), the change against last month as a chip beside the label (under the figure at large text),
                     // one sentence, and a small graph (not at large text, in a two-pane list pane, or while amounts are hidden: its shape would show the figures)
                     if (!firstRun) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
-                        if (supportsBlur) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures
+                        if (supportsBlur && !LocalSimplified.current) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures; not on a phone simplified for weak hardware (UI S7)
                         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp)) {
                             val pill = state.spark.comparePill.takeIf { it.isNotEmpty() && !state.hideAmounts }
                             if (!large) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -419,7 +419,7 @@ fun EntryListScreen(
                             // the big figure stops growing at 150% text: at 200% a seven-figure amount would not fit the card
                             CappedFontScale(LARGE_TEXT_SCALE) {
                                 RollingAmount(
-                                    state.periodSpend, state.periodSpendMinor,
+                                    state.periodSpend,
                                     modifier = Modifier.padding(top = 2.dp).testTag("month_spend"),
                                     color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, whole = true,
                                 )
@@ -548,7 +548,7 @@ fun EntryListScreen(
                 itemsIndexed(listItems, key = { _, it -> if (it is RowUi) it.seq else "day$it" }, contentType = { _, it -> if (it is RowUi) "row" else "day" }) { index, item ->
                     if (item is RowUi) SwipeableRow(
                         item, pos = CardPos.of(first = listItems.getOrNull(index - 1) !is RowUi, last = listItems.getOrNull(index + 1) !is RowUi), onOpen, onDelete, selecting = selected.isNotEmpty(), isSelected = item.id in selected,
-                        onLongPress = { if (selected.isEmpty()) feel(Feel.SELECT); selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
+                        onLongPress = { if (selected.isEmpty()) feel(Feel.LONG_PRESS); selected = selected.toggled(item.id) }, onToggle = { selected = selected.toggled(item.id) },
                         modifier = Modifier.animateItem(), fresh = state.undo?.let { u -> !u.restore && u.entryId == item.id } == true,
                     ) else (item as Long).let { day -> DayHeader(day, dayTotals[day]?.let { signedAmount(Money(it, state.baseCurrency).formatted(), Flow3.OUT) }) }
                 }

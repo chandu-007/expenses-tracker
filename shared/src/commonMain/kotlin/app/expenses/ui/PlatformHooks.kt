@@ -7,9 +7,9 @@ import androidx.compose.runtime.Composable
  * A URI is a String everywhere in shared code (Android: a content Uri's toString(); iOS: a file URL's absoluteString).
  */
 
-/** A function that performs a [Feel]: a crisp confirm on saving (and for a paid bill), a soft neutral tap on Undo (it reverses something; it is not a failure), the one warning when a budget limit is crossed, a tick for the little things. */
+/** The platform's pattern for each [Feel] (Android: `View.performHapticFeedback`, no permission; iPhone: UIKit's feedback generators). Screens use [rememberFeel], which adds the Haptics switch and the scrub throttle. */
 @Composable
-expect fun rememberFeel(): (Feel) -> Unit
+expect fun rememberPlatformFeel(): (Feel) -> Unit
 
 /** Whether the phone itself has animations turned off (Android: animator scale 0; iPhone: Reduce Motion). */
 @Composable
@@ -58,6 +58,14 @@ expect fun rememberOpenSecuritySettings(): () -> Unit
 /** The system Back gesture (Android Back button; iPhone edge swipe where the host forwards it). Does nothing while [enabled] is false. */
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
+
+/**
+ * The system Back gesture with its progress (UI S7, U-20): like [PlatformBackHandler], but while a finger-following back gesture runs [onProgress] gets how far it has gone (0 to 1) and whether it began at the left edge,
+ * [onCancel] runs if the person lets go without going back, and [onBack] when the back is committed. A Back that is all at once (the Back button, the three-button bar) is just [onBack]. Uses only what Compose and
+ * the platform already have (Android: the activity library's predictive back handler; iPhone: Compose's back handler): no new library.
+ */
+@Composable
+expect fun PlatformPredictiveBackHandler(enabled: Boolean, onProgress: (progress: Float, fromLeft: Boolean) -> Unit, onCancel: () -> Unit, onBack: () -> Unit)
 
 /** The dialog the guided tour draws in: full screen, with no dimming of its own (the tour paints its own scrim). */
 @Composable

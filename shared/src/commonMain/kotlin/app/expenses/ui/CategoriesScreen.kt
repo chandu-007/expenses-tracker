@@ -215,8 +215,8 @@ fun CategoriesScreen(
                                     return best
                                 }
                                 detectDragGesturesAfterLongPress(
-                                    onDragStart = { dragging = c.id; dragDy = 0f; last = index; feel(Feel.SELECT) },
-                                    onDrag = { change, amount -> change.consume(); dragDy += amount.y; val t = target(); if (t != last) { last = t; feel(Feel.TICK) } },
+                                    onDragStart = { dragging = c.id; dragDy = 0f; last = index; feel(Feel.LONG_PRESS) },
+                                    onDrag = { change, amount -> change.consume(); dragDy += amount.y; val t = target(); if (t != last) { last = t; feel(Feel.STEP) } },
                                     onDragEnd = { val steps = target() - index; dragging = null; dragDy = 0f; repeat(kotlin.math.abs(steps)) { onMove(c.id, if (steps < 0) -1 else 1) } },
                                     onDragCancel = { dragging = null; dragDy = 0f },
                                 )

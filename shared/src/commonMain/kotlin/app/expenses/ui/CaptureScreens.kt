@@ -263,7 +263,7 @@ private fun InboxCard(
     var naming by rememberSaveable(r.id) { mutableStateOf(false) }
     var showText by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val feel = rememberFeel()
     val credit = r.direction == "CREDIT"
     val flow = if (credit) Flow3.IN else Flow3.OUT
     val other = (otherPick ?: r.otherAccountId).takeIf { it != account }.orEmpty()
@@ -276,7 +276,7 @@ private fun InboxCard(
             when (value) {
                 // the same as the Add button on this card (a card left as it started: an expense, income or the strong transfer it starts as); when it is refused the card slides back and says why
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                    feel(Feel.SAVE)
                     onConfirm(rNow.id, account, category, if (rNow.treatment == "TRANSFER") "TRANSFER" else "PAYMENT", rNow.fromAccountId, rNow.toAccountId, rNow.refundOfEntry) { p -> if (p != null) { problem = p; snapBack++ } }
                     true
                 }
@@ -448,15 +448,15 @@ private fun InboxCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     when {
                         billId.isNotEmpty() -> Button(
-                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onBillPaid(r.id, billId, from, card, billPay.sameEntryId) { p -> problem = p } },
+                            onClick = { feel(Feel.PAID); onBillPaid(r.id, billId, from, card, billPay.sameEntryId) { p -> problem = p } },
                             enabled = from.isNotEmpty() || sameHere, modifier = Modifier.weight(1f).testTag("inbox_billpay_add_${r.id}"),
                         ) { Text("Mark paid") }
                         sameHere -> Button(
-                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onJoin(r.id, billPay.sameEntryId) { p -> problem = p } },
+                            onClick = { feel(Feel.SAVE); onJoin(r.id, billPay.sameEntryId) { p -> problem = p } },
                             modifier = Modifier.weight(1f).testTag("inbox_billpay_join_${r.id}"),
                         ) { Text("Same payment: add to it") }
                         else -> Button(
-                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onBillPaid(r.id, "", from, card, "") { p -> problem = p } },
+                            onClick = { feel(Feel.PAID); onBillPaid(r.id, "", from, card, "") { p -> problem = p } },
                             enabled = from.isNotEmpty(), modifier = Modifier.weight(1f).testTag("inbox_billpay_record_${r.id}"),
                         ) { Text(if (isCard) "Record a card bill payment of ${r.amountText}" else "Record the bill payment of ${r.amountText}") }
                     }
@@ -468,7 +468,7 @@ private fun InboxCard(
             } else if (legMode) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(
-                        onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onJoin(r.id, r.otherLegEntryId) { p -> problem = p } },
+                        onClick = { feel(Feel.SAVE); onJoin(r.id, r.otherLegEntryId) { p -> problem = p } },
                         modifier = Modifier.weight(1f).testTag("inbox_join_${r.id}"),
                     ) { Text("Add to that transfer") }
                     OutlinedButton(onClick = { onDismiss(r.id) }, modifier = Modifier.testTag("inbox_skip_${r.id}")) { Text("Skip") }
@@ -477,7 +477,7 @@ private fun InboxCard(
             } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                        feel(Feel.SAVE)
                         // a transfer the person chose goes from the text's account to the other (or the other way for money in); one the app proposed goes where its card says
                         val from = if (pickedTransfer) (if (credit) other else account) else fromAcct
                         val to = if (pickedTransfer) (if (credit) account else other) else toAcct
@@ -600,7 +600,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
     val nameOf = { id: String -> accounts.firstOrNull { it.id == id }?.name ?: "your account" }
     var showText by rememberSaveable(r.id) { mutableStateOf(false) }
     var problem by remember(r.id) { mutableStateOf<String?>(null) }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val feel = rememberFeel()
     androidx.compose.material3.Card(
         modifier.fillMaxWidth().testTag("inbox_${r.id}"), shape = Radius.M,
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -625,7 +625,7 @@ private fun TransferPairCard(r: InboxRowUi, accounts: List<AccountUi>, onConfirm
             problem?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("inbox_problem_${r.id}")) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm); onConfirmPair(r.id, r.pairedItemId, r.fromAccountId, r.toAccountId) { p -> problem = p } },
+                    onClick = { feel(Feel.SAVE); onConfirmPair(r.id, r.pairedItemId, r.fromAccountId, r.toAccountId) { p -> problem = p } },
                     enabled = r.fromAccountId.isNotEmpty() && r.toAccountId.isNotEmpty(), modifier = Modifier.weight(1f).testTag("inbox_transfer_add_${r.id}"),
                 ) { Text("Add transfer") }
                 OutlinedButton(onClick = { onApart(r.id, r.pairedItemId) }, modifier = Modifier.testTag("inbox_transfer_apart_${r.id}")) { Text("These are separate") }

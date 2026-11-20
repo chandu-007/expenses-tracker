@@ -122,7 +122,7 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onSpent).testTag("report_spent_card")) {
             Text("Spent", style = MaterialTheme.typography.labelLarge, color = quiet)
-            MoneyText(report.spent, style = NumberStyle.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp), color = ink, maxLines = 1, minFontSize = 12.sp, modifier = Modifier.testTag("report_spent"))
+            MoneyText(report.spent, style = NumberStyle.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp), color = ink, maxLines = 1, minFontSize = 12.sp, rolling = true, modifier = Modifier.testTag("report_spent"))
             report.comparison?.let { c ->
                 // the words say "more" or "less"; the tint only repeats that, so it is never the sole signal
                 val more = c.contains("more")
@@ -368,7 +368,7 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
         Box(
             Modifier.fillMaxWidth().padding(top = 8.dp).height(room + BARS_HEIGHT).testTag("trend_chart")
-                .chartScrub(n, onScrub = { i -> scrub = i; feel(Feel.TICK) }, onEnd = { scrub = -1 }, onTap = { i -> bars.getOrNull(i)?.let { onBar(it.startDay, it.endDay) } })
+                .chartScrub(n, onScrub = { i -> scrub = i; feel(Feel.STEP) }, onEnd = { scrub = -1 }, onTap = { i -> bars.getOrNull(i)?.let { onBar(it.startDay, it.endDay) } })
                 .semantics { contentDescription = privatelyPlain(summary, hide) },
         ) {
             Canvas(Modifier.fillMaxSize()) {

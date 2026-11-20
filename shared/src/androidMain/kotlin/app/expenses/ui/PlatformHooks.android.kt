@@ -27,23 +27,25 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 
 /**
- * The Android haptic constant for [feel] on a phone with API level [sdk]: what each pattern is documented to mean, so a person learns what happened without looking. A save and a paid bill
- * are a confirm; Undo is a soft, neutral end-of-gesture tap (it reverses something, it is not a failure: it used to be the "reject" buzz); a budget limit crossed is the one warning (reject, which is
- * the firmest of the three); a tick is a clock tick. Before API 30 the constants that do not exist fall back to the nearest older one.
+ * The Android haptic constant for [feel] on a phone with API level [sdk]: what each pattern is documented to mean, so a person learns what happened without looking (UI S7). A save and a paid bill are a
+ * confirm; Undo is a soft, neutral end-of-gesture tap (it reverses something, it is not a failure); a budget limit crossed is the one warning (reject, the firmest); a press on a tab or tile is a very light
+ * segment tick and a step along a chart a frequent one; a swipe crossing its commit point has its own pair on Android 14; a press and hold is the platform's long press; a key of the number pad is a virtual key.
+ * Before the API level a constant exists at, the nearest older one is used. Only `View.performHapticFeedback` constants: no vibrator, so no permission.
  */
 fun hapticConstant(feel: Feel, sdk: Int): Int = when (feel) {
+    Feel.PRESS -> if (sdk >= 34) HapticFeedbackConstants.SEGMENT_TICK else HapticFeedbackConstants.CLOCK_TICK
     Feel.SAVE, Feel.PAID -> if (sdk >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
     Feel.UNDO -> if (sdk >= 30) HapticFeedbackConstants.GESTURE_END else HapticFeedbackConstants.KEYBOARD_TAP
-    Feel.LIMIT -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
-    Feel.TICK -> HapticFeedbackConstants.CLOCK_TICK
-    Feel.SELECT -> HapticFeedbackConstants.LONG_PRESS // a long press that starts choosing: the platform's own meaning
-    // a swipe crossing its commit point: Android 14 has the pair made for it, before that a tick
+    Feel.WARN -> if (sdk >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
     Feel.THRESHOLD -> if (sdk >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE else HapticFeedbackConstants.CLOCK_TICK
     Feel.THRESHOLD_OFF -> if (sdk >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE else HapticFeedbackConstants.CLOCK_TICK
+    Feel.STEP -> if (sdk >= 34) HapticFeedbackConstants.SEGMENT_FREQUENT_TICK else HapticFeedbackConstants.CLOCK_TICK
+    Feel.LONG_PRESS -> HapticFeedbackConstants.LONG_PRESS
+    Feel.KEY -> HapticFeedbackConstants.VIRTUAL_KEY
 }
 
 @Composable
-actual fun rememberFeel(): (Feel) -> Unit {
+actual fun rememberPlatformFeel(): (Feel) -> Unit {
     val view = LocalView.current
     return remember(view) { { feel -> view.performHapticFeedback(hapticConstant(feel, Build.VERSION.SDK_INT)) } }
 }
@@ -57,6 +59,54 @@ actual fun systemAnimationsOff(): Boolean {
 }
 
 actual val supportsBlur: Boolean = Build.VERSION.SDK_INT >= 31
+
+@Composable
+actual fun rememberLowRamDevice(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        runCatching { (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice }.getOrDefault(false)
+    }
+}
+
+private fun isEmulator(): Boolean =
+    Build.FINGERPRINT.startsWith("generic") || Build.FINGERPRINT.contains("emulator") || Build.MODEL.contains("Emulator") || Build.MODEL.contains("sdk_gphone") ||
+        Build.HARDWARE == "goldfish" || Build.HARDWARE == "ranchu" || Build.PRODUCT.contains("sdk")
+
+private fun Context.activityOrNull(): android.app.Activity? {
+    var c: Context? = this
+    while (c is android.content.ContextWrapper) { if (c is android.app.Activity) return c; c = c.baseContext }
+    return null
+}
+
+@Composable
+actual fun SlowFrameWatch(onSlow: () -> Unit) {
+    val view = LocalView.current
+    val latest by rememberUpdatedState(onSlow)
+    DisposableEffect(view) {
+        val window = view.context.activityOrNull()?.window
+        if (window == null || isEmulator()) return@DisposableEffect onDispose { }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val health = app.expenses.core.domain.FrameHealth()
+        val listener = android.view.Window.OnFrameMetricsAvailableListener { _, metrics, _ ->
+            if (health.add(metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION) / 1_000_000.0)) main.post { latest() }
+        }
+        runCatching { window.addOnFrameMetricsAvailableListener(listener, main) }
+        onDispose { runCatching { window.removeOnFrameMetricsAvailableListener(listener) } }
+    }
+}
+
+@Composable
+actual fun systemReduceTransparency(): Boolean {
+    val context = LocalContext.current
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    // the APPLICATION context's UiModeManager: the one of an activity registers a listener with the system that holds the activity, and every recreation leaked one (found by RecreateStressTest running out of memory: 150 recreations kept 150 activities)
+    return remember(context, config) {
+        runCatching {
+            val level = if (Build.VERSION.SDK_INT >= 34) (context.applicationContext.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).contrast else 0f
+            level > 0f || Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1
+        }.getOrDefault(false)
+    }
+}
 
 /**
  * Two signs, either one is enough: the visible part of the window shrinking by more than a sixth of its height (the window is resized for the keyboard, which is what the API 26
@@ -152,6 +202,22 @@ actual fun rememberOpenSecuritySettings(): () -> Unit {
 
 @Composable
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)
+
+@Composable
+actual fun PlatformPredictiveBackHandler(enabled: Boolean, onProgress: (progress: Float, fromLeft: Boolean) -> Unit, onCancel: () -> Unit, onBack: () -> Unit) {
+    val progress by rememberUpdatedState(onProgress)
+    val cancelled by rememberUpdatedState(onCancel)
+    val back by rememberUpdatedState(onBack)
+    androidx.activity.compose.PredictiveBackHandler(enabled) { events: kotlinx.coroutines.flow.Flow<androidx.activity.BackEventCompat> ->
+        try {
+            events.collect { progress(it.progress, it.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT) }
+            back()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            cancelled()
+            throw e
+        }
+    }
+}
 
 @Composable
 actual fun GuideDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {

@@ -763,6 +763,10 @@ sealed interface UiState {
         val categoryLookNotice: Boolean = false,
         /** "off", "quick", "relaxed" or "slow": how long the app's movements take. */
         val motionSpeed: String = "relaxed",
+        /** UI S7: the Haptics switch under Appearance (on by default); off silences every haptic in the app. */
+        val hapticsOn: Boolean = true,
+        /** UI S7: "auto", "on" or "off": whether the app simplifies itself for a weak phone (Appearance); see [app.expenses.core.domain.Simplify]. */
+        val simplifyMode: String = "auto",
         val smsCapture: Boolean,
         val autoExport: AutoExportUi,
         /** "Hide amounts" is on: every amount on screen is hidden. */
@@ -2125,6 +2129,12 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     /** "Got it" on the line at the top of Categories about the new look (UI S3): never shown again. */
     fun dismissCategoryLookNotice() = withStore { ok -> ok.templates.putSetting(SETTING_LOOK_NOTICE, "1"); refresh(ok) }
+
+    /** Appearance: haptics on (the default) or off (UI S7). Takes effect at once, on every screen. */
+    fun setHaptics(on: Boolean) = withStore { ok -> ok.templates.putSetting(app.expenses.core.domain.Haptics.SETTING, if (on) "1" else "0"); refresh(ok) }
+
+    /** Appearance: whether the app simplifies itself for a weak phone: "auto" (the default), "on" or "off" (UI S7). */
+    fun setSimplifyMode(mode: String) = withStore { ok -> ok.templates.putSetting(app.expenses.core.domain.Simplify.SETTING, app.expenses.core.domain.Simplify.mode(mode).key); refresh(ok) }
 
     fun setMotionSpeed(speed: String) = withStore { ok ->
         ok.templates.putSetting(SETTING_REDUCE_MOTION, if (speed == "off") "1" else "0")
@@ -4950,6 +4960,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             showSpendingRed = ok.templates.setting(SETTING_SPEND_RED) == "1",
             categoryLookNotice = categoryLookNotice(ok),
             motionSpeed = if (ok.templates.setting(SETTING_REDUCE_MOTION) == "1") "off" else ok.templates.setting(SETTING_MOTION_SPEED) ?: "relaxed",
+            hapticsOn = app.expenses.core.domain.Haptics.isOn(ok.templates.setting(app.expenses.core.domain.Haptics.SETTING)),
+            simplifyMode = app.expenses.core.domain.Simplify.mode(ok.templates.setting(app.expenses.core.domain.Simplify.SETTING)).key,
             smsCapture = ok.templates.setting(CaptureKeys.SETTING_SMS_ON) == "1",
             hideAmounts = ok.templates.setting(SETTING_HIDE_AMOUNTS) == "1",
             homeLayout = HomeLayout.decode(ok.templates.setting(SETTING_HOME_LAYOUT)),

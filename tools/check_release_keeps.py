@@ -64,7 +64,7 @@ class DexClass:
 
 
 def parse_dex(apk):
-    out = subprocess.run([tool("build-tools/*/dexdump"), apk], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run([tool("build-tools/*/dexdump"), apk], capture_output=True, text=True, errors="replace", check=True).stdout
     classes = {}
     cur = None
     section = None
@@ -129,7 +129,10 @@ def manifest_components(apk):
 # The debug-only frame logger (UI S0 F-15): BuildConfig.FRAME_LOG is a constant false outside the debug build, so R8 must remove FrameLog, FrameProbe's wiring and FrameStats. If any of them is reachable in a release build,
 # a measuring tool would ship (and run an extra frame listener on every phone), so this check fails.
 LOGGER_CLASSES = ["app.expenses.FrameLog", "app.expenses.ui.FrameProbe", "app.expenses.core.domain.FrameStats", "app.expenses.FrameLogDriveTest"]
-LOGGER_STRINGS = ["addOnFrameMetricsAvailableListener", "OnFrameMetricsAvailableListener", "FRAMELOG_RESULT"]
+# Not "addOnFrameMetricsAvailableListener" any more (UI S7 U-21): the release build now has ONE frame listener of its own, SlowFrameWatch, which lets a phone that stutters switch to simple visuals; it never writes a log line.
+# What only the logger has is its classes (above) and its own strings: the log tag and thread name "FrameLog" and the burst label "scroll or animation on" (a constant string survives R8 even where a class name does not).
+# ("FRAMELOG_RESULT", the old third string, lives in the instrumented test only, so it never was in an app build.)
+LOGGER_STRINGS = ['"FrameLog"', "scroll or animation on"]
 
 
 def debug_logger_leftovers(apk, mapping):

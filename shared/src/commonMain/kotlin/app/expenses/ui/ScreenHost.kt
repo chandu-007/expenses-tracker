@@ -18,15 +18,87 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import kotlin.concurrent.Volatile
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 
 /** True inside a screen that is leaving: it is still drawn for its exit, but must no longer answer the Back button. */
 val LocalLeavingScreen = androidx.compose.runtime.compositionLocalOf { false }
 
-/** The platform back handler (Android Back, iOS edge swipe) that stands down while its screen is animating out, so a Back press goes to the screen that is now showing. */
+/** The platform back handler (Android Back, iOS edge swipe) that stands down while its screen is animating out, so a Back press goes to the screen that is now showing. For a state inside a screen (a selection, an open panel). */
 @Composable
 fun BackHandler(enabled: Boolean = true, onBack: () -> Unit) = PlatformBackHandler(enabled && !LocalLeavingScreen.current, onBack)
+
+/**
+ * The finger-following preview of the back gesture (UI S7, U-20): while the gesture runs, [progress] (0 to 1) is how far it has gone and [key] is the screen it is leaving, so [ScreenHost] can scale that screen down and
+ * shift it a little, as the system does between apps. It is read only in the graphics layer, so following the finger recomposes nothing.
+ */
+@Stable
+class BackPreview {
+    var progress by mutableFloatStateOf(0f)
+    /** The screen the gesture is on; [Int.MIN_VALUE] for none. */
+    var key by mutableIntStateOf(Int.MIN_VALUE)
+    /** True when the gesture began at the left edge: the screen is pushed to the right (to the left for the right edge). */
+    var fromLeft by mutableStateOf(true)
+}
+
+val LocalBackPreview = compositionLocalOf<BackPreview?> { null }
+
+/** What the back gesture did, for the tests: the furthest it got, and how many times it was committed or let go of. Nothing in the app reads it. */
+object BackProbe {
+    @Volatile var maxProgress = 0f
+    @Volatile var committed = 0
+    @Volatile var cancelled = 0
+    fun reset() { maxProgress = 0f; committed = 0; cancelled = 0 }
+}
+
+/** The key of the screen this part of the composition belongs to (set by [ScreenHost] around each screen); [Int.MIN_VALUE] outside one. */
+val LocalScreenKey = compositionLocalOf { Int.MIN_VALUE }
+
+/**
+ * The back handler of a whole SCREEN (Back goes to the screen below). Like [BackHandler], and with the finger-following preview where the platform reports it (Android 14 and later through the system's predictive back;
+ * the iPhone's edge swipe): the screen shrinks and shifts as the finger moves, springs back if the person lets go, and leaves from where it is when they go back. Under Reduce motion there is no preview, only the Back.
+ * The Back button, and a Back from the three-button bar, always work as before: they are a gesture that is all at once.
+ */
+@Composable
+fun ScreenBackHandler(enabled: Boolean = true, onBack: () -> Unit) {
+    val preview = LocalBackPreview.current
+    val key = LocalScreenKey.current
+    val on = enabled && !LocalLeavingScreen.current
+    if (preview == null || LocalReduceMotion.current) { PlatformBackHandler(on, onBack); return }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    PlatformPredictiveBackHandler(
+        enabled = on,
+        onProgress = { p, fromLeft -> preview.key = key; preview.fromLeft = fromLeft; preview.progress = p; if (p > BackProbe.maxProgress) BackProbe.maxProgress = p },
+        onCancel = { BackProbe.cancelled++; scope.launch { androidx.compose.animation.core.animate(preview.progress, 0f, animationSpec = tween(Motion.FEEDBACK * 2)) { v, _ -> preview.progress = v } } },
+        onBack = { BackProbe.committed++; onBack() },
+    )
+}
+
+/** The screen's own preview while the back gesture is on it: a little smaller, a little aside, a little fainter. Drawn in the graphics layer. */
+private fun Modifier.backPreview(preview: BackPreview?, key: Int): Modifier = if (preview == null) this else graphicsLayer {
+    if (preview.key == key) {
+        val p = preview.progress
+        if (p > 0f) {
+            val s = 1f - 0.08f * p
+            scaleX = s; scaleY = s
+            translationX = (if (preview.fromLeft) 1f else -1f) * 24.dp.toPx() * p
+            alpha = 1f - 0.12f * p
+        }
+    }
+}
 
 private val TABS = setOf(ScreenKeys.HOME, ScreenKeys.SEARCH, 16)
 
@@ -62,6 +134,8 @@ fun ScreenHost(screenKey: Int, content: @Composable (key: Int) -> Unit) {
     androidx.compose.runtime.LaunchedEffect(screenKey) {
         if (previousKey[0] != screenKey) { FrameProbe.onScreenChange?.invoke(previousKey[0], screenKey); previousKey[0] = screenKey }
     }
+    val preview = remember { BackPreview() }
+    CompositionLocalProvider(LocalBackPreview provides preview) {
     SharedTransitionLayout {
         AnimatedContent(
             targetState = screenKey,
@@ -94,9 +168,12 @@ fun ScreenHost(screenKey: Int, content: @Composable (key: Int) -> Unit) {
             },
         ) { key ->
             val leaving = transition.targetState == EnterExitState.PostExit
-            CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout, LocalAnimatedVisibilityScope provides this, LocalLeavingScreen provides leaving) {
-                Box(Modifier.fillMaxSize().then(if (leaving) Modifier.clearAndSetSemantics { } else Modifier)) { content(key) }
+            // when this screen has gone (its exit has finished), the preview it was left in is cleared for the next time
+            DisposableEffect(key) { onDispose { if (preview.key == key) { preview.key = Int.MIN_VALUE; preview.progress = 0f } } }
+            CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout, LocalAnimatedVisibilityScope provides this, LocalLeavingScreen provides leaving, LocalScreenKey provides key) {
+                Box(Modifier.fillMaxSize().backPreview(preview, key).then(if (leaving) Modifier.clearAndSetSemantics { } else Modifier)) { content(key) }
             }
         }
+    }
     }
 }

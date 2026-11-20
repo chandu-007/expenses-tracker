@@ -72,6 +72,7 @@ fun moneyAnnotated(text: String, paiseColor: Color, smallSign: Boolean = true): 
 /**
  * An amount drawn as a hero figure. Hidden amounts (Hide amounts) are masked first and come out as plain text. With [minFontSize] the figure stays on one line at any text size: it takes the largest size (1 sp steps, from the
  * style's down to [minFontSize]) at which it fits the width on offer; the sign and the paise are in em, so they follow. (Compose's own auto-size ignores the spans of a text, which is why this does not use it.)
+ * With [rolling] the digits that change roll (UI S7, see [OdometerText]): for a figure that changes while it is on screen (the month's spending, a net worth), not for one in a list.
  */
 @Composable
 fun MoneyText(
@@ -81,12 +82,16 @@ fun MoneyText(
     color: Color = Color.Unspecified,
     maxLines: Int = 1,
     minFontSize: TextUnit = TextUnit.Unspecified,
+    rolling: Boolean = false,
+    /** See [OdometerText]'s `memoryKey`. */
+    memoryKey: String? = null,
 ) {
     val shown = privately(text)
     val ink = color.takeOrElse { androidx.compose.material3.LocalContentColor.current }
     val built = remember(shown, ink) { moneyAnnotated(shown, paiseColor = ink.copy(alpha = 0.72f)) }
     if (minFontSize == TextUnit.Unspecified) {
-        androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style, maxLines = maxLines)
+        if (rolling) OdometerText(text, modifier = modifier, style = style, color = color, maxLines = maxLines, money = true, memoryKey = memoryKey)
+        else androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style, maxLines = maxLines)
         return
     }
     val measurer = rememberTextMeasurer()
@@ -97,6 +102,7 @@ fun MoneyText(
             while (size > minFontSize.value && measurer.measure(built, style.copy(fontSize = size.sp), maxLines = 1, softWrap = false).size.width > widthPx) size -= 1f
             size.sp
         }
-        androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style.copy(fontSize = fitted), maxLines = maxLines, softWrap = false)
+        if (rolling) OdometerText(text, modifier = modifier, style = style.copy(fontSize = fitted), color = color, maxLines = maxLines, softWrap = false, money = true, memoryKey = memoryKey)
+        else androidx.compose.material3.Text(built, modifier = modifier, color = color, style = style.copy(fontSize = fitted), maxLines = maxLines, softWrap = false)
     }
 }

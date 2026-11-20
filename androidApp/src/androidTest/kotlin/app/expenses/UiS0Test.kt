@@ -64,14 +64,14 @@ class UiS0MotionAndHapticsTest {
     fun undoIsASoftNeutralTapNotTheFailureBuzzAndTheLimitIsTheOneWarning() {
         for (sdk in listOf(26, 29, 30, 34)) {
             assertNotEquals(HapticFeedbackConstants.REJECT, hapticConstant(Feel.UNDO, sdk), "Undo is not a rejection (API $sdk)")
-            assertNotEquals(hapticConstant(Feel.LIMIT, sdk), hapticConstant(Feel.UNDO, sdk), "Undo and the limit feel different (API $sdk)")
+            assertNotEquals(hapticConstant(Feel.WARN, sdk), hapticConstant(Feel.UNDO, sdk), "Undo and the limit feel different (API $sdk)")
             assertNotEquals(hapticConstant(Feel.SAVE, sdk), hapticConstant(Feel.UNDO, sdk))
         }
         assertEquals(HapticFeedbackConstants.GESTURE_END, hapticConstant(Feel.UNDO, 30)); assertEquals(HapticFeedbackConstants.KEYBOARD_TAP, hapticConstant(Feel.UNDO, 29))
-        assertEquals(HapticFeedbackConstants.REJECT, hapticConstant(Feel.LIMIT, 30)); assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.LIMIT, 26))
+        assertEquals(HapticFeedbackConstants.REJECT, hapticConstant(Feel.WARN, 30)); assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.WARN, 26))
         assertEquals(HapticFeedbackConstants.CONFIRM, hapticConstant(Feel.SAVE, 34)); assertEquals(HapticFeedbackConstants.CONFIRM, hapticConstant(Feel.PAID, 34)); assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, hapticConstant(Feel.SAVE, 28))
-        assertEquals(HapticFeedbackConstants.CLOCK_TICK, hapticConstant(Feel.TICK, 26))
-        for (sdk in listOf(26, 34)) assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.SELECT, sdk), "starting a selection is the long-press feel")
+        assertEquals(HapticFeedbackConstants.CLOCK_TICK, hapticConstant(Feel.STEP, 26)); assertEquals(HapticFeedbackConstants.SEGMENT_FREQUENT_TICK, hapticConstant(Feel.STEP, 34))
+        for (sdk in listOf(26, 34)) assertEquals(HapticFeedbackConstants.LONG_PRESS, hapticConstant(Feel.LONG_PRESS, sdk), "starting a selection is the long-press feel")
     }
 }
 

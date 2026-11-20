@@ -28,7 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import app.expenses.ui.BackHandler
+import app.expenses.ui.ScreenBackHandler
 import app.expenses.ui.BudgetScreen
 import app.expenses.ui.LoansScreen
 import app.expenses.ui.BillsScreen
@@ -319,17 +319,27 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
 
             val tipsSeen by viewModel.tipsSeen.collectAsStateWithLifecycle(context = MAIN)
             val tourForTips by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
+            // UI S7: the app simplifies itself on a weak phone (a low-RAM phone, or one that has drawn slowly for long enough); the person's choice under Appearance wins (see Simplify)
+            val lowRamPhone = app.expenses.ui.rememberLowRamDevice()
+            var slowFrames by rememberSaveable { mutableStateOf(false) }
+            app.expenses.ui.SlowFrameWatch { slowFrames = true }
             if (locked) LockedScreen(lockMessage) { lock.requestUnlock() } else when (val s = state) {
                 UiState.Opening -> OpeningScreen()
                 is UiState.KeyLost -> KeyLostScreen(s.message, viewModel::startFresh)
-                is UiState.Ready -> androidx.compose.runtime.CompositionLocalProvider(
+                is UiState.Ready -> {
+                val simplified = app.expenses.core.domain.Simplify.active(app.expenses.core.domain.Simplify.mode(s.simplifyMode), lowRamPhone, slowFrames)
+                androidx.compose.runtime.CompositionLocalProvider(
                     app.expenses.ui.LocalHideAmounts provides s.hideAmounts,
+                    app.expenses.ui.LocalHapticsEnabled provides s.hapticsOn,
+                    app.expenses.ui.LocalOdometerMemory provides androidx.compose.runtime.remember { HashMap<String, String>() },
+                    app.expenses.ui.LocalSimplified provides simplified,
                     app.expenses.ui.LocalReduceMotion provides (s.reduceMotion || app.expenses.ui.systemAnimationsOff()),
                     app.expenses.ui.LocalSpendingRed provides s.showSpendingRed,
                     app.expenses.ui.LocalTips provides androidx.compose.runtime.remember(tipsSeen, tourForTips == null && !s.showWelcome) { app.expenses.ui.TipsContext(tipsSeen, tourForTips == null && !s.showWelcome, viewModel::markTipSeen) },
                     app.expenses.ui.LocalCategoryLooks provides androidx.compose.runtime.remember(s.categories) { app.expenses.ui.CategoryLooks.of(s.categories) },
                 ) {
-                androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(s.motionSpeed) }
+                // simplified: Quick motion (Reduce motion, "off", stays what it is)
+                androidx.compose.runtime.SideEffect { app.expenses.ui.Motion.scale = app.expenses.ui.Motion.scaleOf(if (simplified && s.motionSpeed != "off") "quick" else s.motionSpeed) }
                 // the tour: the app opens each part for real, and a layer on top explains it
                 val guide by viewModel.guide.collectAsStateWithLifecycle(context = MAIN)
                 var tourIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -425,7 +435,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         // kept in the root, not saved with the screen: when the window turns wide or narrow under an open entry, the detail or form that appears in its new place is the one that was showing
                         var viewing by androidx.compose.runtime.remember(identity) { mutableStateOf(viewHold.of(identity) ?: hasDetail) }
                         androidx.compose.runtime.SideEffect { viewHold.keep(identity, viewing) }
-                        BackHandler { if (!viewing && hasDetail) viewing = true else viewModel.closeEditor() }
+                        ScreenBackHandler { if (!viewing && hasDetail) viewing = true else viewModel.closeEditor() }
                         if (viewing) {
                             app.expenses.ui.EntryDetailScreen(
                                 form = e, categories = s.categories,
@@ -467,7 +477,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         }
                     }
                     is Editable.ReadOnly -> {
-                        BackHandler { viewModel.closeEditor() }
+                        ScreenBackHandler { viewModel.closeEditor() }
                         ReadOnlyEntryScreen(e.title, e.reason, viewModel::closeEditor, e.origin)
                     }
                 } }
@@ -553,31 +563,31 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 app.expenses.ui.ScreenHost(screenKey) { k -> app.expenses.ui.WideFrame(wide, k, editing, editorScreen, moreOpen = moreOpen) { when {
                     k == 0 -> {
                         val h = history ?: heldHistory.value!!
-                        BackHandler { viewModel.closeHistory() }
+                        ScreenBackHandler { viewModel.closeHistory() }
                         HistoryScreen(h, onBack = viewModel::closeHistory, onRestore = { viewModel.restoreVersion(h.entryId, it) })
                     }
                     // k 1 and 2 are drawn only while the editor is a full screen: a one still leaving when the window turns wide draws nothing, the pane beside Home has the editor then
                     k == 1 -> if (editorFull) editorScreen((editing as? Editable.Form) ?: (heldEditing.value as Editable.Form))
                     k == 2 -> if (editorFull) editorScreen((editing as? Editable.ReadOnly) ?: (heldEditing.value as Editable.ReadOnly))
                     k == 3 -> {
-                        BackHandler { inboxOpen = false }
+                        ScreenBackHandler { inboxOpen = false }
                         InboxScreen(inboxRows, s.accounts, s.categories, onConfirm = { id, a, c, t, f, to, r, done -> viewModel.confirmCapture(id, a, c, t, f, to, r, done) }, onDismiss = viewModel::dismissCapture, onFlip = viewModel::flipCaptureDirection, onName = viewModel::namePayee, onBack = { inboxOpen = false }, onPaste = if (platform.supportsShortcutsCapture) viewModel::pasteMessage else null, loaded = inboxLoaded, undo = inboxUndo, onUndo = viewModel::undoDismissCapture, onUndoGone = viewModel::inboxUndoGone, onConfirmPair = viewModel::confirmTransferPair, onApart = viewModel::keepApart, onConvert = viewModel::makeTransfer, onChooseAccount = viewModel::chooseCaptureAccount, onCreateAccount = viewModel::createCaptureAccount, onBillPaid = viewModel::confirmBillPayment, onJoin = viewModel::joinCapture, onSetUpCapture = { inboxOpen = false; captureOpen = true; viewModel.loadCaptureSettings() }, onOpenCheckup = { inboxOpen = false; checkupOpen = true }, onSameShop = { from, to, done -> viewModel.joinShops(from, to, true, done) })
                     }
                     k == 4 -> {
-                        BackHandler { healthOpen = false }
+                        ScreenBackHandler { healthOpen = false }
                         // the report depends on the text permission: work it out again when the permission changes while the screen is open (the first load is the tap that opened it)
                         val firstHealth = remember { booleanArrayOf(true) }
                         LaunchedEffect(smsPermission) { if (firstHealth[0]) firstHealth[0] = false else viewModel.loadCaptureHealth(smsPermission) }
                         CaptureHealthScreen(health, onAddSender = { viewModel.addSenderHeader(it, smsPermission) }, onBack = { healthOpen = false })
                     }
                     k == 5 -> {
-                        BackHandler { privacyOpen = false }
+                        ScreenBackHandler { privacyOpen = false }
                         // read again whenever the app returns from the system's settings, so a permission given there shows at once
                         val privacy = app.expenses.ui.rememberResumeState { host.privacyRows() }
                         PrivacyScreen(privacy.value, host.canUseInternet, onBack = { privacyOpen = false }, onVerify = { privacyOpen = false; verifyFromPrivacy = true; verifying = true })
                     }
                     k == 6 -> {
-                        BackHandler { rulesOpen = false }
+                        ScreenBackHandler { rulesOpen = false }
                         CaptureRulesScreen(
                             captureRules, s.categories, onAdd = viewModel::addCaptureRule, onRemove = viewModel::removeCaptureRule, onMove = viewModel::moveCaptureRule, onTest = viewModel::testCaptureRule, onBack = { rulesOpen = false },
                             learned = learnedPayees, onForgetLearned = viewModel::forgetLearned, onChangeLearned = { key, cat, done -> viewModel.changeLearned(key, cat, done) }, onFileLearned = viewModel::fileEarlierLike,
@@ -586,7 +596,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 7 -> {
-                        BackHandler { captureOpen = false }
+                        ScreenBackHandler { captureOpen = false }
                         CaptureSettingsScreen(
                             captureSettings, smsPermission, notifAccess.value,
                             onToggle = { on -> if (!on) viewModel.setSmsCapture(false) else if (smsPermission) viewModel.setSmsCapture(true) else sms.request() },
@@ -600,7 +610,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 28 -> {
-                        BackHandler { checkupOpen = false }
+                        ScreenBackHandler { checkupOpen = false }
                         // read again whenever the app comes back from Android's settings, so a permission given there shows at once
                         val phone = app.expenses.ui.rememberResumeState { host.phoneStatus() }
                         val phoneNow = CheckupTestHook.phone ?: phone.value
@@ -637,7 +647,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 29 -> {
                         val step = app.expenses.core.domain.SetupStep.entries.firstOrNull { it.name == setupStep } ?: app.expenses.core.domain.SetupStep.PERMISSION
-                        BackHandler { viewModel.setupLeave(step); setupOpen = false }
+                        ScreenBackHandler { viewModel.setupLeave(step); setupOpen = false }
                         val setupUi by viewModel.setup.collectAsStateWithLifecycle(context = MAIN)
                         LaunchedEffect(Unit) { viewModel.loadCaptureSettings(); viewModel.loadSetup() }
                         app.expenses.ui.GuidedSetupScreen(
@@ -665,7 +675,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val closeSummary = { tripSummaryOf = null; viewModel.closeTripSummary() }
                         // the page is rebuilt from the store, also after the app's process was recreated with the page open
                         LaunchedEffect(tripSummaryOf) { tripSummaryOf?.let { viewModel.openTripSummary(it) } }
-                        BackHandler { closeSummary() }
+                        ScreenBackHandler { closeSummary() }
                         app.expenses.ui.TripSummaryScreen(
                             summary, tripUndo, onBack = closeSummary,
                             // Search opens with the trip's tag already chosen (all dates: the same entries as the page's total) (Back returns to this page: it is still open underneath)
@@ -680,7 +690,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         val tripUndo by viewModel.tripUndo.collectAsStateWithLifecycle(context = MAIN)
                         val closeTrips = { tripsOpen = false; viewModel.closeTrips() }
                         LaunchedEffect(Unit) { if (tripList == null) viewModel.openTrips() }
-                        BackHandler { closeTrips() }
+                        ScreenBackHandler { closeTrips() }
                         app.expenses.ui.TripsScreen(
                             tripList, tags = s.tags, offer = tripOffer, undo = tripUndo, onBack = closeTrips,
                             onSave = viewModel::saveTrip, onDelete = viewModel::deleteTrip,
@@ -691,12 +701,12 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 33 -> {
                         val closeVerify = { verifying = false; if (verifyFromPrivacy) { verifyFromPrivacy = false; privacyOpen = true } }
-                        BackHandler { closeVerify() }
+                        ScreenBackHandler { closeVerify() }
                         val asked = app.expenses.ui.rememberResumeState { host.privacyRows() }
                         app.expenses.ui.VerifyScreen(asked.value, onBack = closeVerify)
                     }
                     k == 30 -> {
-                        BackHandler { earlierOpen = false }
+                        ScreenBackHandler { earlierOpen = false }
                         val pickers = app.expenses.ui.rememberFilePickers()
                         app.expenses.ui.EarlierSpendingScreen(
                             accounts = s.accounts, categories = s.categories,
@@ -711,19 +721,19 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 8 -> {
-                        BackHandler { currencyOpen = false }
+                        ScreenBackHandler { currencyOpen = false }
                         CurrencyScreen(s.baseCurrency, currencyBlocker, onChoose = viewModel::setBaseCurrency, onBack = { currencyOpen = false })
                     }
                     k == 9 -> {
-                        BackHandler { appearing = false }
-                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed, onShowTipsAgain = viewModel::resetTips)
+                        ScreenBackHandler { appearing = false }
+                        AppearanceScreen(s.appearance, onChange = viewModel::setAppearance, onBack = { appearing = false }, motionSpeed = s.motionSpeed, onMotionSpeed = viewModel::setMotionSpeed, showSpendingRed = s.showSpendingRed, onShowSpendingRed = viewModel::setShowSpendingRed, onShowTipsAgain = viewModel::resetTips, hapticsOn = s.hapticsOn, onHaptics = viewModel::setHaptics, simplifyMode = s.simplifyMode, onSimplifyMode = viewModel::setSimplifyMode, simplifyLine = app.expenses.core.domain.Simplify.line(app.expenses.core.domain.Simplify.mode(s.simplifyMode), lowRamPhone, slowFrames))
                     }
                     k == 10 -> {
-                        BackHandler { customisingHome = false }
+                        ScreenBackHandler { customisingHome = false }
                         HomeLayoutScreen(s.homeLayout, onChange = viewModel::setHomeLayout, onBack = { customisingHome = false })
                     }
                     k == 11 -> {
-                        BackHandler { managingAccounts = false }
+                        ScreenBackHandler { managingAccounts = false }
                         AccountsScreen(
                             rows = s.accountRows, onBack = { managingAccounts = false },
                             onSave = viewModel::saveAccount, onArchive = viewModel::setAccountArchived, onDelete = viewModel::deleteAccount,
@@ -734,7 +744,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 12 -> {
-                        BackHandler { managingCategories = false }
+                        ScreenBackHandler { managingCategories = false }
                         CategoriesScreen(
                             categories = s.categories,
                             onBack = { managingCategories = false },
@@ -750,7 +760,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 13 -> {
-                        BackHandler { securing = false; lock.dismissMessage() }
+                        ScreenBackHandler { securing = false; lock.dismissMessage() }
                         SecurityScreen(
                             settings = lockSettings, availability = lock::availability, message = lockMessage,
                             onEnable = { lock.enable(it) }, onDisable = { lock.disable() },
@@ -760,7 +770,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 14 -> {
                         val found by viewModel.search.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
+                        ScreenBackHandler { searching = false; searchAccount = null; searchTag = null; searchFrom = null; searchTo = null; viewModel.closeSearch() }
                         // a change made to the entry that is open beside the results (two panes): its form would Save the old version over the change, or fail for a deleted entry, so the entry is closed first
                         val settle = { ids: List<String> -> val open = (editing as? Editable.Form)?.draft?.id ?: (editing as? Editable.ReadOnly)?.id; if (open != null && open in ids) viewModel.closeEditor() }
                         SearchScreen(
@@ -781,7 +791,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 15 -> {
                         val cal by viewModel.calendar.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { calendaring = false; viewModel.closeCalendar() }
+                        ScreenBackHandler { calendaring = false; viewModel.closeCalendar() }
                         CalendarScreen(
                             state = cal, onBack = { calendaring = false; viewModel.closeCalendar() },
                             onShift = viewModel::shiftCalendar, onSelect = viewModel::selectCalendarDay, onOpenEntry = viewModel::openEditor,
@@ -789,11 +799,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 24 -> {
                         val subs by viewModel.subscriptions.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { subscribing = false; viewModel.closeSubscriptions() }
+                        ScreenBackHandler { subscribing = false; viewModel.closeSubscriptions() }
                         app.expenses.ui.SubscriptionsScreen(subs, onBack = { subscribing = false; viewModel.closeSubscriptions() }, onNotOne = viewModel::ignoreSubscription, onShowIgnored = viewModel::showIgnoredSubscriptions, onRepeat = viewModel::repeatSubscription)
                     }
                     k == 27 -> {
-                        BackHandler { categorising = false; viewModel.closeCategorise() }
+                        ScreenBackHandler { categorising = false; viewModel.closeCategorise() }
                         app.expenses.ui.CategoriseScreen(
                             categoriseState, s.categories, onChoose = viewModel::categoriseChoose, onSkip = viewModel::categoriseSkip, onBack = { categorising = false; viewModel.closeCategorise() },
                             onUndo = viewModel::undoCategorise, onUndoGone = viewModel::categoriseUndoGone,
@@ -801,7 +811,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 26 -> {
                         val found by viewModel.transferCandidates.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { transferring = false; viewModel.closeTransferCandidates() }
+                        ScreenBackHandler { transferring = false; viewModel.closeTransferCandidates() }
                         app.expenses.ui.TransferCandidatesScreen(
                             found, onBack = { transferring = false; viewModel.closeTransferCandidates() }, onMake = viewModel::makeCandidateTransfers, onNotOne = viewModel::dismissTransferCandidates,
                             onShowDismissed = viewModel::showDismissedTransferCandidates, onCreateCash = viewModel::createCashAccountForCandidates, onUndo = viewModel::undoCandidateTransfers, onUndoGone = viewModel::candidateTransfersUndoGone,
@@ -809,14 +819,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                     }
                     k == 25 -> {
                         val goalState by viewModel.goals.collectAsStateWithLifecycle(context = MAIN)
-                        BackHandler { goaling = false; viewModel.closeGoals() }
+                        ScreenBackHandler { goaling = false; viewModel.closeGoals() }
                         app.expenses.ui.GoalsScreen(goalState, onBack = { goaling = false; viewModel.closeGoals() }, onSave = viewModel::saveGoal, onAdjust = viewModel::adjustGoal, onDelete = viewModel::deleteGoal)
                     }
                     k == 16 -> {
                         val report by viewModel.report.collectAsStateWithLifecycle(context = MAIN)
                         val reportBuilds by viewModel.reportBuilds.collectAsStateWithLifecycle(context = MAIN)
                         // Back leaves the entry list first, then the report.
-                        BackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
+                        ScreenBackHandler { if (report?.drill != null) viewModel.closeDrill() else { reporting = false; viewModel.closeReports() } }
                         ReportsScreen(
                             tabBar = { tabBar("Reports") },
                             report = report, working = reportBuilds > 0,
@@ -836,7 +846,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         var sawImport by remember { mutableStateOf(false) }
                         LaunchedEffect(statement.active) { if (statement.active) sawImport = true else if (sawImport && importFromEarlier) { importFromEarlier = false; yourData = false } }
                         if (statement.active) {
-                            BackHandler { viewModel.closeImport() }
+                            ScreenBackHandler { viewModel.closeImport() }
                             ImportScreen(
                                 state = statement, accounts = s.accounts,
                                 onAccount = viewModel::changeImportAccount, onMapping = viewModel::changeImportMapping,
@@ -844,7 +854,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 onCardPayments = viewModel::chooseCardPayments, onCreateCategories = viewModel::setCreateImportCategories, onPlainFile = viewModel::readImportAsPlainFile,
                             )
                         } else {
-                            BackHandler { importFromEarlier = false; yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
+                            ScreenBackHandler { importFromEarlier = false; yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() }
                             DataScreen(
                                 state = dataState,
                                 onBack = { importFromEarlier = false; yourData = false; viewModel.cancelRestore(); viewModel.dismissDataStatus() },
@@ -857,14 +867,14 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         }
                     }
                     k == 18 -> {
-                        BackHandler { alerts = false }
+                        ScreenBackHandler { alerts = false }
                         NotificationSettingsScreen(
                             prefs = s.notifications, onChange = viewModel::updateNotificationPrefs, onSendTest = viewModel::sendTestNotification, onBack = { alerts = false },
                             nudgesPausedUntil = s.nudgesPausedUntil, onPause = viewModel::pauseNudges, milestonesOn = s.milestonesOn, onMilestones = viewModel::setMilestonesOn,
                         )
                     }
                     k == 19 -> {
-                        BackHandler { repeating = false }
+                        ScreenBackHandler { repeating = false }
                 
                         RecurringScreen(
                             due = s.due, hiddenOlder = s.hiddenOlder, items = s.recurring, categories = s.categories, accounts = s.accounts,
@@ -878,7 +888,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 20 -> {
-                        BackHandler { budgeting = false }
+                        ScreenBackHandler { budgeting = false }
                         BudgetScreen(
                             budget = s.budget,
                             onBack = { budgeting = false },
@@ -891,7 +901,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 21 -> {
-                        BackHandler { adding = false }
+                        ScreenBackHandler { adding = false }
                         EntryFormScreen(
                             title = "Add",
                             attachments = stagedList, attachmentProblem = attachmentProblem, onAttach = viewModel::stageAttachment,
@@ -915,7 +925,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 23 -> {
-                        BackHandler { billsOpen = false; viewModel.watchBills(false) }
+                        ScreenBackHandler { billsOpen = false; viewModel.watchBills(false) }
                         BillsScreen(
                             ui = billsUi, accounts = s.accounts, onBack = { billsOpen = false; viewModel.watchBills(false) },
                             onAdd = viewModel::trackBill, onSkip = viewModel::dismissBill, onSetDue = viewModel::setBillDue, onUnpay = viewModel::unpayBill, onPay = viewModel::payBill,
@@ -925,7 +935,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         )
                     }
                     k == 22 -> {
-                        BackHandler { if (loans.selected != null) viewModel.selectLoanPerson(null) else { loansOpen = false; viewModel.watchLoans(false) } }
+                        ScreenBackHandler { if (loans.selected != null) viewModel.selectLoanPerson(null) else { loansOpen = false; viewModel.watchLoans(false) } }
                         LoansScreen(
                             ui = loans,
                             onBack = { loansOpen = false; viewModel.watchLoans(false) },
@@ -1007,6 +1017,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onOpenCheckup = { checkupOpen = true }, onOpenEarlier = { earlierOpen = true },
                     )
                 } }
+                }
                 }
                 }
                 }

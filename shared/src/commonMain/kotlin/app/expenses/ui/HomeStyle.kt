@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.Column
@@ -122,6 +123,9 @@ fun BoxScope.HeroGlow(color: Color) {
     }
 }
 
+/** How tall the fade above the bottom bar is: the same as the bottom padding of the lists that scroll under it (UI S7). */
+private val SCROLL_EDGE = 24.dp
+
 /** Where the glass indicator of the bottom bar last rested, so a bar that appears on another screen starts there and glides on, as one bar would. */
 private object TabMemory { var index = 0f }
 
@@ -151,9 +155,19 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
     val glassTop = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
     val glassBottom = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
     val rim = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+    // UI S7 (U-22): the content slides under a soft fade above the bar instead of being cut off hard at its edge. The fade is the screen's own colour, drawn once (no blur), as tall as the lists' bottom padding, so the last
+    // row is clear of it at rest. A person who asked the phone for less transparency gets an opaque bar with a visible edge and no fade.
+    val opaque = systemReduceTransparency()
+    val screen = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().drawBehind {
+        if (!opaque) {
+            val h = SCROLL_EDGE.toPx()
+            drawRect(Brush.verticalGradient(listOf(Color.Transparent, screen.copy(alpha = 0.92f)), startY = -h, endY = 0f), topLeft = androidx.compose.ui.geometry.Offset(0f, -h), size = androidx.compose.ui.geometry.Size(size.width, h))
+        }
+    }.testTag(if (opaque) "bar_opaque" else "bar_glass")) {
+    androidx.compose.material3.Surface(color = if (opaque) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Column {
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            androidx.compose.material3.HorizontalDivider(color = if (opaque) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             // navigationBarsPadding: with the phone's three-button or gesture bar showing, the tabs must sit above it, not under it
             CappedFontScale(BAR_MAX_FONT_SCALE) {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp)) {
@@ -184,6 +198,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
             }
         }
     }
+    }
 }
 
 @Composable
@@ -192,7 +207,7 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) Motion.REDUCED_MS else Motion.TAB), label = "tab tint",
     )
     Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Tab; this.selected = selected },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Tab; this.selected = selected },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box {
@@ -211,7 +226,7 @@ private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
 @Composable
 private fun AddItem(onClick: () -> Unit, modifier: Modifier) {
     Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick).semantics { role = Role.Button },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Button },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
@@ -261,13 +276,19 @@ fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
     Flow3.MOVE -> amount
 }
 
-/** Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. */
-fun Modifier.pressScale(onClick: () -> Unit, haptic: androidx.compose.ui.hapticfeedback.HapticFeedbackType? = null): Modifier = composed {
+/**
+ * Shrinks slightly while pressed and springs back: the touch is acknowledged before the action happens. Follows the phone's remove-animations setting. With [haptic] (UI S7: [Feel.PRESS] for the tabs and
+ * tiles) it gives that feel at the moment of touch-down, not when the finger lifts; a touch that turns into a scroll gives none, because the press is only reported once the touch is not a scroll.
+ */
+fun Modifier.pressScale(onClick: () -> Unit, haptic: Feel? = null): Modifier = composed {
     val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.95f else 1f, Motion.press(), label = "press")
-    val feedback = androidx.compose.ui.platform.LocalHapticFeedback.current
-    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { haptic?.let { feedback.performHapticFeedback(it) }; onClick() }
+    val feel by androidx.compose.runtime.rememberUpdatedState(rememberFeel())
+    if (haptic != null) LaunchedEffect(source, haptic) {
+        source.interactions.collect { if (it is androidx.compose.foundation.interaction.PressInteraction.Press) feel(haptic) }
+    }
+    this.graphicsLayer { scaleX = scale; scaleY = scale }.clickable(interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
 }
 
 /** A short rise-and-fade for the More page. */

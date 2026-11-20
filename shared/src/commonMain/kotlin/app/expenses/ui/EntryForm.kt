@@ -736,7 +736,7 @@ private fun NumberPad(onKey: (String) -> Unit) {
                         Box(
                             Modifier.weight(1f).height(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
                                 .clip(Radius.S).background(if (op) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable(interactionSource = source, indication = null) { feel(Feel.TICK); onKey(key) }
+                                .clickable(interactionSource = source, indication = null) { feel(Feel.KEY); onKey(key) }
                                 .semantics { contentDescription = words; role = Role.Button }
                                 .testTag(tag),
                             contentAlignment = Alignment.Center,
