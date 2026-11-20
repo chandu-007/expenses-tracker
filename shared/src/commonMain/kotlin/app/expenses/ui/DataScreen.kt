@@ -193,6 +193,8 @@ fun DataScreen(
         androidx.compose.runtime.LaunchedEffect(state.status) { if (state.status != null) dataScroll.animateScrollTo(0) }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(dataScroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SigningNotice()
+            // UI S9 (U-18): the page in one sentence; each section below says what it does in one line and keeps its long explanation behind "Details"
+            Text("Save, export or bring in your entries. Nothing leaves this phone unless you choose where it goes.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("data_summary"))
             // N-23: how safe the data is, in one calm line (no colour of warning, no amounts): when the last backup was made and how many entries were added since.
             // Shown once the setting and the count are read (a moment after the page opens), so "No backup yet" is never drawn for a ledger that has one.
             val backupLine = remember(state.backup) { BackupStatus.text(nowMillis(), state.backup.lastAt, state.backup.countAtBackup, state.backup.liveCount) }
@@ -209,7 +211,10 @@ fun DataScreen(
             }
 
             Text("Spreadsheet", style = MaterialTheme.typography.titleMedium)
-            Text("Every entry as an Excel workbook (amounts are numbers, so they add up) or a plain CSV file. Free, always. For moving to another phone use a backup: a spreadsheet leaves things out.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Every entry as an Excel workbook or a CSV file.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Details("data_spreadsheet_details") {
+                Text("Amounts are numbers, so they add up. Free, always. For moving to another phone use a backup: a spreadsheet leaves things out.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             OutlinedButton(onClick = { pickers.createDocument("expenses-$today.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") { it?.let(onExportXlsx) } }, enabled = !state.busy, modifier = Modifier.testTag("export_xlsx")) { Text("Export as Excel (.xlsx)") }
             OutlinedButton(onClick = { pickers.createDocument("expenses-$today.csv", "text/csv") { it?.let(onExportCsv) } }, enabled = !state.busy, modifier = Modifier.testTag("export_csv")) { Text("Export as CSV") }
             Text("Financial year summary", style = MaterialTheme.typography.titleSmall)
@@ -226,7 +231,10 @@ fun DataScreen(
                 HorizontalDivider()
             } else if (autoExport != null) {
                 Text("Automatic copies to your own folder", style = MaterialTheme.typography.titleMedium)
-                Text("A backup and an Excel file are saved into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are plain files unless you protect them with a passphrase below, so choose a folder only you can reach. This is the safety net for losing or resetting the phone. They carry your photos and files too while \"Include photos and files\" under Backup is on and together they are under ${AttachmentRules.sizeText(BackupKeys.AUTO_FILES_LIMIT_BYTES)}; over that the copies are made without them and the line below says so.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("A backup and an Excel file, saved by themselves into a folder you choose: the safety net for losing or resetting the phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Details("data_auto_details") {
+                    Text("They go into a folder you choose, such as one on your drive, and only the newest ${platform.autoExportKeep} of each are kept. They are plain files unless you protect them with a passphrase below, so choose a folder only you can reach. They carry your photos and files too while \"Include photos and files\" under Backup is on and together they are under ${AttachmentRules.sizeText(BackupKeys.AUTO_FILES_LIMIT_BYTES)}; over that the copies are made without them and the line below says so.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedButton(onClick = { pickers.openFolder { it?.let(onAutoFolder) } }, modifier = Modifier.testTag("auto_folder")) { Text(autoExport.folderName?.let { "Folder: $it" } ?: "Choose a folder") }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AutoExportFrequency.entries.forEach { f -> FilterChip(selected = autoExport.frequency == f, onClick = { onAutoFrequency(f) }, label = { Text(f.label) }, modifier = Modifier.testTag("auto_freq_${f.name}")) }
@@ -266,16 +274,19 @@ fun DataScreen(
             }
 
             Text("Bring in a bank statement", style = MaterialTheme.typography.titleMedium)
-            Text("Import a CSV, Excel or PDF file downloaded from your bank or card, or a photo or screenshot of a statement (read on this phone, nothing is sent anywhere). The way a bank's file was read is remembered for next time. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("A CSV, Excel or PDF file from your bank or card, or a photo of a statement, read on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Details("data_import_details") {
+                Text("Nothing is sent anywhere. The way a bank's file was read is remembered for next time. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             OutlinedButton(onClick = { pickers.openDocument(listOf("*/*")) { it?.let(onImportStatement) } }, enabled = !state.busy, modifier = Modifier.testTag("import_statement")) { Text("Import a statement (CSV, Excel, PDF or photo)") }
             HorizontalDivider()
 
             Text("Backup", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Everything in one file: entries, categories, budgets, repeating expenses, and the photos and files attached to entries unless you switch that off below. Keep it somewhere safe, like your Google Drive or email to yourself. " +
-                    "Uninstalling the app deletes the data on this phone, so make a backup first.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // the one sentence a person must not miss stays on the page: uninstalling deletes the data
+            Text("Everything in one file, to keep somewhere safe. Uninstalling the app deletes the data on this phone, so make a backup first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Details("data_backup_details") {
+                Text("The file holds your entries, categories, budgets, repeating expenses, and the photos and files attached to entries unless you switch that off below. Keep it somewhere safe, like your Google Drive or email to yourself.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Include photos and files", modifier = Modifier.weight(1f))
                 Switch(checked = state.files.include, onCheckedChange = onIncludeFiles, modifier = Modifier.testTag("backup_files_switch"))

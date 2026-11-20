@@ -82,12 +82,19 @@ fun EarlierSpendingScreen(
             Text("Best order: 1, then 2 for what the statement missed, then 3 so the balances match your bank app.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("earlier_spending_order"))
 
             Way("1. Import a bank or card statement", "earlier_spending_way_statement") {
-                Text("The most exact way. Download a statement from your bank or card app as a CSV, Excel or PDF file (or take a photo of one), choose it here, and check how it was read before anything is saved. Importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodyMedium)
+                // UI S9 (U-18): one sentence on the card, the how-to behind "Details"
+                Text("The most exact way: a statement from your bank or card app, checked before anything is saved.", style = MaterialTheme.typography.bodyMedium)
+                Details("earlier_spending_statement_details") {
+                    Text("Download it as a CSV, Excel or PDF file (or take a photo of one) and choose it here. You check how it was read before anything is saved, and importing the same file twice adds nothing new.", style = MaterialTheme.typography.bodyMedium)
+                }
                 Button(onClick = onImportStatement, modifier = Modifier.heightIn(min = 48.dp).testTag("earlier_spending_import")) { Text("Choose a statement") }
             }
             Way("2. Add earlier spending by hand", "earlier_spending_way_manual") { QuickAdd(accounts, categories, onAdd) }
             Way("3. Set your balances", "earlier_spending_way_balances") {
-                Text("If an account already held money, or a card already owed some, when you started, give it that opening balance. Or use Fix this balance on an account to match what your bank app says today: it moves the opening balance and adds no entry.", style = MaterialTheme.typography.bodyMedium)
+                Text("Give each account the balance it had when you started, or match what your bank app says today.", style = MaterialTheme.typography.bodyMedium)
+                Details("earlier_spending_balances_details") {
+                    Text("If an account already held money, or a card already owed some, when you started, give it that opening balance. Or use Fix this balance on an account to match what your bank app says today: it moves the opening balance and adds no entry.", style = MaterialTheme.typography.bodyMedium)
+                }
                 OutlinedButton(onClick = onOpenAccounts, modifier = Modifier.heightIn(min = 48.dp).testTag("earlier_spending_balances")) { Text("Open Accounts") }
             }
             Column(Modifier.fillMaxWidth().clip(Radius.S).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)).padding(14.dp).semantics(mergeDescendants = true) {}.testTag("earlier_spending_no_scan"), verticalArrangement = Arrangement.spacedBy(4.dp)) {

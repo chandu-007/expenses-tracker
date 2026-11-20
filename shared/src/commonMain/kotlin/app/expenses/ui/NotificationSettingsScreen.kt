@@ -85,6 +85,8 @@ fun NotificationSettingsScreen(
             return@Scaffold
         }
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // UI S9 (U-18): the page in one sentence; how and when notices arrive is behind "Details" at the end
+            Text("Reminders for bills, cards and budgets, and a weekly recap: only the ones you turn on, never promotions.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("notif_summary"))
             PauseAndMilestones(nudgesPausedUntil, onPause, milestonesOn, onMilestones)
             HorizontalDivider()
             if (!allowed) {
@@ -121,11 +123,13 @@ fun NotificationSettingsScreen(
             TimeRow("From", prefs.quietStartMinute, "notif_quiet_start", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietStartMinute = shiftHours(p.quietStartMinute, d)) } }
             TimeRow("Until", prefs.quietEndMinute, "notif_quiet_end", prefs.quietEnabled) { d -> onChange { p -> p.copy(quietEndMinute = shiftHours(p.quietEndMinute, d)) } }
             HorizontalDivider()
-            Text("This app only sends the kinds above (and card due dates with the bill reminders). It never sends promotions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                platform.notificationTimingNote ?: "The app checks about once an hour in the background, so an alert can arrive up to an hour late. Your phone's battery saver can delay it further.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Details("notif_details") {
+                Text("This app only sends the kinds above (and card due dates with the bill reminders). It never sends promotions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    platform.notificationTimingNote ?: "The app checks about once an hour in the background, so an alert can arrive up to an hour late. Your phone's battery saver can delay it further.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             OutlinedButton(onClick = onSendTest, modifier = Modifier.testTag("notif_test")) { Text("Send a test notification") }
         }
     }

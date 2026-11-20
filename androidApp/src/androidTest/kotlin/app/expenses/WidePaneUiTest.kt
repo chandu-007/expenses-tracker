@@ -1,8 +1,12 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
 package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
@@ -49,7 +53,7 @@ class WidePaneUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } } }
-    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); SystemDialogs.dismissAppErrorDialog(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; runBlocking { container.startFresh() } }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); SystemDialogs.dismissAppErrorDialog(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; WideLayoutTestHook.rail = false; WideLayoutTestHook.hinge = null; runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) {
@@ -399,5 +403,73 @@ class WidePaneUiTest {
         val wide = listed(); assertTrue(wide.intersect(before).size >= 2 && "result_m30" !in wide, "still scrolled to the same place after the unfold: $before then $wide")
         shell("wm size 904x2316"); waitWide(false, "folded"); Thread.sleep(800)
         val narrow = listed(); assertTrue(has("search_selection_clear") && narrow.intersect(before).size >= 2 && "result_m30" !in narrow, "and after folding again: $before then $narrow")
+    }
+
+    // ---- UI S9 (U-24): the rail from 600 dp, Add beside the list, right-click ----
+
+    private fun count(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().size
+    private fun entries() = runBlocking { container.write { it.db.schemaQueries.entryCount().executeAsOne() } }!!
+
+    @Test
+    fun fromSixHundredDpTheBarIsARailWithEveryPlaceOnceAndTheSameTags() {
+        WideLayoutTestHook.rail = true
+        launch(600, 800); waitFor("nav_rail")
+        assertTrue(!has("bar_glass") && !has("bar_opaque"), "no bar along the bottom as well")
+        for (tag in listOf("nav_home", "open_search", "add", "open_reports", "more_menu")) assertEquals(1, count(tag), "$tag is there once")
+        assertTrue(right("nav_rail") <= left("wide_list_pane") + 1f, "the rail is left of the list")
+        tap("more_menu"); waitFor("more_page")
+        tap("nav_home"); waitGone("more_page")
+        tap("open_search"); waitFor("search_text"); waitFor("nav_rail")
+        assertEquals(1, count("bar_add"), "on Search the rail's Add has the bar's tag")
+        tap("open_reports"); waitGone("search_text"); waitFor("nav_rail")
+        tap("nav_home"); waitFor("add")
+    }
+
+    @Test
+    fun underSixHundredDpAndWithABookFoldTheBarStays() {
+        WideLayoutTestHook.rail = true
+        launch(599, 800)
+        assertTrue(!has("nav_rail") && (has("bar_glass") || has("bar_opaque")), "a phone keeps the bar")
+        scenario?.close()
+        WideLayoutTestHook.hinge = app.expenses.ui.Hinge(345f, 0f, 345f, 829f, vertical = true)
+        launch(690, 829); waitFor("wide_list_pane")
+        assertTrue(!has("nav_rail"), "half open like a book: the panes sit either side of the hinge and the bar stays")
+    }
+
+    @Test
+    fun addOpensBesideTheListAndSavingOrBackEmptiesThePane() {
+        seed("e1", "Cafe", 10_000)
+        launch(1000); waitFor("row_Cafe")
+        tap("add"); waitFor("wide_add_pane"); waitFor("amount")
+        assertTrue(has("row_Cafe") && has("wide_list_pane"), "the list stays beside the Add form")
+        assertTrue(left("amount") >= right("row_Cafe") - 1f, "the form is in the pane, not over the list")
+        val before = entries()
+        compose.onNodeWithTag("amount", useUnmergedTree = true).performTextInput("250")
+        tap("save"); waitGone("wide_add_pane"); waitFor("wide_placeholder")
+        compose.waitUntil(10_000) { entries() == before + 1 }
+        tap("add"); waitFor("wide_add_pane")
+        back(); waitGone("wide_add_pane"); waitFor("wide_placeholder")
+        assertTrue(has("row_Cafe"), "Back closes the pane, Home stays")
+    }
+
+    @Test
+    fun whatIsTypedInAddStaysWhenTheWindowTurnsNarrowAndWideAgain() {
+        launch(1000)
+        tap("add"); waitFor("wide_add_pane")
+        compose.onNodeWithTag("amount", useUnmergedTree = true).performTextInput("250")
+        waitEditable("amount", "250", "typed in the pane")
+        WideLayoutTestHook.widthDp = null
+        waitGone("wide_add_pane"); waitFor("amount"); waitEditable("amount", "250", "the full-screen form on a narrow window starts from what was typed")
+        WideLayoutTestHook.widthDp = 1000
+        waitFor("wide_add_pane"); waitEditable("amount", "250", "and the pane again")
+    }
+
+    @Test
+    fun aRightClickOnARowSelectsItAsALongPressDoes() {
+        seed("e1", "Cafe", 10_000)
+        launch(1000); waitFor("row_Cafe")
+        compose.onNodeWithTag("row_Cafe", useUnmergedTree = true).performMouseInput { rightClick() }
+        waitFor("bulk_bar")
+        assertTrue(!has("detail_edit"), "a right-click selects; it does not open the entry")
     }
 }
