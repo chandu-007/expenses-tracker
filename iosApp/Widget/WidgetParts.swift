@@ -145,7 +145,7 @@ struct WidgetsOffNote: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Widgets are off").font(.headline)
-            Text("Turn them on in Expenses: More, App lock.").font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            Text("Turn them on in Expenses: More, App lock.").font(.caption2).foregroundStyle(.secondary).lineLimit(3)
         }
     }
 }

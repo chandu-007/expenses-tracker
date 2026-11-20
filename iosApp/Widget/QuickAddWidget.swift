@@ -132,7 +132,7 @@ struct QuickAddView: View {
             } else {
                 // with the pace shown there is room for one row of quick entries; without it, up to three rows as before
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(entry.buttons.prefix(entry.pace == nil ? 6 : 2)) { b in QuickChip(button: b) }
+                    ForEach(entry.buttons.prefix(entry.pace == nil ? 6 : 2)) { b in QuickChip(button: b, showDetail: entry.revealed) }
                 }
             }
             Spacer(minLength: 0)

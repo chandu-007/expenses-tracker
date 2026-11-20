@@ -82,8 +82,9 @@ class UiS8WidgetsTest {
 
     @Test
     fun maskedTheTodayWidgetSaysSoAndKeepsAQuickEntrySoItStillCaptures() = runGlanceAppWidgetUnitTest {
-        setAppWidgetSize(DpSize(170.dp, 170.dp))
-        provideComposable { TodayContent(today(revealed = false), 170, 170) }
+        // the chip needs 64 dp of free width in the bottom row beside the eye and Add (48 dp each): 184 dp of widget at the least (a 3 x 2 cell widget is wider); at 170 dp it is left out
+        setAppWidgetSize(DpSize(190.dp, 170.dp))
+        provideComposable { TodayContent(today(revealed = false), 190, 170) }
         onNode(hasText("₹••••")).assertExists(); onNode(hasText(TODAY_HIDDEN)).assertExists()
         onNode(hasText("Chai")).assertExists()
         onNode(hasText("₹20.00")).assertDoesNotExist() // the chip is the name only
@@ -266,12 +267,12 @@ class UiS8DeviceTest {
     }
 
     @Test
-    fun withNoQuickEntryALongPressOnAddOpensNoMenuAndATapStillOpensTheForm() {
+    fun withNoQuickEntryALongPressOnAddOpensNoMenuAndOpensTheFormLikeATap() {
         launch()
+        // with no quick entry saved the long press is only a press: it opens the Add form like a tap (Compose's clickable acts on release) and there is no menu
         node("add").performTouchInput { longClick() }
-        compose.waitForIdle()
+        waitFor("amount")
         assertTrue(!has("bar_quick_menu"))
-        tap("add"); waitFor("amount")
     }
 
     @Test
