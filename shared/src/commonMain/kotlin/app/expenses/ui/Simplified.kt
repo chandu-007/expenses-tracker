@@ -26,3 +26,20 @@ expect fun SlowFrameWatch(onSlow: () -> Unit)
  */
 @Composable
 expect fun systemReduceTransparency(): Boolean
+
+/**
+ * UI S9 (U-25): the phone asks for more contrast (Android: high-contrast text, or Android 14's contrast level above standard; iPhone: Increase Contrast). The theme then makes secondary text as strong
+ * as body text and every outline a visible line ([app.expenses.core.domain.ThemeRoles]); cards drop their see-through tint and the bar is opaque. Read once per configuration, never per frame.
+ */
+@Composable
+expect fun systemHighContrast(): Boolean
+
+/** UI S9: [systemHighContrast] as the app's root read it, for the parts that are drawn differently (cards, the bar, the rail). */
+val LocalHighContrast = androidx.compose.runtime.compositionLocalOf { false }
+
+/**
+ * UI S9 (D18): the phone's own accent colour (0xRRGGBB) for the "Wallpaper" accent, or null where there is none: Android before 12, and the iPhone (which offers no such colour to apps). Android 12 and later:
+ * the primary colour of the system's dynamic light scheme (Material 3's own `dynamicLightColorScheme`, already a dependency), which follows the wallpaper.
+ */
+@Composable
+expect fun systemAccentRgb(): Int?

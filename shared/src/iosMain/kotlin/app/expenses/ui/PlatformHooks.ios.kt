@@ -77,6 +77,14 @@ actual fun SlowFrameWatch(onSlow: () -> Unit) { }
 @Composable
 actual fun systemReduceTransparency(): Boolean = remember { platform.UIKit.UIAccessibilityIsReduceTransparencyEnabled() }
 
+/** UI S9 (U-25): Settings, Accessibility, Display & Text Size, Increase Contrast (`UIAccessibilityDarkerSystemColorsEnabled`, iOS 5). */
+@Composable
+actual fun systemHighContrast(): Boolean = remember { platform.UIKit.UIAccessibilityDarkerSystemColorsEnabled() }
+
+/** UI S9 (D18): the iPhone gives apps no colour from the wallpaper: only the true-black theme is offered there. */
+@Composable
+actual fun systemAccentRgb(): Int? = null
+
 @Composable
 actual fun rememberKeyboardOpen(): Boolean = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 

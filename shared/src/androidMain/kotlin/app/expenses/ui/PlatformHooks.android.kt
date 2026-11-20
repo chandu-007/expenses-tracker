@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * The Android haptic constant for [feel] on a phone with API level [sdk]: what each pattern is documented to mean, so a person learns what happened without looking (UI S7). A save and a paid bill are a
@@ -105,6 +106,20 @@ actual fun systemReduceTransparency(): Boolean {
             val level = if (Build.VERSION.SDK_INT >= 34) (context.applicationContext.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).contrast else 0f
             level > 0f || Settings.Secure.getInt(context.contentResolver, "high_text_contrast_enabled", 0) == 1
         }.getOrDefault(false)
+    }
+}
+
+/** UI S9 (U-25): the same two signals as [systemReduceTransparency] (high-contrast text, Android 14's contrast level), read from the application context for the same reason. */
+@Composable
+actual fun systemHighContrast(): Boolean = systemReduceTransparency()
+
+/** UI S9 (D18): Android 12 and later: the dynamic light scheme's primary, which the system makes from the wallpaper. Read again when the configuration changes (a new wallpaper sends one). */
+@Composable
+actual fun systemAccentRgb(): Int? {
+    val context = LocalContext.current
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    return remember(context, config) {
+        if (Build.VERSION.SDK_INT >= 31) runCatching { androidx.compose.material3.dynamicLightColorScheme(context.applicationContext).primary.toArgb() and 0xFFFFFF }.getOrNull() else null
     }
 }
 

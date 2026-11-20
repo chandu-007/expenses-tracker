@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.compositeOver
  * Before this there were nine ways to draw a card (three tints, four radii, Material's `Card` and drawn ones).
  */
 @Composable
-fun standardCardColor(): Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+fun standardCardColor(): Color = if (LocalHighContrast.current) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f) // UI S9: high contrast drops the see-through tint
 
 /** A standard card: clipped to 20 dp and tinted; the caller adds its own padding. */
 @Composable

@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.border
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -40,25 +43,38 @@ import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.Density
 import app.expenses.core.domain.ThemeMode
 
-/** Light or dark, an accent colour, and how tight the lists are. Changes apply at once. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Light or dark, an accent colour, and how tight the lists are. Changes apply at once. UI S9: a live preview at the top (U-18: the page shows what it changes), the true-black dark theme and,
+ * where the phone offers one (Android 12 and later), the wallpaper's colour as an accent (D18). Both are part of the one appearance setting, which backups carry.
+ */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack: () -> Unit, motionSpeed: String = "relaxed", onMotionSpeed: (String) -> Unit = {}, showSpendingRed: Boolean = false, onShowSpendingRed: (Boolean) -> Unit = {}, onShowTipsAgain: () -> Unit = {}, hapticsOn: Boolean = true, onHaptics: (Boolean) -> Unit = {}, simplifyMode: String = "auto", onSimplifyMode: (String) -> Unit = {}, simplifyLine: String = "") {
     Scaffold(topBar = { ScreenHeader("Appearance", onBack, "appearance_back") }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("How the app looks on this phone. Changes apply at once; the example below shows them.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("appearance_summary"))
+            AppearancePreview()
             Text("Theme", style = MaterialTheme.typography.labelMedium)
             SegmentedChoice(ThemeMode.entries.map { Segment(it, it.label, "theme_${it.name}") }, current.mode, { onChange(current.copy(mode = it)) })
-            Text("Accent colour", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Appearances.ACCENTS.forEach { a ->
-                    val chosen = current.accent == a
-                    Box(
-                        Modifier.size(40.dp).background(Color(0xFF000000.toInt() or a.rgb), CircleShape).clickable { onChange(current.copy(accent = a)) }
-                            .testTag("accent_${a.key}").semantics { contentDescription = a.label + if (chosen) ", chosen" else ""; selected = chosen },
-                        contentAlignment = Alignment.Center,
-                    ) { if (chosen) Text("✓", color = Color(0xFF000000.toInt() or Appearances.onColor(a.rgb))) }
+            // UI S9 (D18): true black for the dark theme (OLED screens); it does nothing while the app is light, which the line says
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = current.black, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = { onChange(current.copy(black = it)) }).testTag("black_row"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Black dark theme", style = MaterialTheme.typography.bodyLarge)
+                    Text("When the app is dark, the background is true black: easier on OLED screens at night. No change while it is light.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                androidx.compose.material3.Switch(checked = current.black, onCheckedChange = null, modifier = Modifier.testTag("black_switch"))
             }
+            Text("Accent colour", style = MaterialTheme.typography.labelMedium)
+            val wallpaperRgb = systemAccentRgb()
+            // more room than one row: 48 dp swatches that wrap at a large text size or on a narrow phone, the wallpaper's colour last where the phone has one
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Appearances.ACCENTS.forEach { a ->
+                    val chosen = current.accent == a || (a == Appearances.ACCENTS.first() && current.accent == Appearances.WALLPAPER && wallpaperRgb == null)
+                    AccentSwatch(a.rgb, a.label, chosen, "accent_${a.key}") { onChange(current.copy(accent = a)) }
+                }
+                if (wallpaperRgb != null) AccentSwatch(wallpaperRgb, "Wallpaper", current.accent == Appearances.WALLPAPER, "accent_wallpaper", wallpaper = true) { onChange(current.copy(accent = Appearances.WALLPAPER)) }
+            }
+            if (wallpaperRgb != null && current.accent == Appearances.WALLPAPER) Text("The colour your phone takes from its wallpaper; it changes when the wallpaper does. Money colours stay the same.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("accent_wallpaper_line"))
             Text("List spacing", style = MaterialTheme.typography.labelMedium)
             SegmentedChoice(Density.entries.map { Segment(it, it.label, "density_${it.name}") }, current.density, { onChange(current.copy(density = it)) })
             Text("Motion", style = MaterialTheme.typography.labelMedium)
@@ -90,6 +106,49 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             Details("appearance_details") {
                 Text("How long screens, totals and charts take to move. Relaxed is the default; Off changes everything at once, as the phone's own \"Remove animations\" setting does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Compact fits more entries on the screen: the rows of the list, search and report entries are about a third tighter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** One accent: a 48 dp round swatch with a tick when chosen; the wallpaper's carries a small palette mark so it reads as "the phone's colour". A screen reader hears the name and whether it is chosen. */
+@Composable
+private fun AccentSwatch(rgb: Int, label: String, chosen: Boolean, tag: String, wallpaper: Boolean = false, onClick: () -> Unit) {
+    val fill = Color(0xFF000000.toInt() or rgb)
+    val on = Color(0xFF000000.toInt() or Appearances.onColor(rgb))
+    Box(
+        Modifier.size(48.dp).background(fill, CircleShape).clickable(onClick = onClick)
+            .then(if (chosen) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
+            .testTag(tag).semantics { contentDescription = label + if (chosen) ", chosen" else ""; selected = chosen },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (chosen) Text("✓", color = on)
+        else if (wallpaper) androidx.compose.material3.Icon(Icons.Outlined.Palette, contentDescription = null, tint = on, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * UI S9 (U-18): what the choices on this page look like, drawn in the app's real theme (so it follows the accent, light or dark, black and the list spacing at once): a month card and two rows.
+ * Invented figures; a screen reader hears only that it is an example, never the figures.
+ */
+@Composable
+private fun AppearancePreview() {
+    Column(
+        Modifier.fillMaxWidth().standardCard().padding(16.dp).clearAndSetSemantics { contentDescription = "Example of the look you chose, not your data" }.testTag("appearance_preview"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("This month", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("On pace", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Text("₹12,480", style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)) {
+            Box(Modifier.fillMaxWidth(0.55f).height(6.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+        }
+        listOf("Chai" to "−₹20", "Groceries" to "−₹1,240").forEach { (name, amount) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = rowPadding(12.dp)), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(amount, style = MaterialTheme.typography.bodyLarge, color = amountColor(Flow3.OUT))
             }
         }
     }

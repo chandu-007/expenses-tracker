@@ -47,6 +47,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -146,6 +149,8 @@ private const val BAR_MAX_FONT_SCALE = 1.3f
  */
 @Composable
 fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: (() -> Unit)? = null, addTag: String = "bar_add", quickEntries: List<BarQuickEntry> = emptyList(), onQuickEntry: (String) -> Unit = {}) {
+    // UI S9 (U-24): on a two-pane window the root draws the same places as a rail along the left edge ([HomeRail]); the bar along the bottom then has nothing to draw
+    if (LocalNavRail.current) return
     val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
     val reduce = LocalReduceMotion.current
     val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
@@ -159,7 +164,8 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
     val rim = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
     // UI S7 (U-22): the content slides under a soft fade above the bar instead of being cut off hard at its edge. The fade is the screen's own colour, drawn once (no blur), as tall as the lists' bottom padding, so the last
     // row is clear of it at rest. A person who asked the phone for less transparency gets an opaque bar with a visible edge and no fade.
-    val opaque = systemReduceTransparency()
+    // UI S9 (U-25): the phone's high contrast makes it opaque too (on the iPhone Increase Contrast; on Android the same signals already count as less transparency)
+    val opaque = systemReduceTransparency() || LocalHighContrast.current
     val screen = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().drawBehind {
         if (!opaque) {
@@ -200,6 +206,59 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
             }
         }
     }
+    }
+}
+
+/**
+ * UI S9 (U-24): the bar as a rail along the left edge of a two-pane window (from 600 dp wide; [rememberUsesRail]): the same five places, top to bottom, with the same tags, the same Add (its long press
+ * included) and the same badge; the pane of glass glides up and down instead of sideways, starting where the bar's last rested. Drawn once by the app's root beside the screens that have the bar
+ * (Home, Search, Reports); no per-frame work but the glide. Under Reduce motion it jumps; with less transparency or high contrast it is opaque with a visible edge.
+ */
+@Composable
+fun HomeRail(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReports: () -> Unit, onMore: () -> Unit, moreBadge: Boolean = false, onAdd: () -> Unit, addTag: String = "bar_add", quickEntries: List<BarQuickEntry> = emptyList(), onQuickEntry: (String) -> Unit = {}) {
+    val target = TABS.indexOf(selected).coerceAtLeast(0).toFloat()
+    val reduce = LocalReduceMotion.current
+    val pos = remember { Animatable(if (reduce) target else TabMemory.index) }
+    LaunchedEffect(target, reduce) {
+        if (reduce) pos.snapTo(target)
+        else pos.animateTo(target, Motion.spring(dampingRatio = 0.72f, stiffness = 260f))
+        TabMemory.index = target
+    }
+    val glassTop = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+    val glassBottom = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    val rim = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    val opaque = systemReduceTransparency() || LocalHighContrast.current
+    val item = 56.dp
+    val gap = 4.dp
+    Row(Modifier.fillMaxHeight().testTag(if (opaque) "rail_opaque" else "rail_glass")) {
+        androidx.compose.material3.Surface(
+            color = if (opaque) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.90f), tonalElevation = 3.dp,
+            modifier = Modifier.fillMaxHeight().width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp).testTag("nav_rail"),
+        ) {
+            CappedFontScale(BAR_MAX_FONT_SCALE) {
+                Box(Modifier.fillMaxHeight().statusBarsPadding().navigationBarsPadding().padding(horizontal = 6.dp, vertical = 12.dp)) {
+                    Box(
+                        Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item * TABS.size + gap * (TABS.size - 1)).drawBehind {
+                            val h = item.toPx()
+                            val top = pos.value * (h + gap.toPx())
+                            val r = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx())
+                            val tl = androidx.compose.ui.geometry.Offset(0f, top)
+                            val sz = androidx.compose.ui.geometry.Size(size.width, h)
+                            drawRoundRect(Brush.verticalGradient(listOf(glassTop, glassBottom), startY = top, endY = top + h), tl, sz, r)
+                            drawRoundRect(rim, tl, sz, r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+                        },
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("nav_home"))
+                        BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_search"))
+                        AddItem(onAdd, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item), addTag, quickEntries, onQuickEntry)
+                        BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_reports"))
+                        BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("more_menu"), badge = moreBadge)
+                    }
+                }
+            }
+        }
+        androidx.compose.material3.VerticalDivider(color = if (opaque) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     }
 }
 

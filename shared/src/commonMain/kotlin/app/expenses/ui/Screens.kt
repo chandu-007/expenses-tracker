@@ -612,6 +612,8 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = flash.value * 0.16f))
+                // UI S9 (U-24): right-click selects, as a long press does; the keyboard's focus shows as a ring
+                .then(if (LocalLargeWindow.current) Modifier.focusRing(Radius.S).secondaryClick(onLongPress) else Modifier)
                 .combinedClickable(onClick = { if (selecting) onToggle() else { tappedEntry?.id = row.id; onOpen(row) } }, onLongClick = onLongPress)
                 .padding(horizontal = 16.dp, vertical = rowPadding(12.dp)).semantics {
                     selected = isSelected

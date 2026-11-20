@@ -30,6 +30,7 @@ fun LongPressChip(label: String, onClick: () -> Unit, onLongClick: () -> Unit, m
     Surface(
         shape = shape, color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.defaultMinSize(minHeight = 40.dp).clip(shape)
+            .then(if (LocalLargeWindow.current) Modifier.focusRing(shape).secondaryClick(onLongClick) else Modifier) // UI S9: on a large window right-click is the long press
             .combinedClickable(onClick = onClick, onLongClick = onLongClick, role = Role.Button)
             .semantics { onLongClick(label = "Remove") { onLongClick(); true } },
     ) {
