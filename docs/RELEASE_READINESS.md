@@ -219,13 +219,13 @@ The navigation rail and Add opening as a pane on wide windows are **switched off
 • Category icons and colours
 • Charts: drag to read or view as a table
 • Budget pace; a daily amount to payday
-• Widgets show your pace; iPhone Lock Screen widgets
+• Widgets show your budget pace
 • Long-press Add or the app icon for quick entries
 • Black dark theme, wallpaper colour (Android 12+), high contrast
 • Haptics switch, rolling digits, Simplify for slow phones
 • Fixes: bill photos on old Android; alerts follow Hide amounts
 ```
-Count: **479**.
+Count: **458**.
 
 ### (b) Production (users have 0.10.6)
 
@@ -235,17 +235,17 @@ Count: **479**.
 • To review: Expense, Income or Transfer
 • Card bill payments recognised; fix a balance
 • Category icons; charts you can drag or read as a table
-• Widgets show your pace; iPhone Lock Screen widgets
+• Widgets show your budget pace
 • Long-press Add or the app icon for quick entries
 • Black dark theme, wallpaper colour (Android 12+), high contrast
 • Two panes on foldables
 • Haptics switch; Simplify for slow phones
 ```
-Count: **475**.
+Count: **454**.
 
-Sources for the new lines: widget pace, iPhone Lock Screen widgets, launcher shortcuts and long-press Add are S8, Slice 121 (`docs/PHASE2_PROGRESS.md:1821-1822`, `:1825-1826`, `:1830`). The black dark theme, wallpaper accent (Android 12+) and high contrast are S9, Slice 122 (`:1872-1875`). Haptics, rolling digits and Simplify are S7, Slice 120 (`:1769`). The other lines have the sources given in section 5.
+Sources for the new lines: widget pace, launcher shortcuts and long-press Add are S8, Slice 121 (`docs/PHASE2_PROGRESS.md:1821-1822`, `:1825-1826`). The black dark theme, wallpaper accent (Android 12+) and high contrast are S9, Slice 122 (`:1872-1875`). Haptics, rolling digits and Simplify are S7, Slice 120 (`:1769`). The other lines have the sources given in section 5.
 
-Play's release notes are per release, not per platform. The iPhone Lock Screen line is there because the owner asked for it. Drop it on Play if the notes should name only Android features. Without it the texts are shorter and need no other change.
+The Play notes describe Android only. The iPhone's S8 additions (Lock Screen widgets and the iOS 18 control, `:1830-1831`) belong in the App Store notes, not here.
 
 ---
 
