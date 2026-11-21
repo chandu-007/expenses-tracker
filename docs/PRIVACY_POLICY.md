@@ -1,6 +1,6 @@
 # Privacy Policy for Expenses
 
-Effective EFFECTIVE_DATE. Applies to the Expenses app for Android and iPhone ("the app"), published by Chandrashekhar Nelluri ("I", "me").
+Effective 21 November 2026. Applies to the Expenses app for Android and iPhone ("the app"), published by Chandrashekhar Nelluri ("I", "me").
 
 **In one sentence: everything you enter stays on your phone, the app has no way to send it anywhere by itself, and I collect nothing about you unless you choose to email me.**
 
@@ -17,7 +17,7 @@ Nothing, unless you email me (see "If you email me"). The app has no account, no
 - **Check a message.** In More, Capture, "Why isn't capture working?", you can paste a message (on Android you can also share one to the app from another app's Share sheet) to see how the app would read it. The app reads the clipboard only when you tap Paste. It reads that text on your phone and shows the result on the screen; the text is not saved and not sent anywhere, and it is gone when you leave the page. Nothing is read unless you paste or share it, and this check does not open your messages.
 - **Bank messages and emails on iPhone.** iPhone does not let any app read messages, emails or other apps' notifications. If you set up a Shortcuts automation, share a text or email to the app from the Share sheet, or paste one, the app reads that text on your phone with the same rules as above. The Share sheet and the widgets keep a small amount of data (the shared words until the app reads them; the figures a widget shows) in storage shared only between the app and its own extensions on your phone.
 - **Photos and attachments.** You can take a photo of a bill or attach a photo or file to an entry. On Android the app uses your phone's camera app and has no camera permission; on iPhone it asks for camera access. Photos and files stay in the app's private storage on your phone. When you ask the app to read the items of a bill photo or a statement (a photo, PDF or Excel file), it reads it on your phone; on Android with ML Kit, whose model is inside the app and works offline. Nothing is uploaded.
-- **Widgets and notifications.** A widget you place shows figures on your home screen; Hide amounts masks them. Reminders leave amounts out while Hide amounts or the App lock is on.
+- **Widgets, shortcuts and notifications.** A widget you place shows figures on your home screen (and, on iPhone, on your Lock Screen if you add one there); the eye on a widget, Hide amounts and the App lock mask them. With Allow widgets off (on the App lock screen) no widget shows any figure. Quick entries in widgets and in the app icon's shortcuts (Android) hide their amounts while Hide amounts or the App lock is on. Reminders leave amounts out while Hide amounts or the App lock is on.
 - **Reminders and milestones.** Bill and budget reminders are made on your phone from your own data. Milestones, off until you turn them on, are cards inside the app, not notifications. Nothing is sent to a server.
 - **Travel mode.** A trip tags the entries dated within its days. It uses dates only: the app never asks for your location.
 - **App lock.** The app asks your phone's fingerprint, face or passcode check. The app never sees your fingerprint or face.
