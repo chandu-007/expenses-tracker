@@ -182,12 +182,7 @@ The S7 line (haptics, rolling numbers, Simplify) belongs in the notes **only if 
 • Fixes: bill photos on older Android; alerts obey Hide amounts
 ```
 Count: **390**. Without the S7 line: 330.
-Insert S8/S9 here, after the "Haptics" line, if they land:
-```
-• Refreshed home screen widgets
-• Large screens, dark mode polish and a true-black theme
-```
-With both lines added: **479**.
+The S8/S9 placeholder lines that used to be here are superseded: the final texts, with S8 and S9 as they shipped, are in "Release notes 0.15.0 (final)" below.
 
 Sources: S2 `docs/research/OUR_FEATURES.md:368-370`; S3 `:375-377`; S4 `:382-384`; S5 `:390-391`; S6 `:399-405`; S7 `origin/s7-wip:docs/PHASE2_PROGRESS.md:1774-1778`. "Bill photos on older Android" is the `List.removeLast` crash in `BillItems.readItem` on Android 14 and older, present in 0.13.0 and fixed in 0.14.0 (`docs/PHASE2_PROGRESS.md:1502`). "Alerts obey Hide amounts" is S0 F-01 (`:1411`; `OUR_FEATURES.md:357`).
 
@@ -206,9 +201,51 @@ Sources: S2 `docs/research/OUR_FEATURES.md:368-370`; S3 `:375-377`; S4 `:382-384
 • Fixes, incl. Hide amounts in alerts
 ```
 Count: **391**. Without the S7 line: 348.
-Insert S8/S9 here, after the "Haptics" line, if they land: the same two lines as in (a). With both: **480**.
+S8/S9: see "Release notes 0.15.0 (final)" below.
 
 Sources: Travel mode Slice 110 (`docs/PHASE2_PROGRESS.md:1304`); Home Option B Slice 112 (`:1354`); Search Slice 106 (`:1245`); Add S2 (`:1510`); To review type and card bill payments Slice 104 (`:1103`, `:1142`); Fix this balance Slice 105 (`:1222`); checkup and guided setup Slice 107 (`:1208-1215`); category look S3 (`:1540`); charts S4 (`:1586`); fold two panes Slices 103 and 111 (`:1078`, `:1329`); hidden amounts in alerts S0 (`:1411`).
+
+## Release notes 0.15.0 (final)
+
+For the `bundlePlaySms` AAB 0.15.0, versionCode 44 (`main` `b405841`; S7, S8 and S9 merged: `docs/PHASE2_PROGRESS.md:1969`, `:1991`). Counted on 2026-11-21 with `printf %s "<text>" | wc -m` on exactly the text in the block (lines joined by newlines, no trailing newline). Both are at most 480 characters.
+
+The navigation rail and Add opening as a pane on wide windows are **switched off** in 0.15.0 (`WindowLayout.RAIL_ENABLED` / `ADD_PANE_ENABLED = false`, Slice 124, `docs/PHASE2_PROGRESS.md:1937`). Neither text mentions them. "Two panes on foldables" in (b) is the two-pane Home and Search of Slices 103 and 111, which still ship.
+
+### (a) Open testing (testers have 0.13.0)
+
+```
+• Add: amount first; keypad does sums
+• Entry details: edit, copy or delete
+• Category icons and colours
+• Charts: drag to read or view as a table
+• Budget pace; a daily amount to payday
+• Widgets show your pace; iPhone Lock Screen widgets
+• Long-press Add or the app icon for quick entries
+• Black dark theme, wallpaper colour (Android 12+), high contrast
+• Haptics switch, rolling digits, Simplify for slow phones
+• Fixes: bill photos on old Android; alerts follow Hide amounts
+```
+Count: **479**.
+
+### (b) Production (users have 0.10.6)
+
+```
+• Travel mode: trips tag their own spending
+• New Home, Search and Add; the keypad does sums
+• To review: Expense, Income or Transfer
+• Card bill payments recognised; fix a balance
+• Category icons; charts you can drag or read as a table
+• Widgets show your pace; iPhone Lock Screen widgets
+• Long-press Add or the app icon for quick entries
+• Black dark theme, wallpaper colour (Android 12+), high contrast
+• Two panes on foldables
+• Haptics switch; Simplify for slow phones
+```
+Count: **475**.
+
+Sources for the new lines: widget pace, iPhone Lock Screen widgets, launcher shortcuts and long-press Add are S8, Slice 121 (`docs/PHASE2_PROGRESS.md:1821-1822`, `:1825-1826`, `:1830`). The black dark theme, wallpaper accent (Android 12+) and high contrast are S9, Slice 122 (`:1872-1875`). Haptics, rolling digits and Simplify are S7, Slice 120 (`:1769`). The other lines have the sources given in section 5.
+
+Play's release notes are per release, not per platform. The iPhone Lock Screen line is there because the owner asked for it. Drop it on Play if the notes should name only Android features. Without it the texts are shorter and need no other change.
 
 ---
 
