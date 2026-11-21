@@ -70,6 +70,8 @@ object WideLayoutTestHook {
      * 393 dp emulator has no 80 dp to spare); the rail's own tests turn it on. A real wide window (`wm size`) always gets the rail.
      */
     var rail: Boolean by mutableStateOf(false)
+    /** UI S9: turns on the features that are switched off in the app ([WindowLayout.RAIL_ENABLED], [WindowLayout.ADD_PANE_ENABLED]) so their code stays under test. */
+    var features: Boolean by mutableStateOf(false)
 }
 
 /**
@@ -92,6 +94,7 @@ private fun currentHinge(): Hinge? = WideLayoutTestHook.hinge ?: LocalHinge.curr
  */
 @Composable
 fun rememberUsesRail(wide: Boolean): Boolean {
+    if (!WindowLayout.RAIL_ENABLED && !WideLayoutTestHook.features) return false
     if (WideLayoutTestHook.widthDp != null && !WideLayoutTestHook.rail) return false
     val vertical = currentHinge()?.vertical == true
     return WindowLayout.usesRail(if (wide) WindowLayout.TWO_PANE else WindowLayout.PHONE, vertical)

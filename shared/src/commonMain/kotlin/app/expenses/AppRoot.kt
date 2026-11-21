@@ -504,7 +504,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 // UI S9 (U-24): on a two-pane window (no book fold) the bar along the bottom is a rail along the left edge, beside the screens that have the bar
                 val railMode = app.expenses.ui.rememberUsesRail(wide)
                 // ... and only where the pane is wide enough for the form's heading (from about 680 dp with the rail); in a narrower two-pane window Add covers the window as before
-                val addFits = app.expenses.ui.rememberAddFitsBeside(railMode)
+                val addFits = app.expenses.ui.rememberAddFitsBeside(railMode) && (app.expenses.core.domain.WindowLayout.ADD_PANE_ENABLED || app.expenses.ui.WideLayoutTestHook.features)
                 val addBeside = history == null && editing == null && addFits && app.expenses.core.domain.WindowLayout.addBesideList(
                     if (wide) app.expenses.core.domain.WindowLayout.TWO_PANE else app.expenses.core.domain.WindowLayout.PHONE, adding,
                     otherScreenOpen = screens.withIndex().any { (i, open) -> open && i != app.expenses.ui.ScreenKeys.ADD_FORM },

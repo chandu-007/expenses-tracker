@@ -94,6 +94,8 @@ class UiS9ThemeTest {
         assertFalse(WindowLayout.addBesideList(fold, adding = true, otherScreenOpen = true), "Add opened over another screen (a loan, a bill) covers it, as before")
         assertFalse(WindowLayout.addBesideList(phone, adding = true, otherScreenOpen = false))
         assertFalse(WindowLayout.addBesideList(fold, adding = false, otherScreenOpen = false))
+        // the rail and the Add pane are switched off in the app until a cheaper one has been measured equal to the bar and the full-screen form (Slice 124); their rules above stay under test
+        assertFalse(WindowLayout.RAIL_ENABLED); assertFalse(WindowLayout.ADD_PANE_ENABLED)
         // the pane beside the list must be wide enough for the heading: with the rail it is 259 dp at 600 and 299 at 680, so there Add covers the window; from about 682 dp it opens beside
         assertFalse(WindowLayout.addBesideList(fold, adding = true, otherScreenOpen = false, windowWidthDp = 600f))
         assertFalse(WindowLayout.addBesideList(fold, adding = true, otherScreenOpen = false, windowWidthDp = 680f))

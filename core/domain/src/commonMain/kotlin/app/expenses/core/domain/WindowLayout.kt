@@ -59,6 +59,19 @@ enum class WindowLayout {
          */
         fun usableHeightDp(windowHeightDp: Float, hingeTopDp: Float?): Float = if (hingeTopDp != null && hingeTopDp > 0f && hingeTopDp < windowHeightDp) hingeTopDp else windowHeightDp
 
+        /**
+         * UI S9 (U-24): whether the navigation rail is used at all. **OFF** (Slice 124): on a wide window (864 dp) the rail made Home to Reports and Reports to Home, and Add opening beside the list,
+         * draw about twice the frames and three to four times the frames over 100 ms of the bar and the full-screen Add, in five alternating frame rounds against `e40e287` and again in a four-round
+         * variant matrix (the rail alone and the Add pane alone were each the whole of the excess; S8 without S9 equals the base; the right-click and focus-ring modifiers cost nothing). The cause is
+         * a persistent control's own animations (its press ripple and scale, the glass pane's glide and the tint fade keep the window drawing for about 600 ms after every tap, where the bar of each
+         * screen leaves with its screen); fading the tint, snapping the glide and giving the rail its own graphics layer did not remove it. So a wide window keeps the bottom bar, as before S9.
+         * The code path (the rail, [usesRail]) stays and is tested (`WideLayoutTestHook.features`); turn this on only when a cheaper rail has been measured equal to the bar.
+         */
+        const val RAIL_ENABLED = false
+
+        /** UI S9 (U-24): whether Add opens in the pane beside the list. **OFF** for the same measured reason as [RAIL_ENABLED] (the Add pane alone was the whole of the Add-open excess): Add covers the window as before S9. */
+        const val ADD_PANE_ENABLED = false
+
         /** UI S9 (U-24): the navigation rail's width, where it replaces the bar along the bottom. */
         const val RAIL_WIDTH_DP = 80
 

@@ -53,7 +53,7 @@ class WidePaneUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before fun fresh() { runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1") } } }
-    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); SystemDialogs.dismissAppErrorDialog(); WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; WideLayoutTestHook.rail = false; WideLayoutTestHook.hinge = null; runBlocking { container.startFresh() } }
+    @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); resetDisplay(); SystemDialogs.dismissAppErrorDialog(); WideLayoutTestHook.features = false; WideLayoutTestHook.widthDp = null; WideLayoutTestHook.heightDp = null; WideLayoutTestHook.rail = false; WideLayoutTestHook.hinge = null; runBlocking { container.startFresh() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun waitFor(tag: String) {
@@ -412,6 +412,7 @@ class WidePaneUiTest {
 
     @Test
     fun fromSixHundredDpTheBarIsARailWithEveryPlaceOnceAndTheSameTags() {
+        WideLayoutTestHook.features = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test
         WideLayoutTestHook.rail = true
         launch(600, 800); waitFor("nav_rail")
         assertTrue(!has("bar_glass") && !has("bar_opaque"), "no bar along the bottom as well")
@@ -427,7 +428,7 @@ class WidePaneUiTest {
 
     @Test
     fun underSixHundredDpAndWithABookFoldTheBarStays() {
-        WideLayoutTestHook.rail = true
+        WideLayoutTestHook.features = true; WideLayoutTestHook.rail = true
         launch(599, 800)
         assertTrue(!has("nav_rail") && (has("bar_glass") || has("bar_opaque")), "a phone keeps the bar")
         scenario?.close()
@@ -438,6 +439,7 @@ class WidePaneUiTest {
 
     @Test
     fun addOpensBesideTheListAndSavingOrBackEmptiesThePane() {
+        WideLayoutTestHook.features = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test
         seed("e1", "Cafe", 10_000)
         launch(1000); waitFor("row_Cafe")
         tap("add"); waitFor("wide_add_pane"); waitFor("amount")
@@ -454,6 +456,7 @@ class WidePaneUiTest {
 
     @Test
     fun inAWindowTooNarrowForTheFormsHeadingAddCoversTheWindowAndFromAboutSevenHundredDpItOpensBeside() {
+        WideLayoutTestHook.features = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test
         seed("e1", "Cafe", 10_000)
         // 600 dp: the rail leaves panes of 260 and 259 dp, too narrow for "New expense" and the date chip on one line: Add covers the window, as before the pane existed
         launch(620, 800)
@@ -469,6 +472,7 @@ class WidePaneUiTest {
 
     @Test
     fun whatIsTypedInAddStaysWhenTheWindowTurnsNarrowAndWideAgain() {
+        WideLayoutTestHook.features = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test
         launch(1000)
         tap("add"); waitFor("wide_add_pane")
         compose.onNodeWithTag("amount", useUnmergedTree = true).performTextInput("250")
