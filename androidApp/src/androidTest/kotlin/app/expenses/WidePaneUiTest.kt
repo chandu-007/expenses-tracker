@@ -456,7 +456,7 @@ class WidePaneUiTest {
 
     @Test
     fun inAWindowTooNarrowForTheFormsHeadingAddCoversTheWindowAndFromAboutSevenHundredDpItOpensBeside() {
-        WideLayoutTestHook.features = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test
+        WideLayoutTestHook.features = true; WideLayoutTestHook.rail = true // the rail and the Add pane are switched off in the app (WindowLayout.RAIL_ENABLED, ADD_PANE_ENABLED): their code stays under test; the rule is for the window with the rail
         seed("e1", "Cafe", 10_000)
         // 600 dp: the rail leaves panes of 260 and 259 dp, too narrow for "New expense" and the date chip on one line: Add covers the window, as before the pane existed
         launch(620, 800)
