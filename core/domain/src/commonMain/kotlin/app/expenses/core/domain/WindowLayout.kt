@@ -71,7 +71,21 @@ enum class WindowLayout {
          */
         fun usesRail(layout: WindowLayout, verticalHinge: Boolean): Boolean = layout == TWO_PANE && !verticalHinge
 
-        /** UI S9 (U-24): the Add form opens in the pane beside the list (not over the whole window) when the window has two panes and no screen other than Home is open under it. */
-        fun addBesideList(layout: WindowLayout, adding: Boolean, otherScreenOpen: Boolean): Boolean = layout == TWO_PANE && adding && !otherScreenOpen
+        /** UI S9: the narrowest the pane beside the list may be for the Add form to open in it: under this its heading ("New expense") and the date chip no longer fit one line. */
+        const val ADD_PANE_MIN_DP = 300
+
+        /** The width of the pane beside the list in a window [windowWidthDp] wide, with the navigation [rail] taking its [RAIL_WIDTH_DP] (the divider is 1 dp). */
+        fun detailPaneWidthDp(windowWidthDp: Float, rail: Boolean): Float {
+            val area = windowWidthDp - if (rail) RAIL_WIDTH_DP else 0
+            return area - listPaneWidthDp(area) - 1f
+        }
+
+        /**
+         * UI S9 (U-24): the Add form opens in the pane beside the list (not over the whole window) when the window has two panes, no screen other than Home is open under it and the pane is at least
+         * [ADD_PANE_MIN_DP] wide: with the rail the panes are 260 and 259 dp at 600 dp, too narrow for the form's heading, so there (up to 680 dp) Add covers the window as it did before. [windowWidthDp] is
+         * left out where the width is not known (the pane is then taken to fit).
+         */
+        fun addBesideList(layout: WindowLayout, adding: Boolean, otherScreenOpen: Boolean, windowWidthDp: Float? = null, rail: Boolean = true): Boolean =
+            layout == TWO_PANE && adding && !otherScreenOpen && (windowWidthDp == null || detailPaneWidthDp(windowWidthDp, rail) >= ADD_PANE_MIN_DP)
     }
 }

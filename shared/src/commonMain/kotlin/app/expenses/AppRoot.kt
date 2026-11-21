@@ -501,7 +501,11 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                 val searchAlone = searching && screens.count { it } - (if (tripSummaryOf != null) 1 else 0) - (if (tripsOpen) 1 else 0) == 1
                 val editorFull = !wide || (screens.any { it } && !searchAlone)
                 // UI S9 (U-24): on a two-pane window Add opened from Home is the pane beside the list (Home stays the screen); opened over another screen (a loan, Bills) it covers that screen as before
-                val addBeside = history == null && editing == null && app.expenses.core.domain.WindowLayout.addBesideList(
+                // UI S9 (U-24): on a two-pane window (no book fold) the bar along the bottom is a rail along the left edge, beside the screens that have the bar
+                val railMode = app.expenses.ui.rememberUsesRail(wide)
+                // ... and only where the pane is wide enough for the form's heading (from about 680 dp with the rail); in a narrower two-pane window Add covers the window as before
+                val addFits = app.expenses.ui.rememberAddFitsBeside(railMode)
+                val addBeside = history == null && editing == null && addFits && app.expenses.core.domain.WindowLayout.addBesideList(
                     if (wide) app.expenses.core.domain.WindowLayout.TWO_PANE else app.expenses.core.domain.WindowLayout.PHONE, adding,
                     otherScreenOpen = screens.withIndex().any { (i, open) -> open && i != app.expenses.ui.ScreenKeys.ADD_FORM },
                 )
@@ -598,8 +602,6 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                         onBack = { adding = false; prefillLoan = null; prefillTransfer = null },
                     )
                 }
-                // UI S9 (U-24): on a two-pane window (no book fold) the bar along the bottom is a rail along the left edge, beside the screens that have the bar
-                val railMode = app.expenses.ui.rememberUsesRail(wide)
                 val railShown = railMode && (screenKey == app.expenses.ui.ScreenKeys.HOME || screenKey == app.expenses.ui.ScreenKeys.SEARCH || screenKey == 16)
                 // a message set while a screen other than Home is open (Added to your bills, Notifications are blocked...) would wait for Home: a bar under the screen says it (the screen is
                 // given the room, so the bar covers nothing and takes no touch)

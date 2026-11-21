@@ -453,6 +453,21 @@ class WidePaneUiTest {
     }
 
     @Test
+    fun inAWindowTooNarrowForTheFormsHeadingAddCoversTheWindowAndFromAboutSevenHundredDpItOpensBeside() {
+        seed("e1", "Cafe", 10_000)
+        // 600 dp: the rail leaves panes of 260 and 259 dp, too narrow for "New expense" and the date chip on one line: Add covers the window, as before the pane existed
+        launch(620, 800)
+        tap("add"); waitFor("amount")
+        assertTrue(!has("wide_add_pane"), "no pane at 620 dp")
+        assertTrue(!has("row_Cafe"), "Add covers the list")
+        back(); waitGone("amount"); waitFor("row_Cafe")
+        // 700 dp: the pane is 300 dp or more
+        WideLayoutTestHook.widthDp = 700
+        waitFor("row_Cafe"); tap("add"); waitFor("wide_add_pane"); waitFor("amount")
+        assertTrue(has("row_Cafe"), "the list stays beside the form at 700 dp")
+    }
+
+    @Test
     fun whatIsTypedInAddStaysWhenTheWindowTurnsNarrowAndWideAgain() {
         launch(1000)
         tap("add"); waitFor("wide_add_pane")

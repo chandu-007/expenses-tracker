@@ -115,6 +115,23 @@ fun Modifier.aboveHinge(): Modifier {
 @Composable
 internal expect fun platformWindowSizeDp(): androidx.compose.ui.unit.DpSize?
 
+/**
+ * True while the pane beside the list is wide enough for the Add form ([WindowLayout.addBesideList]'s width rule, with the rail drawn as [rail] says). Only a change of the answer recomposes the caller.
+ */
+@Composable
+fun rememberAddFitsBeside(rail: Boolean): Boolean {
+    val info = LocalWindowInfo.current
+    val density = LocalDensity.current
+    val platformSize = platformWindowSizeDp()
+    val fits by remember(info, density, platformSize, rail) {
+        derivedStateOf {
+            val width = WideLayoutTestHook.widthDp?.toFloat() ?: platformSize?.width?.value ?: (info.containerSize.width / density.density)
+            WindowLayout.detailPaneWidthDp(width, rail) >= WindowLayout.ADD_PANE_MIN_DP
+        }
+    }
+    return fits
+}
+
 /** True while the window is big enough for two panes ([WindowLayout.of]). Only a change of the answer recomposes the caller, not every pixel of a window resize. */
 @Composable
 fun rememberIsWide(): Boolean {
