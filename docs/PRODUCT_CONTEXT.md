@@ -16,7 +16,7 @@ Working name: **the app** (a brand name is still to be chosen).
 |---|---|
 | axio, Moneyview, CRED, Jupiter (trackers that fund themselves with loans) | **No lending, no ads, no data sale**, and that promise is auditable. |
 | Fold (AA-first, paywalled export, no cash at launch) | Capture from many sources, first-class cash, **export always free**. |
-| Monarch, YNAB, Copilot (US-centric, sync-dependent, pricey, redesign churn) | Local-first and instant, works without bank linking, India-native capture, fair pricing including a lifetime option, a stable UI. |
+| Monarch, YNAB, Copilot (US-centric, sync-dependent, pricey, redesign churn) | Local-first and instant, works without bank linking, India-native capture, **free with no ads or in-app purchases**, a stable UI. |
 | Money Manager, Monefy, Cashew (manual, data-loss-prone sync) | Equally fast manual entry **plus** reliable account-based sync, automatic capture, and correct ledger semantics. |
 | Splitwise, Tricount (paywalled splitters, no personal budget) | Splits live **inside** the personal ledger: enter once, see your own share, settle via UPI. |
 | Apple Wallet Insights, ChatGPT Finances | Works on Android and iOS, covers cash, UPI, splits and budgets, privacy-first AI. |
@@ -46,8 +46,8 @@ India first, with global-ready foundations. The evidence: no global leader suppo
 1. **Instant, always.** Every interaction reads and writes local storage. Nothing in the core loop waits on the network. (PP-06)
 2. **Correct before clever.** Transfers, card payments, refunds, splits and cash are modelled in the ledger itself, not patched in reports. (PP-04)
 3. **Capture from many sources; no single point of failure.** Every source is optional, every auto-captured item is reviewable, and manual entry is always the 2-second fallback. (PP-01, PP-03)
-4. **The user owns the data.** Free full export in open formats, account-based sync with version history, and a shutdown data guarantee. (PP-05, PP-09)
-5. **Earn trust explicitly.** No ads, no lending, no data sale, honest pricing, human support. (PP-02, PP-07, PP-08, PP-10)
+4. **The user owns the data.** Free full export in open formats, backups the user controls, and a shutdown data guarantee (the data never depended on a server). (PP-05, PP-09)
+5. **Earn trust explicitly.** No ads, no lending, no data sale, **no charges**, human support. (PP-02, PP-07, PP-08, PP-10)
 6. **Calm, not shaming.** Neutral colours, encouraging language, focus on "what's next" rather than red failure states. (PP-21)
 7. **Stable UI.** No surprise redesigns. Big changes ship behind a toggle with a migration window. (PP-06)
 8. **Simple by default, deep on demand.** Progressive disclosure: a one-number budget for beginners, envelopes and rules for power users. (PP-11, PP-22)
@@ -323,24 +323,18 @@ Every interaction gets visual feedback within 100 ms. No ads, network calls or h
 
 **Later:** web app for bulk editing, reports and desktop use (**S**, after iOS). Wear OS and watchOS quick entry (**C**).
 
-**Backend (all stages):** Docker containers deployed in an India region (§6.3): sync relay, email-forwarding ingest, account/entitlements, Postgres. The app stays fully usable offline without it.
+**Backend (later, optional):** none is needed today; the shipped app has no internet permission. If sync or email forwarding is built, it would run in an India region (§6.3) with no entitlements or billing service. The app stays fully usable offline without it.
 
 ---
 
 ## 7. Business model principles
 
-These are derived from PP-02, PP-07, PP-08 and PP-09. The exact pricing is an open decision (§10).
+These are derived from PP-02, PP-07, PP-08 and PP-09. **The app is free** (owner, 2026-11-21): no paid tier, no subscriptions, no in-app purchases.
 
 1. **No ads, no lending or credit products, no data sale, ever.** This is written into the terms of service.
-2. A **generous free tier** that is a complete tracker: unlimited manual entries, accounts, categories, budgets, splits and groups, local storage, **full export**, dark mode.
-3. **Premium** (subscription **and** a fairly priced lifetime option) covers costs that scale or that we pay for: multi-device and household sync, automatic capture sources that need servers (email forwarding, bank/AA), cloud AI, receipt OCR in the cloud, advanced reports, web app.
-4. **Billing honesty:**
-   - pricing shown before any setup
-   - in-app cancellation
-   - trial reminders 48 hours before charging
-   - price changes announced 30+ days ahead, with existing lifetime licences honoured
-   - entitlements restored on any device or platform from one account
-5. **Group fairness:** group participants never need Premium to view, add or settle.
+2. **Everything is free**: unlimited entries, accounts, categories, budgets, capture, reports, local storage, **full export** and backups.
+3. **No paid tier is planned.** Features that would need servers (sync, email forwarding, bank/AA, cloud AI) are not built; if any is ever considered, the owner decides first, and the app's privacy promise (no internet permission) changes only with a new version and a clear notice (`docs/PRIVACY_POLICY.md`, "Changes").
+4. **Group fairness:** everyone can view, add and settle; nothing is behind a payment.
 
 ---
 
@@ -382,10 +376,10 @@ The user accepted all recommendations below. On 2026-10-06 the user chose mobile
 | D4 | E2EE by default vs. opt-in | Default E2EE (no server AI); opt-in E2EE | `research/tech.md` §3.4 | Opt-in E2EE at launch. Server features clearly labelled; on-device AI preferred. |
 | D5 | India AA path | None (SMS/email/statement only); partner with a regulated FIU; register as a SEBI RIA (Fold's route) | `research/india.md` AA section | Defer. Launch without AA; revisit after traction. |
 | D6 | Gmail direct parsing | Forwarding only; Gmail API + CASA (~$540–675/yr) | `research/tech.md` §2.2 | Forwarding first |
-| D7 | Pricing | Free + Premium subscription + lifetime; price points for IN vs. global | `research/reviews.md` business model | Validate willingness to pay; anchor below Fold Plus in India and below Monarch globally |
+| D7 | Pricing | Free; Free + Premium; Free + lifetime | `research/reviews.md` business model | **Decided: free (owner, 2026-11-21)**: no ads, no subscriptions, no in-app purchases (the Verify page says so: `shared/src/commonMain/kotlin/app/expenses/ui/VerifyScreen.kt`) |
 | D8 | Platform order | Web first; Android + iOS together; Android then iOS | §6.5 | **Android first, then iOS**, then web |
 | D9 | AI provider for cloud fallback | Gemini Flash-Lite, GPT-5 nano, self-hosted small model | `research/tech.md` §2.5 | Start with a cheap hosted nano model on de-identified strings; move to a fine-tuned small model later |
-| D10 | Hosting / deployment | Docker containers on a cloud provider's India region; managed PaaS | §6.3 data residency | Docker images (sync relay, email ingest, accounts/entitlements, Postgres) deployed in an India region. Backend in Kotlin (Ktor), so it shares the KMP serialization models with the app. |
+| D10 | Hosting / deployment | Docker containers on a cloud provider's India region; managed PaaS | §6.3 data residency | Not needed for the shipped app. If ever built: Docker images (sync relay, email ingest, Postgres) in an India region; **no accounts/entitlements service**. Backend in Kotlin (Ktor), so it shares the KMP serialization models with the app. |
 
 ---
 
@@ -394,7 +388,7 @@ The user accepted all recommendations below. On 2026-10-06 the user chose mobile
 | Pain point | Requirements |
 |---|---|
 | PP-01 Unreliable capture | FR-CAP-05…13, FR-LED-02, FR-SUP-02 |
-| PP-02 Price / billing | §7, FR-SPL-05 |
+| PP-02 Price / billing | §7 (free) |
 | PP-03 Logging fatigue | FR-CAP-01…04, FR-CAP-12, FR-CAT-01, FR-CAT-07, FR-LED-09, FR-RPT-06, FR-NOT-01 |
 | PP-04 Untrustworthy numbers | §4, FR-LED-01…04, FR-CAT-02, FR-CAT-03 |
 | PP-05 Data loss | FR-DATA-01…06, FR-LED-08, FR-SPL-07, §6.2 |
