@@ -25,12 +25,13 @@ object PeriodCompare {
         return if (diff > 0) "${format(diff)} more than $last so far" else "${format(-diff)} less than $last so far"
     }
 
-    /** The small chip beside the figure: "▲ +25%" or "▼ −30%" (capped at 999%). Null when there is nothing to compare with or nothing changed. */
+    /** The small chip beside the figure: "▲ +25%" or "▼ −30%" (capped at 999%; "▲ <1%" or "▼ <1%" under one percent). Null when there is nothing to compare with or nothing changed. */
     fun pill(current: Long, previous: Long): String? {
         if (previous <= 0) return null
         val diff = current - previous
         if (diff == 0L) return null
         val percent = (kotlin.math.abs(diff) * 100 / previous).coerceAtMost(999)
+        if (percent == 0L) return if (diff > 0) "▲ <1%" else "▼ <1%" // a change under one percent is not "-0%"
         return if (diff > 0) "▲ +$percent%" else "▼ −$percent%"
     }
 

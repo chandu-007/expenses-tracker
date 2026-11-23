@@ -33,6 +33,9 @@ class PeriodCompareTest {
         assertNull(PeriodCompare.sentence(50_000, 0, "last month", rupees)); assertNull(PeriodCompare.pill(50_000, 0))
         assertEquals("▲ +999%", PeriodCompare.pill(10_000_000, 100))
         assertEquals("▼ −100%", PeriodCompare.pill(0, 100_000))
+        assertEquals("▼ <1%", PeriodCompare.pill(99_500, 100_000), "half a percent less is not '-0%'")
+        assertEquals("▲ <1%", PeriodCompare.pill(100_400, 100_000))
+        assertEquals("▲ +1%", PeriodCompare.pill(101_000, 100_000))
     }
 
     @Test
