@@ -21,6 +21,8 @@ import app.expenses.core.domain.ledger.CategoryId
 import app.expenses.core.domain.ledger.CategorySplit
 import app.expenses.core.domain.ledger.EntryId
 import app.expenses.core.domain.ledger.Expense
+import app.expenses.core.storage.Bill
+import app.expenses.core.storage.BillStatus
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -58,6 +60,14 @@ class UiFeat016SpokenForTest {
     /** A monthly repeating expense whose first occurrence is today: still due (not posted) in this period. */
     private fun repeating(id: String, name: String, rupees: Long) = runBlocking {
         container.write { it.recurring.save(RecurringItem(id, name, Money(rupees * 100, inr), CategoryId("Bills"), AccountId("bank"), null, Schedule(RepeatUnit.MONTH, 1, today))) }
+    }
+    /** A repeating expense whose amount differs each time (an electricity bill): due today, no amount. */
+    private fun variableRepeating(id: String, name: String) = runBlocking {
+        container.write { it.recurring.save(RecurringItem(id, name, null, CategoryId("Bills"), AccountId("bank"), null, Schedule(RepeatUnit.MONTH, 1, today))) }
+    }
+    /** A tracked bill read from a text; [amountMinor] 0 is a bill whose message had no figure. */
+    private fun trackedBill(id: String, title: String, amountMinor: Long, dueInDays: Long, kind: String = "UTILITY") = runBlocking {
+        container.write { it.bills.add(Bill(id, "SMS", "AX-$id", title, kind, title, amountMinor, null, "INR", java.time.LocalDate.now().plusDays(dueInDays).toString(), null, null, false, System.currentTimeMillis(), null, BillStatus.TRACKED, null, null, "key-$id")) }
     }
     private fun spend(rupees: Long) = runBlocking {
         container.write { ok -> ok.store.save(Expense(EntryId("s$rupees"), System.currentTimeMillis(), AccountId("cash"), Money(rupees * 100, inr), listOf(CategorySplit(CategoryId("Food"), Money(rupees * 100, inr)))), EntryDetails(merchant = "Shop")) }
@@ -118,5 +128,40 @@ class UiFeat016SpokenForTest {
         tap("spoken_for_home"); waitFor("spoken_for_row_0")
         val row = compose.onNodeWithTag("spoken_for_row_0").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty()
         assertFalse(row.contains("500"), row)
+    }
+
+    @Test
+    fun anOverdueBillFromBeforeThePeriodCountsAndOneWithNoAmountIsSaidAndListed() {
+        limit(10_000); repeating("net", "Streaming", 500)
+        trackedBill("old", "Old power bill", 90_000, -45) // fell due long before this budget period began and is still unpaid
+        trackedBill("nil", "Water bill", 0, 0)            // its message had no figure
+        launch()
+        waitFor("spoken_for_home")
+        assertEquals("₹1,400.00 of what's left is already spoken for by 2 bills due, plus 1 with no amount yet", textOf("spoken_for_home"))
+        tap("spoken_for_home")
+        waitFor("spoken_for_row_0"); waitFor("spoken_for_row_1"); waitFor("spoken_for_row_2")
+        val rows = (0..2).map { i -> compose.onNodeWithTag("spoken_for_row_$i").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty() }
+        assertTrue(rows[0].contains("Old power bill") && rows[0].contains("overdue"), "the overdue bill comes first and is marked: ${rows[0]}")
+        assertTrue(rows.any { it.contains("Water bill") && it.contains("amount not known") }, "the bill without an amount is listed as such: $rows")
+    }
+
+    @Test
+    fun aVariableRepeatingItemWithNoAmountIsCountedButAddsNothing() {
+        limit(10_000); variableRepeating("power", "Electricity")
+        launch()
+        waitFor("spoken_for_home")
+        assertEquals("1 bill due has no amount yet", textOf("spoken_for_home"))
+        repeating("net", "Streaming", 500)
+        launch(); waitFor("spoken_for_home")
+        assertEquals("₹500.00 of what's left is already spoken for by 1 bill due, plus 1 with no amount yet", textOf("spoken_for_home"))
+    }
+
+    @Test
+    fun whenTheBannerCountsACardBillTheLineSaysCardBillsAreNotIncluded() {
+        limit(10_000); repeating("net", "Streaming", 500)
+        trackedBill("card", "Regalia card bill", 500_000, 0, kind = "CREDIT_CARD")
+        launch()
+        waitFor("spoken_for_home")
+        assertEquals("₹500.00 of what's left is already spoken for by 1 bill due (card bills not included)", textOf("spoken_for_home"), "the card bill is left out of the figure on purpose, and the line says so")
     }
 }

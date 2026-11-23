@@ -1565,21 +1565,32 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     private fun spokenForOf(ok: AppContainer.Opened.Ok, status: app.expenses.core.storage.BudgetStatus?): SpokenForUi? {
         val s = status ?: return null
         val overall = s.progress.firstOrNull { it.categoryId == null } ?: return null
+        ok.bills.reconcileWithEntries() // as the home banner does: a bill whose payment was deleted or restored is put right first (one read, no write, in the usual case)
+        val today = todayLocal()
         val dues = ArrayList<app.expenses.core.domain.SpokenFor.Due>()
-        for (d in ok.recurring.unhandled(s.period.start, s.period.endExclusive)) {
-            val amount = d.item.amount ?: continue
-            if (d.item.kind == RecurringKind.EXPENSE && amount.currency == inr) dues += app.expenses.core.domain.SpokenFor.Due(d.item.name, amount.minorUnits, d.date)
+        // repeating expenses reach back as far as the banner's ([waitingRepeats]: two weeks) or to the start of the period, whichever is further: one overdue and unposted will still be paid from what is left
+        for (d in ok.recurring.unhandled(minOf(s.period.start, today.minusDays(14)), s.period.endExclusive)) {
+            if (d.item.kind != RecurringKind.EXPENSE) continue
+            val amount = d.item.amount
+            if (amount != null && amount.currency != inr) continue
+            dues += app.expenses.core.domain.SpokenFor.Due(d.item.name, amount?.minorUnits, d.date)
         }
+        // tracked bills have no lower bound: one that is overdue and unpaid, however long ago it fell due, is still to be paid (a card's bill stays out: paying a card is a transfer, not spending)
         for (b in ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED, 200)) {
             if (b.currency != inr.code || b.kind == "CREDIT_CARD") continue
             val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
-            dues += app.expenses.core.domain.SpokenFor.Due(b.title, b.amountMinor, due)
+            dues += app.expenses.core.domain.SpokenFor.Due(b.title, b.amountMinor.takeIf { it > 0 }, due)
         }
-        val r = app.expenses.core.domain.SpokenFor.compute(overall.remaining.minorUnits, dues, s.period.start, s.period.endExclusive) ?: return null
+        val r = app.expenses.core.domain.SpokenFor.compute(overall.remaining.minorUnits, dues, s.period.endExclusive) ?: return null
         val money = { m: Long -> Money(m, inr).formatted() }
         val day = DatePattern("d MMM")
-        return SpokenForUi(app.expenses.core.domain.SpokenFor.line(r, money), r.items.map { SpokenItemUi(it.name, money(it.amountMinor), day.format(it.due)) })
+        // "card bills not included" only where the banner beside this line counts a card's bill (weekAhead set the count in the same refresh)
+        val line = app.expenses.core.domain.SpokenFor.line(r, money, cardBillsNote = weekCardBills > 0)
+        return SpokenForUi(line, r.listed.map { SpokenItemUi(it.name, it.amountMinor?.let(money) ?: "amount not known", day.format(it.due) + if (it.due < today) ", overdue" else "") })
     }
+
+    /** How many card bills the home banner counted at its last refresh (a tracked card bill or a card with something left on its statement, within the week); see [weekAhead]. */
+    @Volatile private var weekCardBills = 0
 
     /**
      * How many expenses have no category, for Home's "N expenses have no category" card: 0 when the card is not wanted (fewer than [UncategorisedNudge.MIN_COUNT], or "Not now" in the last week, which
@@ -2432,13 +2443,15 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             count++; due.item.amount?.takeIf { it.currency == inr }?.let { total += it.minorUnits }
         }
         val cardBills = trackedDue.filter { (b, _) -> b.kind == "CREDIT_CARD" }.map { it.second }
+        var cardCount = trackedDue.count { (b, d) -> b.kind == "CREDIT_CARD" && d < until }
         ok.cards.all().forEach { terms ->
             // the due date follows from the billing dates alone: a card whose statement is not due within the week costs no balance queries (they read the card's whole history)
             if (app.expenses.core.domain.CardBilling.cycleOn(today, terms).dueDate >= until) return@forEach
             val st = ok.cards.standing(terms.accountId, today, zone)?.takeIf { it.remaining > 0 && it.cycle.dueDate < until } ?: return@forEach
             if (cardBills.any { kotlin.math.abs(it.toEpochDays() - st.cycle.dueDate.toEpochDays()) <= 2 }) return@forEach // its own bill is already counted
-            count++; total += st.remaining
+            count++; total += st.remaining; cardCount++
         }
+        weekCardBills = cardCount
         return count to (if (count > 0 && total > 0) Money(total, inr).formatted() else "")
     }
 
