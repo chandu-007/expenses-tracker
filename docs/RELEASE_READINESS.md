@@ -247,6 +247,39 @@ Sources for the new lines: widget pace, launcher shortcuts and long-press Add ar
 
 The Play notes describe Android only. The iPhone's S8 additions (Lock Screen widgets and the iOS 18 control, `:1830-1831`) belong in the App Store notes, not here.
 
+## Release notes 0.16.0
+
+For the `bundlePlaySms` AAB 0.16.0, versionCode 45 (`main` `73b7a2a`; content since 0.15.0: Slice 125 and the "<1%" chip, `docs/PHASE2_PROGRESS.md:1993`, `:2029`). Android only. Counted on 2026-11-23 with `printf %s "<text>" | wc -m` on exactly the text in the block (no trailing newline). Both are at most 480 characters.
+
+### (a) Open testing (testers have 0.15.0)
+
+```
+• Add: type "chai 20 yesterday" in one line and check the preview before saving
+• Home and Budget show how much of what's left is already set aside for bills due
+• Your data: Test a backup checks that a file restores, without touching your data
+• Home: a change under 1% now shows "<1%" instead of "-0%"
+```
+Count: **303**.
+
+### (b) Production (users have 0.10.6)
+
+```
+• Travel mode: trips tag their own spending
+• New Home, Search and Add; keypad does sums
+• Add in one line: "chai 20 yesterday"
+• To review: Expense, Income or Transfer
+• Card bill payments recognised; fix a balance
+• Category icons; charts you can drag or read as a table
+• Budget shows what bills due will take
+• Test a backup without touching your data
+• Widgets show your budget pace
+• Black dark theme, wallpaper colour (Android 12+), high contrast
+• Two panes on foldables
+```
+Count: **478**.
+
+These are the 0.15.0 production lines plus three 0.16.0 lines (one-line Add, bills already set aside, Test a backup). To fit 480 characters, two 0.15.0 lines were dropped (long-press Add / app-icon quick entries; the haptics switch and Simplify) and "the keypad" became "keypad". The "<1%" chip fix is in (a) only, left out of (b) to save space. Sources: smart line N-01 (`docs/PHASE2_PROGRESS.md:1998-2003`; it fills a preview and never saves by itself), "already spoken for" N-18 (`:2004`), "Test a backup" N-23 (`:2005`), "<1%" (`:2016`, commit `bb7d8b4`).
+
 ---
 
 ## 6. Release checklist for this release
