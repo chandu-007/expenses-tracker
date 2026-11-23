@@ -43,19 +43,23 @@ class UiRel0161AddFormEdgeTest {
 
     private fun stripIsClean(label: String): String? {
         compose.waitForIdle(); Thread.sleep(400)
-        val padTop = node("number_pad").fetchSemanticsNode().positionOnScreen.y
+        val padNode = node("number_pad").fetchSemanticsNode()
+        val padTop = padNode.positionOnScreen.y
+        // the app window is not always the whole screenshot (API 26 letterboxes a narrower window), so the colour is read inside the window, on the pad's own left and right edges
+        val left = padNode.positionOnScreen.x.toInt() + 2
+        val right = (padNode.positionOnScreen.x + padNode.size.width).toInt() - 3
         val density = context.resources.displayMetrics.density
         val shot = instrumentation.uiAutomation.takeScreenshot()
         val bottom = padTop.toInt() - 1
         val top = bottom - (12 * density).toInt()
-        val reference = shot.getPixel(2, bottom)
+        val reference = shot.getPixel(left, bottom)
         fun fail(msg: String): String { java.io.File(context.getExternalFilesDir(null), "edge_failure_${label.replace(Regex("[^A-Za-z0-9]+"), "_")}.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }; return msg }
-        for (y in top..bottom) for (x in listOf(2, shot.width - 3)) {
+        for (y in top..bottom) for (x in listOf(left, right)) {
             if (shot.getPixel(x, y) != reference) return fail("$label: the screen edge is not one colour at y=$y")
         }
         for (y in top..bottom) {
-            var x = 0
-            while (x < shot.width) { if (shot.getPixel(x, y) != reference) return fail("$label: something shows just above the keypad at ($x, $y): ${Integer.toHexString(shot.getPixel(x, y))} against ${Integer.toHexString(reference)}"); x += 3 }
+            var x = left
+            while (x < right) { if (shot.getPixel(x, y) != reference) return fail("$label: something shows just above the keypad at ($x, $y): ${Integer.toHexString(shot.getPixel(x, y))} against ${Integer.toHexString(reference)}"); x += 3 }
         }
         return null
     }
