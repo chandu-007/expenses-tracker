@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.expenses.core.domain.symbolOrCode
@@ -389,7 +390,9 @@ fun EntryFormScreen(
             }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // 0.16.1: the form scrolls under the pinned pad (or keyboard) and Save, so the top edge of whatever comes next could show as a sliver just above them; the last few dp of the
+        // scrolling area fade out (the content's own pixels, whatever the colour behind), so a control is cut off softly or not at all, never as a thin strip
+        Column(Modifier.fillMaxSize().padding(padding).fadeBottomEdge(FORM_EDGE_FADE_DP.dp).testTag("form_scroll").verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (kinds.size > 1) {
                 SegmentedChoice(
                     kinds.map { Segment(it, it.label, "kind_${it.name}") }, draft.kind,
@@ -659,6 +662,25 @@ fun EntryFormScreen(
     }
     }
 }
+
+/** The height of the soft edge above the pinned keypad and Save: fully opaque at the top of it, fully clear for the last [FORM_EDGE_CLEAR_DP], so a control's top edge that peeks out there is not seen. */
+internal const val FORM_EDGE_FADE_DP = 28
+
+/** The last part of that edge that is cleared completely: a control that only just comes into view there is not drawn. */
+internal const val FORM_EDGE_CLEAR_DP = 16
+
+/** Fades what is drawn in the last [height] of this node's bottom edge to nothing (the content is masked, so it works on any background, light, dark or black). */
+internal fun Modifier.fadeBottomEdge(height: androidx.compose.ui.unit.Dp): Modifier = this
+    .graphicsLayer(compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen)
+    .drawWithContent {
+        drawContent()
+        val h = height.toPx().coerceAtMost(size.height)
+        val top = size.height - h
+        drawRect(
+            brush = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = top, endY = size.height - FORM_EDGE_CLEAR_DP.dp.toPx()),
+            topLeft = androidx.compose.ui.geometry.Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
+    }
 
 
 /** What earlier entries with the note typed in were put under: the category and how many agreed ("Usually Food for Chai"). */
