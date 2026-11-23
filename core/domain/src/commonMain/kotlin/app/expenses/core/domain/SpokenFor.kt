@@ -42,7 +42,7 @@ object SpokenFor {
      */
     fun line(r: Result, money: (Long) -> String): String = when {
         r.overBudget -> "${bills(r.count).replaceFirstChar { it.uppercase() }} still due (${money(r.totalMinor)}) will add to what is over"
-        r.coversAll -> "All of what's left is spoken for: ${bills(r.count)} due come to ${money(r.totalMinor)}"
+        r.coversAll -> "All of what's left is spoken for: ${bills(r.count)} due ${if (r.count == 1) "comes" else "come"} to ${money(r.totalMinor)}"
         else -> "${money(r.totalMinor)} of what's left is already spoken for by ${bills(r.count)} due"
     }
 }

@@ -48,7 +48,7 @@ class UiFeat016BackupTestTest {
     private val files = mutableListOf<File>()
 
     private fun reset() = runBlocking { container.startFresh(); container.write { it.templates.putSetting("welcome_dismissed", "1"); it.templates.putSetting("first_week_dismissed", "1") } }
-    @Before fun fresh() = reset()
+    @Before fun fresh() { reset() }
     @After fun cleanUp() { compose.waitForIdle(); scenario?.close(); reset(); files.forEach { it.delete() } }
 
     private fun has(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

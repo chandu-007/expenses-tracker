@@ -34,6 +34,12 @@ class SpokenForTest {
         assertEquals("₹1,800.00 of what's left is already spoken for by 1 bill due", SpokenFor.line(r, money))
     }
 
+    @Test fun oneBillThatTakesAllOfItIsSaidInTheSingular() {
+        val r = SpokenFor.compute(150_000, listOf(due("Rent", 2_000, 26)), start, end)!!
+        assertTrue(r.coversAll)
+        assertEquals("All of what's left is spoken for: 1 bill due comes to ₹2,000.00", SpokenFor.line(r, money))
+    }
+
     @Test fun allOfWhatIsLeftIsDue() {
         val r = SpokenFor.compute(150_000, listOf(due("Power", 1_000, 26), due("Mobile", 600, 28)), start, end)!!
         assertTrue(r.coversAll)

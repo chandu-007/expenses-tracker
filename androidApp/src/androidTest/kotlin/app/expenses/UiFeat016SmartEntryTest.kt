@@ -89,7 +89,7 @@ class UiFeat016SmartEntryTest {
         waitFor("smart_preview")
         assertTrue(textsOf("smart_preview").contains("₹80.00 · Auto · Transport · Yesterday"), textsOf("smart_preview"))
         tap("smart_preview")
-        node("date").assertTextContains("Yesterday", substring = true)
+        assertTrue(textsOf("date").contains("Yesterday"), "the date chip: " + textsOf("date"))
         node("category_chip_Transport").assertIsSelected()
     }
 

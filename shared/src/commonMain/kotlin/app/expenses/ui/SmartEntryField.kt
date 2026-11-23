@@ -73,7 +73,7 @@ internal fun SmartEntryField(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(
             value = text, onValueChange = { if (it.length <= SmartEntry.MAX_LENGTH + 40) text = it },
-            label = { Text("Or type it: chai 20, auto 80 yesterday") }, singleLine = true,
+            label = { Text("Or type it: chai 20", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, placeholder = { Text("chai 20, auto 80 yesterday", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
             modifier = Modifier.fillMaxWidth().testTag("smart_entry"),
         )
