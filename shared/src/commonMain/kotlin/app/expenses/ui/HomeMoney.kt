@@ -34,22 +34,22 @@ import app.expenses.SafeToSpendUi
  * the whole row. At large text the tiles stack. Hide amounts: every figure is masked by [Text], and the bar, which would show the figure's size, is not drawn.
  */
 @Composable
-fun HomeMoneyTiles(budget: BudgetUi, safe: SafeToSpendUi?, onOpenBudget: () -> Unit, onOpenSafe: () -> Unit) {
+fun HomeMoneyTiles(budget: BudgetUi, safe: SafeToSpendUi?, onOpenBudget: () -> Unit, onOpenSafe: () -> Unit, spokenFor: app.expenses.SpokenForUi? = null) {
     val margin = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
     if (budget.overall.limit == null) {
         BudgetSummary(budget, onOpenBudget)
         safe?.let { SafeToSpendTile(it, "home_safe_to_spend_line", onOpenSafe, margin) }
         return
     }
-    if (safe == null) { BudgetSummary(budget, onOpenBudget, margin); return }
+    if (safe == null) { BudgetSummary(budget, onOpenBudget, margin, spokenFor); return }
     if (isLargeText()) {
         Column(margin, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BudgetSummary(budget, onOpenBudget, Modifier.fillMaxWidth())
+            BudgetSummary(budget, onOpenBudget, Modifier.fillMaxWidth(), spokenFor)
             SafeToSpendTile(safe, "home_safe_to_spend_line", onOpenSafe, Modifier.fillMaxWidth())
         }
     } else {
         Row(margin.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BudgetSummary(budget, onOpenBudget, Modifier.weight(1f).fillMaxHeight())
+            BudgetSummary(budget, onOpenBudget, Modifier.weight(1f).fillMaxHeight(), spokenFor)
             SafeToSpendTile(safe, "home_safe_to_spend_line", onOpenSafe, Modifier.weight(1f).fillMaxHeight())
         }
     }

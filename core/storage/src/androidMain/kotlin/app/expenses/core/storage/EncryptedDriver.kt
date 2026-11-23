@@ -38,6 +38,19 @@ object EncryptedDriver {
         return AndroidSqliteDriver(ExpensesDb.Schema, context, name, SupportOpenHelperFactory(rawKey(passphrase), null, true))
     }
 
+    /**
+     * N-23 "Test a backup": a NEW database at [file] (in the cache folder), opened through the same bundled SQLite (the schema's upserts need it), sealed with a random
+     * key that is held in memory only and dies with the driver. It never reads or writes [WRAPPED_FILE], the Keystore key, or the app database; [file] is deleted first
+     * if it is there (a test the app was stopped in the middle of).
+     */
+    fun scratch(context: Context, file: File): SqlDriver {
+        loadNative()
+        require(file.absolutePath != context.getDatabasePath(DEFAULT_NAME).absolutePath) { "Not the app database" }
+        for (suffix in listOf("", "-wal", "-shm", "-journal")) File(file.path + suffix).delete()
+        val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        return AndroidSqliteDriver(ExpensesDb.Schema, context, file.absolutePath, SupportOpenHelperFactory(rawKey(key), null, true))
+    }
+
     /** Deletes the database, its wrapped key and the Keystore key. Irreversible: only after user consent. */
     fun reset(context: Context, name: String = DEFAULT_NAME) {
         context.deleteDatabase(name)

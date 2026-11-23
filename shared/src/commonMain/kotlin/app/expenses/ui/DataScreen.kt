@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -75,6 +76,10 @@ fun DataScreen(
     onShown: () -> Unit = {},
     onIncludeFiles: (Boolean) -> Unit = {},
     autoRunning: Boolean = false,
+    /** N-23 "Test a backup": a file was chosen to test, its passphrase was typed, the passphrase question was closed. */
+    onTestBackup: (String) -> Unit = {},
+    onTestUnlock: (String) -> Unit = {},
+    onTestCancel: () -> Unit = {},
 ) {
     val platform = LocalPlatform.current
     // how many photos and files a backup would carry is read when the screen opens
@@ -186,6 +191,26 @@ fun DataScreen(
             dismissButton = { TextButton(onClick = onCancelRestore) { Text("Cancel") } },
         )
     }
+    if (state.testNeedsPassphrase) {
+        // kept in memory only while the question is open, like the restore passphrase
+        var testPass by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = onTestCancel,
+            title = { Text("Passphrase") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This backup is protected. Type its passphrase to test it. Nothing on this phone changes.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = testPass, onValueChange = { testPass = it }, label = { Text("Passphrase") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth().testTag("test_passphrase"),
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { onTestUnlock(testPass); testPass = "" }, enabled = testPass.isNotEmpty(), modifier = Modifier.testTag("test_unlock")) { Text("Test") } },
+            dismissButton = { TextButton(onClick = onTestCancel, modifier = Modifier.testTag("test_cancel")) { Text("Cancel") } },
+        )
+    }
 
     Scaffold(topBar = { ScreenHeader("Your data", onBack, "data_back") }) { padding ->
         // what a button far down the page did is told at the top: the page goes back up to say it (a result below the fold was never seen)
@@ -199,6 +224,20 @@ fun DataScreen(
             // Shown once the setting and the count are read (a moment after the page opens), so "No backup yet" is never drawn for a ledger that has one.
             val backupLine = remember(state.backup) { BackupStatus.text(nowMillis(), state.backup.lastAt, state.backup.countAtBackup, state.backup.liveCount) }
             if (state.backup.liveCount != null) Text(backupLine, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("backup_status_line"))
+            // N-23 "Test a backup": a chosen backup is restored into a scratch database (never this one) and what it held is said; the scratch database is then deleted
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { pickers.openDocument(listOf("*/*")) { it?.let(onTestBackup) } }, enabled = !state.testing, modifier = Modifier.testTag("test_backup")) { Text("Test a backup") }
+                if (state.testing) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Testing. Your data is not touched.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).testTag("test_backup_busy"))
+                }
+            }
+            state.testResult?.let {
+                Text(
+                    it, style = MaterialTheme.typography.bodyMedium, color = if (state.testFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("test_backup_result"),
+                )
+            }
             if (state.busy) CircularProgressIndicator(Modifier.testTag("data_busy"))
             val feel = rememberFeel()
             LaunchedEffect(state.backupDone, state.status) { if (state.backupDone) feel(Feel.SAVE) }

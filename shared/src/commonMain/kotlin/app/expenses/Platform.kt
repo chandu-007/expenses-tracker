@@ -24,7 +24,7 @@ import kotlin.time.Clock
  *                 supportsSmsCapture, supportsNotificationCapture, supportsWidget, seedingEnabled
  *   numbers       autoExportKeep, backupMinPassphrase
  *   diagnostics   trace(name)
- *   database      openDriver(), resetDatabase(), nodeId()
+ *   database      openDriver(), resetDatabase(), nodeId(), openScratchDatabase() (N-23: a throw-away database for "Test a backup")
  *   files         readBytes(uri), writeBytes(uri, bytes), openRead(uri), openWrite(uri) (the same as streams), displayName(uri), mimeType(uri), folderDisplayName(uri)
  *   attachments   attachmentFiles: AttachmentFileStore
  *   backup        backupCipher: BackupCipher
@@ -80,6 +80,13 @@ interface Platform {
 
     /** A random id for this install, stable across launches, used to make sync-log timestamps unique per device. */
     fun nodeId(): String
+
+    /**
+     * N-23 "Test a backup": a NEW, empty database of the app's schema in the cache folder, for a test restore, or null where the platform has none. It is never the app's
+     * own database and uses none of its keys (Android: SQLCipher with a random key held in memory only; iPhone: its own file). Whatever an earlier test left there (the app
+     * was stopped part way) is deleted first. [ScratchDatabase.discard] closes and deletes it.
+     */
+    fun openScratchDatabase(): ScratchDatabase? = null
 
     // ---- files the user picked ----
 
@@ -277,3 +284,11 @@ internal expect val ioDispatcher: CoroutineDispatcher
 
 /** A failure in background work nobody awaits: reaches the platform's uncaught-exception path, as it would on the thread itself. */
 internal expect fun rethrowUncaught(e: Throwable)
+
+/** A throw-away database ([Platform.openScratchDatabase]): [discard] closes it and deletes its files; call it once, in a `finally`. */
+class ScratchDatabase(val driver: SqlDriver, private val delete: () -> Unit) {
+    fun discard() {
+        try { driver.close() } catch (_: Exception) { }
+        delete()
+    }
+}

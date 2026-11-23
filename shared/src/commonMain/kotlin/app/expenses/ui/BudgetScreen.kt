@@ -64,6 +64,10 @@ import kotlinx.datetime.DayOfWeek
 import androidx.compose.foundation.layout.heightIn
 import app.expenses.core.domain.PaceLevel
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
@@ -94,7 +98,7 @@ fun BudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
  * amounts is on every figure is masked and the bar, whose length would show the figure, is not drawn.
  */
 @Composable
-fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), spokenFor: app.expenses.SpokenForUi? = null) {
     val overall = budget.overall
     val tint = if (overall.limit == null) MaterialTheme.colorScheme.primary else stateColor(overall.state)
     val hide = LocalHideAmounts.current
@@ -127,6 +131,8 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
                 // UI S5: where the spending stands against "today" in words (the figure a day moved to the Home card's top: one "a day" figure, not two)
                 Text(paceWord(overall), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(overall.pace), modifier = Modifier.testTag("budget_pace_word"))
                 if (budget.billsUseItAll) Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
+                // N-18: how much of what is left the bills still due before the period ends will take (a tap lists them)
+                spokenFor?.let { SpokenForLine(it, "spoken_for_home") }
                 if (budget.categoriesNeedingAttention > 0) {
                     Text(
                         if (budget.categoriesNeedingAttention == 1) "1 category budget is near or over its limit" else "${budget.categoriesNeedingAttention} category budgets are near or over their limit",
@@ -136,6 +142,55 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
             }
         }
     }
+}
+
+/**
+ * N-18, "already spoken for": "₹2,100 of what's left is already spoken for by 3 bills due", drawn in whole units (the node says the exact amounts), a tap lists the bills.
+ * Hide amounts masks every figure ([Text] and [privately]); the line has no bar or size that would show one.
+ */
+@Composable
+fun SpokenForLine(ui: app.expenses.SpokenForUi, tag: String, modifier: Modifier = Modifier) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val exact = privately(ui.line)
+    Text(
+        ui.line.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.clip(Radius.XS).clickable(onClickLabel = "Show the bills") { open = true }.heightIn(min = 48.dp)
+            .wrapContentHeight(Alignment.CenterVertically).testTag(tag)
+            .clearAndSetSemantics {
+                text = androidx.compose.ui.text.AnnotatedString(exact)
+                role = androidx.compose.ui.semantics.Role.Button
+                onClick("Show the bills") { open = true; true }
+            },
+    )
+    if (open) SpokenForDialog(ui) { open = false }
+}
+
+/** The bills behind the line: name, due day and amount, each one stop for a screen reader; name over figures at large text. */
+@Composable
+private fun SpokenForDialog(ui: app.expenses.SpokenForUi, onClose: () -> Unit) {
+    val large = isLargeText()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Already spoken for") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()).testTag("spoken_for_list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(ui.line, style = MaterialTheme.typography.bodyMedium)
+                ui.items.forEachIndexed { i, item ->
+                    val name: @Composable (Modifier) -> Unit = { m ->
+                        Column(m) {
+                            Text(item.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                            Text("Due ${item.due}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val amount: @Composable () -> Unit = { Text(item.amount, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    val row = Modifier.fillMaxWidth().testTag("spoken_for_row_$i").semantics(mergeDescendants = true) { }
+                    if (large) Column(row) { name(Modifier); amount() }
+                    else Row(row, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { name(Modifier.weight(1f)); amount() }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.testTag("spoken_for_close")) { Text("Close") } },
+    )
 }
 
 private val WEEKDAYS = listOf(
@@ -154,6 +209,8 @@ fun BudgetScreen(
     onShiftStartDay: (Int) -> Unit,
     onShiftCustomDays: (Int) -> Unit = {},
     onRollover: (Boolean) -> Unit = {},
+    /** N-18: the bills still due this period against what is left (null: none due, or not worked out yet). */
+    spokenFor: app.expenses.SpokenForUi? = null,
 ) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editingOverall by rememberSaveable { mutableStateOf(false) }
@@ -181,7 +238,7 @@ fun BudgetScreen(
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "tip") { TipSlot("budget") }
-            item(key = "ring") { BudgetRingCard(budget, onClick = { editingOverall = true }) }
+            item(key = "ring") { BudgetRingCard(budget, spokenFor, onClick = { editingOverall = true }) }
             item(key = "limits_title") {
                 Text("LIMITS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp).semantics { heading() })
                 if (withLimit.isEmpty()) Text(
@@ -222,7 +279,7 @@ fun BudgetScreen(
  * opens the limit of everything (`budget_row_overall`).
  */
 @Composable
-private fun BudgetRingCard(budget: BudgetUi, onClick: () -> Unit) {
+private fun BudgetRingCard(budget: BudgetUi, spokenFor: app.expenses.SpokenForUi?, onClick: () -> Unit) {
     val overall = budget.overall
     val hide = LocalHideAmounts.current
     val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
@@ -285,6 +342,7 @@ private fun BudgetRingCard(budget: BudgetUi, onClick: () -> Unit) {
                         modifier = Modifier.testTag("safe_to_spend"),
                     )
                 }
+                spokenFor?.let { SpokenForLine(it, "spoken_for_budget") }
 
                 Text(overall.spent.wholeAmounts() + " of " + overall.limit.wholeAmounts() + " · " + budget.range, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_range_line"))
             }

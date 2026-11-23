@@ -931,6 +931,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                                 onUnlock = viewModel::unlockBackup, onRestore = viewModel::confirmRestore, onCancelRestore = viewModel::cancelRestore,
                                 onShown = viewModel::loadBackupFiles, onIncludeFiles = viewModel::setIncludeBackupFiles, autoRunning = autoRunning,
                                 canShareBackup = host.canShareFiles, onShareBackup = { name, pass -> viewModel.shareBackup(name, pass) { n, b -> host.shareFile(n, "application/octet-stream", b) } },
+                                onTestBackup = viewModel::testBackup, onTestUnlock = viewModel::unlockTestBackup, onTestCancel = viewModel::cancelTestBackup,
                             )
                         }
                     }
@@ -966,6 +967,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onShiftStartDay = viewModel::shiftBudgetStartDay,
                             onShiftCustomDays = viewModel::shiftCustomDays,
                             onRollover = viewModel::setBudgetRollover,
+                            spokenFor = s.spokenFor,
                         )
                     }
                     k == 21 -> addScreen()

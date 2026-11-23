@@ -143,3 +143,9 @@ fun waitingSummary(ok: AppContainer.Opened.Ok, inr: Currency): WaitingUi {
     val total = all.filter { it.currency == inr.code }.sumOf { it.remainingMinor }
     return WaitingUi(all.size, if (total > 0) Money(total, inr).formatted() else "")
 }
+
+/** N-18: the "already spoken for" line ([app.expenses.core.domain.SpokenFor.line], exact amounts) and the bills behind it, for the list a tap on the line opens. */
+data class SpokenForUi(val line: String, val items: List<SpokenItemUi>)
+
+/** One bill or repeating expense still due: its name, amount ("₹600.00") and due day ("28 Nov"). */
+data class SpokenItemUi(val name: String, val amount: String, val due: String)

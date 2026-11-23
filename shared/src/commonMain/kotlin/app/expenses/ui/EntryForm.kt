@@ -473,6 +473,15 @@ fun EntryFormScreen(
             if (split) SplitEditor(draft, categories, currency) { draft = it }
 
             if (rest) {
+            // N-01: one line typed as it is said ("chai 20", "auto ke 80 diye"); its preview fills this form when tapped and never saves. A new expense only, composed with the rest a frame
+            // after the form opens, so the amount-first pad and the first frame are as they were for people who ignore it.
+            if (start.id == null && refundOf == null && draft.kind == DraftKind.EXPENSE && !split) SmartEntryField(categories, activeAccounts, currency, draft.occurredAt, usualCategory) { f ->
+                commitAmount(f.amountText)
+                draft = draft.copy(
+                    note = f.note.ifEmpty { draft.note }, category = f.categoryId ?: draft.category, accountId = f.accountId ?: draft.accountId,
+                    occurredAt = f.daysAgo?.let { smartDateMillis(it, draft.occurredAt, zone) } ?: draft.occurredAt,
+                )
+            }
             OutlinedTextField(
                 value = draft.note, onValueChange = { draft = draft.copy(note = it) },
                 label = { Text(if (draft.kind == DraftKind.EXPENSE) "Note or merchant" else "Note") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("note"),

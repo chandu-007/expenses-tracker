@@ -439,7 +439,7 @@ fun EntryListScreen(
                     // the two money tiles come right under the month card while Budget is the first block of the person's layout (the default); moved lower in Customise home, they stay where the person put them
                     val sections = state.homeLayout.visible()
                     val moneyFirst = sections.firstOrNull() == HomeSection.BUDGET
-                    val moneyTiles: @Composable () -> Unit = { HomeMoneyTiles(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onOpenBudget, onOpenSafe = { safeOpen = true }) }
+                    val moneyTiles: @Composable () -> Unit = { HomeMoneyTiles(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onOpenBudget, onOpenSafe = { safeOpen = true }, spokenFor = state.spokenFor) }
                     if (moneyFirst && !firstRun) moneyTiles()
                     // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
                     state.tripCard?.let { TripHomeCard(it) { onOpenTrip(it.id) } }

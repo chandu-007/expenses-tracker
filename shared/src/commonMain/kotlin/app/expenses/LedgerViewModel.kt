@@ -699,6 +699,11 @@ data class DataUi(
     val backup: BackupStatusUi = BackupStatusUi(),
     /** The status is the confirmation of a backup that was saved and checked: Your data draws a tick beside it. */
     val backupDone: Boolean = false,
+    /** N-23 "Test a backup": a test is running; it asks for the file's passphrase; what it found ([testFailed]: it did not open or would not restore). */
+    val testing: Boolean = false,
+    val testNeedsPassphrase: Boolean = false,
+    val testResult: String? = null,
+    val testFailed: Boolean = false,
 )
 
 /**
@@ -802,6 +807,8 @@ sealed interface UiState {
         val milestonesOn: Boolean = false,
         /** UI S6: the milestone Home may show now (worked out with the slow figures, never on the save path), or null. */
         val milestone: Milestone? = null,
+        /** N-18: what of the budget's "left" the bills still due this period will take, with the bills (worked out with the slow figures, never on the save path); null when none are due or there is no limit. */
+        val spokenFor: SpokenForUi? = null,
         /** The person turned on putting yearly bills aside month by month (it is taken off safe to spend). */
         val sinkingFunds: Boolean = false,
         /** Travel mode: the trip that is on today, for the card under Home's summary (informational, not a nudge: docs/HOME_NUDGES.md); null when none is. */
@@ -892,6 +899,9 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     val data: StateFlow<DataUi> = _data
     private var openedUri: String? = null
     private var openedReady: DataTransfer.Opened.Ready? = null
+    /** The file "Test a backup" is reading, kept while it asks for the passphrase. */
+    private var testUri: String? = null
+    private val testFlight = SingleFlight()
     private val actions get() = DataTransfer(platform, container)
 
     private val _import = MutableStateFlow(ImportUi())
@@ -1502,6 +1512,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         balancesJob = viewModelScope.launch(BACKGROUND) {
             kotlinx.coroutines.delay(wait)
             var milestoneNext: Milestone? = null
+            var spokenNext: SpokenForUi? = null
             val figures = container.write { ok ->
                 val live = ok.db.schemaQueries.entryCount().executeAsOne()
                 val nudge = BackupNudge.shouldShow(
@@ -1525,20 +1536,50 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                     buildMap<String, Long> { ok.reports.breakdown(cur, kotlinx.datetime.TimeZone.currentSystemDefault(), inr).forEach { r -> r.categoryId?.let { put(it, r.total.minorUnits) }; r.children.forEach { c -> c.categoryId?.let { put(it, c.total.minorUnits) } } } }
                 } else categorySpendCache
                 milestoneNext = milestoneFigures.next(ok, nowMillis(), systemZone())?.takeIf { m -> m.id != milestoneAcked }
+                spokenNext = spokenForOf(ok, budgetStatusCache)
                 Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok), spend)
             } ?: return@launch
             nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; categorySpendCache = figures.spend; sparkCache = figures.spark; figuresReady = true
             milestoneCache = milestoneNext
+            spokenCache = spokenNext
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
                     (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage, spentMinor = figures.spend[c.id] ?: c.spentMinor) }) ?: st
                 }
-                _state.update { st -> (st as? UiState.Ready)?.copy(milestone = milestoneNext) ?: st }
+                _state.update { st -> (st as? UiState.Ready)?.copy(milestone = milestoneNext, spokenFor = spokenNext) ?: st }
             }
         }
     }
 
     private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi, val safe: SafeToSpendUi?, val categorise: Int, val spend: Map<String, Long>)
+
+    /** N-18: the budget status the last refresh worked out (the overall limit's "left" and the period), read by the slow figures; and what they made of it. */
+    @Volatile private var budgetStatusCache: app.expenses.core.storage.BudgetStatus? = null
+    private var spokenCache: SpokenForUi? = null
+
+    /**
+     * N-18, "already spoken for": the repeating expenses not yet posted or skipped in the budget period (what the budget's own "bills still to come" counts) and the tracked bills with a due
+     * date in it (not a card's bill: paying a card is a transfer, not spending), against what is left under the overall limit. One read of the repeating items and one of the tracked bills;
+     * worked out with the slow figures, never on the save path or when Home opens. Null without an overall limit or with nothing due.
+     */
+    private fun spokenForOf(ok: AppContainer.Opened.Ok, status: app.expenses.core.storage.BudgetStatus?): SpokenForUi? {
+        val s = status ?: return null
+        val overall = s.progress.firstOrNull { it.categoryId == null } ?: return null
+        val dues = ArrayList<app.expenses.core.domain.SpokenFor.Due>()
+        for (d in ok.recurring.unhandled(s.period.start, s.period.endExclusive)) {
+            val amount = d.item.amount ?: continue
+            if (d.item.kind == RecurringKind.EXPENSE && amount.currency == inr) dues += app.expenses.core.domain.SpokenFor.Due(d.item.name, amount.minorUnits, d.date)
+        }
+        for (b in ok.bills.list(app.expenses.core.storage.BillStatus.TRACKED, 200)) {
+            if (b.currency != inr.code || b.kind == "CREDIT_CARD") continue
+            val due = b.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: continue
+            dues += app.expenses.core.domain.SpokenFor.Due(b.title, b.amountMinor, due)
+        }
+        val r = app.expenses.core.domain.SpokenFor.compute(overall.remaining.minorUnits, dues, s.period.start, s.period.endExclusive) ?: return null
+        val money = { m: Long -> Money(m, inr).formatted() }
+        val day = DatePattern("d MMM")
+        return SpokenForUi(app.expenses.core.domain.SpokenFor.line(r, money), r.items.map { SpokenItemUi(it.name, money(it.amountMinor), day.format(it.due)) })
+    }
 
     /**
      * How many expenses have no category, for Home's "N expenses have no category" card: 0 when the card is not wanted (fewer than [UncategorisedNudge.MIN_COUNT], or "Not now" in the last week, which
@@ -4746,6 +4787,43 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
 
     fun dismissDataStatus() = _data.update { it.copy(status = null, backupDone = false) }
 
+    /**
+     * N-23 "Test a backup": the file is read whole and restored into a scratch database that is deleted afterwards ([DataTransfer.testRestore]); this ledger is never
+     * written, so this does not use [dataAction] (whose busy state stops the other buttons) and needs no write lock. One test at a time.
+     */
+    fun testBackup(uri: String) { testUri = uri; runBackupTest(null) }
+
+    fun unlockTestBackup(passphrase: String) = runBackupTest(passphrase)
+
+    fun cancelTestBackup() {
+        testUri = null
+        _data.update { it.copy(testNeedsPassphrase = false) }
+    }
+
+    private fun runBackupTest(passphrase: String?) {
+        val uri = testUri ?: return
+        if (!testFlight.tryEnter()) return
+        _data.update { it.copy(testing = true, testNeedsPassphrase = false, testResult = null, testFailed = false) }
+        viewModelScope.launch(BACKGROUND) {
+            try {
+                when (val t = actions.testRestore(uri, passphrase)) {
+                    DataTransfer.Tested.NeedsPassphrase -> _data.update { it.copy(testing = false, testNeedsPassphrase = true) }
+                    is DataTransfer.Tested.Done -> { testUri = null; _data.update { it.copy(testing = false, testResult = t.text, testFailed = false) } }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: BackupException) {
+                testUri = null
+                _data.update { it.copy(testing = false, testResult = "This backup did not pass: ${e.message} Your data was not touched.", testFailed = true) }
+            } catch (e: Exception) {
+                testUri = null
+                _data.update { it.copy(testing = false, testResult = "This backup could not be tested. Your data was not touched.", testFailed = true) }
+            } finally {
+                testFlight.leave()
+            }
+        }
+    }
+
     // ---- notifications ----
 
     /**
@@ -4918,6 +4996,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val zone = systemZone()
         val today = todayLocal(zone)
         val status = ok.budgets.status(today, kotlinx.datetime.TimeZone.currentSystemDefault(), inr)
+        budgetStatusCache = status
         val spent = ok.store.spendByCategory(inr, from = status.period.startMillis(kotlinx.datetime.TimeZone.currentSystemDefault()), until = status.period.endMillis(kotlinx.datetime.TimeZone.currentSystemDefault()))
             .values.fold(Money.zero(inr)) { a, m -> a + m }
         val cats = ok.categories.list()
@@ -5005,6 +5084,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             nudgesPausedUntil = ok.templates.setting(NudgePause.SETTING)?.toLongOrNull() ?: 0L,
             milestonesOn = ok.templates.setting(Milestones.ON_SETTING) == "1",
             milestone = milestoneCache,
+            spokenFor = spokenCache,
             sinkingFunds = ok.templates.setting(SETTING_SINKING_FUNDS) == "1",
             tripCard = tripCard,
             tripWindows = tripsOn.map { TripWindowUi(it.id, it.name, it.tag, it.startDay, it.endDay) },

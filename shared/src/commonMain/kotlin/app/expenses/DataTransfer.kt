@@ -228,6 +228,40 @@ class DataTransfer(private val platform: Platform, private val container: AppCon
         }
     }
 
+    /** What "Test a backup" came to: the file needs its passphrase, or [Tested.Done] with the sentence for the person. */
+    sealed interface Tested {
+        data object NeedsPassphrase : Tested
+        class Done(val text: String) : Tested
+    }
+
+    /**
+     * N-23 "Test a backup": reads the backup at [uri] to its end (every photo and file checked, none stored), restores it into a scratch database in the cache folder
+     * ([Platform.openScratchDatabase]) and says what that held, then deletes the scratch database. The app's database, its settings, node id and keys are never
+     * opened for this (no [container] call): nothing here can change the person's data. Throws [BackupException] with words for a person when it fails.
+     */
+    suspend fun testRestore(uri: String, passphrase: String?): Tested {
+        val cipher = platform.backupCipher
+        val source = asBackupException("That file could not be opened.") { platform.openRead(uri) }
+        val opened = app.expenses.core.storage.RestoreTrial.open(source, passphrase, cipher.primitives) { bytes, p -> cipher.decrypt(bytes, p) }
+        if (opened !is app.expenses.core.storage.RestoreTrial.Opened.Ready) return Tested.NeedsPassphrase
+        val scratch = platform.openScratchDatabase() ?: throw BackupException("Testing a backup is not available on this device.")
+        try {
+            val counts = try {
+                app.expenses.core.storage.RestoreTrial.restoreInto(app.expenses.core.storage.db.ExpensesDb(scratch.driver), opened.data, now)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BackupException) {
+                throw e
+            } catch (e: Exception) {
+                throw BackupException("It opens, but it would not restore: ${e.message ?: "something in it breaks a rule of the app"}.")
+            }
+            val day = DatePattern("d MMM")
+            return Tested.Done(app.expenses.core.storage.RestoreTrial.summary(counts, opened.files, opened.filesBad) { day.format(dateOfMillis(it)) })
+        } finally {
+            scratch.discard()
+        }
+    }
+
     private suspend fun previewOf(data: BackupData): RestoreReport = container.write { it.backup.preview(data) } ?: throw BackupException("The data is not available.")
 
     private suspend fun ready(reader: BackupReader, reopen: () -> BackupReader): Opened.Ready {

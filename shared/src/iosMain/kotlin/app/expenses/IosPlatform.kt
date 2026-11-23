@@ -15,6 +15,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import platform.Foundation.NSApplicationSupportDirectory
+import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
@@ -78,6 +79,24 @@ class IosPlatform(host: IosHostServices) : Platform {
     private val databaseName = "expenses.db"
 
     override fun openDriver(): SqlDriver = NativeSqliteDriver(ExpensesDb.Schema, databaseName, onConfiguration = { it.copy(extendedConfig = it.extendedConfig.copy(basePath = supportDir)) })
+
+    /** N-23: Caches/restore-test, never Application Support; a file of its own, deleted (with its -wal, -shm and -journal) before it is made and when the test ends. */
+    private val scratchDir: String by lazy {
+        val base = (NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, true).firstOrNull() as? String) ?: error("No Caches folder")
+        "$base/restore-test"
+    }
+    private val scratchName = "scratch.db"
+
+    private fun removeScratch() {
+        for (suffix in listOf("", "-wal", "-shm", "-journal")) files.removeItemAtPath("$scratchDir/$scratchName$suffix", error = null)
+    }
+
+    override fun openScratchDatabase(): ScratchDatabase {
+        ensureDir(scratchDir)
+        removeScratch()
+        val driver = NativeSqliteDriver(ExpensesDb.Schema, scratchName, onConfiguration = { it.copy(extendedConfig = it.extendedConfig.copy(basePath = scratchDir)) })
+        return ScratchDatabase(driver) { removeScratch() }
+    }
 
     override fun resetDatabase() {
         for (suffix in listOf("", "-wal", "-shm", "-journal")) files.removeItemAtPath("$supportDir/$databaseName$suffix", error = null)

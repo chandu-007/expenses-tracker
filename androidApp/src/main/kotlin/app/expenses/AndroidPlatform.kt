@@ -62,6 +62,13 @@ class AndroidPlatform(context: Context) : Platform {
 
     override fun openDriver(): SqlDriver = EncryptedDriver.create(context)
 
+    /** N-23: in the cache folder, its own folder; SQLCipher with a random key held in memory only ([EncryptedDriver.scratch]); deleted, folder and all files, on discard. */
+    override fun openScratchDatabase(): ScratchDatabase {
+        val dir = File(context.cacheDir, "restore-test").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() } // what a test the app was stopped in the middle of left behind
+        return ScratchDatabase(EncryptedDriver.scratch(context, File(dir, "scratch.db"))) { dir.listFiles()?.forEach { it.delete() } }
+    }
+
     /** The key of passphrase-protected automatic copies, wrapped by the Keystore like the database key (but under a Keystore key of its own). */
     override val secretStore: SecretStore = KeystoreSecretStore(context)
 
