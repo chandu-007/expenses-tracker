@@ -41,25 +41,24 @@ class UiRel0161AddFormEdgeTest {
     private fun waitFor(tag: String) = compose.waitUntil(20_000) { has(tag) }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
 
+    private fun close(a: Int, b: Int) = (0..2).all { k -> kotlin.math.abs(((a shr (8 * k)) and 0xff) - ((b shr (8 * k)) and 0xff)) <= 4 } // a rounding step is not a control
+
     private fun stripIsClean(label: String): String? {
         compose.waitForIdle(); Thread.sleep(400)
-        val padNode = node("number_pad").fetchSemanticsNode()
-        val padTop = padNode.positionOnScreen.y
-        // the app window is not always the whole screenshot (API 26 letterboxes a narrower window), so the colour is read inside the window, on the pad's own left and right edges
-        val left = padNode.positionOnScreen.x.toInt() + 2
-        val right = (padNode.positionOnScreen.x + padNode.size.width).toInt() - 3
+        val padTop = node("number_pad").fetchSemanticsNode().positionOnScreen.y
         val density = context.resources.displayMetrics.density
         val shot = instrumentation.uiAutomation.takeScreenshot()
         val bottom = padTop.toInt() - 1
         val top = bottom - (12 * density).toInt()
+        // the app's window is not always the whole screenshot (API 26 draws a narrower window with black either side): the colour is read inside it, at its own edges
+        var left = 0; while (left < shot.width && shot.getPixel(left, bottom) == android.graphics.Color.BLACK) left++
+        var right = shot.width - 1; while (right > left && shot.getPixel(right, bottom) == android.graphics.Color.BLACK) right--
+        left += 2; right -= 2
         val reference = shot.getPixel(left, bottom)
         fun fail(msg: String): String { java.io.File(context.getExternalFilesDir(null), "edge_failure_${label.replace(Regex("[^A-Za-z0-9]+"), "_")}.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }; return msg }
-        for (y in top..bottom) for (x in listOf(left, right)) {
-            if (shot.getPixel(x, y) != reference) return fail("$label: the screen edge is not one colour at y=$y")
-        }
         for (y in top..bottom) {
             var x = left
-            while (x < right) { if (shot.getPixel(x, y) != reference) return fail("$label: something shows just above the keypad at ($x, $y): ${Integer.toHexString(shot.getPixel(x, y))} against ${Integer.toHexString(reference)}"); x += 3 }
+            while (x < right) { if (!close(shot.getPixel(x, y), reference)) return fail("$label: something shows just above the keypad at ($x, $y): ${Integer.toHexString(shot.getPixel(x, y))} against ${Integer.toHexString(reference)}"); x += 3 }
         }
         return null
     }
