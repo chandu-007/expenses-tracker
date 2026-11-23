@@ -247,12 +247,12 @@ object SmartEntry {
         val lower = tokens.map { it.lower }
         val hits = HashMap<String, List<Token>>()
         for (a in accounts) {
-            val parts = a.name.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+            val parts = nameWords(a.name)
             if (parts.isEmpty()) continue
             val at = (0..lower.size - parts.size).firstOrNull { s -> parts.indices.all { lower[s + it] == parts[it] } }
             if (at != null) { hits[a.id] = tokens.subList(at, at + parts.size); continue }
             val first = parts.first()
-            if (first.length >= 3 && first !in FILLERS && accounts.count { o -> o.name.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).firstOrNull() == first } == 1) {
+            if (first.length >= 3 && first !in FILLERS && accounts.count { o -> nameWords(o.name).firstOrNull() == first } == 1) {
                 tokens.firstOrNull { it.lower == first }?.let { hits[a.id] = listOf(it) }
             }
         }
@@ -260,6 +260,17 @@ object SmartEntry {
         val (id, used) = hits.entries.single()
         used.forEach { it.used = true }
         return id
+    }
+
+    /** The words of an account's name, lower case, split at anything that is not a letter or digit ("ICICI Amazon-Pay card" is icici, amazon, pay, card). */
+    private fun nameWords(name: String): List<String> {
+        val out = ArrayList<String>()
+        val cur = StringBuilder()
+        for (c in name.lowercase()) {
+            if (c.isLetterOrDigit()) cur.append(c) else if (cur.isNotEmpty()) { out += cur.toString(); cur.clear() }
+        }
+        if (cur.isNotEmpty()) out += cur.toString()
+        return out
     }
 
     /** The words left, as a note: the merchant's clean name when they are one ("Uber"), else as typed with a capital first letter, cut at a word to [MAX_NOTE]. */

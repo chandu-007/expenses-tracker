@@ -155,7 +155,7 @@ fun SpokenForLine(ui: app.expenses.SpokenForUi, tag: String, modifier: Modifier 
     Text(
         ui.line.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
         modifier = modifier.clip(Radius.XS).clickable(onClickLabel = "Show the bills") { open = true }.heightIn(min = 48.dp)
-            .wrapContentHeight(Alignment.CenterVertically).testTag(tag)
+            .wrapContentHeight(Alignment.CenterVertically).testTag(tag).semantics(mergeDescendants = true) { } // its own stop for a screen reader inside the tappable budget tile
             .clearAndSetSemantics {
                 text = androidx.compose.ui.text.AnnotatedString(exact)
                 role = androidx.compose.ui.semantics.Role.Button
