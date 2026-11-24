@@ -172,6 +172,12 @@ class ReportMathTest {
         assertEquals(y27, ReportMath.samePointWindow(y27, y28, d(2028, 12, 31)), "day 366 of a leap year against a 365-day year is the whole year")
     }
 
+    @Test fun aYearToDateIsLinedUpByDateAcrossALeapDay() {
+        val y28 = p(d(2028, 1, 1), d(2029, 1, 1)); val y27 = p(d(2027, 1, 1), d(2028, 1, 1)); val y29 = p(d(2029, 1, 1), d(2030, 1, 1))
+        assertEquals(p(d(2027, 1, 1), d(2027, 3, 2)), ReportMath.samePointWindow(y27, y28, d(2028, 3, 1)), "1 March 2028 (day 61) against 1 January to 1 March 2027, not 61 days in")
+        assertEquals(p(d(2028, 1, 1), d(2028, 3, 2)), ReportMath.samePointWindow(y28, y29, d(2029, 3, 1)), "1 March 2029 against 1 January to 1 March 2028: 29 February is inside it")
+    }
+
     @Test fun aFinancialYearBeganInApril() {
         val fy = p(d(2026, 4, 1), d(2027, 4, 1)); val before = p(d(2025, 4, 1), d(2026, 4, 1))
         assertEquals(p(d(2025, 4, 1), d(2025, 5, 1)), ReportMath.samePointWindow(before, fy, d(2026, 4, 30)))

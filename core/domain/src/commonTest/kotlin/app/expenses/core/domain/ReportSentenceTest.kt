@@ -38,6 +38,9 @@ class ReportSentenceTest {
     @Test fun aFinishedPeriodIsComparedWithoutSoFar() {
         assertEquals("▲ ₹200.00 more than 2025 (+66%)", ReportSentence.comparison(50_000, 30_000, "2025", false, rupees)!!.text)
     }
+    @Test fun refundsThatTakeTheTotalBelowNothingAreCappedAtAHundredPercent() {
+        assertEquals("▼ ₹600.00 less than Oct so far (−100%)", ReportSentence.comparison(-30_000, 30_000, "Oct", true, rupees)!!.text)
+    }
     @Test fun theSameOrNothingToCompareWith() {
         val same = ReportSentence.comparison(100, 100, "Oct", true, rupees)!!
         assertEquals("Same as Oct so far", same.text); assertEquals(null, same.more)

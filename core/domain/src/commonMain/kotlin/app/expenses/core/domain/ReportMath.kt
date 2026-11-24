@@ -3,6 +3,7 @@ package app.expenses.core.domain
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.daysUntil
+import kotlinx.datetime.periodUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlin.math.roundToInt
@@ -67,13 +68,15 @@ object ReportMath {
 
     /**
      * What to set an unfinished [current] period against, so that a half-lived month is not compared with a whole one: the same number of days from the start of [previous] as [current] has
-     * lived at [today] (day 23 of this month against the first 23 days of last month; year to date against the same days of the year before). Never longer than [previous] itself (23 March
+     * lived at [today] (day 23 of this month against the first 23 days of last month; year to date against the same dates of the year before). Never longer than [previous] itself (23 March
      * days against a 28-day February is the whole of February). When [current] is over (or not begun: [today] is outside it) the whole of [previous]: complete against complete.
      */
     fun samePointWindow(previous: DatePeriod, current: DatePeriod, today: LocalDate): DatePeriod {
         if (today !in current) return previous
-        val lived = current.start.daysUntil(today) + 1
-        return DatePeriod(previous.start, minOf(previous.endExclusive, previous.start.plus(lived, DateTimeUnit.DAY)))
+        // a year or a financial year is lined up by date (1 March of a leap year against 1 March of the year before, not 61 days in); anything shorter by the days lived
+        val end = if (current.days > 40) previous.start.plus(current.start.periodUntil(today)).plus(1, DateTimeUnit.DAY)
+        else previous.start.plus(current.start.daysUntil(today) + 1, DateTimeUnit.DAY)
+        return DatePeriod(previous.start, minOf(previous.endExclusive, end))
     }
 
     /**

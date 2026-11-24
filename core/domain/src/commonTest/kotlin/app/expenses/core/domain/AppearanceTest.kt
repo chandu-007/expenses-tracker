@@ -38,4 +38,16 @@ class AppearanceTest {
         for (a in Appearances.ACCENTS) for (dark in listOf(false, true)) { val p = Appearances.primaryFor(a, dark); val c = Appearances.containerFor(p, dark); assertTrue(Appearances.contrast(c, Appearances.onColor(c)) >= 7.0, "${a.key} dark=$dark: text on the selected-chip background") }
         assertEquals(Appearances.ACCENTS.size, Appearances.ACCENTS.map { it.key }.toSet().size)
     }
+
+    @Test
+    fun aChartBarThatIsNotBeingReadStillReachesThreeToOneAgainstThePageForEveryAccentInLightDarkAndBlack() {
+        fun over(fg: Int, bg: Int, alpha: Double): Int {
+            fun ch(shift: Int) = (((fg shr shift) and 0xFF) * alpha + ((bg shr shift) and 0xFF) * (1 - alpha)).toInt()
+            return (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
+        for (a in Appearances.ACCENTS) for ((dark, page) in listOf(false to Appearances.LIGHT_BACKGROUND, true to Appearances.DARK_SURFACE, true to 0x000000)) {
+            val bar = over(Appearances.primaryFor(a, dark), page, Appearances.IDLE_BAR_ALPHA)
+            assertTrue(Appearances.contrast(bar, page) >= 3.0, "${a.key} dark=$dark page=${page.toString(16)}: ${Appearances.contrast(bar, page)}")
+        }
+    }
 }

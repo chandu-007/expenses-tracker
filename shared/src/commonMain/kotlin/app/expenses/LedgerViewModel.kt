@@ -647,7 +647,7 @@ data class GroupRowUi(val key: String?, val name: String, val amount: String, va
 data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList(), val minor: Long = 0L)
 
 /** One bar of the trend. [fraction] is its height relative to the tallest bar (0 to 1). Tapping it opens the entries of that period. */
-data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long, /** The total in minor units: the chart's average line, the bubble's change from the bar before, the table. */ val minor: Long = 0L, /** The period is still going on (today is inside it): its bar is "so far", not a finished total, and it is left out of the average. */ val open: Boolean = false)
+data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long, /** The total in minor units: the chart's average line, the bubble's change from the bar before, the table. */ val minor: Long = 0L, /** The period is still going on (today is inside it): its bar is "so far", not a finished total, and it is left out of the average. */ val open: Boolean = false, /** The bar covers only part of a calendar month (the ends of a custom range): it is left out of the average and of the change from the bar before. */ val partial: Boolean = false)
 
 data class DrillLineUi(val entryId: String, val date: String, val title: String, val category: String, val amount: String, val negative: Boolean)
 
@@ -677,6 +677,8 @@ data class ReportUi(
     val open: Boolean = false, val openDay: Int = 0, val periodDays: Int = 0,
     /** What the first segment of the mode row is called: "Month" for monthly budget periods, "Week", "Fortnight" or "Period". */
     val periodModeLabel: String = "Period",
+    /** Any income was recorded in the period: without it "Saved" and "Over by" mean nothing and the hero does not say them. */
+    val hasIncome: Boolean = false,
     /** The shortfall when the period spent more than it took in ("₹1,300.00"), else empty: [net] is the signed difference, this is what the hero line says. */
     val shortBy: String = "",
     /** Share of income kept, in whole percent rounded down, when there is income and something was kept; else null. */
@@ -1637,10 +1639,8 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val compare = PeriodCompare.lastName(budgetPeriod)?.let { last ->
             val cur = budgetPeriod.containing(today)
             val before = budgetPeriod.containing(cur.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
-            val daysIn = cur.start.daysUntil(today) + 1
-            val comparableEnd = minOf(before.start.plus(daysIn, kotlinx.datetime.DateTimeUnit.DAY), before.endExclusive)
             val now = ok.reports.spent(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).minorUnits
-            val earlier = ok.reports.spent(DatePeriod(before.start, comparableEnd), zone, inr).minorUnits
+            val earlier = ok.reports.spent(ReportMath.samePointWindow(before, cur, today), zone, inr).minorUnits
             // the same two figures give the sentence and the chip beside the total ("▲ +158%")
             comparePill = PeriodCompare.pill(now, earlier).orEmpty()
             // the ghost under the line: the same 14 days, one period earlier (a month back for a month; the length of the period before for the others)
@@ -1651,12 +1651,11 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
         val insight = PeriodCompare.lastName(budgetPeriod)?.let {
             val cur = budgetPeriod.containing(today)
-            val daysIn = cur.start.daysUntil(today) + 1
             val now = ok.reports.breakdown(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).associate { it.name to it.total.minorUnits }
             var edge = cur.start
             val earlier = (1..3).map {
                 val p = budgetPeriod.containing(edge.minus(1, kotlinx.datetime.DateTimeUnit.DAY)); edge = p.start
-                ok.reports.breakdown(DatePeriod(p.start, minOf(p.start.plus(daysIn, kotlinx.datetime.DateTimeUnit.DAY), p.endExclusive)), zone, inr).associate { r -> r.name to r.total.minorUnits }
+                ok.reports.breakdown(ReportMath.samePointWindow(p, cur, today), zone, inr).associate { r -> r.name to r.total.minorUnits }
             }.filter { m -> m.values.sum() > 0 }
             if (earlier.size < 2) null else SpendingInsight.best(now.map { (name, minor) -> InsightLine(name, minor, earlier.sumOf { m -> m[name] ?: 0L } / earlier.size) }) { Money(it, inr).formatted() }
         }.orEmpty()
@@ -4125,7 +4124,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             try {
                 container.write { ok ->
                     val kept = openingReport
-                    if (kept != null && kept.day == todayLocal().toEpochDays() && kept.signature == container.dataSignature(ok)) { if (reportRequest == OPENING_REPORT) _report.value = kept.report }
+                    if (kept != null && kept.day == todayLocal().toEpochDays() && kept.signature == container.dataSignature(ok) && (kept.report.budget != null || budgetStatusCache == null)) { if (reportRequest == OPENING_REPORT) _report.value = kept.report }
                     else reportRequest?.let { publishReport(ok, it) }
                 }
             } finally { _reportBuilds.update { it - 1 } }
@@ -4625,19 +4624,29 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val tallest = totals.maxOfOrNull { it.minorUnits }?.takeIf { it > 0 } ?: 1L
         val custom = r.mode == ReportMode.CUSTOM
         val trend = bars.mapIndexed { i, (label, _, p) ->
-            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays(), totals[i].minorUnits, ReportMath.isOpen(p, today, custom))
+            TrendBarUi(
+                label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays(), totals[i].minorUnits, ReportMath.isOpen(p, today, custom),
+                partial = custom && (p.start.dayOfMonth != 1 || p.endExclusive != kotlinx.datetime.LocalDate(p.start.year, p.start.monthNumber, 1).plus(1, kotlinx.datetime.DateTimeUnit.MONTH)),
+            )
         }
 
-        // an unfinished period is set against the same point of the one before (day 23 against the first 23 days), a finished one whole against whole
+        // an unfinished period is set against the same point of the one before (day 23 against the first 23 days), a finished one whole against whole; "so far" stops at today, like Home's line, so entries dated later do not count
         val open = ReportMath.isOpen(period, today, custom)
         val previousWindow = ReportMath.samePointWindow(previous, period, today)
+        val tomorrow = today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)
+        val compareNow = if (open) reports.spent(app.expenses.core.domain.DatePeriod(period.start, minOf(period.endExclusive, tomorrow)), zone, inr) else spent
+        // stepped back, the earlier period is "the week before", not "last week" (which is the one before the one being lived)
+        val stepped = r.offset < 0
         val previousName = when (r.mode) {
             ReportMode.YEAR -> previous.start.year.toString()
             ReportMode.FINANCIAL_YEAR -> "FY ${previous.start.year}–${(previous.start.year + 1) % 100}"
             ReportMode.CUSTOM -> "the same length of time before"
-            ReportMode.PERIOD -> if (budgetPeriod is BudgetPeriod.Monthly && budgetPeriod.startDay == 1) DatePattern("MMM").format(previous.start) else PeriodCompare.lastName(budgetPeriod) ?: "the year before"
+            ReportMode.PERIOD -> if (budgetPeriod is BudgetPeriod.Monthly && budgetPeriod.startDay == 1) DatePattern("MMM").format(previous.start)
+                else PeriodCompare.lastName(budgetPeriod)?.let { if (stepped) "the " + it.removePrefix("the ").removePrefix("last ") + " before" else it } ?: "the year before"
         }
-        val compared = ReportSentence.comparison(spent.minorUnits, reports.spent(previousWindow, zone, inr).minorUnits, previousName, open) { Money(it, inr).formatted() }
+        // a range that has not begun has nothing to be compared yet
+        val notBegun = custom && period.start > today
+        val compared = if (notBegun) null else ReportSentence.comparison(compareNow.minorUnits, reports.spent(previousWindow, zone, inr).minorUnits, previousName, open) { Money(it, inr).formatted() }
         val comparison = compared?.text
 
         val drill = r.drillTarget?.let { target ->
@@ -4674,6 +4683,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             r.mode, title, r.mode != ReportMode.CUSTOM && r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison,
             reports.breakdown(period, zone, inr).map(::row), trend, drill, r.group, groupRows, period.start.toEpochDays().toLong(), period.endExclusive.toEpochDays().toLong(),
             compared?.more, open, if (open) period.start.daysUntil(today) + 1 else 0, if (open) period.days else 0, ReportMath.modeLabel(budgetPeriod),
+            hasIncome = income.minorUnits > 0,
             shortBy = if (net.minorUnits < 0) Money(-net.minorUnits, inr).formatted() else "",
             savedPercent = if (income.minorUnits > 0 && net.minorUnits > 0) (net.minorUnits * 100 / income.minorUnits).toInt() else null,
             budget = budgetNow?.first, budgetElapsed = budgetNow?.second ?: 0f,

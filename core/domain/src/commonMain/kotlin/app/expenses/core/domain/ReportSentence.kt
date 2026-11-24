@@ -36,7 +36,8 @@ object ReportSentence {
         val diff = current - previous
         val soFar = if (open) " so far" else ""
         if (diff == 0L) return Comparison("Same as $previousName$soFar", null)
-        val percent = PeriodCompare.pill(current, previous)?.drop(2).orEmpty()
+        // refunds can take the period below nothing: "less" is then the whole of what the other had, never more than 100%
+        val percent = if (diff < 0 && -diff > previous) "−100%" else PeriodCompare.pill(current, previous)?.drop(2).orEmpty()
         return if (diff > 0) Comparison("▲ ${format(diff)} more than $previousName$soFar ($percent)", true) else Comparison("▼ ${format(-diff)} less than $previousName$soFar ($percent)", false)
     }
 

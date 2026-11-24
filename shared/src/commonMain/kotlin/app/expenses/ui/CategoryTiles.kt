@@ -59,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.compositeOver
+import app.expenses.core.domain.Appearances
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -138,11 +140,14 @@ private fun tileShape(size: Dp) = if (size >= 36.dp) Radius.M else Radius.S
  * the first letter on a stable colour from the text. [fallback] is used for the monogram when [name] is blank.
  */
 @Composable
-fun CategoryAvatar(name: String, fallback: String, modifier: Modifier = Modifier, size: Dp = 40.dp, tint: Color? = null) {
-    val style = LocalCategoryLooks.current[name]
+fun CategoryAvatar(name: String, fallback: String, modifier: Modifier = Modifier, size: Dp = 40.dp, tint: Color? = null, monogram: Boolean = false) {
+    // [monogram]: the first letter, whatever the name is (an account, a tag or a shop that happens to share a category's name is not that category)
+    val style = if (monogram) null else LocalCategoryLooks.current[name]
     val label = name.ifBlank { fallback }
-    // a [tint] draws the tile in that colour (the slice of a chart) with a black or white glyph, whichever reads on it
-    val tile = if (tint != null) CategoryLook.Tile(tint.toArgb() and 0xFFFFFF, if (tint.luminance() > 0.5f) 0x000000 else 0xFFFFFF) else tileColors(label.trim().lowercase(), style)
+    // a [tint] draws the tile in that colour (the slice of a chart, over the surface when it has some alpha) with the glyph colour that reads best on it
+    val surface = MaterialTheme.colorScheme.surface
+    val tinted = tint?.compositeOver(surface)?.toArgb()?.and(0xFFFFFF)
+    val tile = if (tinted != null) CategoryLook.Tile(tinted, Appearances.onColor(tinted)) else tileColors(label.trim().lowercase(), style)
     Box(modifier.size(size).clip(tileShape(size)).background(tile.container.opaque()).testTag("tile_" + label.trim().lowercase()), contentAlignment = Alignment.Center) {
         if (style != null) Icon(categoryGlyph(style.glyph ?: CategoryLook.defaultGlyph(style.name)), contentDescription = null, tint = tile.glyph.opaque(), modifier = Modifier.size(size * 0.56f))
         else Text(label.trim().take(1).uppercase(), color = tile.glyph.opaque(), fontWeight = FontWeight.SemiBold, fontSize = (size.value * 0.4f).sp)

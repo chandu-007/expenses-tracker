@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -29,7 +28,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import app.expenses.core.storage.ReportGroup
-import app.expenses.GroupRowUi
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -145,8 +143,8 @@ fun ReportsScreen(
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(-1) }, modifier = Modifier.testTag("report_prev").semantics { contentDescription = "Earlier" }) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
                     Column(Modifier.weight(1f)) {
-                        Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("report_title"), maxLines = 1)
-                        if (report.open) Text("so far · day ${report.openDay} of ${report.periodDays}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("report_open_note"), maxLines = 1)
+                        Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }.testTag("report_title"), maxLines = 1)
+                        if (report.open) Text("so far · day ${report.openDay} of ${report.periodDays}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("report_open_note"), maxLines = 2)
                     }
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(1) }, enabled = report.canGoNext, modifier = Modifier.testTag("report_next").semantics { contentDescription = "Later" }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                 }
@@ -155,7 +153,7 @@ fun ReportsScreen(
             item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             // the grouping changes only what is below it (the ring and the list), so it sits here and not at the top of the page
             item(key = "groups") {
-                Text("Where it went", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).semantics { heading() }.testTag("report_where"))
+                Text("Where it went", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).semantics { heading() }.testTag("report_group_title"))
                 SegmentedChoice(
                     listOf(ReportGroup.CATEGORY to "Category", ReportGroup.ACCOUNT to "Account", ReportGroup.TAG to "Tag", ReportGroup.MERCHANT to "Merchant").map { (g, label) -> Segment(g, label, "group_${g.name}") },
                     report.group, onGroup, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -176,14 +174,14 @@ fun ReportsScreen(
                     }
                 }
                 BreakdownRing(
-                    slices, report.spent, "Spent", picked, { picked = it }, allWord,
+                    slices, report.spent, "Spent", picked, { picked = it }, allWord, if (report.group == ReportGroup.CATEGORY) report.rows.size else report.groupRows.size,
                     onShowAll = { showAll = true; scope.launch { if (reduce) listState.scrollToItem(RANKED_LIST_ITEM) else listState.animateScrollToItem(RANKED_LIST_ITEM) } },
                 )
             }
             // the one list of the page: every row is one stop; the biggest few are shown and the rest are one tap away
             item(key = "ranked") {
                 Column {
-                    if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("report_account_note"))
                     if (report.group == ReportGroup.TAG) Text("An entry with several tags counts under each, so these can add up to more than the total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals. Names you counted as one shop (More, Capture, Category rules) are added together.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -197,7 +195,7 @@ fun ReportsScreen(
                 val key = row.key ?: "none"
                 RankedRow(
                     name = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.key], marked = picked == key,
-                    tag = "report_group_row_${row.key ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = false, onClick = {
+                    tag = "report_group_row_${row.key ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = false, monogram = true, onClick = {
                         val target = when (report.group) {
                             ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
                             ReportGroup.TAG -> row.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged
@@ -241,7 +239,7 @@ private fun ModeMenu(report: ReportUi, onMode: (ReportMode) -> Unit) {
     val items = listOf(ReportMode.PERIOD to (report.periodModeLabel to "mode_period"), ReportMode.YEAR to ("Year" to "mode_year"), ReportMode.FINANCIAL_YEAR to ("Financial year" to "mode_fy"), ReportMode.CUSTOM to ("Any dates" to "mode_custom"))
     val current = items.first { it.first == report.mode }.second.first
     Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("mode_menu").semantics { contentDescription = "Report by: $current. Change" }) { Text("$current ▾") }
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("mode_menu").semantics { contentDescription = "Report by: $current. Change"; stateDescription = if (open) "Expanded" else "Collapsed" }) { Text("$current ▾", modifier = Modifier.clearAndSetSemantics {}) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             items.forEach { (mode, named) -> DropdownMenuItem(text = { Text(named.first) }, onClick = { open = false; onMode(mode) }, modifier = Modifier.testTag(named.second)) }
         }
@@ -262,7 +260,7 @@ private const val RANKED_LIST_ITEM = 8
 @Composable
 private fun RankedRow(
     name: String, amount: String, share: Int, negative: Boolean, color: Color, marked: Boolean, tag: String,
-    children: List<ReportRowUi>, expanded: Boolean, onToggle: () -> Unit, indent: Boolean, onClick: () -> Unit,
+    children: List<ReportRowUi>, expanded: Boolean, onToggle: () -> Unit, indent: Boolean, monogram: Boolean = false, onClick: () -> Unit,
 ) {
     val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
     Row(Modifier.fillMaxWidth().background(if (marked) color.copy(alpha = 0.10f) else Color.Transparent), verticalAlignment = Alignment.CenterVertically) {
@@ -270,12 +268,19 @@ private fun RankedRow(
             Modifier.weight(1f).clickable(onClick = onClick).padding(start = if (indent) 44.dp else 16.dp, end = if (children.isEmpty()) 16.dp else 0.dp, top = rowPadding(10.dp), bottom = rowPadding(10.dp)).testTag(tag),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            CategoryAvatar(name, name, size = if (indent) 28.dp else 36.dp, tint = color)
+            // the tile is decoration (the name is the row): not read out as a letter before every row
+            Box(Modifier.clearAndSetSemantics {}) { CategoryAvatar(name, name, size = if (indent) 28.dp else 36.dp, tint = color, monogram = monogram) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = if (stacked) 3 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    WholeText(amount, style = MaterialTheme.typography.bodyLarge, color = if (negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
-                    Text(shareText(share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                val amountText: @Composable () -> Unit = { WholeText(amount, style = MaterialTheme.typography.bodyLarge, color = if (negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, maxLines = 1) }
+                val shareLabel: @Composable () -> Unit = { Text(shareText(share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+                // from 140% text the name has the line to itself and the figures sit under it (side by side the name was left about 68 dp at 360 dp wide, and broke in the middle of a word)
+                if (stacked) {
+                    Text(name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) { amountText(); shareLabel() }
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Box(Modifier.padding(start = 8.dp)) { amountText() }
+                    Box(Modifier.padding(start = 12.dp).widthIn(min = 40.dp)) { shareLabel() }
                 }
                 LinearProgressIndicator(progress = { share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
             }

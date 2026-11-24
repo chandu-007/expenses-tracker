@@ -75,6 +75,9 @@ object Appearances {
     private const val LIGHT_SURFACE = 0xFFFFFF
     /** Material's light background, the lightest thing a light primary is read on. */
     const val LIGHT_BACKGROUND = 0xFEF7FF
+
+    /** How strongly a chart bar that is not the one being read is drawn: the accent at this share over the page, which keeps 3:1 against the page (WCAG 1.4.11) for every accent in light, dark and black. */
+    const val IDLE_BAR_ALPHA = 0.8
     /** UI S9: the true-black theme's background and surface. */
     const val BLACK_SURFACE = 0x000000
 

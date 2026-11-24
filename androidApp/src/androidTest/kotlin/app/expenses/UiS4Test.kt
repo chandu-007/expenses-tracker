@@ -124,6 +124,7 @@ class UiS4Test {
         assertEquals(6, rows.size)
         for (i in 0 until 6) assertEquals(barAmounts[i], rows[i][1], "row $i amount equals bar $i")
         assertEquals("₹500.00", rows[5][1]); assertEquals("₹300.00", rows[4][1]); assertEquals("₹900.00", rows[3][1])
+        assertEquals("+₹900.00", rows[3][2], "900 after an empty period: a finished increase keeps its plus")
         assertEquals("−₹600.00", rows[4][2], "300 after 900")
         assertEquals("", rows[5][2], "the period still going on has no change from the one before: a part is not set against a whole")
         assertTrue(rows[5][0].endsWith("so far"), "and it says so: ${rows[5][0]}")
@@ -142,7 +143,7 @@ class UiS4Test {
         assertEquals(androidx.compose.ui.semantics.Role.Button, node.config.getOrNull(SemanticsProperties.Role))
         assertEquals(true, node.config.getOrNull(SemanticsProperties.Selected), "this period is the selected one")
         val summary = descriptionOf("trend_chart")
-        assertTrue(summary.contains("Highest") && summary.contains("Average ₹600.00 of the finished periods"), "the average is of the finished periods (300 and 900), not the one going on: $summary")
+        assertTrue(summary.contains("Highest") && summary.contains("Average ₹600.00 of the full periods"), "the average is of the finished periods (300 and 900), not the one going on: $summary")
     }
 
     @Test
@@ -157,7 +158,7 @@ class UiS4Test {
         compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performScrollTo()
         compose.waitUntil(5_000) { has("trend_value_5") && has("trend_value_3") }
         assertTrue(!has("trend_value_4"), "only the selected bar (5, this period) and the tallest (3, the 900) carry a figure")
-        assertTrue(texts("trend_average").joinToString(" ").contains("avg ₹600") && texts("trend_average").joinToString(" ").contains("full months"), "the key names the average of the finished periods: ${texts("trend_average")}")
+        assertTrue(texts("trend_average").joinToString(" ").contains("Average ₹600.00 of the full months"), "the key says the exact average of the full periods (drawn short as avg ₹600): ${texts("trend_average")}")
         compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { down(Offset(width * 0.75f, height * 0.8f)); moveTo(Offset(width * 0.80f, height * 0.8f)); moveTo(Offset(width * 0.75f, height * 0.8f)) }
         compose.waitUntil(5_000) { has("trend_bubble") && !has("trend_value_5") }
         assertTrue(!has("trend_value_3"), "while a finger scrubs, the bubble speaks and the figures on the bars step aside")

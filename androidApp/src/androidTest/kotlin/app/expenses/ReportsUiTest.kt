@@ -246,7 +246,7 @@ class ReportsUiTest {
         val older = DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -2).start)
         waitText("report_comparison", "▼ ₹600.00 less than $older (−66%)")
         assertTrue(compose.onAllNodes(hasTestTag("report_open_note"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "a period that is over has no 'so far' note")
-        assertTrue(compose.onAllNodes(hasTestTag("report_comparison") and hasText("so far"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and the comparison does not say so far")
+        assertTrue(compose.onAllNodes(hasTestTag("report_comparison") and hasText("so far", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and the comparison does not say so far")
     }
 
     @Test
@@ -290,6 +290,35 @@ class ReportsUiTest {
         spend("a", 600, "Food")
         openReports()
         assertTrue(compose.onAllNodes(hasTestTag("report_budget_line"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasTestTag("report_net"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and with no income there is no 'Saved' or 'Over by': nothing came in to keep or overspend")
+        assertTrue(textsOf("report_income_card").contains("Income"), "the income is still said")
+    }
+
+    @Test
+    fun anOverBudgetLineSaysTheExactOverrunAndTheLimitAndHideAmountsMasksEveryFigureOfThePage() {
+        listOf("Food" to 1000L, "Groceries" to 400L, "Transport" to 300L, "Bills" to 200L, "Shopping" to 100L, "Health" to 60L, "Fun" to 40L).forEachIndexed { i, (c, r) -> spend("r$i", r, c) }
+        spend("before", 300, "Fun", at = previousPeriodNoon())
+        runBlocking { container.write { ok ->
+            ok.store.save(Income(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), Money(500_000, inr), CategoryId("Other")), EntryDetails(merchant = "Salary"))
+            ok.budgets.setLimit(null, Money(100_000, inr))
+        } }
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        waitFor("add"); compose.waitForIdle()
+        compose.onNodeWithTag("open_reports").performClick()
+        waitFor("report_budget_line")
+        assertTrue(textsOf("report_budget_line").joinToString(" ").contains("Over by ₹1,100.00 · limit ₹1,000.00"), "the overrun is exact and the limit is named: ${textsOf("report_budget_line")}")
+        // now hidden: no figure anywhere on the page, the percent and the words stay
+        runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
+        scenario!!.close(); scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        waitFor("add"); compose.waitForIdle()
+        compose.onNodeWithTag("open_reports").performClick()
+        waitFor("report_budget_line")
+        val figure = Regex("₹\\s*[0-9]")
+        for (tag in listOf("report_spent", "report_comparison", "report_income", "report_net", "report_budget_line", "report_headline", "breakdown_Food", "breakdown_Groceries", "report_row_Food", "trend_average")) {
+            waitFor(tag)
+            assertTrue(!figure.containsMatchIn(textsOf(tag).joinToString(" ")), "$tag shows no figure: ${textsOf(tag)}")
+        }
+        assertTrue(textsOf("report_comparison").joinToString(" ").contains("%"), "the percent is not an amount and stays")
     }
 
     @Test

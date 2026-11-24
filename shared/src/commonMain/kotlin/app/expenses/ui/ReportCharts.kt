@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +75,7 @@ import app.expenses.TrendBarUi
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.CategoryLook
 import app.expenses.core.domain.Money
+import app.expenses.core.domain.Appearances
 import app.expenses.core.domain.compact
 import app.expenses.core.domain.formatted
 import app.expenses.core.domain.wholeAmounts
@@ -121,15 +121,15 @@ internal fun shareText(share: Int): String = if (share < 1) "<1%" else "$share%"
 
 /**
  * An amount line drawn in whole units ("₹24,558", not "₹24,558.00") with its exact text kept for a screen reader and for the tests (the same pattern as `SpokenForLine`); Hide amounts masks it either way
- * (the shared [Text] masks the drawn text, [privately] the exact one). Text without a decimal amount is drawn as it is.
+ * (the shared [Text] masks the drawn text, [privately] the exact one). Text without a decimal amount is drawn as it is. [spoken] is what the node says when it is not the drawn text itself (no arrow glyph read aloud).
  */
 @Composable
 fun WholeText(
-    text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, fontWeight: FontWeight? = null, textAlign: TextAlign? = null, maxLines: Int = Int.MAX_VALUE,
+    text: String, modifier: Modifier = Modifier, spoken: String = text, color: Color = Color.Unspecified, fontWeight: FontWeight? = null, textAlign: TextAlign? = null, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, style: androidx.compose.ui.text.TextStyle = androidx.compose.material3.LocalTextStyle.current,
     autoSize: androidx.compose.foundation.text.TextAutoSize? = null,
 ) {
-    val exact = privately(text)
+    val exact = privately(spoken)
     Text(
         text.wholeAmounts(), modifier.clearAndSetSemantics { this.text = androidx.compose.ui.text.AnnotatedString(exact) }, color = color, fontWeight = fontWeight, textAlign = textAlign,
         maxLines = maxLines, overflow = overflow, style = style, autoSize = autoSize,
@@ -148,12 +148,14 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, o
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onSpent).testTag("report_spent_card")) {
             Text(if (report.open) "Spent so far" else "Spent", style = MaterialTheme.typography.labelLarge, color = quiet)
-            MoneyText(report.spent, style = NumberStyle.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp), color = ink, maxLines = 1, minFontSize = 12.sp, rolling = true, modifier = Modifier.testTag("report_spent"))
+            // drawn in whole rupees like every other amount of the page; the node says the exact amount (what a screen reader and the tests read)
+            val exactSpent = privately(report.spent)
+            MoneyText(report.spent.wholeAmounts(), style = NumberStyle.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp), color = ink, maxLines = 1, minFontSize = 12.sp, rolling = true, modifier = Modifier.testTag("report_spent").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exactSpent) })
             report.comparison?.let { c ->
                 // the words say "more" or "less"; the tint only repeats that, so it is never the sole signal
                 val tint = when (report.comparisonMore) { true -> MaterialTheme.colorScheme.error; false -> Color(0xFF2E7D32); null -> quiet }
                 WholeText(
-                    c, style = MaterialTheme.typography.labelMedium, color = ink,
+                    c, spoken = c.removePrefix("▲ ").removePrefix("▼ "), style = MaterialTheme.typography.labelMedium, color = ink,
                     modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(50)).background(tint.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("report_comparison"),
                 )
             }
@@ -168,7 +170,7 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, o
                 Text("Income", style = MaterialTheme.typography.bodyMedium, color = quiet)
                 WholeText(report.income, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, autoSize = amountFit(14), modifier = Modifier.testTag("report_income"))
             }
-            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (report.hasIncome) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(if (report.netPositive) "Saved" else "Over by", style = MaterialTheme.typography.bodyMedium, color = quiet)
                 WholeText(if (report.netPositive) report.net else report.shortBy, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) ink else MaterialTheme.colorScheme.error, maxLines = 1, autoSize = amountFit(14), modifier = Modifier.testTag("report_net"))
                 report.savedPercent?.let { Text("(${shareText(it)})", style = MaterialTheme.typography.bodyMedium, color = quiet) }
@@ -176,7 +178,9 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, o
         }
         report.budget?.let { b ->
             // only for the budget period being lived: "On pace · ₹25,695 left of ₹75,000 ›", the bar under it with a tick for today
-            val line = (if (b.pace == app.expenses.core.domain.PaceLevel.OVER) paceWord(b) + " of " + b.limit else paceWord(b) + " · " + b.note + " of " + b.limit)
+            // the exact text is built here and drawn whole by [WholeText]: "Over by ₹1,300.00 · limit ₹2,000.00" is spoken with its paise, never pre-rounded
+            val line = if (b.pace == app.expenses.core.domain.PaceLevel.OVER) app.expenses.core.domain.PaceMath.word(b.pace, b.note.removeSuffix(" over")) + " · limit " + b.limit
+                else app.expenses.core.domain.PaceMath.word(b.pace) + " · " + b.note + " of " + b.limit
             Column(Modifier.fillMaxWidth().clickable(onClick = onBudget).testTag("report_budget_line"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     WholeText(line, style = MaterialTheme.typography.labelLarge, color = ink, modifier = Modifier.weight(1f))
@@ -239,7 +243,7 @@ fun ChartTable(heads: List<String>, lines: List<TableLine>, tag: String, modifie
  * is the page's, so the list can mark it too). "Show as table" lists every slice, exact, and the ring is also one description for a screen reader. The middle says the total once, in whole units.
  */
 @Composable
-fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked: String?, onPick: (String?) -> Unit, allWord: String, onShowAll: () -> Unit) {
+fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked: String?, onPick: (String?) -> Unit, allWord: String, allCount: Int, onShowAll: () -> Unit) {
     val shown = slices.filter { it.share > 0 }
     if (shown.isEmpty()) return
     val top = shown.take(5)
@@ -257,9 +261,10 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked:
     var table by rememberSaveable { mutableStateOf(false) }
     val stacked = LocalDensity.current.fontScale >= 1.4f
     val ringSize = if (stacked) 112.dp else 132.dp
+    val hideRing = LocalHideAmounts.current
     val ring: @Composable () -> Unit = {
         Box(
-            Modifier.size(ringSize).semantics { contentDescription = "Breakdown: " + all.joinToString(", ") { "${it.name} ${if (it.share < 1) "less than 1%" else "${it.share}%"}" } }.pointerInput(all) {
+            Modifier.size(ringSize).semantics { contentDescription = (if (stacked) privatelyPlain("$label $totalText. ", hideRing) else "") + "Breakdown: " + all.joinToString(", ") { "${it.name} ${if (it.share < 1) "less than 1%" else "${it.share}%"}" } }.pointerInput(all) {
                 detectTapGestures { tap ->
                     val cx = size.width / 2f
                     val cy = size.height / 2f
@@ -342,7 +347,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked:
                     }
                 }
             }
-            if (shown.size > 3) TextButton(onClick = onShowAll, modifier = Modifier.testTag("breakdown_all")) { Text("All ${shown.size} $allWord ›") }
+            if (allCount > 3) TextButton(onClick = onShowAll, modifier = Modifier.testTag("breakdown_all")) { Text("All $allCount $allWord ›") }
         }
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("breakdown")) {
@@ -389,7 +394,8 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
     var scrub by remember { mutableIntStateOf(-1) }
     var table by rememberSaveable { mutableStateOf(false) }
     // the average is of finished periods: a month half lived would pull it down
-    val withData = bars.filter { it.minor > 0 && !it.open }
+    // a bar that is only part of a period (the one going on, the ends of a custom range) is not a full period either
+    val withData = bars.filter { it.minor > 0 && !it.open && !it.partial }
     val average = if (withData.size >= 2) withData.sumOf { it.minor } / withData.size else 0L
     val averageFraction = if (average > 0) withData.map { it.fraction }.average().toFloat() else 0f
     /** "so far" for the open bar, plain for the rest. */
@@ -397,7 +403,7 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
     // a bar's change from the bar before; none for an open bar (a part against a whole), nor for the bar after it
     fun changeOf(i: Int): String? {
         val prev = bars.getOrNull(i - 1) ?: return null
-        if (bars[i].open || prev.open) return null
+        if (bars[i].open || prev.open || bars[i].partial || prev.partial) return null
         val d = bars[i].minor - prev.minor
         return ReportSentence.change(money(abs(d)), d.compareTo(0L), prev.label)
     }
@@ -407,15 +413,19 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
     val unitWord = if (report.mode != ReportMode.PERIOD || report.periodModeLabel == "Month") "months" else "periods"
     val highest = bars.maxByOrNull { it.minor }
     val tallest = bars.indexOf(highest)
-    val summary = title + ", bar chart. " + (highest?.takeIf { it.minor > 0 }?.let { "Highest: ${nameOf(it)}, ${it.amount}. " } ?: "") + (if (average > 0) "Average ${money(average)}" + (if (bars.any { it.open }) " of the finished periods" else "") + ". " else "") + "Each bar opens its period's entries; the table lists them."
+    val summary = title + ", bar chart. " + (highest?.takeIf { it.minor > 0 }?.let { "Highest: ${nameOf(it)}, ${it.amount}. " } ?: "") + (if (average > 0) "Average ${money(average)}" + (if (bars.any { it.open || it.partial }) " of the full periods" else "") + ". " else "") + "Each bar opens its period's entries; the table lists them."
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("trend")) {
         val stacked = LocalDensity.current.fontScale >= 1.4f
         val titleText: @Composable (Modifier) -> Unit = { m -> Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = m.semantics { heading() }) }
         // the average is named beside the title, not on the chart, where its label ran into the first bar
         val averageKey: @Composable () -> Unit = {
-            if (average > 0) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("trend_average")) {
+            if (average > 0) Row(
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // said in full ("Average ₹57,152.80 of the full months"), drawn short
+                modifier = Modifier.testTag("trend_average").clearAndSetSemantics { this.text = androidx.compose.ui.text.AnnotatedString(privatelyPlain("Average ${money(average)}" + (if (bars.any { it.open || it.partial }) " of the full $unitWord" else ""), hide)) },
+            ) {
                 Canvas(Modifier.size(width = 16.dp, height = 2.dp)) { drawLine(quiet, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))) }
-                Text("avg ${Money(average, BaseCurrency.current).compact()}" + if (bars.any { it.open }) ", full $unitWord" else "", style = NumberStyle.Chart, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("avg ${Money(average, BaseCurrency.current).compact()}" + if (bars.any { it.open || it.partial }) ", full $unitWord" else "", style = NumberStyle.Chart, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (stacked) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { titleText(Modifier); averageKey() }
@@ -435,14 +445,15 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
                 bars.forEachIndexed { i, b ->
                     val h = (maxH * b.fraction * grow.value).coerceAtLeast(if (b.fraction > 0f) 4.dp.toPx() else 2.dp.toPx())
                     val topLeft = Offset(slot * i + (slot - barW) / 2f, baseY - h)
+                    // every bar is drawn at [Appearances.IDLE_BAR_ALPHA] or more (3 to 1 against the page in light, dark and black, for every accent); the one being read, or touched, is marked by an outline, not by being fainter than the rest
+                    val marked = if (focus >= 0) i == focus else b.isSelected
                     if (b.open) {
                         // so far: a light fill and a dashed outline, never the solid bar of a finished total
-                        val on = focus < 0 || i == focus
-                        drawRoundRect(accent.copy(alpha = if (on) 0.18f else 0.10f), topLeft, Size(barW, h), CornerRadius(r, r))
-                        drawRoundRect(accent.copy(alpha = if (on) 1f else 0.5f), topLeft, Size(barW, h), CornerRadius(r, r), style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 3.dp.toPx()))))
+                        drawRoundRect(accent.copy(alpha = 0.18f), topLeft, Size(barW, h), CornerRadius(r, r))
+                        drawRoundRect(accent, topLeft, Size(barW, h), CornerRadius(r, r), style = Stroke(if (marked) 2.5.dp.toPx() else 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 3.dp.toPx()))))
                     } else {
-                        val alpha = if (focus >= 0) (if (i == focus) 1f else if (b.isSelected) 0.7f else 0.5f) else (if (b.isSelected) 1f else 0.6f)
-                        drawRoundRect(accent.copy(alpha = alpha), topLeft, Size(barW, h), CornerRadius(r, r))
+                        drawRoundRect(accent.copy(alpha = if (marked) 1f else Appearances.IDLE_BAR_ALPHA.toFloat()), topLeft, Size(barW, h), CornerRadius(r, r))
+                        if (marked) drawRoundRect(ink, topLeft, Size(barW, h), CornerRadius(r, r), style = Stroke(2.dp.toPx()))
                     }
                 }
                 if (averageFraction > 0f && grow.value >= 0.999f) {
@@ -468,7 +479,7 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
                             modifier = Modifier.align(Alignment.TopCenter).wrapContentWidth(Alignment.CenterHorizontally, unbounded = true)
                                 .offset(y = room + BARS_HEIGHT * (1f - b.fraction) - 16.dp * fontScale)
                                 // on the page colour, so the dashed average line never runs through the figure
-                                .background(MaterialTheme.colorScheme.background, RoundedCornerShape(4.dp)).padding(horizontal = 2.dp).clearAndSetSemantics { semanticsTestTag = "trend_value_$i" }, // the bar says it all to a screen reader
+                                .background(MaterialTheme.colorScheme.background, Radius.XS).padding(horizontal = 2.dp).clearAndSetSemantics { semanticsTestTag = "trend_value_$i" }, // the bar says it all to a screen reader
                         )
                     }
                 }
@@ -510,7 +521,7 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
             listOf("Period", "Spent", "Change"),
             bars.mapIndexed { i, b ->
                 val prev = bars.getOrNull(i - 1)
-                val d = if (prev == null || b.open || prev.open) null else b.minor - prev.minor
+                val d = if (prev == null || b.open || prev.open || b.partial || prev.partial) null else b.minor - prev.minor
                 val change = d?.let { (if (it > 0) "+" else if (it < 0) "−" else "") + money(abs(it)) } ?: ""
                 TableLine(listOf(nameOf(b), b.amount, change), ReportSentence.trendBar(nameOf(b), b.amount, changeOf(i)?.let { "$it." }))
             },
