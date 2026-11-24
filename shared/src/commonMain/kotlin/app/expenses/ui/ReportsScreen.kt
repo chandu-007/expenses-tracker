@@ -2,6 +2,7 @@ package app.expenses.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
@@ -55,7 +60,7 @@ import app.expenses.ReportRowUi
 import app.expenses.ReportUi
 import app.expenses.core.storage.DrillTarget
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReportsScreen(
     tabBar: @Composable () -> Unit = {},
@@ -109,33 +114,44 @@ fun ReportsScreen(
         val colors = rememberChartColors(report)
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "tip") { TipSlot("reports") }
-            item {
-                SegmentedChoice(
-                    listOf(Segment(ReportMode.PERIOD, "By period", "mode_period"), Segment(ReportMode.YEAR, "By year", "mode_year"), Segment(ReportMode.FINANCIAL_YEAR, "Financial year", "mode_fy"), Segment(ReportMode.CUSTOM, "Any dates", "mode_custom")),
+            // the mode row: one short row ("Month | Year | FY | Dates"); from 140% text a single menu button, so the figure is on the first screen
+            item(key = "mode") {
+                if (LocalDensity.current.fontScale >= 1.4f) ModeMenu(report, onMode) else SegmentedChoice(
+                    listOf(Segment(ReportMode.PERIOD, report.periodModeLabel, "mode_period"), Segment(ReportMode.YEAR, "Year", "mode_year"), Segment(ReportMode.FINANCIAL_YEAR, "FY", "mode_fy"), Segment(ReportMode.CUSTOM, "Dates", "mode_custom")),
                     report.mode, onMode, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 if (report.mode == ReportMode.CUSTOM) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pickingRange = "from" }, modifier = Modifier.testTag("custom_from")) { Text("From ${dayLabel(report.customStartDay)}") }
                     OutlinedButton(onClick = { pickingRange = "to" }, modifier = Modifier.testTag("custom_to")) { Text("To ${dayLabel(report.customEndDay - 1)}") }
                 }
-                SegmentedChoice(
-                    listOf(ReportGroup.CATEGORY to "Category", ReportGroup.ACCOUNT to "Account", ReportGroup.TAG to "Tag", ReportGroup.MERCHANT to "Merchant").map { (g, label) -> Segment(g, label, "group_${g.name}") },
-                    report.group, onGroup, Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            }
+            // the period and its arrows stay at the top while the page scrolls, so a long list never takes the way to another period out of reach
+            stickyHeader(key = "period") {
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(-1) }, modifier = Modifier.testTag("report_prev").semantics { contentDescription = "Earlier" }) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                    Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).testTag("report_title"), maxLines = 1)
+                    Column(Modifier.weight(1f)) {
+                        Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("report_title"), maxLines = 1)
+                        if (report.open) Text("so far · day ${report.openDay} of ${report.periodDays}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("report_open_note"), maxLines = 1)
+                    }
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(1) }, enabled = report.canGoNext, modifier = Modifier.testTag("report_next").semantics { contentDescription = "Later" }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                 }
             }
             item {
                 // one sentence that says the point before the chart does (UI S4)
                 val top = if (report.group == ReportGroup.CATEGORY) report.rows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) } else report.groupRows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) }
-                val sentence = top?.let { ReportSentence.headline(report.group.name.lowercase(), it.first, it.second, it.third, report.spent) }.orEmpty()
-                if (sentence.isNotEmpty()) Text(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("report_headline"))
+                val sentence = top?.let { ReportSentence.headline(report.group.name.lowercase(), it.first, it.second, it.third) }.orEmpty()
+                if (sentence.isNotEmpty()) WholeText(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("report_headline"))
             }
             item { ReportSummary(report, onSpent = { onDrill(DrillTarget.All, null, null, null) }, onIncome = { onDrill(DrillTarget.Income, null, null, null) }) }
             item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
+            // the grouping changes only what is below it (the ring and the list), so it sits here and not at the top of the page
+            item(key = "groups") {
+                Text("Where it went", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).semantics { heading() }.testTag("report_where"))
+                SegmentedChoice(
+                    listOf(ReportGroup.CATEGORY to "Category", ReportGroup.ACCOUNT to "Account", ReportGroup.TAG to "Tag", ReportGroup.MERCHANT to "Merchant").map { (g, label) -> Segment(g, label, "group_${g.name}") },
+                    report.group, onGroup, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             item {
                 val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.map { r ->
                     Slice(r.categoryId ?: "none", r.name, r.share, colors[r.categoryId], r.amount, r.minor, r.name) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
@@ -178,6 +194,20 @@ fun ReportsScreen(
     }
 }
 
+/** From 140% text the four segments no longer fit one row: the mode is one button that opens a menu of the same four, with the same tags. */
+@Composable
+private fun ModeMenu(report: ReportUi, onMode: (ReportMode) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val items = listOf(ReportMode.PERIOD to (report.periodModeLabel to "mode_period"), ReportMode.YEAR to ("Year" to "mode_year"), ReportMode.FINANCIAL_YEAR to ("Financial year" to "mode_fy"), ReportMode.CUSTOM to ("Any dates" to "mode_custom"))
+    val current = items.first { it.first == report.mode }.second.first
+    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("mode_menu").semantics { contentDescription = "Report by: $current. Change" }) { Text("$current ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            items.forEach { (mode, named) -> DropdownMenuItem(text = { Text(named.first) }, onClick = { open = false; onMode(mode) }, modifier = Modifier.testTag(named.second)) }
+        }
+    }
+}
+
 private const val WORKING_SHOWS_AFTER_MS = 250L
 private const val ANNOUNCE_AFTER_MS = 1_000L
 
@@ -192,8 +222,8 @@ private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, o
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).background(color, CircleShape))
             Text(row.name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
-            Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
+            WholeText(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            Text(shareText(row.share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
         }
         LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }
@@ -238,8 +268,8 @@ private fun GroupReportRow(row: GroupRowUi, color: Color, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("report_group_row_${row.key ?: "none"}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
-            Text(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text("${row.share}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
+            WholeText(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            Text(shareText(row.share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
         }
         LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
     }

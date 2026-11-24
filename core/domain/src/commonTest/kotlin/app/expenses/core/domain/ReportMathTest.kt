@@ -114,4 +114,88 @@ class ReportMathTest {
             assertEquals(if (year == 2028) 29 else 28, months[1].days, "February in $year")
         }
     }
+
+    // ---- 0.17: the open period is compared with the same point of the one before ----
+
+    private fun d(y: Int, m: Int, day: Int) = LocalDate(y, m, day)
+    private fun p(a: LocalDate, b: LocalDate) = DatePeriod(a, b)
+    private val nov = p(d(2026, 11, 1), d(2026, 12, 1))
+    private val oct = p(d(2026, 10, 1), d(2026, 11, 1))
+
+    @Test fun midMonthTheWindowIsTheSameNumberOfDaysFromTheStartOfTheMonthBefore() {
+        assertEquals(p(d(2026, 10, 1), d(2026, 10, 24)), ReportMath.samePointWindow(oct, nov, d(2026, 11, 23)), "day 23 of Nov: the first 23 days of Oct")
+        assertEquals(23, ReportMath.samePointWindow(oct, nov, d(2026, 11, 23)).days)
+    }
+
+    @Test fun theFirstDayIsOneDayAndTheLastDayOfAMonthOfTheSameLengthIsTheWholeOfTheOneBefore() {
+        assertEquals(p(d(2026, 10, 1), d(2026, 10, 2)), ReportMath.samePointWindow(oct, nov, d(2026, 11, 1)))
+        assertEquals(30, ReportMath.samePointWindow(oct, nov, d(2026, 11, 30)).days, "30 days lived: the first 30 of October's 31")
+        val sep = p(d(2026, 9, 1), d(2026, 10, 1))
+        assertEquals(sep, ReportMath.samePointWindow(sep, oct, d(2026, 10, 30)), "30 days lived and September has 30: all of it")
+    }
+
+    @Test fun aLongerMonthAgainstAShorterOneIsCappedAtTheWholeOfTheShorterOne() {
+        val feb = p(d(2026, 2, 1), d(2026, 3, 1)); val mar = p(d(2026, 3, 1), d(2026, 4, 1))
+        assertEquals(feb, ReportMath.samePointWindow(feb, mar, d(2026, 3, 31)), "31 days lived, February has 28: all of February")
+        assertEquals(feb, ReportMath.samePointWindow(feb, mar, d(2026, 3, 29)))
+        assertEquals(28, ReportMath.samePointWindow(feb, mar, d(2026, 3, 28)).days)
+        val leapFeb = p(d(2028, 2, 1), d(2028, 3, 1)); val leapMar = p(d(2028, 3, 1), d(2028, 4, 1))
+        assertEquals(29, ReportMath.samePointWindow(leapFeb, leapMar, d(2028, 3, 31)).days, "a leap February has 29")
+    }
+
+    @Test fun aShorterMonthAgainstALongerOneIsCutToTheDaysItHasLived() {
+        val jan = p(d(2026, 1, 1), d(2026, 2, 1)); val feb = p(d(2026, 2, 1), d(2026, 3, 1))
+        assertEquals(p(d(2026, 1, 1), d(2026, 1, 28)), ReportMath.samePointWindow(jan, feb, d(2026, 2, 27)))
+    }
+
+    @Test fun aPeriodThatIsOverOrNotBegunIsComparedWholeWithWhole() {
+        assertEquals(oct, ReportMath.samePointWindow(oct, nov, d(2026, 12, 5)), "today is after Nov")
+        assertEquals(oct, ReportMath.samePointWindow(oct, nov, d(2026, 10, 15)), "today is before Nov")
+        val sep = p(d(2026, 9, 1), d(2026, 10, 1))
+        assertEquals(sep, ReportMath.samePointWindow(sep, oct, d(2026, 11, 23)), "stepping back to October: all of September")
+    }
+
+    @Test fun aSalaryDayMonthAndAWeekAndAFortnightFollowTheirOwnStart() {
+        val cycle = p(d(2026, 11, 25), d(2026, 12, 25)); val before = p(d(2026, 10, 25), d(2026, 11, 25))
+        assertEquals(p(d(2026, 10, 25), d(2026, 11, 3)), ReportMath.samePointWindow(before, cycle, d(2026, 12, 3)), "day 9 of the cycle that began on the 25th")
+        val week = p(d(2026, 11, 23), d(2026, 11, 30)); val weekBefore = p(d(2026, 11, 16), d(2026, 11, 23))
+        assertEquals(p(d(2026, 11, 16), d(2026, 11, 19)), ReportMath.samePointWindow(weekBefore, week, d(2026, 11, 25)), "Wednesday: Monday to Wednesday")
+        val fortnight = p(d(2026, 11, 9), d(2026, 11, 23)); val fortnightBefore = p(d(2026, 10, 26), d(2026, 11, 9))
+        assertEquals(14, ReportMath.samePointWindow(fortnightBefore, fortnight, d(2026, 11, 22)).days)
+    }
+
+    @Test fun aYearToDateIsComparedWithTheSameDaysOfTheYearBefore() {
+        val y26 = p(d(2026, 1, 1), d(2027, 1, 1)); val y25 = p(d(2025, 1, 1), d(2026, 1, 1))
+        val w = ReportMath.samePointWindow(y25, y26, d(2026, 11, 23))
+        assertEquals(d(2025, 1, 1), w.start); assertEquals(327, w.days, "Nov 23 is day 327 of 2026"); assertEquals(d(2025, 11, 24), w.endExclusive)
+        val y28 = p(d(2028, 1, 1), d(2029, 1, 1)); val y27 = p(d(2027, 1, 1), d(2028, 1, 1))
+        assertEquals(y27, ReportMath.samePointWindow(y27, y28, d(2028, 12, 31)), "day 366 of a leap year against a 365-day year is the whole year")
+    }
+
+    @Test fun aFinancialYearBeganInApril() {
+        val fy = p(d(2026, 4, 1), d(2027, 4, 1)); val before = p(d(2025, 4, 1), d(2026, 4, 1))
+        assertEquals(p(d(2025, 4, 1), d(2025, 5, 1)), ReportMath.samePointWindow(before, fy, d(2026, 4, 30)))
+    }
+
+    @Test fun aCustomRangeThatReachesPastTodayIsCutAndOneThatEndsTodayIsComplete() {
+        val range = p(d(2026, 11, 1), d(2026, 12, 11)); val before = p(d(2026, 9, 22), d(2026, 11, 1)) // 40 days, the same length before
+        assertEquals(p(d(2026, 9, 22), d(2026, 10, 15)), ReportMath.samePointWindow(before, range, d(2026, 11, 23)), "23 days lived of a range that runs to 10 December")
+        val last30 = p(d(2026, 10, 25), d(2026, 11, 24)); val last30Before = p(d(2026, 9, 25), d(2026, 10, 25))
+        assertEquals(last30Before, ReportMath.samePointWindow(last30Before, last30, d(2026, 11, 23)), "the default last 30 days ends today: whole against whole")
+    }
+
+    @Test fun anOpenPeriodIsOneTodayIsInside() {
+        assertTrue(ReportMath.isOpen(nov, d(2026, 11, 23))); assertTrue(ReportMath.isOpen(nov, d(2026, 11, 1))); assertTrue(ReportMath.isOpen(nov, d(2026, 11, 30)))
+        assertTrue(!ReportMath.isOpen(oct, d(2026, 11, 23))); assertTrue(!ReportMath.isOpen(nov, d(2026, 10, 31)))
+        val last30 = p(d(2026, 10, 25), d(2026, 11, 24))
+        assertTrue(ReportMath.isOpen(last30, d(2026, 11, 23)), "a calendar-style period is open on every day of it")
+        assertTrue(!ReportMath.isOpen(last30, d(2026, 11, 23), endsBeforeTomorrowIsDone = true), "a custom range that stops today is a finished stretch")
+        assertTrue(ReportMath.isOpen(p(d(2026, 11, 1), d(2026, 12, 11)), d(2026, 11, 23), endsBeforeTomorrowIsDone = true))
+    }
+
+    @Test fun theModeRowNamesTheBudgetPeriodShortly() {
+        assertEquals("Month", ReportMath.modeLabel(BudgetPeriod.Monthly(1))); assertEquals("Month", ReportMath.modeLabel(BudgetPeriod.Monthly(25)))
+        assertEquals("Week", ReportMath.modeLabel(BudgetPeriod.Weekly())); assertEquals("Fortnight", ReportMath.modeLabel(BudgetPeriod.BiWeekly(d(2026, 11, 2))))
+        assertEquals("Period", ReportMath.modeLabel(BudgetPeriod.Yearly())); assertEquals("Period", ReportMath.modeLabel(BudgetPeriod.EveryDays(10, d(2026, 11, 2)))); assertEquals("Period", ReportMath.modeLabel(BudgetPeriod.SemiMonthly))
+    }
 }

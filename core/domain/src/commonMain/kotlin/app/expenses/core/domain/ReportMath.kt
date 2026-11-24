@@ -2,6 +2,7 @@ package app.expenses.core.domain
 
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlin.math.roundToInt
@@ -47,6 +48,32 @@ object ReportMath {
         if (previous.minorUnits <= 0) return null
         val delta = (current.minorUnits - previous.minorUnits).toDouble() * 100.0 / previous.minorUnits
         return delta.roundToInt()
+    }
+
+    /** What the first segment of Reports' mode row is called for the person's budget period: "Month", "Week", "Fortnight", or "Period" for the rest (a year is the segment next to it). */
+    fun modeLabel(period: BudgetPeriod): String = when (period) {
+        is BudgetPeriod.Monthly -> "Month"
+        is BudgetPeriod.Weekly -> "Week"
+        is BudgetPeriod.BiWeekly -> "Fortnight"
+        else -> "Period"
+    }
+
+    /**
+     * Whether [period] is still being lived, so that what it holds is "so far": [today] is inside it. For a custom range ([endsBeforeTomorrowIsDone]) one that stops at or before today is a finished
+     * stretch (the default "last 30 days" is), not one in progress.
+     */
+    fun isOpen(period: DatePeriod, today: LocalDate, endsBeforeTomorrowIsDone: Boolean = false): Boolean =
+        today in period && (!endsBeforeTomorrowIsDone || period.endExclusive > today.plus(1, DateTimeUnit.DAY))
+
+    /**
+     * What to set an unfinished [current] period against, so that a half-lived month is not compared with a whole one: the same number of days from the start of [previous] as [current] has
+     * lived at [today] (day 23 of this month against the first 23 days of last month; year to date against the same days of the year before). Never longer than [previous] itself (23 March
+     * days against a 28-day February is the whole of February). When [current] is over (or not begun: [today] is outside it) the whole of [previous]: complete against complete.
+     */
+    fun samePointWindow(previous: DatePeriod, current: DatePeriod, today: LocalDate): DatePeriod {
+        if (today !in current) return previous
+        val lived = current.start.daysUntil(today) + 1
+        return DatePeriod(previous.start, minOf(previous.endExclusive, previous.start.plus(lived, DateTimeUnit.DAY)))
     }
 
     /**

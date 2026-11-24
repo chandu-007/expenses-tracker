@@ -41,6 +41,7 @@ import app.expenses.core.domain.LastBackup
 import app.expenses.core.domain.Flow
 import app.expenses.core.domain.ParsedStatement
 import app.expenses.core.domain.ReportMath
+import app.expenses.core.domain.ReportSentence
 import app.expenses.core.domain.StatementDetector
 import app.expenses.core.domain.StatementMapping
 import app.expenses.core.domain.StatementParser
@@ -646,7 +647,7 @@ data class GroupRowUi(val key: String?, val name: String, val amount: String, va
 data class ReportRowUi(val categoryId: String?, val name: String, val amount: String, val share: Int, val colorArgb: Long?, val negative: Boolean, val children: List<ReportRowUi> = emptyList(), val minor: Long = 0L)
 
 /** One bar of the trend. [fraction] is its height relative to the tallest bar (0 to 1). Tapping it opens the entries of that period. */
-data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long, /** The total in minor units: the chart's average line, the bubble's change from the bar before, the table. */ val minor: Long = 0L)
+data class TrendBarUi(val label: String, val amount: String, val fraction: Float, val isSelected: Boolean, val startDay: Long, val endDay: Long, /** The total in minor units: the chart's average line, the bubble's change from the bar before, the table. */ val minor: Long = 0L, /** The period is still going on (today is inside it): its bar is "so far", not a finished total, and it is left out of the average. */ val open: Boolean = false)
 
 data class DrillLineUi(val entryId: String, val date: String, val title: String, val category: String, val amount: String, val negative: Boolean)
 
@@ -670,6 +671,12 @@ data class ReportUi(
     val groupRows: List<GroupRowUi> = emptyList(),
     /** The custom range as days since 1970-01-01, the end exclusive; set in the custom mode. */
     val customStartDay: Long = 0, val customEndDay: Long = 0,
+    /** Which way [comparison] went: true more, false less, null the same (or no comparison). */
+    val comparisonMore: Boolean? = null,
+    /** The period is still going on: the figures are "so far" ([openDay] days lived of [periodDays]); both 0 for a finished period. */
+    val open: Boolean = false, val openDay: Int = 0, val periodDays: Int = 0,
+    /** What the first segment of the mode row is called: "Month" for monthly budget periods, "Week", "Fortnight" or "Period". */
+    val periodModeLabel: String = "Period",
 )
 
 /** A backup file that was opened and checked, waiting for the user to confirm the restore. */
@@ -4608,15 +4615,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         }
         val totals = reports.trend(bars.map { it.third }, zone, inr)
         val tallest = totals.maxOfOrNull { it.minorUnits }?.takeIf { it > 0 } ?: 1L
+        val custom = r.mode == ReportMode.CUSTOM
         val trend = bars.mapIndexed { i, (label, _, p) ->
-            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays(), totals[i].minorUnits)
+            TrendBarUi(label, totals[i].formatted(), (totals[i].minorUnits.coerceAtLeast(0).toFloat() / tallest), p == period, p.start.toEpochDays(), p.endExclusive.toEpochDays(), totals[i].minorUnits, ReportMath.isOpen(p, today, custom))
         }
 
-        val change = ReportMath.percentChange(spent, reports.spent(previous, zone, inr))
-        val comparison = change?.let {
-            val what = when (r.mode) { ReportMode.YEAR, ReportMode.FINANCIAL_YEAR -> "the year before"; ReportMode.CUSTOM -> "the same length of time before"; else -> "the period before" }
-            when { it > 0 -> "$it% more than $what"; it < 0 -> "${-it}% less than $what"; else -> "The same as $what" }
+        // an unfinished period is set against the same point of the one before (day 23 against the first 23 days), a finished one whole against whole
+        val open = ReportMath.isOpen(period, today, custom)
+        val previousWindow = ReportMath.samePointWindow(previous, period, today)
+        val previousName = when (r.mode) {
+            ReportMode.YEAR -> previous.start.year.toString()
+            ReportMode.FINANCIAL_YEAR -> "FY ${previous.start.year}–${(previous.start.year + 1) % 100}"
+            ReportMode.CUSTOM -> "the same length of time before"
+            ReportMode.PERIOD -> if (budgetPeriod is BudgetPeriod.Monthly && budgetPeriod.startDay == 1) DatePattern("MMM").format(previous.start) else PeriodCompare.lastName(budgetPeriod) ?: "the year before"
         }
+        val compared = ReportSentence.comparison(spent.minorUnits, reports.spent(previousWindow, zone, inr).minorUnits, previousName, open) { Money(it, inr).formatted() }
+        val comparison = compared?.text
 
         val drill = r.drillTarget?.let { target ->
             val dp = if (r.drillStart != null && r.drillEnd != null) app.expenses.core.domain.DatePeriod(kotlinx.datetime.LocalDate.fromEpochDays(r.drillStart.toInt()), kotlinx.datetime.LocalDate.fromEpochDays(r.drillEnd.toInt())) else period
@@ -4645,6 +4659,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return ReportUi(
             r.mode, title, r.mode != ReportMode.CUSTOM && r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison,
             reports.breakdown(period, zone, inr).map(::row), trend, drill, r.group, groupRows, period.start.toEpochDays().toLong(), period.endExclusive.toEpochDays().toLong(),
+            compared?.more, open, if (open) period.start.daysUntil(today) + 1 else 0, if (open) period.days else 0, ReportMath.modeLabel(budgetPeriod),
         )
     }
 

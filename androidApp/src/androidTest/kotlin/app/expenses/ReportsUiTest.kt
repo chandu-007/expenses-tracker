@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.expenses.DatePattern
 import app.expenses.core.domain.BudgetPeriod
 import app.expenses.core.domain.Currency
 import app.expenses.core.domain.Money
@@ -28,6 +29,7 @@ import app.expenses.core.domain.ledger.Income
 import app.expenses.core.storage.EntryDetails
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import org.junit.After
@@ -141,6 +143,7 @@ class ReportsUiTest {
             }
         }
         openReports()
+        waitFor("group_ACCOUNT") // the grouping sits above the ring, below the bars: the page is scrolled to it
         compose.onNodeWithTag("group_ACCOUNT").performClick()
         waitFor("report_group_row_bank"); waitFor("report_group_row_cash")
         compose.onNodeWithTag("report_group_row_bank").performClick(); waitFor("drill_total")
@@ -201,7 +204,10 @@ class ReportsUiTest {
         spend("before", 300, "Fun", at = previousPeriodNoon())
         openReports()
         compose.onNodeWithTag("report_next").assertIsNotEnabled()
-        waitText("report_comparison", "67% more than the period before")
+        // the period is still going on: the 500 so far is set against the same days of the period before (its 300 is on its first day), the words say so, and the percent is Home's
+        waitText("report_comparison", "▲ ₹200.00 more than ${DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1).start)} so far (+66%)")
+        waitText("report_spent_card", "Spent so far")
+        waitFor("report_open_note")
         compose.onNodeWithTag("report_prev").performClick()
         waitText("report_spent", "₹300.00")
         compose.onNodeWithTag("report_next").assertIsEnabled()
@@ -211,6 +217,29 @@ class ReportsUiTest {
         compose.onNodeWithTag("trend_bar_4").performClick()
         waitFor("drill_total")
         compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹300.00")
+    }
+
+    @Test
+    fun aFinishedPeriodIsComparedWholeWithWholeAndIsNotSoFar() {
+        spend("now", 500, "Food"); spend("before", 300, "Fun", at = previousPeriodNoon()); spend("older", 900, "Fun", at = noonOf(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -2).start))
+        openReports()
+        compose.onNodeWithTag("report_prev").performClick()
+        waitText("report_spent", "₹300.00")
+        val older = DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -2).start)
+        waitText("report_comparison", "▼ ₹600.00 less than $older (−66%)")
+        assertTrue(compose.onAllNodes(hasTestTag("report_open_note"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "a period that is over has no 'so far' note")
+        assertTrue(compose.onAllNodes(hasTestTag("report_comparison") and hasText("so far"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and the comparison does not say so far")
+    }
+
+    @Test
+    fun theOpenPeriodIsNotComparedWithTheLateDaysOfThePeriodBefore() {
+        val before = ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1)
+        val lived = today.toEpochDays() - ReportMath.periodAt(BudgetPeriod.Monthly(1), today, 0).start.toEpochDays() + 1
+        org.junit.Assume.assumeTrue("on the last days of a month the same point is the whole of the month before", lived < before.days)
+        spend("now", 500, "Food"); spend("early", 300, "Fun", at = noonOf(before.start)); spend("late", 700, "Fun", at = noonOf(before.endExclusive.minus(1, kotlinx.datetime.DateTimeUnit.DAY)))
+        openReports()
+        // against the first days only (300), not against all of it (1,000): "more", not "less"
+        waitText("report_comparison", "▲ ₹200.00 more than")
     }
 
     @Test

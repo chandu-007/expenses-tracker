@@ -101,7 +101,7 @@ class UiS6TipsTest {
     fun atTwoHundredPercentTheScreensOwnFirstControlIsStillReachableAndTheTipFitsTheWidth() {
         unseenAll(); shell("settings put system font_scale 2.0"); launch(); openReports()
         waitFor("tip_reports"); node("tip_reports").assertIsDisplayed(); node("tip_gotit_reports").assertIsDisplayed()
-        waitFor("mode_period"); node("mode_period").performScrollTo(); node("mode_period").assertIsDisplayed()
+        waitFor("mode_menu"); node("mode_menu").performScrollTo(); node("mode_menu").assertIsDisplayed() // from 140% text the mode row is one menu button
         val card = node("tip_reports").fetchSemanticsNode().boundsInRoot
         val button = node("tip_gotit_reports").fetchSemanticsNode().boundsInRoot
         assertTrue(card.left >= 0f && card.right <= node("report_list").fetchSemanticsNode().boundsInRoot.right + 1f, "the card stays inside the screen")

@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * What Reports shows while its first page is being worked out (it used to be the words "Loading…" in the middle of a white page): the page's own chrome, the two segmented controls as plain pill tracks (period choices and
+ * What Reports shows while its first page is being worked out (it used to be the words "Loading…" in the middle of a white page): the page's own chrome, the segmented controls as plain pill tracks (period choices and
  * groupings), and plain blocks where the title, the figures, the chart and the list will be. It does not pulse or shimmer (a looping animation keeps the screen redrawing), it only
  * fades in once, and it is hidden from screen readers: there is nothing in it to read.
  */
@@ -41,16 +41,15 @@ internal fun ReportsSkeleton(padding: PaddingValues) {
     val block = MaterialTheme.colorScheme.surfaceVariant
     fun Modifier.block(h: Dp, w: Dp? = null, corner: Dp = 8.dp) = (if (w == null) fillMaxWidth() else width(w)).height(h).clip(RoundedCornerShape(corner)).background(block)
     Column(Modifier.fillMaxSize().padding(padding).graphicsLayer { alpha = shown.value }.clearAndSetSemantics { testTag = "reports_skeleton" }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // the two segmented controls of the real screen: a full-width pill track, 3 dp frame + 42 dp segment = 48 dp, with the same outer padding; no gap between them but their own
-        Column {
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
-        }
+        // the mode row of the real screen: a full-width pill track, 3 dp frame + 42 dp segment = 48 dp, with the same outer padding
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(24.dp, 180.dp)) }
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(96.dp, corner = 24.dp)) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(72.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             listOf(0.4f, 0.65f, 0.5f, 0.8f, 0.55f, 1f).forEach { f -> Box(Modifier.weight(1f).height(72.dp * f).clip(Radius.XS).background(block)) }
         }
+        // the grouping row sits above the ring, where it takes effect
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(112.dp).clip(CircleShape).background(block))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { Box(Modifier.block(14.dp)) } }

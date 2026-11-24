@@ -124,7 +124,9 @@ class UiS4Test {
         assertEquals(6, rows.size)
         for (i in 0 until 6) assertEquals(barAmounts[i], rows[i][1], "row $i amount equals bar $i")
         assertEquals("₹500.00", rows[5][1]); assertEquals("₹300.00", rows[4][1]); assertEquals("₹900.00", rows[3][1])
-        assertEquals("−₹600.00", rows[4][2], "300 after 900"); assertEquals("+₹200.00", rows[5][2], "500 after 300")
+        assertEquals("−₹600.00", rows[4][2], "300 after 900")
+        assertEquals("", rows[5][2], "the period still going on has no change from the one before: a part is not set against a whole")
+        assertTrue(rows[5][0].endsWith("so far"), "and it says so: ${rows[5][0]}")
         compose.onNodeWithTag("trend_table_toggle", useUnmergedTree = true).performClick()
         compose.waitUntil(5_000) { !has("trend_table") }
     }
@@ -133,18 +135,44 @@ class UiS4Test {
     fun eachBarIsItsOwnStopWithItsAmountSpokenAndOpensItsPeriodAndTheChartHasASummary() {
         threeMonths(); openReports(); waitFor("trend_bar_5")
         val d5 = descriptionOf("trend_bar_5")
-        assertTrue(d5.contains("₹500.00") && d5.contains("more than"), d5)
+        assertTrue(d5.contains("₹500.00") && d5.contains("so far") && !d5.contains("than"), "an open period is spoken as so far, with no change from a finished one: $d5")
+        val d4 = descriptionOf("trend_bar_4")
+        assertTrue(d4.contains("₹300.00") && d4.contains("less than"), "a finished period keeps its change: $d4")
         val node = compose.onNodeWithTag("trend_bar_5", useUnmergedTree = true).fetchSemanticsNode()
         assertEquals(androidx.compose.ui.semantics.Role.Button, node.config.getOrNull(SemanticsProperties.Role))
         assertEquals(true, node.config.getOrNull(SemanticsProperties.Selected), "this period is the selected one")
         val summary = descriptionOf("trend_chart")
-        assertTrue(summary.contains("Highest") && summary.contains("Average"), summary)
+        assertTrue(summary.contains("Highest") && summary.contains("Average ₹600.00 of the finished periods"), "the average is of the finished periods (300 and 900), not the one going on: $summary")
     }
 
     @Test
     fun theSentenceNamesTheBiggestCategoryItsShareAndTheAmounts() {
         spend("a", 700, "Food"); spend("b", 300, "Fun"); openReports(); waitFor("report_headline")
-        compose.onNodeWithTag("report_headline", useUnmergedTree = true).assertTextEquals("Food is 70% of what you spent (₹700.00 of ₹1,000.00).")
+        compose.onNodeWithTag("report_headline", useUnmergedTree = true).assertTextEquals("Food took ₹700.00, 70% of what you spent.")
+    }
+
+    @Test
+    fun theSelectedBarAndTheTallestCarryTheirFigureAndTheAverageIsNamedBesideTheTitleNotOnTheChart() {
+        threeMonths(); openReports(); waitFor("trend_chart")
+        compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performScrollTo()
+        compose.waitUntil(5_000) { has("trend_value_5") && has("trend_value_3") }
+        assertTrue(!has("trend_value_4"), "only the selected bar (5, this period) and the tallest (3, the 900) carry a figure")
+        assertTrue(texts("trend_average").joinToString(" ").contains("avg ₹600") && texts("trend_average").joinToString(" ").contains("full months"), "the key names the average of the finished periods: ${texts("trend_average")}")
+        compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { down(Offset(width * 0.75f, height * 0.8f)); moveTo(Offset(width * 0.80f, height * 0.8f)); moveTo(Offset(width * 0.75f, height * 0.8f)) }
+        compose.waitUntil(5_000) { has("trend_bubble") && !has("trend_value_5") }
+        assertTrue(!has("trend_value_3"), "while a finger scrubs, the bubble speaks and the figures on the bars step aside")
+        compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { up() }
+    }
+
+    @Test
+    fun anOpenPeriodsBubbleSaysSoFarAndHasNoChangeLine() {
+        threeMonths(); openReports(); waitFor("trend_chart")
+        compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performScrollTo().performTouchInput { down(Offset(width * 0.92f, height * 0.8f)); moveTo(Offset(width * 0.95f, height * 0.8f)) }
+        compose.waitUntil(5_000) { has("trend_bubble") }
+        val shown = texts("trend_bubble").joinToString(" | ")
+        assertTrue(shown.contains("so far") && shown.contains("₹500.00"), shown)
+        assertTrue(!shown.contains("than"), "no change line for a period that is not over: $shown")
+        compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { up() }
     }
 
     @Test

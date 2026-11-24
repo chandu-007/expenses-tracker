@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -87,8 +88,17 @@ class FrameLogDriveTest {
             measure("Add close") { node("cancel").performClick(); waitFor("add") }
             // the bar's tabs, one after the other and back (Search is left out here: it raises the keyboard, which is measured by its own scroll below)
             measure("tab switch: Home to Reports") { node("open_reports").performClick(); waitFor("report_list") }
-            measure("Reports tab switches") {
-                for (tag in listOf("mode_year", "mode_period", "group_ACCOUNT", "group_MERCHANT", "group_CATEGORY")) { node(tag).performClick(); compose.waitForIdle(); Thread.sleep(250) }
+            measure("Reports mode switches") {
+                for (tag in listOf("mode_year", "mode_period")) { node(tag).performClick(); compose.waitForIdle(); Thread.sleep(250) }
+            }
+            // the grouping sits above the ring, below the bars: scroll to it first (not measured; the scroll of the page has its own row below)
+            node("report_list").performScrollToNode(hasTestTag("group_ACCOUNT")); compose.waitForIdle()
+            measure("Reports grouping switches") {
+                for (tag in listOf("group_ACCOUNT", "group_MERCHANT", "group_CATEGORY")) { node(tag).performClick(); compose.waitForIdle(); Thread.sleep(250) }
+            }
+            measure("Reports scroll") {
+                repeat(3) { node("report_list").performTouchInput { swipeUp(startY = bottom - 50f, endY = top + 50f, durationMillis = 120) } }
+                repeat(3) { node("report_list").performTouchInput { swipeDown(startY = top + 50f, endY = bottom - 50f, durationMillis = 120) } }
             }
             measure("tab switch: Reports to Home") { node("nav_home").performClick(); waitFor("add"); waitFor("list") }
             measure("tab switch: Home to More") { node("more_menu").performClick(); waitFor("more_page") }
