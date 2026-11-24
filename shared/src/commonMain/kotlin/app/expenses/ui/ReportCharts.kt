@@ -312,7 +312,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked:
             val exact = privatelyPlain("$label $totalText", hideAmounts)
             // from 140% text the hole of the 112 dp ring cannot hold a figure at that size (it was cut): the total is in the card above, so the middle is left empty and the screen reader still hears it
             if (stacked) Box(Modifier.clearAndSetSemantics { contentDescription = exact })
-            else Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp).clearAndSetSemantics { contentDescription = exact }) {
+            else Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 14.dp).clearAndSetSemantics { contentDescription = exact }) {
                 Text(label, style = NumberStyle.Chart, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(totalText.wholeAmounts(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = amountFit(16))
             }
