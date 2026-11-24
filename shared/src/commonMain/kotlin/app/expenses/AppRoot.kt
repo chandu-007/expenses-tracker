@@ -902,6 +902,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
                             onMode = viewModel::setReportMode, onStep = viewModel::stepReport,
                             onDrill = { target, start, end, label -> viewModel.drill(target, start, end, label) },
                             onGroup = viewModel::setReportGroup, onRange = viewModel::setReportRange,
+                            onBudget = { reporting = false; viewModel.closeReports(); budgeting = true },
                             onCloseDrill = viewModel::closeDrill,
                             onOpenEntry = viewModel::openEditor,
                         )

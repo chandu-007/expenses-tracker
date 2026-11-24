@@ -137,12 +137,12 @@ fun WholeText(
 }
 
 /**
- * The top of the page, slimmer since UI S4: what was spent (large) with the comparison against the period before, and income and what is left beside it. Three figures on a plain card, not a hero
- * card; the tappable areas open the entries behind each figure, as the plain text did. While the period is still going on the figure is "so far" and the comparison is against the same point of the
- * period before (see `ReportMath.samePointWindow`), the words saying so; the tint only repeats the words.
+ * The top of the page: ONE card that answers three questions in a glance (UI redesign R6): how much was spent (large, "so far" while the period is still going on) with the comparison against the same point of
+ * the period before; how much came in and how much of it was kept; and, for the budget period being lived, where the spending stands against the budget (a thin bar, a tick for how much of the period has gone,
+ * and the pace in words; it opens the Budget). Amounts are drawn in whole units and the nodes say the exact ones. The tappable areas open the entries behind each figure; the tint of the pill only repeats its words.
  */
 @Composable
-fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
+fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, onBudget: () -> Unit = {}) {
     val ink = MaterialTheme.colorScheme.onSurface
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -158,20 +158,33 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit) {
                 )
             }
         }
-        // from 140% text the two tiles sit one under the other: side by side each is about 150 dp wide, and an amount like ₹1,85,000 broke in the middle of the number
-        val stacked = LocalDensity.current.fontScale >= 1.4f
-        val tiles: @Composable (Modifier) -> Unit = { mod ->
-            Column(mod.clip(Radius.S).background(MaterialTheme.colorScheme.surface).clickable(onClick = onIncome).padding(12.dp).testTag("report_income_card")) {
-                Text("Income", style = MaterialTheme.typography.labelMedium, color = quiet)
-                WholeText(report.income, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_income"))
+        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        // "Income ₹82,000   Saved ₹32,695 (40%)": two groups that wrap by whole words (a group's own words too), so at 200% text each is its own line and no amount breaks in the middle
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth().clickable(onClick = onIncome).testTag("report_income_card"),
+            horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Income", style = MaterialTheme.typography.bodyMedium, color = quiet)
+                WholeText(report.income, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, autoSize = amountFit(14), modifier = Modifier.testTag("report_income"))
             }
-            Column(mod.clip(Radius.S).background(MaterialTheme.colorScheme.surface).padding(12.dp)) {
-                Text("Income minus spending", style = MaterialTheme.typography.labelMedium, color = quiet)
-                WholeText(report.net, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) ink else MaterialTheme.colorScheme.error, maxLines = 1, autoSize = amountFit(16), modifier = Modifier.testTag("report_net"))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (report.netPositive) "Saved" else "Over by", style = MaterialTheme.typography.bodyMedium, color = quiet)
+                WholeText(if (report.netPositive) report.net else report.shortBy, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = if (report.netPositive) ink else MaterialTheme.colorScheme.error, maxLines = 1, autoSize = amountFit(14), modifier = Modifier.testTag("report_net"))
+                report.savedPercent?.let { Text("(${shareText(it)})", style = MaterialTheme.typography.bodyMedium, color = quiet) }
             }
         }
-        if (stacked) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { tiles(Modifier.fillMaxWidth()) }
-        else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { tiles(Modifier.weight(1f)) }
+        report.budget?.let { b ->
+            // only for the budget period being lived: "On pace · ₹25,695 left of ₹75,000 ›", the bar under it with a tick for today
+            val line = (if (b.pace == app.expenses.core.domain.PaceLevel.OVER) paceWord(b) + " of " + b.limit else paceWord(b) + " · " + b.note + " of " + b.limit)
+            Column(Modifier.fillMaxWidth().clickable(onClick = onBudget).testTag("report_budget_line"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    WholeText(line, style = MaterialTheme.typography.labelLarge, color = ink, modifier = Modifier.weight(1f))
+                    Text("›", style = MaterialTheme.typography.titleMedium, color = quiet, modifier = Modifier.padding(start = 8.dp).clearAndSetSemantics {})
+                }
+                if (!LocalHideAmounts.current) AnimatedBudgetBar(b, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = report.budgetElapsed)
+            }
+        }
     }
 }
 
@@ -221,16 +234,16 @@ fun ChartTable(heads: List<String>, lines: List<TableLine>, tag: String, modifie
 // ---- the ring ----
 
 /**
- * Where it went, as a ring (UI S4): round-capped slices with a gap between them, the total in the middle, and under it a ranked legend: the biggest five and the rest together, each with its glyph
- * tile, share, amount and a mini bar, and each opening its entries. A touch on a slice (or on a legend row) lifts it and dims the others. The ring sweeps in when the page opens (at once under
- * Reduce motion). "Show as table" lists the same legend as numbers. Nothing is drawn when there is nothing to show; the list below says so.
+ * The ring of "Where it went" (UI redesign R5): a small ring on the left (about 132 dp; 112 dp above its key from 140% text) and its key on the right: the three biggest slices, each with its share and amount, and a
+ * link to all of them. The ranked list below it is the one list of the page. The ring shows the five biggest and "Others"; touching a slice (or a key row) lifts it and the same row of the list is marked ([picked]
+ * is the page's, so the list can mark it too). "Show as table" lists every slice, exact, and the ring is also one description for a screen reader. The middle says the total once, in whole units.
  */
 @Composable
-fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
+fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked: String?, onPick: (String?) -> Unit, allWord: String, onShowAll: () -> Unit) {
     val shown = slices.filter { it.share > 0 }
     if (shown.isEmpty()) return
     val top = shown.take(5)
-    // shares are whole percents rounded down, so the rest is what the five biggest leave of 100 (never less than the rest's own sum): the legend adds up
+    // shares are whole percents rounded down, so the rest is what the five biggest leave of 100 (never less than the rest's own sum): the key adds up
     val rest = if (shown.size > 5) maxOf(shown.drop(5).sumOf { it.share }, 100 - top.sumOf { it.share }) else 0
     val restMinor = shown.drop(5).sumOf { it.minor }
     val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, money(restMinor), restMinor, null, null)) else emptyList()
@@ -238,22 +251,22 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
     val sweep = remember(all) { Animatable(if (reduce) 1f else 0f) }
     LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween(Motion.CHART)) }
     val track = MaterialTheme.colorScheme.surfaceVariant
-    var picked by remember { mutableStateOf<String?>(null) }
     val pulls = all.map { s -> animateFloatAsState(if (picked == s.key) 1f else 0f, Motion.tweenOrSnap(reduce, Motion.CHIP, Motion.EaseOut), label = "pull") }
     val fades = all.map { s -> animateFloatAsState(if (picked != null && picked != s.key) 0.45f else 1f, Motion.tweenOrSnap(reduce, Motion.CHIP, Motion.EaseOut), label = "dim") }
-    fun toggle(key: String) { picked = if (picked == key) null else key }
+    fun toggle(key: String) { onPick(if (picked == key) null else key) }
     var table by rememberSaveable { mutableStateOf(false) }
     val stacked = LocalDensity.current.fontScale >= 1.4f
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("breakdown"), horizontalAlignment = Alignment.CenterHorizontally) {
+    val ringSize = if (stacked) 112.dp else 132.dp
+    val ring: @Composable () -> Unit = {
         Box(
-            Modifier.size(176.dp).semantics { contentDescription = "Breakdown: " + all.joinToString(", ") { "${it.name} ${it.share}%" } }.pointerInput(all) {
+            Modifier.size(ringSize).semantics { contentDescription = "Breakdown: " + all.joinToString(", ") { "${it.name} ${if (it.share < 1) "less than 1%" else "${it.share}%"}" } }.pointerInput(all) {
                 detectTapGestures { tap ->
                     val cx = size.width / 2f
                     val cy = size.height / 2f
                     val dx = tap.x - cx
                     val dy = tap.y - cy
                     val dist = sqrt(dx * dx + dy * dy)
-                    if (dist < cx * 0.45f || dist > cx) { picked = null; return@detectTapGestures }
+                    if (dist < cx * 0.45f || dist > cx) { onPick(null); return@detectTapGestures }
                     var deg = (atan2(dx.toDouble(), -dy.toDouble()) * 180.0 / PI).toFloat()
                     if (deg < 0f) deg += 360f
                     val total = all.sumOf { it.share }.coerceAtLeast(1)
@@ -266,9 +279,9 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
             },
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(Modifier.size(176.dp)) {
-                val stroke = 20.dp.toPx()
-                val pull = 8.dp.toPx()
+            Canvas(Modifier.size(ringSize)) {
+                val stroke = size.width * 0.105f
+                val pull = size.width * 0.04f
                 val inset = stroke / 2 + pull
                 val arc = Size(size.width - 2 * inset, size.height - 2 * inset)
                 val radius = arc.width / 2f
@@ -297,50 +310,42 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String) {
             // the middle is drawn in whole units ("₹27,167", not "₹27,167.00"): the screen reader and the table still have the exact amount
             val hideAmounts = LocalHideAmounts.current
             val exact = privatelyPlain("$label $totalText", hideAmounts)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 30.dp).clearAndSetSemantics { contentDescription = exact }) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = if (stacked) 22.dp else 24.dp).clearAndSetSemantics { contentDescription = exact }) {
                 Text(label, style = NumberStyle.Chart, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(totalText.wholeAmounts(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = amountFit(18))
+                Text(totalText.wholeAmounts(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = amountFit(16))
             }
         }
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            all.forEach { s ->
+    }
+    val key: @Composable (Modifier) -> Unit = { mod ->
+        Column(mod, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            all.take(3).forEach { s ->
                 val source = remember { MutableInteractionSource() }
                 val pressed by source.collectIsPressedAsState()
                 LaunchedEffect(pressed) { if (pressed) toggle(s.key) }
                 val base = Modifier.fillMaxWidth().clip(Radius.S).background(if (picked == s.key) s.color.copy(alpha = 0.10f) else Color.Transparent)
                 val tappable = s.onClick?.let { base.clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = it) }
                     ?: base.pointerInput(s.key) { detectTapGestures(onPress = { toggle(s.key) }) }
-                Column(tappable.padding(vertical = 6.dp, horizontal = 4.dp).testTag("breakdown_${s.key}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val tile: @Composable () -> Unit = {
-                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                            if (s.tileName != null) CategoryAvatar(s.tileName, s.name, size = 32.dp) else Box(Modifier.size(14.dp).background(s.color, CircleShape))
-                        }
-                    }
-                    if (stacked) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            tile()
-                            Column(Modifier.weight(1f)) {
-                                Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(shareText(s.share), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    WholeText(s.amount, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
+                Row(tappable.padding(vertical = 6.dp, horizontal = 4.dp).testTag("breakdown_${s.key}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(10.dp).background(s.color, CircleShape))
+                    if (stacked) Column(Modifier.weight(1f)) {
+                        Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(shareText(s.share), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            WholeText(s.amount, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            tile()
-                            Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Text(shareText(s.share), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            WholeText(s.amount, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 72.dp))
-                        }
-                    }
-                    Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(s.color.copy(alpha = 0.18f))) {
-                        Box(Modifier.fillMaxWidth(s.share.coerceIn(0, 100) / 100f).fillMaxHeight().background(s.color, CircleShape))
+                        Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(shareText(s.share), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        WholeText(s.amount, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, maxLines = 1)
                     }
                 }
             }
+            if (shown.size > 3) TextButton(onClick = onShowAll, modifier = Modifier.testTag("breakdown_all")) { Text("All ${shown.size} $allWord ›") }
         }
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("breakdown")) {
+        if (stacked) Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { ring(); key(Modifier.fillMaxWidth()) }
+        else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) { ring(); key(Modifier.weight(1f)) }
         TableToggle(table, { table = !table }, "ring_table_toggle", Modifier.align(Alignment.Start))
         if (table) ChartTable(
             listOf("Name", "Share", "Amount"),

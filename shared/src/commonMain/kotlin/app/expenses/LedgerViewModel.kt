@@ -677,6 +677,14 @@ data class ReportUi(
     val open: Boolean = false, val openDay: Int = 0, val periodDays: Int = 0,
     /** What the first segment of the mode row is called: "Month" for monthly budget periods, "Week", "Fortnight" or "Period". */
     val periodModeLabel: String = "Period",
+    /** The shortfall when the period spent more than it took in ("₹1,300.00"), else empty: [net] is the signed difference, this is what the hero line says. */
+    val shortBy: String = "",
+    /** Share of income kept, in whole percent rounded down, when there is income and something was kept; else null. */
+    val savedPercent: Int? = null,
+    /** The overall budget limit, only on the current budget period (and only once the budget status is known: the first page may come without it). Null otherwise. */
+    val budget: BudgetLineUi? = null,
+    /** How much of the budget period has gone (0..1), for the tick on the budget bar. */
+    val budgetElapsed: Float = 0f,
 )
 
 /** A backup file that was opened and checked, waiting for the user to confirm the restore. */
@@ -4655,11 +4663,20 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 truncated = lines.size.toLong() == limit,
             )
         }
+        // the budget line is for the budget period being lived: from the status the last refresh worked out (no new read here, so the page opens as fast as before; before the first refresh the line is simply not there)
+        val budgetNow = budgetStatusCache?.takeIf { r.mode == ReportMode.PERIOD && r.offset == 0 && it.period == period && it.progress.any { p -> p.categoryId == null } }?.let { st ->
+            val daysIn = app.expenses.core.domain.PaceMath.daysIn(st.period, today)
+            val elapsed = app.expenses.core.domain.PaceMath.elapsed(st.period, today)
+            budgetLineOf(st, null, "Everything", elapsed, daysIn, st.safeToSpend?.upcoming?.minorUnits ?: 0L) to elapsed
+        }
         val groupRows = if (r.group == ReportGroup.CATEGORY) emptyList() else reports.groups(r.group, period, zone, inr).map { GroupRowUi(it.key, it.name, it.total.formatted(), it.share, it.total.minorUnits < 0, it.total.minorUnits) }
         return ReportUi(
             r.mode, title, r.mode != ReportMode.CUSTOM && r.offset < 0, spent.formatted(), income.formatted(), net.formatted(), net.minorUnits >= 0, comparison,
             reports.breakdown(period, zone, inr).map(::row), trend, drill, r.group, groupRows, period.start.toEpochDays().toLong(), period.endExclusive.toEpochDays().toLong(),
             compared?.more, open, if (open) period.start.daysUntil(today) + 1 else 0, if (open) period.days else 0, ReportMath.modeLabel(budgetPeriod),
+            shortBy = if (net.minorUnits < 0) Money(-net.minorUnits, inr).formatted() else "",
+            savedPercent = if (income.minorUnits > 0 && net.minorUnits > 0) (net.minorUnits * 100 / income.minorUnits).toInt() else null,
+            budget = budgetNow?.first, budgetElapsed = budgetNow?.second ?: 0f,
         )
     }
 
@@ -5120,6 +5137,22 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         )
     }
 
+    /** One limit's line (the overall one when [categoryId] is null): amounts, share used and the pace against how much of the period has gone. Shared by the Budget screen's lines and Reports' budget line. */
+    private fun budgetLineOf(status: BudgetStatus, categoryId: String?, name: String, elapsed: Float, daysIn: Int, upcoming: Long): BudgetLineUi {
+        val p = status.progress.firstOrNull { it.categoryId == categoryId }
+        return BudgetLineUi(
+            categoryId, name,
+            limit = p?.limit?.formatted(), limitPlain = p?.limit?.toPlainString().orEmpty(),
+            spent = (p?.spent ?: Money.zero(inr)).formatted(),
+            note = p?.let { if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left" else "${Money(-it.remaining.minorUnits, inr).formatted()} over" }.orEmpty(),
+            percent = p?.usedPercent ?: 0,
+            state = p?.state ?: BudgetState.OK,
+            spentMinor = p?.spent?.minorUnits ?: 0L,
+            limitMinor = p?.limit?.minorUnits ?: 0L,
+            pace = if (p == null) app.expenses.core.domain.PaceLevel.EARLY else app.expenses.core.domain.PaceMath.level(p.spent.minorUnits, p.limit.minorUnits, elapsed, daysIn, status.period.days, if (categoryId == null) upcoming else 0L),
+        )
+    }
+
     private fun budgetUi(ok: AppContainer.Opened.Ok, status: BudgetStatus, cats: List<app.expenses.core.domain.Category>): BudgetUi {
         val byScope = status.progress.associateBy { it.categoryId }
         val names = cats.associate { it.id to it.name }
@@ -5127,20 +5160,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         val daysInB = app.expenses.core.domain.PaceMath.daysIn(status.period, todayB)
         val elapsedB = app.expenses.core.domain.PaceMath.elapsed(status.period, todayB)
         val upcomingB = status.safeToSpend?.upcoming?.minorUnits ?: 0L
-        fun line(categoryId: String?, name: String): BudgetLineUi {
-            val p = byScope[categoryId]
-            return BudgetLineUi(
-                categoryId, name,
-                limit = p?.limit?.formatted(), limitPlain = p?.limit?.toPlainString().orEmpty(),
-                spent = (p?.spent ?: Money.zero(inr)).formatted(),
-                note = p?.let { if (it.remaining.minorUnits >= 0) "${it.remaining.formatted()} left" else "${Money(-it.remaining.minorUnits, inr).formatted()} over" }.orEmpty(),
-                percent = p?.usedPercent ?: 0,
-                state = p?.state ?: BudgetState.OK,
-                spentMinor = p?.spent?.minorUnits ?: 0L,
-                limitMinor = p?.limit?.minorUnits ?: 0L,
-                pace = if (p == null) app.expenses.core.domain.PaceLevel.EARLY else app.expenses.core.domain.PaceMath.level(p.spent.minorUnits, p.limit.minorUnits, elapsedB, daysInB, status.period.days, if (categoryId == null) upcomingB else 0L),
-            )
-        }
+        fun line(categoryId: String?, name: String): BudgetLineUi = budgetLineOf(status, categoryId, name, elapsedB, daysInB, upcomingB)
         // Only categories that serve expenses can carry a limit (one that already has a limit stays, so it can still be removed).
         val lines = cats.filter { (it.kind.forExpense && !it.hidden) || byScope.containsKey(it.id) }
             .map { c -> line(c.id, c.parentId?.let { pid -> names[pid]?.let { "$it › ${c.name}" } } ?: c.name) }

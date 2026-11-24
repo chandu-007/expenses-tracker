@@ -46,6 +46,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import kotlinx.coroutines.launch
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -73,11 +77,21 @@ fun ReportsScreen(
     onOpenEntry: (String) -> Unit,
     onGroup: (ReportGroup) -> Unit = {},
     onRange: (startDay: Long, endDay: Long) -> Unit = { _, _ -> },
+    /** The budget line of the hero opens the Budget. */
+    onBudget: () -> Unit = {},
     /** A new report is being worked out (over a big ledger it takes a moment): a thin bar shows after a short wait, while the old figures stay. */
     working: Boolean = false,
 ) {
     var pickingRange by rememberSaveable { mutableStateOf<String?>(null) }
     var slow by remember { mutableStateOf(false) }
+    // the ranked list shows the biggest few; "Show all" opens it. The ring and the list share the slice being looked at, and a category's subcategories are collapsed until asked for
+    var showAll by rememberSaveable(report?.group) { mutableStateOf(false) }
+    var picked by remember(report?.group, report?.title) { mutableStateOf<String?>(null) }
+    var expanded by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val reduce = LocalReduceMotion.current
+    val allWord = when (report?.group) { ReportGroup.ACCOUNT -> "accounts"; ReportGroup.TAG -> "tags"; ReportGroup.MERCHANT -> "merchants"; else -> "categories" }
     androidx.compose.runtime.LaunchedEffect(working) { slow = false; if (working) { kotlinx.coroutines.delay(WORKING_SHOWS_AFTER_MS); slow = true } }
     val drill = report?.drill
     if (drill != null) {
@@ -112,7 +126,7 @@ fun ReportsScreen(
         }
         if (waitedLong) Box(Modifier.size(1.dp).semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite; contentDescription = "Reports loaded" }.testTag("reports_loaded_announcement"))
         val colors = rememberChartColors(report)
-        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("report_list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "tip") { TipSlot("reports") }
             // the mode row: one short row ("Month | Year | FY | Dates"); from 140% text a single menu button, so the figure is on the first screen
             item(key = "mode") {
@@ -136,13 +150,7 @@ fun ReportsScreen(
                     if (report.mode != ReportMode.CUSTOM) TextButton(onClick = { onStep(1) }, enabled = report.canGoNext, modifier = Modifier.testTag("report_next").semantics { contentDescription = "Later" }) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                 }
             }
-            item {
-                // one sentence that says the point before the chart does (UI S4)
-                val top = if (report.group == ReportGroup.CATEGORY) report.rows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) } else report.groupRows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) }
-                val sentence = top?.let { ReportSentence.headline(report.group.name.lowercase(), it.first, it.second, it.third) }.orEmpty()
-                if (sentence.isNotEmpty()) WholeText(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("report_headline"))
-            }
-            item { ReportSummary(report, onSpent = { onDrill(DrillTarget.All, null, null, null) }, onIncome = { onDrill(DrillTarget.Income, null, null, null) }) }
+            item { ReportSummary(report, onSpent = { onDrill(DrillTarget.All, null, null, null) }, onIncome = { onDrill(DrillTarget.Income, null, null, null) }, onBudget = onBudget) }
             item { TrendChart(report) { start, end -> onDrill(DrillTarget.All, start, end, null) } }
             // the grouping changes only what is below it (the ring and the list), so it sits here and not at the top of the page
             item(key = "groups") {
@@ -152,7 +160,13 @@ fun ReportsScreen(
                     report.group, onGroup, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            item {
+            // one sentence that says the point of the list (UI S4), under the grouping it is about
+            item(key = "headline") {
+                val top = if (report.group == ReportGroup.CATEGORY) report.rows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) } else report.groupRows.firstOrNull { !it.negative }?.let { Triple(it.name, it.share, it.amount) }
+                val sentence = top?.let { ReportSentence.headline(report.group.name.lowercase(), it.first, it.second, it.third) }.orEmpty()
+                if (sentence.isNotEmpty()) WholeText(sentence, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("report_headline"))
+            }
+            item(key = "ring") {
                 val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.map { r ->
                     Slice(r.categoryId ?: "none", r.name, r.share, colors[r.categoryId], r.amount, r.minor, r.name) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
                 } else report.groupRows.filter { !it.negative }.map { r ->
@@ -160,34 +174,59 @@ fun ReportsScreen(
                         onDrill(when (report.group) { ReportGroup.ACCOUNT -> DrillTarget.InAccount(r.key!!); ReportGroup.TAG -> r.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged; else -> DrillTarget.AtMerchant(r.key.orEmpty()) }, null, null, r.name)
                     }
                 }
-                BreakdownRing(slices, report.spent, "Spent")
+                BreakdownRing(
+                    slices, report.spent, "Spent", picked, { picked = it }, allWord,
+                    onShowAll = { showAll = true; scope.launch { if (reduce) listState.scrollToItem(RANKED_LIST_ITEM) else listState.animateScrollToItem(RANKED_LIST_ITEM) } },
+                )
             }
-            item {
-                HorizontalDivider()
-                Text("By ${report.group.name.lowercase()}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp).testTag("report_group_title"))
-                if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("report_account_note"))
-                if (report.group == ReportGroup.TAG) Text("An entry with several tags counts under each, so these can add up to more than the total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals. Names you counted as one shop (More, Capture, Category rules) are added together.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { EmptyArt(EmptyKind.REPORTS) }
-                    Text("Nothing spent in this period. Pick another period above.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
-                }
-            }
-            if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows, key = { _, r -> r.key ?: "\u0000none" }) { _, row ->
-                GroupReportRow(row, colors[row.key]) {
-                    val target = when (report.group) {
-                        ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
-                        ReportGroup.TAG -> row.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged
-                        else -> DrillTarget.AtMerchant(row.key.orEmpty())
+            // the one list of the page: every row is one stop; the biggest few are shown and the rest are one tap away
+            item(key = "ranked") {
+                Column {
+                    if (report.group == ReportGroup.ACCOUNT) Text("Your share of each expense, filed under the account it was paid from. A shared expense shows only what you consumed, so this is not the amount that left the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    if (report.group == ReportGroup.TAG) Text("An entry with several tags counts under each, so these can add up to more than the total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    if (report.group == ReportGroup.MERCHANT) Text("Merchants are grouped by the name as typed, ignoring capitals. Names you counted as one shop (More, Capture, Category rules) are added together.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    HorizontalDivider(Modifier.padding(top = 8.dp))
+                    if (if (report.group == ReportGroup.CATEGORY) report.rows.isEmpty() else report.groupRows.isEmpty()) {
+                        Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) { EmptyArt(EmptyKind.REPORTS) }
+                        Text("Nothing spent in this period. Pick another period above.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).testTag("report_empty"))
                     }
-                    onDrill(target, null, null, row.name)
+                }
+            }
+            if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows.let { if (showAll) it else it.take(RANKED_SHOWN) }, key = { _, r -> r.key ?: "\u0000none" }) { _, row ->
+                val key = row.key ?: "none"
+                RankedRow(
+                    name = row.name, tileName = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.key], marked = picked == key,
+                    tag = "report_group_row_${row.key ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = false, onClick = {
+                        val target = when (report.group) {
+                            ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
+                            ReportGroup.TAG -> row.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged
+                            else -> DrillTarget.AtMerchant(row.key.orEmpty())
+                        }
+                        onDrill(target, null, null, row.name)
+                    },
+                )
+                HorizontalDivider()
+            }
+            if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows.let { if (showAll) it else it.take(RANKED_SHOWN) }, key = { _, r -> r.categoryId ?: "" }) { _, row ->
+                val id = row.categoryId ?: "none"
+                val open = id in expanded
+                RankedRow(
+                    name = row.name, tileName = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.categoryId], marked = picked == id,
+                    tag = "report_row_$id", children = row.children, expanded = open, onToggle = { expanded = if (open) expanded - id else expanded + id }, indent = false,
+                    onClick = { onDrill(if (row.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(row.categoryId), null, null, null) },
+                )
+                if (open) row.children.forEach { child ->
+                    RankedRow(
+                        name = child.name, tileName = child.name, amount = child.amount, share = child.share, negative = child.negative, color = colors[row.categoryId].copy(alpha = 0.7f), marked = false,
+                        tag = "report_row_${child.categoryId ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = true,
+                        onClick = { onDrill(if (child.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(child.categoryId), null, null, null) },
+                    )
                 }
                 HorizontalDivider()
             }
-            if (report.group == ReportGroup.CATEGORY) itemsIndexed(report.rows, key = { _, r -> r.categoryId ?: "" }) { _, row ->
-                CategoryReportRow(row, indent = false, color = colors[row.categoryId], onDrill = onDrill)
-                row.children.forEach { child -> CategoryReportRow(child, indent = true, color = colors[row.categoryId].copy(alpha = 0.7f), onDrill = onDrill) }
-                HorizontalDivider()
+            val count = if (report.group == ReportGroup.CATEGORY) report.rows.size else report.groupRows.size
+            if (count > RANKED_SHOWN) item(key = "show_all") {
+                TextButton(onClick = { showAll = !showAll }, modifier = Modifier.padding(horizontal = 8.dp).testTag("report_show_all")) { Text(if (showAll) "Show fewer" else "Show all $count $allWord") }
             }
         }
         if (slow) LinearProgressIndicator(Modifier.padding(padding).fillMaxWidth().testTag("reports_working"))
@@ -211,21 +250,43 @@ private fun ModeMenu(report: ReportUi, onMode: (ReportMode) -> Unit) {
 private const val WORKING_SHOWS_AFTER_MS = 250L
 private const val ANNOUNCE_AFTER_MS = 1_000L
 
+/** How many rows of the ranked list show before "Show all", and where the list begins among the page's items (the ring's "All N" scrolls there). */
+private const val RANKED_SHOWN = 6
+private const val RANKED_LIST_ITEM = 8
+
+/**
+ * One row of the ranked list (UI redesign R5): the tile in the colour of its slice of the ring, the name, the amount and share, and a bar in the same colour. The row opens its entries; a category with
+ * subcategories has a chevron that shows or hides them (read out as expanded or collapsed). [marked] is the slice being looked at in the ring.
+ */
 @Composable
-private fun CategoryReportRow(row: ReportRowUi, indent: Boolean, color: Color, onDrill: (DrillTarget, Long?, Long?, String?) -> Unit) {
-    val target = if (row.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(row.categoryId)
-    Column(
-        Modifier.fillMaxWidth().clickable { onDrill(target, null, null, null) }.padding(start = if (indent) 44.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
-            .testTag("report_row_${row.categoryId ?: "none"}"),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).background(color, CircleShape))
-            Text(row.name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
-            WholeText(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text(shareText(row.share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
+private fun RankedRow(
+    name: String, tileName: String, amount: String, share: Int, negative: Boolean, color: Color, marked: Boolean, tag: String,
+    children: List<ReportRowUi>, expanded: Boolean, onToggle: () -> Unit, indent: Boolean, onClick: () -> Unit,
+) {
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
+    Row(Modifier.fillMaxWidth().background(if (marked) color.copy(alpha = 0.10f) else Color.Transparent), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).clickable(onClick = onClick).padding(start = if (indent) 44.dp else 16.dp, end = if (children.isEmpty()) 16.dp else 0.dp, top = rowPadding(10.dp), bottom = rowPadding(10.dp)).testTag(tag),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CategoryAvatar(tileName, name, size = if (indent) 28.dp else 36.dp, tint = color)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = if (stacked) 3 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    WholeText(amount, style = MaterialTheme.typography.bodyLarge, color = if (negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+                    Text(shareText(share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                }
+                LinearProgressIndicator(progress = { share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
+            }
         }
-        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
+        if (children.isNotEmpty()) Box(
+            Modifier.size(48.dp).clickable(onClick = onToggle).testTag(tag.replace("report_row_", "report_row_toggle_")).semantics {
+                contentDescription = (if (expanded) "Hide " else "Show ") + children.size + (if (children.size == 1) " subcategory of " else " subcategories of ") + name
+                stateDescription = if (expanded) "Expanded" else "Collapsed"
+                role = androidx.compose.ui.semantics.Role.Button
+            },
+            contentAlignment = Alignment.Center,
+        ) { Text(if (expanded) "▾" else "▸", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clearAndSetSemantics {}) }
     }
 }
 
@@ -262,15 +323,3 @@ private fun DrillRow(line: DrillLineUi, pos: CardPos, onOpen: (String) -> Unit, 
 }
 
 private fun dayLabel(epochDay: Long): String = app.expenses.formatEpochDay(epochDay, "d MMM yyyy")
-
-@Composable
-private fun GroupReportRow(row: GroupRowUi, color: Color, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = rowPadding(10.dp)).testTag("report_group_row_${row.key ?: "none"}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
-            WholeText(row.amount, style = MaterialTheme.typography.bodyLarge, color = if (row.negative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-            Text(shareText(row.share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).widthIn(min = 40.dp))
-        }
-        LinearProgressIndicator(progress = { row.share / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = color, trackColor = color.copy(alpha = 0.15f), strokeCap = androidx.compose.ui.graphics.StrokeCap.Round, gapSize = 0.dp, drawStopIndicator = {})
-    }
-}

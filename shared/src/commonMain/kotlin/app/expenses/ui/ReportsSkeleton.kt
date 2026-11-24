@@ -44,19 +44,19 @@ internal fun ReportsSkeleton(padding: PaddingValues) {
         // the mode row of the real screen: a full-width pill track, 3 dp frame + 42 dp segment = 48 dp, with the same outer padding
         Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
         Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(24.dp, 180.dp)) }
-        Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(96.dp, corner = 24.dp)) }
+        Box(Modifier.padding(horizontal = 16.dp)) { Box(Modifier.block(148.dp, corner = 24.dp)) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(72.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             listOf(0.4f, 0.65f, 0.5f, 0.8f, 0.55f, 1f).forEach { f -> Box(Modifier.weight(1f).height(72.dp * f).clip(Radius.XS).background(block)) }
         }
         // the grouping row sits above the ring, where it takes effect
         Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(48.dp).clip(Radius.Full).background(block.copy(alpha = 0.6f)))
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(112.dp).clip(CircleShape).background(block))
+            Box(Modifier.size(132.dp).clip(CircleShape).background(block))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { Box(Modifier.block(14.dp)) } }
         }
         repeat(4) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(block))
+                Box(Modifier.size(36.dp).clip(Radius.S).background(block))
                 Box(Modifier.weight(1f)) { Box(Modifier.block(14.dp)) }
                 Box(Modifier.block(14.dp, 64.dp))
             }

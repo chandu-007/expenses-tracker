@@ -1,9 +1,12 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -99,8 +102,17 @@ class ReportsUiTest {
         waitFor("breakdown_Food")
         fun hasShare(tag: String, text: String) = compose.onAllNodes(hasText(text) and androidx.compose.ui.test.hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         assertTrue(hasShare("breakdown_Food", "47%"), "1000 of 2100, rounded down like every share")
-        assertTrue(hasShare("breakdown_others", "7%"), "what the five biggest (47 + 19 + 14 + 9 + 4) leave of 100")
+        assertTrue(hasShare("breakdown_Groceries", "19%") && hasShare("breakdown_Transport", "14%"), "the key names the three biggest")
+        assertTrue(compose.onAllNodes(hasTestTag("breakdown_Bills"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and only those: the rest are in the ring and the list")
         assertTrue(compose.onAllNodes(hasTestTag("breakdown_Fun"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the smallest are inside Others, not slices of their own")
+        waitFor("breakdown_all"); compose.onNodeWithTag("breakdown_all", useUnmergedTree = true).assertTextContains("All 7 categories")
+        waitFor("report_row_Bills")
+        assertTrue(compose.onAllNodes(hasTestTag("report_row_Fun"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the list shows the six biggest; the seventh is behind Show all")
+        compose.onNodeWithTag("breakdown_all", useUnmergedTree = true).performClick()
+        waitFor("report_row_Fun")
+        compose.onNodeWithTag("ring_table_toggle", useUnmergedTree = true).performScrollTo().performClick(); waitFor("ring_table")
+        assertTrue(hasShare("ring_table_row_5", "7%"), "what the five biggest (47 + 19 + 14 + 9 + 4) leave of 100, in the table of the ring")
+        waitFor("breakdown_Food")
         compose.onNodeWithTag("breakdown_Food", useUnmergedTree = true).performClick()
         waitFor("drill_total")
         compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹1,000.00")
@@ -129,6 +141,11 @@ class ReportsUiTest {
         compose.onNodeWithTag("report_income_card").performClick()
         waitFor("drill_total")
         compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹5,000.00")
+    }
+
+    private fun textsOf(tag: String): List<String> {
+        fun walk(x: androidx.compose.ui.semantics.SemanticsNode): List<String> = (x.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text } ?: emptyList()) + x.children.flatMap { walk(it) }
+        return walk(compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode())
     }
 
     private fun vm() = androidx.lifecycle.ViewModelProvider(run { var a: MainActivity? = null; scenario!!.onActivity { a = it }; a!! })[LedgerViewModel::class.java]
@@ -187,6 +204,8 @@ class ReportsUiTest {
         spend("a", 600, "Food"); spend("b", 250, cafe)
         openReports()
         waitFor("report_row_Food")
+        assertTrue(compose.onAllNodes(hasTestTag("report_row_$cafe"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "subcategories start collapsed under their category")
+        waitFor("report_row_toggle_Food"); compose.onNodeWithTag("report_row_toggle_Food", useUnmergedTree = true).performClick()
         waitFor("report_row_$cafe")
         compose.onNodeWithTag("report_row_$cafe").performClick()
         waitFor("drill_total")
@@ -240,6 +259,38 @@ class ReportsUiTest {
         openReports()
         // against the first days only (300), not against all of it (1,000): "more", not "less"
         waitText("report_comparison", "▲ ₹200.00 more than")
+    }
+
+    @Test
+    fun theHeroSaysWhatWasKeptAndTheBudgetLineIsThereOnlyForThePeriodBeingLivedAndOpensTheBudget() {
+        spend("a", 600, "Food"); spend("b", 400, "Fun", at = previousPeriodNoon())
+        runBlocking { container.write { ok ->
+            ok.store.save(Income(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), Money(500_000, inr), CategoryId("Other")), EntryDetails(merchant = "Salary"))
+            ok.budgets.setLimit(null, Money(200_000, inr))
+        } }
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        waitFor("add"); compose.waitForIdle()
+        compose.onNodeWithTag("open_reports").performClick()
+        waitFor("report_spent")
+        compose.onNodeWithTag("report_net", useUnmergedTree = true).assertTextEquals("₹4,400.00")
+        waitText("report_income_card", "88%") // 4,400 of 5,000, rounded down
+        waitFor("report_budget_line")
+        val line = textsOf("report_budget_line").joinToString(" ")
+        assertTrue(line.contains("₹1,400.00 left of ₹2,000.00"), "the exact amounts are what the node says: $line")
+        compose.onNodeWithTag("report_prev").performClick()
+        waitText("report_spent", "₹400.00")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("report_budget_line"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("report_next").performClick()
+        waitText("report_spent", "₹600.00"); waitFor("report_budget_line")
+        compose.onNodeWithTag("report_budget_line", useUnmergedTree = true).performClick()
+        waitFor("budget_summary")
+    }
+
+    @Test
+    fun aLedgerWithoutALimitHasNoBudgetLine() {
+        spend("a", 600, "Food")
+        openReports()
+        assertTrue(compose.onAllNodes(hasTestTag("report_budget_line"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
