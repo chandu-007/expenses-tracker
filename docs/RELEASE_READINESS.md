@@ -280,6 +280,40 @@ Count: **478**.
 
 These are the 0.15.0 production lines plus three 0.16.0 lines (one-line Add, bills already set aside, Test a backup). To fit 480 characters, two 0.15.0 lines were dropped (long-press Add / app-icon quick entries; the haptics switch and Simplify) and "the keypad" became "keypad". The "<1%" chip fix is in (a) only, left out of (b) to save space. Sources: smart line N-01 (`docs/PHASE2_PROGRESS.md:1998-2003`; it fills a preview and never saves by itself), "already spoken for" N-18 (`:2004`), "Test a backup" N-23 (`:2005`), "<1%" (`:2016`, commit `bb7d8b4`).
 
+## Release notes 0.16.1
+
+For the `bundlePlaySms` AAB 0.16.1, versionCode 46 (content since 0.16.0: Slice 126, "already spoken for" now counts overdue bills and bills with no amount yet, and the Add form fades above the keypad with no sliver). Android only. Counted on 2026-11-24 with `printf %s "<text>" | wc -m` on exactly the text in the block (no trailing newline). Both are at most 480 characters.
+
+### (a) Open testing (replaces 0.15.0)
+
+```
+• Add: type "chai 20 yesterday" in one line and check the preview before saving
+• Home and Budget show how much of what's left is already set aside for bills due, including overdue bills and ones with no amount yet
+• Your data: Test a backup checks that a file restores, without touching your data
+• Home: a change under 1% now shows "<1%" instead of "-0%"
+• Add: the form fades neatly above the keypad
+```
+Count: **402**.
+
+### (b) Production (replaces 0.10.6)
+
+```
+• Travel mode: trips tag their own spending
+• New Home, Search and Add; keypad does sums
+• Add in one line: "chai 20 yesterday"
+• To review: Expense, Income or Transfer
+• Card bill payments recognised; fix a balance
+• Category icons; charts you can drag or read as a table
+• Budget shows what bills due will take
+• Test a backup without touching your data
+• Widgets show your budget pace
+• Black dark theme, wallpaper colour (Android 12+), high contrast
+• Two panes on foldables
+```
+Count: **478**.
+
+(b) is the 0.16.0 production text unchanged.
+
 ---
 
 ## 6. Release checklist for this release
