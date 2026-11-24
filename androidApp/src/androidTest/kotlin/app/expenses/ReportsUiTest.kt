@@ -273,7 +273,7 @@ class ReportsUiTest {
         compose.onNodeWithTag("open_reports").performClick()
         waitFor("report_spent")
         compose.onNodeWithTag("report_net", useUnmergedTree = true).assertTextEquals("₹4,400.00")
-        waitText("report_income_card", "88%") // 4,400 of 5,000, rounded down
+        compose.waitUntil(10_000) { textsOf("report_income_card").any { it == "(88%)" } } // 4,400 of 5,000, rounded down
         waitFor("report_budget_line")
         val line = textsOf("report_budget_line").joinToString(" ")
         assertTrue(line.contains("₹1,400.00 left of ₹2,000.00"), "the exact amounts are what the node says: $line")
