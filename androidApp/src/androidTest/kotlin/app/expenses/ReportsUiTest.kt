@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -72,9 +74,20 @@ class ReportsUiTest {
 
     // the page is a lazy list and the rows are below the summary, the ring and the chart: scroll to a row before waiting for it
     private fun waitFor(tag: String) = compose.waitUntil(10_000) {
-        if (compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() && compose.onAllNodes(hasTestTag("report_list"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        if (compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() && compose.onAllNodes(hasTestTag("report_list"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
             runCatching { compose.onNodeWithTag("report_list", useUnmergedTree = true).performScrollToNode(hasTestTag(tag)) }
+            runCatching { clearTheStickyHeader(tag) }
+        }
         compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
+
+    /** A lazy list scrolls an item to the very top, which is under the period row that stays on screen: move the page down by what the row covers, so a click on the item reaches it. */
+    private fun clearTheStickyHeader(tag: String) {
+        fun bottomOf(t: String) = compose.onAllNodes(hasTestTag(t), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.bottom
+        val header = listOfNotNull(bottomOf("report_title"), bottomOf("report_open_note")).maxOrNull() ?: return
+        val top = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top ?: return
+        val need = header + 40f - top
+        if (need > 0f) compose.onNodeWithTag("report_list", useUnmergedTree = true).performTouchInput { swipeDown(startY = centerY, endY = centerY + need + 30f, durationMillis = 300) }
     }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     private fun waitText(tag: String, text: String) = compose.waitUntil(10_000) {
@@ -223,7 +236,7 @@ class ReportsUiTest {
         openReports()
         compose.onNodeWithTag("report_next").assertIsNotEnabled()
         // the period is still going on: the 500 so far is set against the same days of the period before (its 300 is on its first day), the words say so, and the percent is Home's
-        waitText("report_comparison", "▲ ₹200.00 more than ${DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1).start)} so far (+66%)")
+        waitText("report_comparison", "₹200.00 more than ${DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1).start)} so far (+66%)") // the node says the words, not the arrow
         compose.waitUntil(10_000) { textsOf("report_spent_card").contains("Spent so far") }
         waitFor("report_open_note")
         compose.onNodeWithTag("report_prev").performClick()
@@ -244,7 +257,7 @@ class ReportsUiTest {
         compose.onNodeWithTag("report_prev").performClick()
         waitText("report_spent", "₹300.00")
         val older = DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -2).start)
-        waitText("report_comparison", "▼ ₹600.00 less than $older (−66%)")
+        waitText("report_comparison", "₹600.00 less than $older (−66%)")
         assertTrue(compose.onAllNodes(hasTestTag("report_open_note"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "a period that is over has no 'so far' note")
         assertTrue(compose.onAllNodes(hasTestTag("report_comparison") and hasText("so far", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and the comparison does not say so far")
     }
@@ -257,7 +270,7 @@ class ReportsUiTest {
         spend("now", 500, "Food"); spend("early", 300, "Fun", at = noonOf(before.start)); spend("late", 700, "Fun", at = noonOf(before.endExclusive.minus(1, kotlinx.datetime.DateTimeUnit.DAY)))
         openReports()
         // against the first days only (300), not against all of it (1,000): "more", not "less"
-        waitText("report_comparison", "▲ ₹200.00 more than")
+        waitText("report_comparison", "₹200.00 more than")
     }
 
     @Test
@@ -297,7 +310,7 @@ class ReportsUiTest {
     @Test
     fun anOverBudgetLineSaysTheExactOverrunAndTheLimitAndHideAmountsMasksEveryFigureOfThePage() {
         listOf("Food" to 1000L, "Groceries" to 400L, "Transport" to 300L, "Bills" to 200L, "Shopping" to 100L, "Health" to 60L, "Fun" to 40L).forEachIndexed { i, (c, r) -> spend("r$i", r, c) }
-        spend("before", 300, "Fun", at = previousPeriodNoon())
+        spend("before", 300, "Fun", at = previousPeriodNoon()); spend("older", 500, "Fun", at = noonOf(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -2).start)) // two finished periods: the average has something to be of
         runBlocking { container.write { ok ->
             ok.store.save(Income(EntryId("pay"), System.currentTimeMillis(), AccountId("bank"), Money(500_000, inr), CategoryId("Other")), EntryDetails(merchant = "Salary"))
             ok.budgets.setLimit(null, Money(100_000, inr))
