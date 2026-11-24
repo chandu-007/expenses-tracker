@@ -282,7 +282,9 @@ These are the 0.15.0 production lines plus three 0.16.0 lines (one-line Add, bil
 
 ## Release notes 0.16.1
 
-For the `bundlePlaySms` AAB 0.16.1, versionCode 46 (content since 0.16.0: Slice 126, "already spoken for" now counts overdue bills and bills with no amount yet, and the Add form fades above the keypad with no sliver). Android only. Counted on 2026-11-24 with `printf %s "<text>" | wc -m` on exactly the text in the block (no trailing newline). Both are at most 480 characters.
+For the `bundlePlaySms` AAB 0.16.1, versionCode 46 (content since 0.16.0: Slice 126, "already spoken for" now counts overdue bills and bills with no amount yet, and the Add form fades above the keypad with no sliver; and Slice 127, the Scapia Federal card's texts). Android only. Counted on 2026-11-24 with `printf %s "<text>" | wc -m` on exactly the text in the block (no trailing newline). Both are at most 480 characters.
+
+**0.16.1 / 46 was rebuilt before upload (2026-11-24, `docs/PHASE2_PROGRESS.md` Slice 127).** The first 0.16.1 artifacts (the release run recorded up to `e38cda5`) were never uploaded; they are kept in `expenses_builds/superseded_0.16.1_e38cda5/`. The AAB, release APK and iPhone IPA under the same names now carry the Scapia fix, with the version unchanged (Android 0.16.1 / 46, iPhone 0.16.1 / 43); `Expenses-0.16.1.md5` was rewritten. Upload only the new AAB.
 
 ### (a) Open testing (replaces 0.15.0)
 
@@ -292,8 +294,9 @@ For the `bundlePlaySms` AAB 0.16.1, versionCode 46 (content since 0.16.0: Slice 
 • Your data: Test a backup checks that a file restores, without touching your data
 • Home: a change under 1% now shows "<1%" instead of "-0%"
 • Add: the form fades neatly above the keypad
+• Texts from the Scapia Federal credit card are now captured
 ```
-Count: **402**.
+Count: **463** (402 before the Scapia line).
 
 ### (b) Production (replaces 0.10.6)
 
