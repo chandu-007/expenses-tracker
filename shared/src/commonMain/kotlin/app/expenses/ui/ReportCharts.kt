@@ -464,7 +464,9 @@ fun TrendChart(report: ReportUi, onBar: (Long, Long) -> Unit) {
                             Money(b.minor, BaseCurrency.current).compact(), style = NumberStyle.Chart, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.align(Alignment.TopCenter).wrapContentWidth(Alignment.CenterHorizontally, unbounded = true)
-                                .offset(y = room + BARS_HEIGHT * (1f - b.fraction) - 16.dp * fontScale).clearAndSetSemantics { semanticsTestTag = "trend_value_$i" }, // the bar says it all to a screen reader
+                                .offset(y = room + BARS_HEIGHT * (1f - b.fraction) - 16.dp * fontScale)
+                                // on the page colour, so the dashed average line never runs through the figure
+                                .background(MaterialTheme.colorScheme.background, RoundedCornerShape(4.dp)).padding(horizontal = 2.dp).clearAndSetSemantics { semanticsTestTag = "trend_value_$i" }, // the bar says it all to a screen reader
                         )
                     }
                 }
