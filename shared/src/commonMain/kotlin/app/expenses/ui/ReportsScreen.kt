@@ -134,7 +134,8 @@ fun ReportsScreen(
                     listOf(Segment(ReportMode.PERIOD, report.periodModeLabel, "mode_period"), Segment(ReportMode.YEAR, "Year", "mode_year"), Segment(ReportMode.FINANCIAL_YEAR, "FY", "mode_fy"), Segment(ReportMode.CUSTOM, "Dates", "mode_custom")),
                     report.mode, onMode, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
-                if (report.mode == ReportMode.CUSTOM) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // the two date buttons wrap onto their own lines at large text (side by side the second was squeezed to one letter a line)
+                if (report.mode == ReportMode.CUSTOM) FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pickingRange = "from" }, modifier = Modifier.testTag("custom_from")) { Text("From ${dayLabel(report.customStartDay)}") }
                     OutlinedButton(onClick = { pickingRange = "to" }, modifier = Modifier.testTag("custom_to")) { Text("To ${dayLabel(report.customEndDay - 1)}") }
                 }
