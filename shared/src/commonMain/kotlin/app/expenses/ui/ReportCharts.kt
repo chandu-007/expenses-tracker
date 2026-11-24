@@ -111,8 +111,8 @@ fun rememberChartColors(report: ReportUi): ChartColors = remember(report.rows, r
     }
 }
 
-/** One slice of the breakdown ring. [share] is a whole percent; [onClick] is null for the "others" slice; [tileName] names the category whose glyph tile leads the legend row (null: a colour swatch). */
-data class Slice(val key: String, val name: String, val share: Int, val color: Color, val amount: String, val minor: Long, val tileName: String?, val onClick: (() -> Unit)?)
+/** One slice of the breakdown ring. [share] is a whole percent; [onClick] is null for the "others" slice. */
+data class Slice(val key: String, val name: String, val share: Int, val color: Color, val amount: String, val minor: Long, val onClick: (() -> Unit)?)
 
 private fun money(minor: Long): String = Money(minor, BaseCurrency.current).formatted()
 
@@ -246,7 +246,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked:
     // shares are whole percents rounded down, so the rest is what the five biggest leave of 100 (never less than the rest's own sum): the key adds up
     val rest = if (shown.size > 5) maxOf(shown.drop(5).sumOf { it.share }, 100 - top.sumOf { it.share }) else 0
     val restMinor = shown.drop(5).sumOf { it.minor }
-    val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, money(restMinor), restMinor, null, null)) else emptyList()
+    val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, money(restMinor), restMinor, null)) else emptyList()
     val reduce = LocalReduceMotion.current
     val sweep = remember(all) { Animatable(if (reduce) 1f else 0f) }
     LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween(Motion.CHART)) }

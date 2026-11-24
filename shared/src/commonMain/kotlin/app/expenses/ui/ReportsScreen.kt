@@ -169,9 +169,9 @@ fun ReportsScreen(
             }
             item(key = "ring") {
                 val slices = if (report.group == ReportGroup.CATEGORY) report.rows.filter { !it.negative }.map { r ->
-                    Slice(r.categoryId ?: "none", r.name, r.share, colors[r.categoryId], r.amount, r.minor, r.name) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
+                    Slice(r.categoryId ?: "none", r.name, r.share, colors[r.categoryId], r.amount, r.minor) { onDrill(if (r.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(r.categoryId), null, null, null) }
                 } else report.groupRows.filter { !it.negative }.map { r ->
-                    Slice(r.key ?: "none", r.name, r.share, colors[r.key], r.amount, r.minor, null) {
+                    Slice(r.key ?: "none", r.name, r.share, colors[r.key], r.amount, r.minor) {
                         onDrill(when (report.group) { ReportGroup.ACCOUNT -> DrillTarget.InAccount(r.key!!); ReportGroup.TAG -> r.key?.let { DrillTarget.WithTag(it) } ?: DrillTarget.Untagged; else -> DrillTarget.AtMerchant(r.key.orEmpty()) }, null, null, r.name)
                     }
                 }
@@ -196,7 +196,7 @@ fun ReportsScreen(
             if (report.group != ReportGroup.CATEGORY) itemsIndexed(report.groupRows.let { if (showAll) it else it.take(RANKED_SHOWN) }, key = { _, r -> r.key ?: "\u0000none" }) { _, row ->
                 val key = row.key ?: "none"
                 RankedRow(
-                    name = row.name, tileName = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.key], marked = picked == key,
+                    name = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.key], marked = picked == key,
                     tag = "report_group_row_${row.key ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = false, onClick = {
                         val target = when (report.group) {
                             ReportGroup.ACCOUNT -> DrillTarget.InAccount(row.key!!)
@@ -212,13 +212,13 @@ fun ReportsScreen(
                 val id = row.categoryId ?: "none"
                 val open = id in expanded
                 RankedRow(
-                    name = row.name, tileName = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.categoryId], marked = picked == id,
+                    name = row.name, amount = row.amount, share = row.share, negative = row.negative, color = colors[row.categoryId], marked = picked == id,
                     tag = "report_row_$id", children = row.children, expanded = open, onToggle = { expanded = if (open) expanded - id else expanded + id }, indent = false,
                     onClick = { onDrill(if (row.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(row.categoryId), null, null, null) },
                 )
                 if (open) row.children.forEach { child ->
                     RankedRow(
-                        name = child.name, tileName = child.name, amount = child.amount, share = child.share, negative = child.negative, color = colors[row.categoryId].copy(alpha = 0.7f), marked = false,
+                        name = child.name, amount = child.amount, share = child.share, negative = child.negative, color = colors[row.categoryId].copy(alpha = 0.7f), marked = false,
                         tag = "report_row_${child.categoryId ?: "none"}", children = emptyList(), expanded = false, onToggle = {}, indent = true,
                         onClick = { onDrill(if (child.categoryId == null) DrillTarget.Uncategorised else DrillTarget.InCategory(child.categoryId), null, null, null) },
                     )
@@ -261,7 +261,7 @@ private const val RANKED_LIST_ITEM = 8
  */
 @Composable
 private fun RankedRow(
-    name: String, tileName: String, amount: String, share: Int, negative: Boolean, color: Color, marked: Boolean, tag: String,
+    name: String, amount: String, share: Int, negative: Boolean, color: Color, marked: Boolean, tag: String,
     children: List<ReportRowUi>, expanded: Boolean, onToggle: () -> Unit, indent: Boolean, onClick: () -> Unit,
 ) {
     val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
@@ -270,7 +270,7 @@ private fun RankedRow(
             Modifier.weight(1f).clickable(onClick = onClick).padding(start = if (indent) 44.dp else 16.dp, end = if (children.isEmpty()) 16.dp else 0.dp, top = rowPadding(10.dp), bottom = rowPadding(10.dp)).testTag(tag),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            CategoryAvatar(tileName, name, size = if (indent) 28.dp else 36.dp, tint = color)
+            CategoryAvatar(name, name, size = if (indent) 28.dp else 36.dp, tint = color)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = if (stacked) 3 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
