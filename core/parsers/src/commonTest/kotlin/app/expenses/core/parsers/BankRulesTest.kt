@@ -26,6 +26,7 @@ class BankRulesTest {
         "YESBNK" to debit, "PNBSMS" to "A/c XX1234 debited INR 450.00 Dt 05-06-26 14:20 Bal INR 5,000.00", "BOBSMS" to "Rs.450.00 Dr. from A/C XXXXXX1234 and Cr. to shop@upi. Ref:628374659283",
         "BOIIND" to "A/c XX1234 debited Rs.450.00 on 05-06-26 UPI Ref 628374659283", "CANBNK" to "Your A/c XX1234 is debited for Rs.450.00 on 05-06-26 and credited to ACME",
         "UNIONB" to "A/c *1234 Debited for Rs:450.00 on 05-06-2026 by UPI Ref 628374659283", "IDBIBK" to debit, "FEDBNK" to debit, "RBLBNK" to card, "AUBANK" to debit, "BANDHN" to debit,
+        "FEDSCP" to "Hi! Your txn of ₹897.39 at grab Bangkok Th on your Scapia Federal Visa credit card was successful. Not you? Go to Scapia support on the app.- Federal Bank",
         "SCBANK" to card, "HSBCIN" to card, "AMEXIN" to "Alert: You've spent INR 1,250.00 on your AMEX card ** 41005 at ACME STORES on 5 June 2026 at 12:30 PM IST.",
         "CITIBK" to card, "INDBNK" to "Your a/c XX1234 is debited for Rs.450.00 on 05-06-26 and a/c credited. UPI Ref 628374659283",
         "GPAY" to "Paid Rs.450.00 to ACME STORES using UPI Ref 628374659283", "PHONEPE" to "Paid Rs.450.00 to ACME STORES. UPI Ref 628374659283", "PAYTM" to "Paid Rs.450.00 to ACME STORES via UPI. Ref 628374659283",

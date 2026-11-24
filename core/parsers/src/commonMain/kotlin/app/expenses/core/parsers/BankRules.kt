@@ -52,6 +52,9 @@ object BankRules {
         BankRule("PNBSMS", "Punjab National Bank", emailAliases = listOf("pnb")),
         BankRule("BOBSMS", "Bank of Baroda"), BankRule("BOIIND", "Bank of India"), BankRule("CANBNK", "Canara Bank"), BankRule("UNIONB", "Union Bank of India"),
         BankRule("IDBIBK", "IDBI Bank"), BankRule("FEDBNK", "Federal Bank"), BankRule("RBLBNK", "RBL Bank"), BankRule("AUBANK", "AU Small Finance Bank"), BankRule("BANDHN", "Bandhan Bank"),
+        // Federal Bank's header for its Scapia co-branded credit card ("VM-FEDSCP-S", seen on the owner's phone in 0.16.1): "Hi! Your txn of ₹897.39 at <shop> on your Scapia Federal Visa credit card was
+        // successful." The issuer is "Scapia", not "Scapia Federal": a longer name with "Federal" in it would win "Federal Savings" away from Federal Bank ([BankChoices.issuerOfAccountName]).
+        BankRule("FEDSCP", "Scapia", SenderKind.CARD, emailNamed = false),
         BankRule("SCBANK", "Standard Chartered"), BankRule("HSBCIN", "HSBC"),
         BankRule("AMEXIN", "American Express", SenderKind.CARD, emailAliases = listOf("amex")),
         BankRule("CITIBK", "Citibank", emailAliases = listOf("citi")),

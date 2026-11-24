@@ -62,10 +62,14 @@ object GenericAlertParser {
     private val debitWords = Regex("""(?i)\b(?:debited|spent|sent|paid|withdrawn|purchase|transferred|deducted|used|redeemed)\b|\bDr\b\.?""")
     /** Roots with [BankRule.cardTxnLayout] only (HDFC Bank: HDFCBK and HDFCBN): its card alert has no "debited" or "spent": "Txn Rs.20.00 On HDFC Bank Card 0862 At <merchant> by UPI <ref>". A card used at a merchant is money out. */
     private val cardTxn = Regex("""(?is)^\s*txn\b.*\bcard\b.*\bat\b""")
-    /** "Payment of Rs.706.82 successful for your Jio bill": the person paid, with no debit word in the text. */
+    /**
+     * "Payment of Rs.706.82 successful for your Jio bill", "Your txn of ₹897.39 at <shop> on your Scapia Federal Visa credit card was successful": the person paid, with no debit word in the text.
+     * Read only when the text has no credit or debit word at all, so a refund or a reversal stays a credit and a declined one stays declined.
+     */
     private val paymentSuccessful = Regex(
         """(?i)\bpayment\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""" +
-            """|\bauto[- ]?pay\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+for\s+[A-Za-z][^.]{0,40}?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""",
+            """|\bauto[- ]?pay\s+of\s+(?:rs\.?|inr|₹)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+for\s+[A-Za-z][^.]{0,40}?\s+(?:is\s+|was\s+|has\s+been\s+)?(?:successful|successfully)\b""" +
+            """|\b(?:txn|transaction)\s+of\s+(?:rs\.?|inr|₹|[a-z]{3})\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?[^!?]{0,120}?\s(?:is|was|has\s+been)\s+successful\b""",
     )
     /** "credited to the beneficiary account" describes an outgoing payment seen from the sender's bank. */
     private val outgoingCreditPhrase = Regex("""(?i)\bbeneficiary\b""")

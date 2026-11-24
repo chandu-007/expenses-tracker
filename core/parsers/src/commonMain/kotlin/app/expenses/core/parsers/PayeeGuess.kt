@@ -21,7 +21,7 @@ object PayeeGuess {
     private val notInName = setOf("card", "a/c", "ac", "acct", "account")
     /** The payment apps whose own name is the title of their notifications: never the name of a person. */
     private val appNames = setOf("google pay", "gpay", "g pay", "phonepe", "phone pe", "paytm", "bhim", "bhim upi", "amazon pay", "cred", "mobikwik", "navi", "super money", "freecharge", "whatsapp pay", "samsung pay")
-    private val atName = Regex("""(?i)\b(?:at|to|from|towards)\s+([A-Za-z][A-Za-z0-9&'.*\-]*(?:\s+[A-Za-z0-9&'.*\-]+){0,5}?)(?=\s+(?:on|via|ref|upi|using|through|txn|trf|avl|bal|available|\(|\.|,|;|$)|$)""")
+    private val atName = Regex("""(?i)\b(?:at|to|from|towards)\s+([A-Za-z][A-Za-z0-9&'.*\-]*(?:\s+[A-Za-z0-9&'.*\-]+){0,5}?)(?=\s+(?:on|via|ref|upi|using|through|txn|trf|avl|bal|available|has\s+been|\(|\.|,|;|$)|$)""")
     /**
      * ICICI's card alert names the shop after the date, with "on" and no "at": "spent using ICICI Bank Card XX1234 on 05-Nov-26 on ACME STORES. Avl Limit: ...". The name runs to the
      * full stop that ends the sentence (a dot inside a name, "AMAZON.IN", is kept) or to the limit that follows.
