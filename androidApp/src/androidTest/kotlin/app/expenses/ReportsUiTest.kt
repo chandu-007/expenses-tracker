@@ -124,7 +124,7 @@ class ReportsUiTest {
         waitFor("report_row_Fun")
         compose.onNodeWithTag("ring_table_toggle", useUnmergedTree = true).performScrollTo().performClick(); waitFor("ring_table")
         assertTrue(hasShare("ring_table_row_5", "7%"), "what the five biggest (47 + 19 + 14 + 9 + 4) leave of 100, in the table of the ring")
-        waitFor("breakdown_Food")
+        waitFor("breakdown_Food"); clearTheStickyHeader("breakdown_Food")
         compose.onNodeWithTag("breakdown_Food", useUnmergedTree = true).performClick()
         waitFor("drill_total")
         compose.onNodeWithTag("drill_total", useUnmergedTree = true).assertTextEquals("₹1,000.00")
