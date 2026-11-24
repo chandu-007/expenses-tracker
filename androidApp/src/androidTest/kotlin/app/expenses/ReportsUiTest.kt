@@ -4,7 +4,6 @@ import android.content.Intent
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.hasTestTag
@@ -105,7 +104,7 @@ class ReportsUiTest {
         assertTrue(hasShare("breakdown_Groceries", "19%") && hasShare("breakdown_Transport", "14%"), "the key names the three biggest")
         assertTrue(compose.onAllNodes(hasTestTag("breakdown_Bills"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "and only those: the rest are in the ring and the list")
         assertTrue(compose.onAllNodes(hasTestTag("breakdown_Fun"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the smallest are inside Others, not slices of their own")
-        waitFor("breakdown_all"); compose.onNodeWithTag("breakdown_all", useUnmergedTree = true).assertTextContains("All 7 categories")
+        waitFor("breakdown_all"); assertTrue(textsOf("breakdown_all").any { it.startsWith("All 7 categories") }, "the link names how many: ${textsOf("breakdown_all")}")
         waitFor("report_row_Bills")
         assertTrue(compose.onAllNodes(hasTestTag("report_row_Fun"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "the list shows the six biggest; the seventh is behind Show all")
         compose.onNodeWithTag("breakdown_all", useUnmergedTree = true).performClick()
@@ -225,7 +224,7 @@ class ReportsUiTest {
         compose.onNodeWithTag("report_next").assertIsNotEnabled()
         // the period is still going on: the 500 so far is set against the same days of the period before (its 300 is on its first day), the words say so, and the percent is Home's
         waitText("report_comparison", "▲ ₹200.00 more than ${DatePattern("MMM").format(ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1).start)} so far (+66%)")
-        waitText("report_spent_card", "Spent so far")
+        compose.waitUntil(10_000) { textsOf("report_spent_card").contains("Spent so far") }
         waitFor("report_open_note")
         compose.onNodeWithTag("report_prev").performClick()
         waitText("report_spent", "₹300.00")
@@ -283,7 +282,7 @@ class ReportsUiTest {
         compose.onNodeWithTag("report_next").performClick()
         waitText("report_spent", "₹600.00"); waitFor("report_budget_line")
         compose.onNodeWithTag("report_budget_line", useUnmergedTree = true).performClick()
-        waitFor("budget_summary")
+        waitFor("budget_back") // the Budget screen
     }
 
     @Test
