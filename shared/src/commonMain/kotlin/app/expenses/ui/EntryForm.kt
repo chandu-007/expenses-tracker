@@ -350,7 +350,7 @@ fun EntryFormScreen(
     Surface(
         modifier = Modifier.fillMaxSize(),
         shape = Sheet.Shape,
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.background,
     ) {
     // a phone-width column in the middle of a wide window (the form was one very wide column with a keypad 1,000 dp wide on an unfolded foldable)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -388,11 +388,12 @@ fun EntryFormScreen(
                 }
                 val categoryName = categories.firstOrNull { it.id == draft.category }?.let { displayName(categories, it) }
                 val echo = saveLabel(editing = start.id != null, kind = draft.kind, amount = amount?.takeIf { exprComplete }, split = split, categoryName = categoryName, currency = currency)
-                Button(
+                PrimaryButton(
+                    echo,
                     onClick = { if (built is DraftResult.Ok && exprComplete) { feel(Feel.SAVE); onSave(draft, saveAsTemplate) } },
                     enabled = built is DraftResult.Ok && exprComplete,
-                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).heightIn(min = 52.dp).testTag("save"),
-                ) { Text(echo, maxLines = 2, textAlign = TextAlign.Center) }
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).testTag("save"),
+                )
             }
         },
     ) { padding ->
@@ -481,9 +482,9 @@ fun EntryFormScreen(
             val fromLabel = when (draft.kind) { DraftKind.TRANSFER -> "From"; DraftKind.INCOME -> "Received in"; DraftKind.REFUND -> "Refunded to"; DraftKind.EXPENSE -> "Paid from"; DraftKind.LOAN -> if (draft.gave) "Paid from" else "Received in" }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AccountPickChip(fromLabel, activeAccounts, draft.accountId) { id -> draft = draft.copy(accountId = id) }
-                AssistChip(
-                    onClick = { pickingDate = true }, label = { Text(dateLabel, maxLines = 1) },
-                    leadingIcon = { Icon(Icons.Outlined.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                DesignChip(
+                    dateLabel, selected = false, onClick = { pickingDate = true },
+                    leading = { Icon(Icons.Outlined.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     modifier = Modifier.testTag("date"),
                 )
                 if (start.id == null && draft.kind == DraftKind.EXPENSE) {
@@ -788,8 +789,8 @@ private fun NumberPad(onKey: (String) -> Unit) {
                         val words = when (key) { "." -> "Decimal point"; "<" -> "Backspace"; "×" -> "Times"; "-" -> "Minus"; "+" -> "Plus"; "00" -> "Double zero"; else -> key }
                         val colors = MaterialTheme.colorScheme
                         Box(
-                            Modifier.weight(1f).height(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-                                .clip(Radius.M).background(if (op) colors.secondaryContainer else colors.surfaceVariant)
+                            Modifier.weight(1f).height(52.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+                                .clip(Radius.S).background(if (op) colors.primaryContainer else colors.surfaceContainerLow)
                                 .combinedClickable(
                                     interactionSource = source, indication = null,
                                     onLongClickLabel = if (key == "×") "Divide" else null,
@@ -799,7 +800,7 @@ private fun NumberPad(onKey: (String) -> Unit) {
                                 .testTag(tag),
                             contentAlignment = Alignment.Center,
                         ) {
-                            val ink = if (op) colors.onSecondaryContainer else colors.onSurface
+                            val ink = if (op) colors.primary else colors.onSurface
                             if (key == "<") Icon(Icons.AutoMirrored.Outlined.Backspace, contentDescription = null, tint = ink)
                             else Text(if (key == "-") "−" else key, style = MaterialTheme.typography.titleLarge, color = ink)
                             if (key == "×") Text("÷", style = MaterialTheme.typography.labelSmall, color = ink, modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 6.dp).clearAndSetSemantics { })
@@ -848,18 +849,18 @@ private fun CategoryTiles(
 /** The last tile: "All 23", with a dashed outline (it is not a category), opening every category in a list with search. */
 @Composable
 private fun AllCategoriesTile(count: Int, modifier: Modifier, onClick: () -> Unit) {
-    val outline = MaterialTheme.colorScheme.outline
+    val outline = MaterialTheme.colorScheme.outlineVariant
     Column(
         modifier.heightIn(min = 76.dp)
             .drawWithContent {
                 drawContent()
-                val r = DesignTokens.RADIUS_M.dp.toPx()
+                val r = DesignTokens.RADIUS_S.dp.toPx()
                 drawRoundRect(
                     outline, cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
                 )
             }
-            .clip(Radius.M).clickable(onClickLabel = "Show all categories", onClick = onClick).padding(horizontal = 4.dp, vertical = 8.dp).testTag("more_categories"),
+            .clip(Radius.S).clickable(onClickLabel = "Show all categories", onClick = onClick).padding(horizontal = 4.dp, vertical = 8.dp).testTag("more_categories"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.MoreHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -871,9 +872,9 @@ private fun AllCategoriesTile(count: Int, modifier: Modifier, onClick: () -> Uni
 private fun CategoryTile(c: CategoryUi, name: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(
-        modifier.heightIn(min = 76.dp).clip(Radius.M)
-            .background(if (selected) colors.primaryContainer else colors.surfaceVariant.copy(alpha = 0.5f))
-            .then(if (selected) Modifier.border(1.dp, colors.primary, Radius.M) else Modifier)
+        modifier.heightIn(min = 76.dp).clip(Radius.S)
+            .background(if (selected) colors.primaryContainer else colors.surfaceContainerLow)
+            .border(1.dp, if (selected) colors.primary else colors.outlineVariant, Radius.S)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 8.dp).testTag("category_chip_${c.id}"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -898,10 +899,10 @@ private fun AccountPickChip(label: String, accounts: List<AccountUi>, selected: 
     var open by remember { mutableStateOf(false) }
     val name = accounts.firstOrNull { it.id == selected }?.name
     Box {
-        AssistChip(
-            onClick = { open = true }, label = { Text(name ?: "Choose an account", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            leadingIcon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        DesignChip(
+            name ?: "Choose an account", selected = false, onClick = { open = true },
+            leading = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            trailing = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
             modifier = Modifier.semantics { stateDescription = "$label: ${name ?: "none chosen"}" }.testTag("account_pick"),
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -958,7 +959,7 @@ private fun SplitEditor(draft: EntryDraft, categories: List<CategoryUi>, currenc
 
 /** Tags on this entry (tap one to take it off), the most-used existing tags to add with a tap, and a field for a new one. */
 @Composable
-private fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: (List<String>) -> Unit) {
+internal fun TagsEditor(tags: List<String>, suggestions: List<String>, onChange: (List<String>) -> Unit) {
     var typed by rememberSaveable { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
     fun add(text: String) {

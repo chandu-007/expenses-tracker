@@ -26,6 +26,7 @@ import app.expenses.core.storage.EntryDetails
 import app.expenses.core.storage.OriginKind
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.datetime.atStartOfDayIn
 
 private val NAMES = mapOf("GPAY" to "Google Pay", "PHONEPE" to "PhonePe", "PAYTM" to "Paytm", "GMAIL" to "Gmail", "OUTLOOK" to "Outlook", "YAHOO" to "Yahoo Mail", "BHIM" to "BHIM", "AMAZONPAY" to "Amazon Pay")
 
@@ -167,6 +168,36 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
         return app.expenses.ui.UsualAmountUi(diff, label)
     }
 
+    /** The newest entries of [kind] whose words match [name] (one indexed words lookup, at most 300), for [app.expenses.core.domain.PayeeHistory]; null when the name has no word worth looking up. */
+    private fun payeeCandidates(kind: String, name: String): List<app.expenses.core.domain.SimilarCandidate>? {
+        val words = app.expenses.core.domain.SimilarEntries.searchWords(name.trim())
+        if (words.isEmpty()) return null
+        return ok.db.schemaQueries.similarCandidates(kind, words.joinToString(" OR ") { app.expenses.core.storage.ftsPhrase(it) }).executeAsList()
+            .map { app.expenses.core.domain.SimilarCandidate(it.id, it.label, it.category_id.orEmpty(), it.amount_minor, it.occurred_at, it.currency) }
+    }
+
+    /**
+     * "At Barbeque Nation this year · 4 visits · ₹4,860" on an expense's detail: the expenses to the same payee as [note] this calendar year (the entry itself included), or null below two
+     * ([app.expenses.core.domain.PayeeHistory]). Read only; asked once the detail is on screen.
+     */
+    fun payeeYear(note: String): app.expenses.ui.PayeeYearUi? {
+        val candidates = payeeCandidates("EXPENSE", note) ?: return null
+        val currency = BaseCurrency.current
+        val zone = systemZone()
+        val today = dateOfMillis(nowMillis(), zone)
+        val first = kotlinx.datetime.LocalDate(today.year, 1, 1)
+        val from = first.atStartOfDayIn(zone).toEpochMilliseconds()
+        val until = kotlinx.datetime.LocalDate(today.year + 1, 1, 1).atStartOfDayIn(zone).toEpochMilliseconds()
+        val v = app.expenses.core.domain.PayeeHistory.visits(note, currency.code, from, until, candidates, ok.captureRules.aliases()) ?: return null
+        return app.expenses.ui.PayeeYearUi(note.trim(), v.count, Money(v.totalMinor, currency).formatted(), first.toEpochDays().toLong(), today.toEpochDays().toLong())
+    }
+
+    /** "Matched 14 earlier Zomato entries" on a card in To review: how many entries of the ledger are the same payee as [name] (money out: expenses; money in: income). Read only. */
+    fun earlierOfPayee(name: String, credit: Boolean): Int {
+        val candidates = payeeCandidates(if (credit) "INCOME" else "EXPENSE", name) ?: return 0
+        return app.expenses.core.domain.PayeeHistory.earlier(name, candidates, ok.captureRules.aliases())
+    }
+
     /** The origin of [entryId] as the screen shows it, or null for an entry typed by hand. */
     fun originUi(entryId: String): OriginUi? {
         val o = ok.origins.get(entryId) ?: return null
@@ -289,6 +320,20 @@ class EntryActions(private val ok: AppContainer.Opened.Ok, nowMillis: () -> Long
             if (expected != null) ok.expects.set(id, draft.expectFrom, draft.expectPersonId, expected) else if (existing != null) ok.expects.clear(id)
         }
         return id
+    }
+
+    /**
+     * "Split with someone" on an expense's detail: the saved expense shared with friends ([EntryDrafts.shareSaved]: equally, or by the parts typed for them), the friends' parts becoming what they
+     * owe you. Everything else about the entry is kept, and the change is in its history. Refused, with the reason, for an expense that cannot be shared.
+     */
+    fun share(draft: EntryDraft) {
+        val id = draft.id ?: throw IllegalArgumentException("Save the expense first.")
+        val existing = ok.db.schemaQueries.entryById(id).executeAsOneOrNull()?.takeIf { it.deleted == 0L } ?: throw IllegalArgumentException("This entry no longer exists")
+        val entry = when (val r = EntryDrafts.shareSaved(draft, BaseCurrency.current)) {
+            is DraftResult.Ok -> r.entry
+            is DraftResult.Problem -> throw IllegalArgumentException(r.message)
+        }
+        ok.store.save(entry, EntryDetails(merchant = draft.note.trim().ifEmpty { null }, note = existing.note, source = existing.source, sourceRef = existing.source_ref, tags = draft.tags))
     }
 
     /**

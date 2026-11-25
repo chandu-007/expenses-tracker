@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.ui.unit.dp
 import app.expenses.AccountUi
 import app.expenses.CategoryUi
@@ -71,9 +72,16 @@ internal fun SmartEntryField(
     val keyboard = LocalSoftwareKeyboardController.current
     val zone = systemZone()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // the design's "What for?" line: a white field with a pencil; what it is for is said by the hint, which a screen reader reads while it is empty
         OutlinedTextField(
             value = text, onValueChange = { if (it.length <= SmartEntry.MAX_LENGTH + 40) text = it },
-            label = { Text("Or type it: chai 20", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, placeholder = { Text("chai 20, auto 80 yesterday", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, singleLine = true,
+            placeholder = { Text("What for? Try \u201Cchai 20 yesterday\u201D", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, singleLine = true,
+            leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Edit, contentDescription = null) },
+            shape = Radius.S,
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow, focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
             modifier = Modifier.fillMaxWidth().testTag("smart_entry"),
         )

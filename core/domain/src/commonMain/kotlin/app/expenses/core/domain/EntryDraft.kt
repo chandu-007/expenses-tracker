@@ -144,6 +144,17 @@ object EntryDrafts {
         return ExpectMath.expected(d.expectAmount, amount) { parseAmount(it, currency)?.minorUnits }
     }
 
+    /**
+     * "Split with someone" on an expense that is already saved: the expense as it is, shared with [EntryDraft.splitWith] the way a new one is shared on the form (equally, or by the parts typed in
+     * [EntryDraft.splitAmounts], yours being what is left). Only a plain expense can be shared this way (one category or none, the ledger's currency, nobody else paid it).
+     */
+    fun shareSaved(d: EntryDraft, currency: Currency): DraftResult {
+        val id = d.id ?: return DraftResult.Problem("Save the expense first.")
+        if (d.kind != DraftKind.EXPENSE || isSplit(d) || d.foreignCode.isNotEmpty() || d.paidBy.isNotEmpty()) return DraftResult.Problem("Only an expense in one category, paid by you in ${currency.code}, can be shared here.")
+        if (d.splitWith.isEmpty()) return DraftResult.Problem("Choose who shares this bill.")
+        return build(d.copy(id = null), EntryId(id), currency)
+    }
+
     private fun expense(d: EntryDraft, id: EntryId, amount: Money, currency: Currency, original: Money? = null): DraftResult {
         if (!isSplit(d)) {
             val parts = if (d.category.isEmpty()) emptyList() else listOf(CategorySplit(CategoryId(d.category), amount))

@@ -1206,6 +1206,40 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     /** "₹120 above your usual at Starbucks" on an entry's detail, or null. Read only. */
     suspend fun usualAmount(entryId: String?, note: String, amountMinor: Long): app.expenses.ui.UsualAmountUi? = container.write { ok -> EntryActions(ok).usualAmount(entryId, note, amountMinor) }
 
+    /** "At Barbeque Nation this year · 4 visits · ₹4,860" on an expense's detail, or null. Read only. */
+    suspend fun payeeYear(note: String): app.expenses.ui.PayeeYearUi? = container.write { ok -> EntryActions(ok).payeeYear(note) }
+
+    /** "Matched 14 earlier Zomato entries" on a card in To review: how many entries of the ledger are the same payee. Read only. */
+    suspend fun earlierOfPayee(name: String, credit: Boolean): Int = container.write { ok -> EntryActions(ok).earlierOfPayee(name, credit) }
+
+    /**
+     * One fact of an entry changed from its detail (the category, the account, the tags or the note): saved as an edit (it is in the entry's history, and a captured entry's category teaches as the
+     * editor does) and the detail stays open with the saved entry. A refusal is said on the detail and nothing changes.
+     */
+    fun saveField(draft: EntryDraft) = viewModelScope.launch(BACKGROUND) {
+        _editorProblem.value = null
+        try {
+            container.write { ok ->
+                val id = EntryActions(ok).save(draft)
+                _editor.value = EntryActions(ok).let { it.withSuggestion(it.editable(id)) }
+                refreshQuickly(ok, undo = null)
+            }
+        } catch (e: IllegalArgumentException) { _editorProblem.value = plainMessage(e) }
+    }
+
+    /** "Split with someone" on an expense's detail ([EntryActions.share]): saved, the detail closes and says who shares it. A refusal is said on the detail and nothing changes. */
+    fun shareEntry(draft: EntryDraft, names: List<String>) = viewModelScope.launch(BACKGROUND) {
+        _editorProblem.value = null
+        try {
+            container.write { ok ->
+                EntryActions(ok).share(draft)
+                _editor.value = null
+                refreshQuickly(ok, undo = null)
+                say("Shared with ${names.joinToString(" and ")}. What they owe you is under Lent and borrowed.")
+            }
+        } catch (e: IllegalArgumentException) { _editorProblem.value = plainMessage(e) }
+    }
+
     fun closeEditor() {
         _editor.value = null
         _editorProblem.value = null

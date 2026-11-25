@@ -36,11 +36,13 @@ class CategoryPicksTest {
     fun tilesAreTheMostUsedFirstThenTheOrderTheyWereArrangedIn() {
         val cats = listOf("Food" to 0L, "Groceries" to 12L, "Transport" to 30L, "Bills" to 12L, "Shopping" to 0L, "Health" to 1L, "Fun" to 0L, "Rent" to 5L)
         val t = CategoryChoices.tiles(cats, null)
-        assertEquals(listOf("Transport", "Groceries", "Bills", "Rent", "Health", "Food"), t.shown)
-        assertEquals(2, t.more)
-        // the chosen one beyond them is added, never hidden; the ranking itself does not move
+        assertEquals(listOf("Transport", "Groceries", "Bills", "Rent", "Health", "Food", "Shopping"), t.shown)
+        assertEquals(1, t.more)
+        // the chosen one beyond them takes the last place: never hidden, and the grid keeps its two rows; the ranking itself does not move
         val chosen = CategoryChoices.tiles(cats, "Fun")
-        assertEquals(t.shown + "Fun", chosen.shown); assertEquals(1, chosen.more)
-        assertEquals(CategoryChoices.TILES, t.shown.size)
+        assertEquals(t.shown.dropLast(1) + "Fun", chosen.shown); assertEquals(1, chosen.more)
+        assertEquals(CategoryChoices.TILES, t.shown.size); assertEquals(CategoryChoices.TILES, chosen.shown.size)
+        // one of the shown ones chosen changes nothing
+        assertEquals(t, CategoryChoices.tiles(cats, "Rent"))
     }
 }

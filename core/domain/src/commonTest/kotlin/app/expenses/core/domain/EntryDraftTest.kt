@@ -160,6 +160,24 @@ class EntryDraftTest {
         assertTrue(plain.shares.isEmpty() && plain.myShare == m(900_01))
     }
 
+    @Test
+    fun aSavedExpenseIsSharedWithSomeoneAsANewOneIsAndKeepsItsIdDateAccountAndCategory() {
+        val saved = EntryDraft("e9", DraftKind.EXPENSE, "1240", "Food", emptyList(), "bank", "", "Barbeque Nation", 77L, splitWith = listOf("asha"))
+        val e = (EntryDrafts.shareSaved(saved, inr) as DraftResult.Ok).entry as Expense
+        assertEquals(EntryId("e9"), e.id); assertEquals(77L, e.occurredAt); assertEquals(AccountId("bank"), e.account)
+        assertEquals(listOf(CategoryId("Food")), e.splits.map { it.category })
+        assertEquals(listOf(null, PersonId("asha")), e.shares.map { it.person }); assertEquals(listOf(620_00L, 620_00L), e.shares.map { it.amount.minorUnits })
+        val typed = (EntryDrafts.shareSaved(saved.copy(splitWith = listOf("asha", "ravi"), splitAmounts = listOf("300", "400")), inr) as DraftResult.Ok).entry as Expense
+        assertEquals(listOf(540_00L, 300_00L, 400_00L), typed.shares.map { it.amount.minorUnits }, "yours is what is left")
+        assertTrue(EntryDrafts.shareSaved(saved.copy(splitWith = emptyList()), inr) is DraftResult.Problem, "nobody chosen")
+        assertTrue(EntryDrafts.shareSaved(saved.copy(id = null), inr) is DraftResult.Problem, "not saved yet: the form shares a new one")
+        assertTrue(EntryDrafts.shareSaved(saved.copy(kind = DraftKind.INCOME), inr) is DraftResult.Problem)
+        assertTrue(EntryDrafts.shareSaved(saved.copy(splits = listOf(SplitDraft("Food", "1000"), SplitDraft("Fun", "240"))), inr) is DraftResult.Problem, "a category split is not shared here")
+        assertTrue(EntryDrafts.shareSaved(saved.copy(expectBack = true), inr) is DraftResult.Problem, "an expense expected back cannot also be shared")
+        // the edit form still never shares: only this action does
+        assertTrue(((EntryDrafts.build(saved, EntryId("e9"), inr) as DraftResult.Ok).entry as Expense).shares.isEmpty())
+    }
+
     // ---- an expense paid in another currency ----
 
     @Test

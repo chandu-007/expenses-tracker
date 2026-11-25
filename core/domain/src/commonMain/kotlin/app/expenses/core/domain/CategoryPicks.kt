@@ -17,13 +17,18 @@ object CategoryChoices {
         return CategoryPicks(shown, visible.size - shown.size)
     }
 
-    /** Category tiles shown in the entry form (UI S2): the most used first, then the person's own order. */
-    const val TILES = 6
+    /** Category tiles shown in the entry form: a grid of four by two, seven categories and "All" (the most used first, then the person's own order). */
+    const val TILES = 7
 
-    /** [visible] is (id, how many entries use it) in the order the person arranged them. The first [limit] by use (ties keep that order), plus the chosen one when it lies beyond them. */
+    /**
+     * [visible] is (id, how many entries use it) in the order the person arranged them. The first [limit] by use (ties keep that order); the chosen one, when it lies beyond them, takes the last place
+     * (it is never hidden, and the grid never grows a row). [CategoryPicks.more] counts the categories not shown.
+     */
     fun tiles(visible: List<Pair<String, Long>>, selected: String?, limit: Int = TILES): CategoryPicks {
         val ranked = visible.withIndex().sortedWith(compareByDescending<IndexedValue<Pair<String, Long>>> { it.value.second }.thenBy { it.index }).map { it.value.first }
-        return pick(ranked, selected, limit)
+        val first = ranked.take(limit)
+        val shown = if (selected != null && limit > 0 && selected in ranked && selected !in first) first.dropLast(1) + selected else first
+        return CategoryPicks(shown, ranked.size - shown.size)
     }
 
     /** The categories whose names contain every word typed, ignoring case; all of them when nothing is typed. */
