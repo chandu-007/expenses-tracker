@@ -210,12 +210,12 @@ class UiS3AmountColourTest {
 
     @Test
     fun spendingIsTheOrdinaryTextColourUnlessTheSwitchIsOnAndThenRedInBothThemes() {
-        var lightText = 0; var darkText = 0
+        var lightText = 0; var darkText = 0; var lightPrimary = 0; var darkPrimary = 0
         compose.setContent {
             Column {
                 for ((name, scheme) in listOf("light" to androidx.compose.material3.lightColorScheme(), "dark" to androidx.compose.material3.darkColorScheme())) {
                     MaterialTheme(colorScheme = scheme) {
-                        if (name == "light") lightText = MaterialTheme.colorScheme.onSurface.toArgb() else darkText = MaterialTheme.colorScheme.onSurface.toArgb()
+                        if (name == "light") { lightText = MaterialTheme.colorScheme.onSurface.toArgb(); lightPrimary = MaterialTheme.colorScheme.primary.toArgb() } else { darkText = MaterialTheme.colorScheme.onSurface.toArgb(); darkPrimary = MaterialTheme.colorScheme.primary.toArgb() }
                         Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.background)) {}
                         CompositionLocalProvider(LocalSpendingRed provides false) {
                             Box(Modifier.size(20.dp).background(amountColor(Flow3.OUT)).testTag("${name}_out")); Box(Modifier.size(20.dp).background(amountColor(Flow3.MOVE)).testTag("${name}_move")); Box(Modifier.size(20.dp).background(amountColor(Flow3.IN)).testTag("${name}_in"))
@@ -230,7 +230,7 @@ class UiS3AmountColourTest {
         assertEquals(darkText, px("dark_out"), "dark: spending is the ordinary text colour"); assertEquals(darkText, px("dark_move"))
         for (name in listOf("light", "dark")) {
             val red = px("${name}_out_red"); assertTrue(((red shr 16) and 0xFF) > ((red shr 8) and 0xFF) + 60 && ((red shr 16) and 0xFF) > (red and 0xFF) + 40, "red when asked for, $name: ${red.toString(16)}")
-            val green = px("${name}_in"); assertTrue(((green shr 8) and 0xFF) > ((green shr 16) and 0xFF) + 20, "money in stays green, $name: ${green.toString(16)}")
+            assertEquals(if (name == "light") lightPrimary else darkPrimary, px("${name}_in"), "money in is the theme's accent (its text colour), $name")
         }
     }
 }
