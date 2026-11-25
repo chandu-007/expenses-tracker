@@ -59,15 +59,15 @@ class UiS9ThemeTest {
 
     @Test
     fun theBlackDarkThemeIsOffByDefaultAndOnItMakesTheDarkBackgroundTrueBlack() {
-        runBlocking { container.write { it.templates.putSetting("appearance", "DARK;violet;COMFORTABLE") } }
+        runBlocking { container.write { it.templates.putSetting("appearance", "DARK;teal;COMFORTABLE") } }
         launch(); appearancePage()
         node("black_row").assertIsOff()
         assertEquals(Appearances.DARK_SURFACE, edgeRgb(), "the ordinary dark background first")
-        tap("black_row"); compose.waitUntil(10_000) { appearance() == "DARK;violet;COMFORTABLE;BLACK" }
+        tap("black_row"); compose.waitUntil(10_000) { appearance() == "DARK;teal;COMFORTABLE;BLACK" }
         node("black_row").assertIsOn()
         compose.waitUntil(10_000) { edgeRgb() == 0x000000 }
         // the light theme does not change with it
-        tap("theme_LIGHT"); compose.waitUntil(10_000) { appearance() == "LIGHT;violet;COMFORTABLE;BLACK" }
+        tap("theme_LIGHT"); compose.waitUntil(10_000) { appearance() == "LIGHT;teal;COMFORTABLE;BLACK" }
         compose.waitUntil(10_000) { edgeRgb() != 0x000000 }
         assertTrue("appearance" in BackupStore.SETTINGS, "the one appearance setting, with the black theme and the accent, is carried by a backup")
     }
