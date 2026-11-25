@@ -68,9 +68,10 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             val wallpaperRgb = systemAccentRgb()
             // more room than one row: 48 dp swatches that wrap at a large text size or on a narrow phone, the wallpaper's colour last where the phone has one
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val swatchDark = isDarkTheme()
                 Appearances.ACCENTS.forEach { a ->
                     val chosen = current.accent == a || (a == Appearances.ACCENTS.first() && current.accent == Appearances.WALLPAPER && wallpaperRgb == null)
-                    AccentSwatch(a.rgb, a.label, chosen, "accent_${a.key}") { onChange(current.copy(accent = a)) }
+                    AccentSwatch(if (swatchDark) a.darkRgb ?: a.rgb else a.rgb, a.label, chosen, "accent_${a.key}") { onChange(current.copy(accent = a)) }
                 }
                 if (wallpaperRgb != null) AccentSwatch(wallpaperRgb, "Wallpaper", current.accent == Appearances.WALLPAPER, "accent_wallpaper", wallpaper = true) { onChange(current.copy(accent = Appearances.WALLPAPER)) }
             }
