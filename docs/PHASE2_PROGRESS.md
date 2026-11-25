@@ -2171,4 +2171,43 @@ Frame series (base = `main` `dc909b3` plus this branch's `FrameLogDriveTest`; fr
 
 **NOT verified (said plainly):** a real phone, tablet or Fold; TalkBack and VoiceOver (the new semantics are checked by device tests only: exact amounts, no arrow, heading, state descriptions); the timing classes' budgets (see above); the iPhone's Reports page (the shared code compiled and its unit tests passed, but the screens were not looked at on an iOS simulator or phone); frame numbers on a quiet host; Dynamic Type on iOS; the Hide amounts page at 200% on 393 dp and dark Hide amounts (pictures exist for light 393/100% and 360/200% only); the Release build and R8 (no release artifact was built); upgrade over an installed release.
 
+## Slice 129: redesign 0.17, P1 colours (branch `redesign-0.17`; the boards' palette, four accents, signal colours as roles; no font, component, sign or layout change)
 
+Owner-approved scope (`docs/REDESIGN.md` rule 1, D1 to D6; fonts, components, D1 signs, Home and Add layouts are Slices 130 to 133).
+
+**Built.**
+1. **Palette** (`core/domain/.../Appearance.kt` `ThemeRoles`, values from `Main.dc.html`): light ground #F5F5F2 with WHITE cards (the container roles), hairline #E8E8E3, divider #EDEDE8, ink #17191B, muted #5C6166; dark ground #0F1112, card #181B1D, hairline #262A2E, ink #F2F3F1, muted #A3A9AE; true black and high contrast kept and re-derived from the new set. `ThemeRoles.surfaces()` now always returns roles (it was null for plain light/dark, i.e. Material's baseline); `UiS9ThemeTest` changed accordingly. `Appearances.LIGHT_BACKGROUND` F5F5F2, `DARK_SURFACE` 0F1112.
+2. **Accents**: Teal 0E6B5C (dark 4CC2A6, default, key `teal`), Indigo 3949AB (8C9EFF), Plum 7B3F8C (D29BE3), Ochre 8A5A06 (E3B45A) with the boards' soft fills (`Accent.soft/softDark`), plus From wallpaper. **Saved keys** migrate in `decode` (`Appearances.MIGRATED`): violet to teal, blue to indigo, green to teal, old teal to teal, orange to ochre, red to ochre; wallpaper unchanged; anything unknown is the default; the line is rewritten with the new key the next time it is saved (an older app reading it falls back to its first accent). Host tests for every mapping and round trip (`AppearanceTest`).
+3. **Signal colours as roles**: `Signals` (core: watch A34A06 / F2A65A, over B42318 / F28B82 and their soft fills) and `Signal.watch/watchSoft/over/overSoft` in `ui/Tokens.kt` (`LocalSignals`, provided in `AppRoot`); the theme's `error` is "over". `rgbColor(rgb)` in `Tokens.kt` is the one place a core colour number becomes a Compose colour.
+4. **The 40 colour literals in `ui/` are gone** (41 counted incl. `AppRoot`'s helper): amber literals in Bills, Budget, Card summary, Home pace, heartbeat chip are `Signal.watch`; the chart "Others" grey is the theme's outline; the comparison pill's green is the accent; income colour is the accent (`amountColor`), spending red is `Signal.over`; the More areas and nudge tiles are no longer five colours (all the accent, the Bills nudge in watch; their text is `onPrimary`, so it reads on the light dark-theme accent); category and chart hues go through `rgbColor`. New `UiConventionsTest.noScreenWritesAColourLiteralOfItsOwn` forbids `Color(0x...)` in `ui/` (only `Tokens.kt` may).
+5. **Radii**: no change in values (S 14 = inputs and keys, M 20 = cards and rows, pill); `DesignTokensTest` unchanged.
+6. **Widgets**: the per-accent resources (`widget_accent_*`, `widget_pill_*`) are now teal, indigo, plum, ochre (light and night values equal `Appearances.primaryFor`, checked by `WidgetDesignTest`); the widgets' own surface colours stay for Slice P16.
+7. Appearance swatches draw each accent's dark colour on the dark themes.
+
+**Ran (final app code `isDarkTheme internal`; later commits change tests only).**
+* `./gradlew check`: BUILD SUCCESSFUL. Host `--rerun-tasks`: domain **1,009**, parsers **231**, storage **615** = **1,855 tests, 0 failures, 0 skipped** (new: 4 accent/migration/signal/contrast tests in `AppearanceTest`, the roles test in `UiS9ThemeTest`, the colour-literal rule).
+* iOS: not run (the change is theme and resources only; the shared code compiled for Android).
+* Device suite, API 34 (164 classes, 24 per cold boot): first pass 810 passed, **2 failed** (`UiS3AmountColourTest`: money in is now the accent, not green; `UiS9ThemeTest`: it wrote the old `violet` key and expected it back: both expectations updated, not weakened), and two chunks (48 classes) did not run because the emulator did not boot. Those 48 classes, the two failed ones and the Appearance, UiS9 and UiS0Layout classes were run again on the final app APK: 313 passed; one failure, `AppearanceUiTest.theChoicesAreSavedKept...`, a race in the test (three taps in a row, each writing from the look it holds): it now waits for each choice to be saved, **3 of 3 pass**. (`UiS9Test.initializationError` and `3`/`5`.initializationError in the summaries are not tests: a class name that is only an outer file and stray words from my chunk list.)
+* API 26 full suite: **not run** (no dialog or keyboard class was touched; the owner's instruction for 129 to 131 is the full API 34 suite).
+* Home timing A/B, API 26 cold boot per run, `RefreshBudgetTest` + `RefreshBudgetUncategorisedTest` + `PerformanceBudgetTest` + `HomeListTest`, main 0b3e357 and the branch alternating base, new, new, base (4 runs, 3 to 4 min each, load 1.8 to 2.4 on a quiet host): **identical in all four**: 9 passed and the same 8 failed (the host-limit budget tests, which also fail on main on this Mac, e.g. save-to-row p95 75.8 ms against 50 ms; search 'upi zq' 498 ms against 200 ms). Save-to-row p50 13.5 against 13.7 ms, settle p95 75.8 against 83.6 ms (noise), tag suggestions 5.5 against 5.7 ms.
+* Frame A/B, API 34, 393 dp, `FrameLogDriveTest`, base main 0b3e357 and branch, 4 runs (base, new, new, base), load 2.1 to 2.9:
+
+| Interaction | main (2 runs): frames, median p50 / p90 / p99, over 100 ms | branch |
+|---|---|---|
+| Home fling | 422, 130.7 / 691.9 / 1127.2, 298 | 426, 124.0 / 701.3 / 1191.4, 289 |
+| Add open | 254, 21.2 / 36.8 / 578.7, 8 | 233, 24.2 / 40.0 / 599.1, 10 |
+| Add close | 201, 18.9 / 45.5 / 384.1, 7 | 175, 24.6 / 59.5 / 502.4, 10 |
+| Tab switch Home to Reports | 169, 24.0 / 42.7 / 366.9, 6 | 170, 17.9 / 47.4 / 424.3, 8 |
+| Reports mode switches | 456, 28.8 / 105.0 / 189.7, 49 | 451, 29.9 / 116.5 / 190.7, 57 |
+| Reports scroll | 720, 69.5 / 163.1 / 253.4, 240 | 742, 64.3 / 156.4 / 230.4, 202 |
+| Home to More / More to Home | 300 / 244 frames, 33 / 31 | 315 / 262, 38 / 27 |
+| Search results scroll | 353, 83.5 / 352.7 / 521.9, 149 | 318, 97.3 / 369.9 / 561.2, 159 |
+
+Equal within the noise (per-run values differ by as much as the two builds do).
+* Pictures: the walk `RdWalk` (Home, Home scrolled, Add, Entry detail, To review, Search, Reports top and "where", Budget, More, Appearance) in `../expenses_builds/redesign_build/tools/` (with `shots.sh`, `suite.sh`, `series.sh`, `ab.sh`, `pair.py`, `ftable.py`); 16 configurations: 393 and 360 dp x light and dark x 100, 150 and 200% (12) + Hide amounts on (Home, Add, Reports) in light and dark at 393/100% and 360/200% (4); `before/` = main 0b3e357 (default accent violet), `129/` = this slice (default teal), 152 pictures each. I read them for clipping and contrast: nothing clipped or wider than the window that main did not have already; the budget ring figure "₹24,705" is overlapped by its today tick at 200% and 360 dp **on main too**.
+
+**Seen and left (Home and later slices).** The Home month card is still an accent gradient (dark text on the dark theme's light teal, about 4:1 at the dark end; removing the gradient is Slice 133); the account tiles keep their multi-colour card designs (`AccountLook`, core); More still has the old layout and icon tiles (now one accent); the Add form's category row still scrolls sideways; widgets keep their own surface colours.
+
+**NOT verified.** The API 26 full suite; iOS (not compiled or run); a real phone or tablet; TalkBack; the wallpaper accent on Android 12+ was only seen through the emulator's own colour; the 3 contrast pairs of the Indigo/Plum/Ochre accents on their soft fills are checked on the host only (not seen in every screen); a saved `violet` choice becoming teal was checked in host tests and the Appearance tests, not by installing 0.16.1 and upgrading.
+
+**Owner decisions applied.** Accent mapping as listed; fonts without a library (Slice 130); keep the divide key; follow the board for the category grid (Slice 133).
