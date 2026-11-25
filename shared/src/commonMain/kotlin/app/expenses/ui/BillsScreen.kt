@@ -60,7 +60,6 @@ import app.expenses.BillRowUi
 import app.expenses.BillsUi
 import app.expenses.core.domain.Money
 
-private val AMBER = Color(0xFFB26A00)
 
 /**
  * Bills found in your messages and the ones you are tracking. A bill found in a message waits here (and in a notification) until you add it or skip it;
@@ -152,7 +151,7 @@ private fun Section(title: String, note: String?, tag: String, modifier: Modifie
 private fun BillCard(b: BillRowUi, onAdd: (String) -> Unit, onSkip: (String) -> Unit, onPay: (String) -> Unit, onSetDate: (String) -> Unit, onUnpay: (String) -> Unit, modifier: Modifier = Modifier, flourish: Boolean = false, onPostRepeat: (BillRowUi) -> Unit = {}, onSkipRepeat: (BillRowUi) -> Unit = {}) {
     var showText by rememberSaveable(b.id) { mutableStateOf(false) }
     val found = b.status == "FOUND"; val paid = b.status == "PAID"
-    val tint = when { b.overdue && !paid -> MaterialTheme.colorScheme.error; b.soon && !paid -> AMBER; else -> MaterialTheme.colorScheme.primary }
+    val tint = when { b.overdue && !paid -> MaterialTheme.colorScheme.error; b.soon && !paid -> Signal.watch; else -> MaterialTheme.colorScheme.primary }
     Card(
         modifier.fillMaxWidth().testTag("bill_${b.id}"), shape = Radius.M,
         colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = if (paid) 0.04f else 0.08f).compositeOver(MaterialTheme.colorScheme.surface)),

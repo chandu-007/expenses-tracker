@@ -213,7 +213,7 @@ fun HomeSpark(spark: SparkUi, color: Color, modifier: Modifier = Modifier, heigh
 @Composable
 fun paceColor(pace: PaceLevel): Color = when (pace) {
     PaceLevel.EARLY, PaceLevel.ON_PACE -> MaterialTheme.colorScheme.primary
-    PaceLevel.A_LITTLE_AHEAD, PaceLevel.AHEAD -> Color(0xFFB36B00)
+    PaceLevel.A_LITTLE_AHEAD, PaceLevel.AHEAD -> Signal.watch
     PaceLevel.OVER -> MaterialTheme.colorScheme.error
 }
 

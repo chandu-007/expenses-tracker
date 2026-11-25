@@ -90,26 +90,25 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** What is left over when more than five things share a ring: grey, so it never competes with a colour of its own. */
-private val OTHERS = Color(0xFF9E9E9E)
 
 /**
  * The colours of one report's chart (UI S4): from the 12 category slot hues (the first seven colour-blind-safe), a category's colour is its own choice or its stable slot and, when two things in the
  * same report would share one, the next free slot ([CategoryLook.chartHues]); the rows below the ring, the ring and the bars read the same map, so a colour means one thing on the page.
  */
-class ChartColors(private val byKey: Map<String, Color>) {
-    operator fun get(key: String?): Color = byKey[key ?: "none"] ?: OTHERS
+class ChartColors(private val byKey: Map<String, Color>, private val others: Color) {
+    operator fun get(key: String?): Color = byKey[key ?: "none"] ?: others
 }
 
 @Composable
-fun rememberChartColors(report: ReportUi): ChartColors = remember(report.rows, report.groupRows, report.group) {
+fun rememberChartColors(report: ReportUi): ChartColors { val others = MaterialTheme.colorScheme.outline; return remember(report.rows, report.groupRows, report.group, others) {
     if (report.group == ReportGroup.CATEGORY) {
         val hues = CategoryLook.chartHues(report.rows.map { it.categoryId }, report.rows.map { r -> r.colorArgb?.let { (it and 0xFFFFFF).toInt() } })
-        ChartColors(report.rows.mapIndexed { i, r -> (r.categoryId ?: "none") to Color(0xFF000000.toInt() or hues[i]) }.toMap())
+        ChartColors(report.rows.mapIndexed { i, r -> (r.categoryId ?: "none") to rgbColor(hues[i]) }.toMap(), others)
     } else {
         val hues = CategoryLook.chartHues(report.groupRows.map { null }, report.groupRows.map { null })
-        ChartColors(report.groupRows.mapIndexed { i, r -> (r.key ?: "none") to Color(0xFF000000.toInt() or hues[i]) }.toMap())
+        ChartColors(report.groupRows.mapIndexed { i, r -> (r.key ?: "none") to rgbColor(hues[i]) }.toMap(), others)
     }
-}
+} }
 
 /** One slice of the breakdown ring. [share] is a whole percent; [onClick] is null for the "others" slice. */
 data class Slice(val key: String, val name: String, val share: Int, val color: Color, val amount: String, val minor: Long, val onClick: (() -> Unit)?)
@@ -153,7 +152,7 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, o
             MoneyText(report.spent.wholeAmounts(), style = NumberStyle.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp), color = ink, maxLines = 1, minFontSize = 12.sp, rolling = true, modifier = Modifier.testTag("report_spent").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exactSpent) })
             report.comparison?.let { c ->
                 // the words say "more" or "less"; the tint only repeats that, so it is never the sole signal
-                val tint = when (report.comparisonMore) { true -> MaterialTheme.colorScheme.error; false -> Color(0xFF2E7D32); null -> quiet }
+                val tint = when (report.comparisonMore) { true -> MaterialTheme.colorScheme.error; false -> MaterialTheme.colorScheme.primary; null -> quiet }
                 WholeText(
                     c, spoken = c.removePrefix("▲ ").removePrefix("▼ "), style = MaterialTheme.typography.labelMedium, color = ink,
                     modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(50)).background(tint.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("report_comparison"),
@@ -250,7 +249,7 @@ fun BreakdownRing(slices: List<Slice>, totalText: String, label: String, picked:
     // shares are whole percents rounded down, so the rest is what the five biggest leave of 100 (never less than the rest's own sum): the key adds up
     val rest = if (shown.size > 5) maxOf(shown.drop(5).sumOf { it.share }, 100 - top.sumOf { it.share }) else 0
     val restMinor = shown.drop(5).sumOf { it.minor }
-    val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, OTHERS, money(restMinor), restMinor, null)) else emptyList()
+    val all = top + if (rest > 0) listOf(Slice("others", "Others", rest, MaterialTheme.colorScheme.outline, money(restMinor), restMinor, null)) else emptyList()
     val reduce = LocalReduceMotion.current
     val sweep = remember(all) { Animatable(if (reduce) 1f else 0f) }
     LaunchedEffect(all, reduce) { if (reduce) sweep.snapTo(1f) else sweep.animateTo(1f, tween(Motion.CHART)) }

@@ -70,3 +70,29 @@ fun SheetHandle(modifier: Modifier = Modifier) {
         Box(Modifier.size(width = 32.dp, height = 4.dp).clip(Radius.Full).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)))
     }
 }
+
+/**
+ * Colours that are not in a theme role: an 0xRRGGBB number from the core (a category's colour, a chart hue, an accent swatch) as an opaque colour. The ONE place a colour literal's alpha lives:
+ * screens call this and never write `Color(0x...)` ([UiConventionsTest] checks).
+ */
+fun rgbColor(rgb: Int): androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFF000000.toInt() or (rgb and 0xFFFFFF))
+
+/** The signal colours of the theme in use, as Compose colours: watch (amber) and over (red), each with its soft fill. See `Signals` in core. */
+class SignalColors(val watch: androidx.compose.ui.graphics.Color, val watchSoft: androidx.compose.ui.graphics.Color, val over: androidx.compose.ui.graphics.Color, val overSoft: androidx.compose.ui.graphics.Color) {
+    companion object {
+        fun of(dark: Boolean) = SignalColors(
+            rgbColor(app.expenses.core.domain.Signals.watch(dark)), rgbColor(app.expenses.core.domain.Signals.watchSoft(dark)),
+            rgbColor(app.expenses.core.domain.Signals.over(dark)), rgbColor(app.expenses.core.domain.Signals.overSoft(dark)),
+        )
+    }
+}
+
+val LocalSignals = androidx.compose.runtime.staticCompositionLocalOf { SignalColors.of(false) }
+
+/** The signal colours by name: `Signal.watch`, `Signal.watchSoft`, `Signal.over`, `Signal.overSoft` (over is also the theme's `error`). */
+object Signal {
+    val watch: androidx.compose.ui.graphics.Color @androidx.compose.runtime.Composable get() = LocalSignals.current.watch
+    val watchSoft: androidx.compose.ui.graphics.Color @androidx.compose.runtime.Composable get() = LocalSignals.current.watchSoft
+    val over: androidx.compose.ui.graphics.Color @androidx.compose.runtime.Composable get() = LocalSignals.current.over
+    val overSoft: androidx.compose.ui.graphics.Color @androidx.compose.runtime.Composable get() = LocalSignals.current.overSoft
+}

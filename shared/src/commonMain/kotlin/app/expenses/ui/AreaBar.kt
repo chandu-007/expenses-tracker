@@ -14,13 +14,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 
-/** The five areas of the More page. Each has its own colour, shared by the rows that open its screens, so the app tells where you are at a glance. */
-enum class Area(val top: Color, val bottom: Color) {
-    MONEY(Color(0xFF1E88E5), Color(0xFF1565C0)),
-    CAPTURE(Color(0xFF00897B), Color(0xFF00695C)),
-    LOOK(Color(0xFF8E24AA), Color(0xFF6A1B9A)),
-    PRIVACY(Color(0xFF43A047), Color(0xFF2E7D32)),
-    HELP(Color(0xFFFB8C00), Color(0xFFEF6C00)),
+/**
+ * The five areas of the More page. The redesign has no multi-colour section tiles: every area is drawn in the accent (one colour for the rows that open its screens, so the page reads calm), and the
+ * enum stays so a page can still ask which area a row belongs to.
+ */
+enum class Area {
+    MONEY, CAPTURE, LOOK, PRIVACY, HELP;
+    val top: Color @Composable get() = MaterialTheme.colorScheme.primary
+    val bottom: Color @Composable get() = MaterialTheme.colorScheme.primary
 }
 
 /**

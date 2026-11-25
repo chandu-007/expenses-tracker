@@ -191,16 +191,16 @@ class WidgetEyeTapTest {
     fun anAccentChosenInTheAppReachesAPlacedWidgetAtOnceWithoutLeavingTheApp() {
         place(QuickAddReceiver::class.java, widthDp = 320, heightDp = 146)
         runBlocking { QuickAddWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(widgetId)) }
-        waitFor("the widget, in the app's default violet") { t, _ -> "+ Add" in t }
+        waitFor("the widget, in the app's default teal") { t, _ -> "+ Add" in t }
         fun waitForAccent(key: String) {
             val rgb = app.expenses.core.domain.Appearances.ACCENTS.first { it.key == key }.let { app.expenses.core.domain.Appearances.primaryFor(it, dark = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES) }
             val deadline = System.currentTimeMillis() + 25_000
             while (System.currentTimeMillis() < deadline) { if (pixelsOf(hostView!!, rgb, 320, 146) > 500) return; Thread.sleep(300) }
             throw AssertionError("the widget never drew the $key accent ${"%06X".format(rgb)}")
         }
-        waitForAccent("violet")
+        waitForAccent("teal")
         scenario = androidx.test.core.app.ActivityScenario.launch(MainActivity::class.java)
-        for (key in listOf("teal", "orange", "violet")) {
+        for (key in listOf("teal", "ochre", "indigo")) {
             scenario!!.onActivity { a ->
                 val model = androidx.lifecycle.ViewModelProvider(a)[LedgerViewModel::class.java]
                 model.setAppearance(app.expenses.core.domain.Appearance(accent = app.expenses.core.domain.Appearances.ACCENTS.first { it.key == key }))

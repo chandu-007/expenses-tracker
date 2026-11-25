@@ -342,11 +342,11 @@ fun EntryListScreen(
             // the cards at the top of More: the nudges Home has, in the same order, whether or not Home put its card off (the first two; every one has its row below)
             val counts = homeNudgeCounts(state)
             val nudges = buildList {
-                counts[HomeNudge.BILLS_DUE]?.let { n -> add(MoreNudge("open_bills", Icons.Outlined.Receipt, "Bills", "$n due this week", n, Color(0xFF00897B), Color(0xFF004D40), onOpenBills)) }
-                counts[HomeNudge.INBOX]?.let { n -> add(MoreNudge("open_inbox", Icons.Outlined.Inbox, "To review", "$n waiting for you", n, Color(0xFF6750A4), Color(0xFF4F378B), onOpenInbox)) }
-                if (state.billPeek.newCount > 0 && counts[HomeNudge.BILLS_DUE] == null) add(MoreNudge("open_bills", Icons.Outlined.Receipt, "Bills", "${state.billPeek.newCount} new", state.billPeek.newCount, Color(0xFF00897B), Color(0xFF004D40), onOpenBills))
-                counts[HomeNudge.WAITING]?.let { n -> add(MoreNudge("open_loans", Icons.Outlined.SwapHoriz, "Money to get back", "$n ${if (n == 1) "expense" else "expenses"} waiting", n, Color(0xFF1E88E5), Color(0xFF0D47A1), onOpenLoans)) }
-                counts[HomeNudge.CATEGORISE]?.let { n -> add(MoreNudge("open_categorise", Icons.Outlined.Label, "No category", "$n ${if (n == 1) "expense" else "expenses"}", n, Color(0xFFF57C00), Color(0xFFBF360C), onOpenCategorise)) }
+                counts[HomeNudge.BILLS_DUE]?.let { n -> add(MoreNudge("open_bills", Icons.Outlined.Receipt, "Bills", "$n due this week", n, Signal.watch, Signal.watch, onOpenBills)) }
+                counts[HomeNudge.INBOX]?.let { n -> add(MoreNudge("open_inbox", Icons.Outlined.Inbox, "To review", "$n waiting for you", n, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary, onOpenInbox)) }
+                if (state.billPeek.newCount > 0 && counts[HomeNudge.BILLS_DUE] == null) add(MoreNudge("open_bills", Icons.Outlined.Receipt, "Bills", "${state.billPeek.newCount} new", state.billPeek.newCount, Signal.watch, Signal.watch, onOpenBills))
+                counts[HomeNudge.WAITING]?.let { n -> add(MoreNudge("open_loans", Icons.Outlined.SwapHoriz, "Money to get back", "$n ${if (n == 1) "expense" else "expenses"} waiting", n, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary, onOpenLoans)) }
+                counts[HomeNudge.CATEGORISE]?.let { n -> add(MoreNudge("open_categorise", Icons.Outlined.Label, "No category", "$n ${if (n == 1) "expense" else "expenses"}", n, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary, onOpenCategorise)) }
             }
             MorePage(
                 Modifier.padding(padding), nudges,

@@ -77,7 +77,7 @@ import androidx.compose.material.icons.outlined.Edit
 @Composable
 private fun stateColor(state: BudgetState): Color = when (state) {
     BudgetState.OK -> MaterialTheme.colorScheme.primary
-    BudgetState.NEAR -> Color(0xFFE08A00)
+    BudgetState.NEAR -> Signal.watch
     BudgetState.OVER -> MaterialTheme.colorScheme.error
 }
 

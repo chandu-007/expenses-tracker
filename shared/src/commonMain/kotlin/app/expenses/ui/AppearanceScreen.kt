@@ -114,8 +114,8 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
 /** One accent: a 48 dp round swatch with a tick when chosen; the wallpaper's carries a small palette mark so it reads as "the phone's colour". A screen reader hears the name and whether it is chosen. */
 @Composable
 private fun AccentSwatch(rgb: Int, label: String, chosen: Boolean, tag: String, wallpaper: Boolean = false, onClick: () -> Unit) {
-    val fill = Color(0xFF000000.toInt() or rgb)
-    val on = Color(0xFF000000.toInt() or Appearances.onColor(rgb))
+    val fill = rgbColor(rgb)
+    val on = rgbColor(Appearances.onColor(rgb))
     Box(
         Modifier.size(48.dp).background(fill, CircleShape).clickable(onClick = onClick)
             .then(if (chosen) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)

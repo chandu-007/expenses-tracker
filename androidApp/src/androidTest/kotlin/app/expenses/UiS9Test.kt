@@ -91,7 +91,7 @@ class UiS9ThemeTest {
         // the merged tree is what a screen reader walks (the unmerged one still holds the drawn rows)
         assertTrue(compose.onAllNodes(hasTestTag("appearance_preview")).fetchSemanticsNodes().single().children.isEmpty(), "its rows and figures are not read one by one")
         // the swatches are at least 48 dp now
-        val swatch = node("accent_violet").fetchSemanticsNode().size
+        val swatch = node("accent_indigo").fetchSemanticsNode().size
         val density = context.resources.displayMetrics.density
         assertTrue(swatch.width >= 48 * density - 1 && swatch.height >= 48 * density - 1, "accent swatch $swatch")
     }

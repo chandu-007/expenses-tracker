@@ -117,7 +117,7 @@ val LocalCategoryLooks = compositionLocalOf { CategoryLooks.Empty }
 @Composable
 private fun isDarkTheme() = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
-private fun Int.opaque() = Color(0xFF000000.toInt() or this)
+private fun Int.opaque() = rgbColor(this)
 
 /** The tile colours for a category style, a slot hue or a chosen colour. */
 @Composable

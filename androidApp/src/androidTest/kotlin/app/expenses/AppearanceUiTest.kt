@@ -53,10 +53,10 @@ class AppearanceUiTest {
     @Test
     fun theChoicesAreSavedKeptAfterARestartAndShownAsSelectedWhenTheScreenReopens() {
         launch(); open()
-        tap("theme_DARK"); tap("accent_green"); tap("density_COMPACT")
-        compose.waitUntil(10_000) { saved().mode == ThemeMode.DARK && saved().accent.key == "green" && saved().density == Density.COMPACT }
+        tap("theme_DARK"); tap("accent_plum"); tap("density_COMPACT")
+        compose.waitUntil(10_000) { saved().mode == ThemeMode.DARK && saved().accent.key == "plum" && saved().density == Density.COMPACT }
         launch(); open()
-        assertEquals(Triple(ThemeMode.DARK, "green", Density.COMPACT), saved().let { Triple(it.mode, it.accent.key, it.density) })
+        assertEquals(Triple(ThemeMode.DARK, "plum", Density.COMPACT), saved().let { Triple(it.mode, it.accent.key, it.density) })
         compose.onNodeWithTag("theme_DARK", useUnmergedTree = true).assertIsSelected()
     }
 

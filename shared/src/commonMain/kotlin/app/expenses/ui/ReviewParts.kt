@@ -97,7 +97,6 @@ fun UnreviewedDot(id: String, modifier: Modifier = Modifier) {
     )
 }
 
-private val HEARTBEAT_AMBER = Color(0xFFB36B00)
 
 /**
  * Home's capture heartbeat: "Last bank text seen yesterday 8:14 pm". After a quiet stretch it turns amber (never red) and says so in words on a second line. One tap opens "Why isn't capture
@@ -106,7 +105,7 @@ private val HEARTBEAT_AMBER = Color(0xFFB36B00)
 @Composable
 fun CaptureHeartbeatChip(chip: CaptureHeartbeat.Chip, onOpen: () -> Unit) {
     val quiet = chip.state == CaptureHeartbeat.State.QUIET
-    val tint = if (quiet) HEARTBEAT_AMBER else MaterialTheme.colorScheme.primary
+    val tint = if (quiet) Signal.watch else MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(Radius.S).background(tint.copy(alpha = if (quiet) 0.16f else 0.08f))

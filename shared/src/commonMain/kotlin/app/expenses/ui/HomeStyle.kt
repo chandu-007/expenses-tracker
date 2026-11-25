@@ -339,14 +339,13 @@ val LocalSpendingRed = androidx.compose.runtime.compositionLocalOf { false }
 /**
  * The colour of an amount (UI S3): money in is green, with a plus sign; money out is the ordinary text colour with a minus sign, because the sign already says which way it went and a list that is all red makes red
  * mean nothing; a transfer is the ordinary text colour. Red is kept for what is wrong (over a limit, overdue, failed), drawn by those screens, and the person can switch spending back to red under Appearance
- * ([LocalSpendingRed]). The greens and reds are chosen per theme so each reads at 4.5:1 or better on that theme's background.
+ * ([LocalSpendingRed]). Money in is the accent (its text colour reads at 4.5:1 on every theme) and over is the signal red, both from the theme.
  */
 @Composable
 fun amountColor(flow: Flow3): Color {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     return when (flow) {
-        Flow3.OUT -> if (!LocalSpendingRed.current) MaterialTheme.colorScheme.onSurface else if (dark) Color(0xFFFF8A80) else Color(0xFFB3261E)
-        Flow3.IN -> if (dark) Color(0xFF6FD3A0) else Color(0xFF17744A)
+        Flow3.OUT -> if (!LocalSpendingRed.current) MaterialTheme.colorScheme.onSurface else Signal.over
+        Flow3.IN -> MaterialTheme.colorScheme.primary
         Flow3.MOVE -> MaterialTheme.colorScheme.onSurface
     }
 }

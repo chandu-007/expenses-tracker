@@ -118,7 +118,7 @@ fun MorePage(modifier: Modifier = Modifier, nudges: List<MoreNudge>, reminder: (
 private fun RowView(r: MoreRow, top: Color, bottom: Color) {
     Row(Modifier.fillMaxWidth().clickable(onClick = r.onClick).padding(horizontal = 14.dp, vertical = 11.dp).testTag(r.tag), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).clip(Radius.S).background(Brush.linearGradient(listOf(top, bottom))), contentAlignment = Alignment.Center) {
-            Icon(r.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
+            Icon(r.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(23.dp))
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(r.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
@@ -133,11 +133,11 @@ private fun RowView(r: MoreRow, top: Color, bottom: Color) {
 private fun NudgeCard(n: MoreNudge, modifier: Modifier) {
     Box(modifier.clip(Radius.M).background(Brush.linearGradient(listOf(n.top, n.bottom))).clickable(onClick = n.onClick).padding(14.dp).testTag(n.tag)) {
         Column {
-            Icon(n.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
-            Text(n.title, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-            Text(n.line, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall)
+            Icon(n.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+            Text(n.title, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+            Text(n.line, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f), style = MaterialTheme.typography.bodySmall)
         }
-        Box(Modifier.align(Alignment.TopEnd).clip(CircleShape).background(Color.White).padding(horizontal = 8.dp, vertical = 2.dp)) {
+        Box(Modifier.align(Alignment.TopEnd).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimary).padding(horizontal = 8.dp, vertical = 2.dp)) {
             Text(n.count.toString(), color = n.bottom, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         }
     }

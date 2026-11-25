@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The accent pill and bar fill in the violet accent (see WidgetAccents). -->
+<!-- The accent pill and bar fill in the ochre accent (see WidgetAccents). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/widget_accent_violet" />
+    <solid android:color="@color/widget_accent_ochre" />
     <corners android:radius="50dp" />
 </shape>

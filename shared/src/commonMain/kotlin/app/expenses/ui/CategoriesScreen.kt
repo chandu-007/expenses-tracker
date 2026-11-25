@@ -194,7 +194,7 @@ fun CategoriesScreen(
                         }.joinToString(" · ")
                         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("cat_note_${c.id}"))
                         if (!incomeTab && c.spentMinor > 0 && biggest > 0 && !LocalHideAmounts.current) {
-                            val hue = Color(0xFF000000.toInt() or hues[shown.indexOf(c)])
+                            val hue = rgbColor(hues[shown.indexOf(c)])
                             Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(hue.copy(alpha = 0.18f)).testTag("cat_bar_${c.id}")) {
                                 Box(Modifier.fillMaxWidth((c.spentMinor.toFloat() / biggest).coerceIn(0.02f, 1f)).fillMaxHeight().background(hue, androidx.compose.foundation.shape.CircleShape))
                             }
@@ -475,7 +475,7 @@ private fun CategoryEditorScreen(
 internal fun CategoryTilePreview(id: String, name: String, colorArgb: Long?, glyph: String?, size: androidx.compose.ui.unit.Dp = 48.dp, modifier: Modifier = Modifier) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val tile = remember(id, colorArgb, dark) { if (colorArgb != null) app.expenses.core.domain.CategoryLook.tileOfHue((colorArgb and 0xFFFFFF).toInt(), dark) else app.expenses.core.domain.CategoryLook.tileFor(app.expenses.core.domain.CategoryLook.slot(id), dark) }
-    Box(modifier.size(size).clip(if (size >= 36.dp) Radius.M else Radius.S).background(Color(0xFF000000.toInt() or tile.container)).testTag("cat_tile_$id"), contentAlignment = Alignment.Center) {
-        Icon(categoryGlyph(glyph ?: app.expenses.core.domain.CategoryLook.defaultGlyph(name)), contentDescription = null, tint = Color(0xFF000000.toInt() or tile.glyph), modifier = Modifier.size(size * 0.56f))
+    Box(modifier.size(size).clip(if (size >= 36.dp) Radius.M else Radius.S).background(rgbColor(tile.container)).testTag("cat_tile_$id"), contentAlignment = Alignment.Center) {
+        Icon(categoryGlyph(glyph ?: app.expenses.core.domain.CategoryLook.defaultGlyph(name)), contentDescription = null, tint = rgbColor(tile.glyph), modifier = Modifier.size(size * 0.56f))
     }
 }

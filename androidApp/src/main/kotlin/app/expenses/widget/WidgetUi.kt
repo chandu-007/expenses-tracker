@@ -85,15 +85,13 @@ internal fun paceColor(level: PaceLevel): androidx.glance.unit.ColorProvider = w
     PaceLevel.OVER -> WidgetColors.negative
 }
 
-/** The accent as the widget draws it: a pill/bar drawable of that accent's colour and the colour of the text on it, both light and dark. Unknown keys fall back to the app's default (violet). */
+/** The accent as the widget draws it: a pill/bar drawable of that accent's colour and the colour of the text on it, both light and dark. Unknown keys fall back to the app's default (teal). */
 internal object WidgetAccents {
     fun fill(a: Accent): Int = when (a.key) {
-        "blue" -> R.drawable.widget_pill_blue
-        "teal" -> R.drawable.widget_pill_teal
-        "green" -> R.drawable.widget_pill_green
-        "orange" -> R.drawable.widget_pill_orange
-        "red" -> R.drawable.widget_pill_red
-        else -> R.drawable.widget_pill_violet
+        "indigo" -> R.drawable.widget_pill_indigo
+        "plum" -> R.drawable.widget_pill_plum
+        "ochre" -> R.drawable.widget_pill_ochre
+        else -> R.drawable.widget_pill_teal
     }
 
     private fun color(rgb: Int) = Color(0xFF000000.toInt() or rgb)

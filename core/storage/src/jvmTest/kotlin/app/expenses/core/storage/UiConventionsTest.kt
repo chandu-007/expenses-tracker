@@ -41,6 +41,17 @@ class UiConventionsTest {
         assertTrue(offenders.isEmpty(), "these draw a RoundedCornerShape(N.dp) of their own; use Radius.XS / S / M / L from Tokens.kt: $offenders")
     }
 
+    /**
+     * Redesign P1 (Slice 129): a screen takes its colours from the theme roles (`MaterialTheme.colorScheme`), the signal colours (`Signal.watch`, `Signal.over`, ...) or `rgbColor(...)` for a number from the
+     * core; it never writes `Color(0x...)` of its own. `Tokens.kt` is the one file that may.
+     */
+    @Test
+    fun noScreenWritesAColourLiteralOfItsOwn() {
+        val literal = Regex("""(?<![A-Za-z])Color\(\s*0x""")
+        val offenders = ui.walkTopDown().filter { it.extension == "kt" && it.name != "Tokens.kt" }.filter { literal.containsMatchIn(it.readText()) }.map { it.name }.toList()
+        assertTrue(offenders.isEmpty(), "these write a Color(0x...) of their own; use a theme role, Signal.* or rgbColor() (Tokens.kt): $offenders")
+    }
+
     /** UI S1: one header. Screens call `ScreenHeader`; `TopAppBar` is Material's inside it, in the Add form (redone in S2) and in the Search selection bar. */
     @Test
     fun everyScreenOpensWithTheOneHeader() {

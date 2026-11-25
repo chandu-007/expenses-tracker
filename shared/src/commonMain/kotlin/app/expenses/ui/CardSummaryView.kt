@@ -51,5 +51,6 @@ internal fun CardSummaryLines(c: CardRowUi, tags: Triple<String, String, String>
 internal fun limitBarColors(): (Float) -> Color {
     val error = MaterialTheme.colorScheme.error
     val calm = MaterialTheme.colorScheme.primary
-    return { fraction -> if (fraction >= 1f) error else if (fraction >= 0.8f) Color(0xFFB26A00) else calm }
+    val watch = Signal.watch
+    return { fraction -> if (fraction >= 1f) error else if (fraction >= 0.8f) watch else calm }
 }

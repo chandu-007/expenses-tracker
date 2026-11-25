@@ -277,16 +277,16 @@ class WidgetDesignTest {
     private fun setAccent(key: String?) = runBlocking { container.write { it.templates.putSetting("appearance", if (key == null) "" else app.expenses.core.domain.Appearance(accent = Appearances.ACCENTS.first { a -> a.key == key }).encode()) } }
 
     @Test
-    fun theWidgetsReadTheAccentChosenInTheAppAndFallBackToVioletForNoneOrAnUnknownOne() {
-        assertEquals("violet", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "nothing chosen yet")
+    fun theWidgetsReadTheAccentChosenInTheAppAndFallBackToTealForNoneOrAnUnknownOne() {
+        assertEquals("teal", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "nothing chosen yet")
         for (a in Appearances.ACCENTS) {
             setAccent(a.key)
             assertEquals(a.key, runBlocking { QuickAddWidget().load(context) }!!.accent.key)
             assertEquals(a.key, runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.accent.key)
         }
         runBlocking { container.write { it.templates.putSetting("appearance", "SYSTEM;chartreuse;COMPACT") } }
-        assertEquals("violet", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "an accent the app does not know is violet, as in the app")
-        assertEquals("violet", runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.accent.key)
+        assertEquals("teal", runBlocking { QuickAddWidget().load(context) }!!.accent.key, "an accent the app does not know is teal, as in the app")
+        assertEquals("teal", runBlocking { app.expenses.widget.TodayWidget().loadToday(context) }!!.accent.key)
     }
 
     @Test

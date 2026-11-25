@@ -201,7 +201,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val wallpaper = if (look.accent.key == Appearances.WALLPAPER.key) app.expenses.ui.systemAccentRgb() else null
     val scheme = androidx.compose.runtime.remember(look, dark, highContrast, wallpaper) { colorSchemeFor(look, dark, highContrast, wallpaper) }
     MaterialTheme(colorScheme = scheme, typography = androidx.compose.runtime.remember(platform) { app.expenses.ui.appTypography(platform.proportionalDigits) }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
-        androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform, app.expenses.ui.LocalHighContrast provides highContrast) {
+        androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalSignals provides androidx.compose.runtime.remember(dark) { app.expenses.ui.SignalColors.of(dark) }, app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform, app.expenses.ui.LocalHighContrast provides highContrast) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
             // on a wide window (a tablet, an unfolded foldable) the app keeps a comfortable width in the middle instead of stretching every line across it
             // from WindowLayout.TWO_PANE (window at least 600 dp wide and 480 dp high): Home and the open entry side by side (see WidePane.kt); below it nothing differs from a phone
@@ -1085,13 +1085,17 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
  * true-black theme and the stronger text and outlines of high contrast ([ThemeRoles.surfaces]: null, and Material's baseline unchanged, for anyone who chose neither). Money colours are not here.
  */
 private fun colorSchemeFor(look: Appearance, dark: Boolean, highContrast: Boolean = false, systemAccent: Int? = null): androidx.compose.material3.ColorScheme {
-    fun c(rgb: Int) = androidx.compose.ui.graphics.Color(0xFF000000.toInt() or rgb)
-    val primary = Appearances.primaryFor(Appearances.resolve(look.accent, systemAccent), dark)
+    fun c(rgb: Int) = app.expenses.ui.rgbColor(rgb)
+    val accent = Appearances.resolve(look.accent, systemAccent)
+    val primary = Appearances.primaryFor(accent, dark)
     val base = if (dark) darkColorScheme() else lightColorScheme()
-    val container = Appearances.containerFor(primary, dark, black = look.black)
-    val scheme = base.copy(primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)))
-    val r = app.expenses.core.domain.ThemeRoles.surfaces(dark, look.black, highContrast) ?: return scheme
-    return scheme.copy(
+    val container = Appearances.softFor(accent, primary, dark, look.black)
+    val r = app.expenses.core.domain.ThemeRoles.surfaces(dark, look.black, highContrast)
+    val over = app.expenses.core.domain.Signals.over(dark)
+    val overSoft = app.expenses.core.domain.Signals.overSoft(dark)
+    return base.copy(
+        primary = c(primary), onPrimary = c(Appearances.onColor(primary)), primaryContainer = c(container), onPrimaryContainer = c(Appearances.onColor(container)), secondary = c(primary), secondaryContainer = c(container), onSecondaryContainer = c(Appearances.onColor(container)),
+        error = c(over), onError = c(Appearances.onColor(over)), errorContainer = c(overSoft), onErrorContainer = c(Appearances.onColor(overSoft)),
         background = c(r.background), onBackground = c(r.onSurface), surface = c(r.surface), onSurface = c(r.onSurface),
         surfaceVariant = c(r.surfaceVariant), onSurfaceVariant = c(r.onSurfaceVariant), outline = c(r.outline), outlineVariant = c(r.outlineVariant),
         surfaceContainerLowest = c(r.containerLowest), surfaceContainerLow = c(r.containerLow), surfaceContainer = c(r.container), surfaceContainerHigh = c(r.containerHigh), surfaceContainerHighest = c(r.containerHighest),

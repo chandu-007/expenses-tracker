@@ -140,7 +140,7 @@ fun TripSummaryScreen(
                 Text("Where it went", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("trip_categories"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val hues = remember(state.categories) { app.expenses.core.domain.CategoryLook.chartHues(state.categories.map { null }, state.categories.map { c -> c.colorArgb?.let { (it and 0xFFFFFF).toInt() } }) }
-                    state.categories.forEachIndexed { i, c -> TripCategoryRow(c, Color(0xFF000000.toInt() or hues[i])) }
+                    state.categories.forEachIndexed { i, c -> TripCategoryRow(c, rgbColor(hues[i])) }
                 }
             } else if (state.entryCount == 0) {
                 Text("Nothing is tagged for this trip on its days yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp).testTag("trip_summary_empty"))
