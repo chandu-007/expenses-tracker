@@ -53,7 +53,10 @@ class AppearanceUiTest {
     @Test
     fun theChoicesAreSavedKeptAfterARestartAndShownAsSelectedWhenTheScreenReopens() {
         launch(); open()
-        tap("theme_DARK"); tap("accent_plum"); tap("density_COMPACT")
+        // each choice is written from the look the screen holds when it is tapped: wait for one to be saved before the next, or a tap can start from the look before the last
+        tap("theme_DARK"); compose.waitUntil(10_000) { saved().mode == ThemeMode.DARK }
+        tap("accent_plum"); compose.waitUntil(10_000) { saved().accent.key == "plum" }
+        tap("density_COMPACT")
         compose.waitUntil(10_000) { saved().mode == ThemeMode.DARK && saved().accent.key == "plum" && saved().density == Density.COMPACT }
         launch(); open()
         assertEquals(Triple(ThemeMode.DARK, "plum", Density.COMPACT), saved().let { Triple(it.mode, it.accent.key, it.density) })
