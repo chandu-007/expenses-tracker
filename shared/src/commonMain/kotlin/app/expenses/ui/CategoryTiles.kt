@@ -115,7 +115,7 @@ class CategoryLooks(private val byName: Map<String, CategoryStyle>) {
 val LocalCategoryLooks = compositionLocalOf { CategoryLooks.Empty }
 
 @Composable
-private fun isDarkTheme() = MaterialTheme.colorScheme.background.luminance() < 0.5f
+internal fun isDarkTheme() = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
 private fun Int.opaque() = Color(0xFF000000.toInt() or this)
 

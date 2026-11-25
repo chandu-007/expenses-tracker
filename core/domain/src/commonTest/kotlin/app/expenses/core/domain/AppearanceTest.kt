@@ -10,7 +10,7 @@ class AppearanceTest {
         for (m in ThemeMode.entries) for (a in Appearances.ACCENTS) for (d in Density.entries) { val x = Appearance(m, a, d); assertEquals(x, Appearances.decode(x.encode())) }
         assertEquals(Appearance(), Appearances.decode(null)); assertEquals(Appearance(), Appearances.decode("")); assertEquals(Appearance(), Appearances.decode("junk;;;;"))
         assertEquals(Appearance(ThemeMode.DARK, Appearances.ACCENTS.first(), Density.COMPACT), Appearances.decode("DARK;purple-from-the-future;COMPACT"))
-        assertEquals(Appearance(ThemeMode.SYSTEM, Appearances.ACCENTS[2], Density.COMFORTABLE), Appearances.decode("LIGHTISH;teal"))
+        assertEquals(Appearance(ThemeMode.SYSTEM, Appearances.ACCENTS.first { it.key == "teal" }, Density.COMFORTABLE), Appearances.decode("LIGHTISH;teal"))
     }
 
     @Test

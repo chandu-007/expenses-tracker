@@ -15,6 +15,8 @@ class ExpensesApp : Application() {
         Notifier.createChannels(this)
         NotificationWork.schedule(this)
         AutoExportWorker.schedule(this)
+        // the design's fonts are read from the assets off the main thread now, so the first screen finds them built (a few ms of file reads that must not be paid inside the Add form's first frame)
+        appScope.launch(Dispatchers.IO) { platform.fonts?.let { f -> runCatching { app.expenses.warmFonts(this@ExpensesApp, f) } } }
     }
 
     /**

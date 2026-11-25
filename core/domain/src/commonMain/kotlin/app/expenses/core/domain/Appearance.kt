@@ -6,7 +6,7 @@ enum class ThemeMode(val label: String) { SYSTEM("Follow the phone"), LIGHT("Lig
 enum class Density(val label: String) { COMFORTABLE("Comfortable"), COMPACT("Compact") }
 
 /** An accent colour offered in settings, as 0xRRGGBB. */
-data class Accent(val key: String, val label: String, val rgb: Int)
+data class Accent(val key: String, val label: String, val rgb: Int, /** The accent as drawn on the dark themes, when it is not just [rgb] lightened (the design's #4CC2A6 for its teal). */ val darkRgb: Int? = null)
 
 /**
  * How the app looks: light or dark (or the phone's choice), an accent colour, and how tightly lists are spaced. Stored as one line of text (the setting `appearance`, which backups carry).
@@ -18,9 +18,10 @@ data class Appearance(val mode: ThemeMode = ThemeMode.SYSTEM, val accent: Accent
 }
 
 object Appearances {
+    /** The design's own accent ("Expenses, calm and clear") is the default for anyone who has not chosen one; the others stay as choices, and a saved choice (including violet) is kept. */
     val ACCENTS = listOf(
-        Accent("violet", "Violet", 0x6750A4), Accent("blue", "Blue", 0x1565C0), Accent("teal", "Teal", 0x00796B),
-        Accent("green", "Green", 0x2E7D32), Accent("orange", "Orange", 0xBF4F00), Accent("red", "Red", 0xB3261E),
+        Accent("calm", "Teal green", 0x0E6B5C, darkRgb = 0x4CC2A6), Accent("violet", "Violet", 0x6750A4), Accent("blue", "Blue", 0x1565C0), Accent("teal", "Teal", 0x00796B),
+        Accent("green", "Green", 0x2E7D32), Accent("orange", "Orange", 0xB34A00), Accent("red", "Red", 0xB3261E),
     )
 
     /**
@@ -61,7 +62,7 @@ object Appearances {
      * are unchanged; a pale wallpaper colour is not); in dark mode lightened until text on a dark surface reads at 4.5:1 or better (true black is darker still, so it reads at least as well).
      */
     fun primaryFor(accent: Accent, dark: Boolean): Int {
-        var c = accent.rgb and 0xFFFFFF
+        var c = ((if (dark) accent.darkRgb else null) ?: accent.rgb) and 0xFFFFFF
         var step = 0
         if (!dark) {
             while (contrast(c, LIGHT_BACKGROUND) < 4.5 && step < 20) { c = mix(c, 0x000000, 0.12); step++ }
@@ -71,10 +72,10 @@ object Appearances {
         return c
     }
 
-    const val DARK_SURFACE = 0x141218
+    const val DARK_SURFACE = 0x0F1112
     private const val LIGHT_SURFACE = 0xFFFFFF
-    /** Material's light background, the lightest thing a light primary is read on. */
-    const val LIGHT_BACKGROUND = 0xFEF7FF
+    /** The design's light ground (#F5F5F2), the lightest thing a light primary is read on. */
+    const val LIGHT_BACKGROUND = 0xF5F5F2
 
     /** How strongly a chart bar that is not the one being read is drawn: the accent at this share over the page, which keeps 3:1 against the page (WCAG 1.4.11) for every accent in light, dark and black. */
     const val IDLE_BAR_ALPHA = 0.8
@@ -101,23 +102,32 @@ data class SurfaceRoles(
 )
 
 object ThemeRoles {
-    /** Material 3's baseline roles (the colours the app has drawn with until UI S9), light and dark. */
-    val LIGHT = SurfaceRoles(0xFEF7FF, 0xFEF7FF, 0x1D1B20, 0xE7E0EC, 0x49454F, 0x79747E, 0xCAC4D0, 0xFFFFFF, 0xF7F2FA, 0xF3EDF7, 0xECE6F0, 0xE6E0E9)
-    val DARK = SurfaceRoles(0x141218, 0x141218, 0xE6E0E9, 0x49454F, 0xCAC4D0, 0x938F99, 0x49454F, 0x0F0D13, 0x1D1B20, 0x211F26, 0x2B2930, 0x36343B)
+    /**
+     * "Calm and clear" (the redesign): a warm grey ground with WHITE cards on it (the container roles are what cards are drawn with); dark is a near-black ground with a slightly lighter card; the
+     * true-black theme keeps the ground black and steps its cards up in small greys. Ink, muted text and hairlines are the design's.
+     */
+    val LIGHT = SurfaceRoles(0xF5F5F2, 0xF5F5F2, 0x17191B, 0xEBEBE7, 0x5C6166, 0x80868B, 0xE1E1DC, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xF0F0EC, 0xE8E8E4)
+    val DARK = SurfaceRoles(0x0F1112, 0x0F1112, 0xE8EAEA, 0x25292B, 0xA7ADB1, 0x767D82, 0x2C3134, 0x0F1112, 0x181B1D, 0x181B1D, 0x212527, 0x2A2F31)
 
     /** True black (OLED): the background and every surface black or nearly; raised surfaces step up in small greys so cards and sheets still separate from the screen. */
-    val BLACK = SurfaceRoles(0x000000, 0x000000, 0xE6E0E9, 0x2B2930, 0xCAC4D0, 0x938F99, 0x3A3740, 0x000000, 0x0E0D10, 0x141218, 0x1D1B20, 0x2B2930)
+    val BLACK = SurfaceRoles(0x000000, 0x000000, 0xE8EAEA, 0x1E2123, 0xA7ADB1, 0x767D82, 0x2C3134, 0x000000, 0x0B0C0D, 0x111314, 0x1A1D1F, 0x25292B)
 
-    /**
-     * The roles for a theme, or null where Material's baseline stays as it is (light or dark, without high contrast: nothing changes for anyone who chose neither). [highContrast] (the phone's
-     * high-contrast text or contrast level, the iPhone's Increase Contrast) makes secondary text as strong as body text and every outline a visible line (3:1 or better).
-     */
-    fun surfaces(dark: Boolean, black: Boolean, highContrast: Boolean): SurfaceRoles? {
-        val trueBlack = dark && black
-        if (!trueBlack && !highContrast) return null
-        val base = if (trueBlack) BLACK else if (dark) DARK else LIGHT
+    /** The roles for a theme. [highContrast] (the phone's high-contrast text or contrast level, the iPhone's Increase Contrast) makes secondary text as strong as body text and every outline a visible line (3:1 or better). */
+    fun surfaces(dark: Boolean, black: Boolean, highContrast: Boolean): SurfaceRoles {
+        val base = if (dark && black) BLACK else if (dark) DARK else LIGHT
         if (!highContrast) return base
-        return if (dark) base.copy(onSurfaceVariant = 0xE6E0E9, outline = 0xCAC4D0, outlineVariant = 0xCAC4D0)
-        else base.copy(onSurfaceVariant = 0x2E2B33, outline = 0x49454F, outlineVariant = 0x49454F)
+        return if (dark) base.copy(onSurfaceVariant = 0xE8EAEA, outline = 0xC4C9CC, outlineVariant = 0xC4C9CC)
+        else base.copy(onSurfaceVariant = 0x2C3034, outline = 0x4A5055, outlineVariant = 0x4A5055)
     }
+}
+
+/**
+ * The two signal colours of the design, the meaning of "watch" (a little ahead of pace, a bill coming) and "over" (over a limit), as 0xRRGGBB, and the soft tint each pill sits on. They are not the
+ * accent and do not follow it (like the money colours before them): on light the design's #A34A06 and #B42318, on dark a lighter pair that reads on the dark ground.
+ */
+object Signals {
+    fun watch(dark: Boolean) = if (dark) 0xF2A65A else 0xA34A06
+    fun over(dark: Boolean) = if (dark) 0xF97066 else 0xB42318
+    /** The pill background: the signal colour thinned into the card (14%). */
+    fun soft(signal: Int, dark: Boolean) = Appearances.mix(if (dark) 0x181B1D else 0xFFFFFF, signal, if (dark) 0.14 else 0.12)
 }

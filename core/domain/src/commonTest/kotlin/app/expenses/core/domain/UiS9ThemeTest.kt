@@ -3,7 +3,6 @@ package app.expenses.core.domain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** UI S9: the true-black theme, the wallpaper accent, the high-contrast roles and the large-window rules. Pure; no screen. */
@@ -13,9 +12,11 @@ class UiS9ThemeTest {
         val a = Appearance(ThemeMode.DARK, Appearances.WALLPAPER, Density.COMPACT, black = true)
         assertEquals("DARK;wallpaper;COMPACT;BLACK", a.encode())
         assertEquals(a, Appearances.decode(a.encode()))
-        assertEquals("SYSTEM;violet;COMFORTABLE", Appearance().encode(), "without the black theme the line is exactly what older versions wrote")
+        assertEquals("SYSTEM;calm;COMFORTABLE", Appearance().encode(), "without the black theme the line is exactly what older versions wrote")
         assertFalse(Appearances.decode("DARK;teal;COMFORTABLE").black, "a line from before UI S9 is not black")
-        assertEquals(Appearances.ACCENTS[2], Appearances.decode("DARK;teal;COMFORTABLE;").accent)
+        assertEquals(Appearances.ACCENTS.first { it.key == "teal" }, Appearances.decode("DARK;teal;COMFORTABLE;").accent)
+        assertEquals(Appearances.ACCENTS.first { it.key == "violet" }, Appearances.decode("LIGHT;violet;COMFORTABLE").accent, "a saved choice of violet is kept")
+        assertEquals("calm", Appearances.ACCENTS.first().key, "the design's teal green is the default")
         for (m in ThemeMode.entries) for (black in listOf(false, true)) for (acc in Appearances.ACCENTS + Appearances.WALLPAPER) {
             val x = Appearance(m, acc, Density.COMFORTABLE, black); assertEquals(x, Appearances.decode(x.encode()))
         }
@@ -27,8 +28,8 @@ class UiS9ThemeTest {
     @Test
     fun theWallpaperAccentIsThePhonesColourAndVioletWhereThePhoneHasNone() {
         assertEquals(0x3366AA, Appearances.resolve(Appearances.WALLPAPER, 0xFF3366AA.toInt()).rgb, "the alpha of an ARGB colour is dropped")
-        assertEquals(Appearances.ACCENTS.first(), Appearances.resolve(Appearances.WALLPAPER, null), "an older Android or the iPhone: the default violet")
-        assertEquals(Appearances.ACCENTS[3], Appearances.resolve(Appearances.ACCENTS[3], 0x123456), "a chosen accent ignores the wallpaper")
+        assertEquals(Appearances.ACCENTS.first(), Appearances.resolve(Appearances.WALLPAPER, null), "an older Android or the iPhone: the default accent")
+        assertEquals(Appearances.ACCENTS[4], Appearances.resolve(Appearances.ACCENTS[4], 0x123456), "a chosen accent ignores the wallpaper")
     }
 
     @Test
@@ -46,19 +47,29 @@ class UiS9ThemeTest {
                 assertTrue(Appearances.contrast(Appearances.onColor(p), p) >= 4.5 && Appearances.contrast(Appearances.onColor(c), c) >= 4.5, "text on ${rgb.toString(16)} dark=$d black=$black")
             }
         }
-        for (a in Appearances.ACCENTS) assertEquals(a.rgb, Appearances.primaryFor(a, false), "the six offered accents are not changed in light mode")
+        for (a in Appearances.ACCENTS) assertEquals(a.rgb, Appearances.primaryFor(a, false), "the offered accents are not changed in light mode")
     }
 
     @Test
-    fun nothingChangesForAnyoneWhoChoseNeitherBlackNorHighContrast() {
-        assertNull(ThemeRoles.surfaces(dark = false, black = false, highContrast = false))
-        assertNull(ThemeRoles.surfaces(dark = true, black = false, highContrast = false))
-        assertNull(ThemeRoles.surfaces(dark = false, black = true, highContrast = false), "black changes nothing while the app is light")
+    fun theDesignsGroundAndCardsAreTheLightAndDarkRoles() {
+        val l = ThemeRoles.surfaces(dark = false, black = false, highContrast = false)
+        assertEquals(0xF5F5F2, l.background); assertEquals(0xFFFFFF, l.container, "white cards on a warm grey ground"); assertEquals(0x17191B, l.onSurface); assertEquals(0x5C6166, l.onSurfaceVariant)
+        val d = ThemeRoles.surfaces(dark = true, black = false, highContrast = false)
+        assertEquals(0x0F1112, d.background); assertEquals(0x181B1D, d.container)
+        assertEquals(l, ThemeRoles.surfaces(dark = false, black = true, highContrast = false), "black changes nothing while the app is light")
+        // the design's own pairs
+        assertTrue(Appearances.contrast(0x0E6B5C, 0xF5F5F2) >= 4.5 && Appearances.contrast(0xFFFFFF, 0x0E6B5C) >= 4.5, "teal on the ground, white on teal")
+        assertTrue(Appearances.contrast(Appearances.primaryFor(Appearances.ACCENTS.first(), true), 0x0F1112) >= 4.5, "the dark teal on the dark ground")
+        for (dark in listOf(false, true)) for (sig in listOf(Signals.watch(dark), Signals.over(dark))) {
+            val card = if (dark) 0x181B1D else 0xFFFFFF
+            assertTrue(Appearances.contrast(sig, card) >= 4.5, "signal ${sig.toString(16)} dark=$dark on a card")
+            assertTrue(Appearances.contrast(sig, Signals.soft(sig, dark)) >= 4.5, "signal ${sig.toString(16)} dark=$dark on its own pill")
+        }
     }
 
     @Test
     fun trueBlackIsBlackAndItsTextAndOutlinesStillRead() {
-        val r = ThemeRoles.surfaces(dark = true, black = true, highContrast = false)!!
+        val r = ThemeRoles.surfaces(dark = true, black = true, highContrast = false)
         assertEquals(0x000000, r.background); assertEquals(0x000000, r.surface); assertEquals(0x000000, r.containerLowest)
         assertTrue(Appearances.contrast(r.onSurface, r.background) >= 7.0)
         assertTrue(Appearances.contrast(r.onSurfaceVariant, r.background) >= 4.5)
@@ -71,7 +82,7 @@ class UiS9ThemeTest {
     @Test
     fun highContrastMakesSecondaryTextAsStrongAsBodyTextAndOutlinesVisibleInEveryTheme() {
         for (dark in listOf(false, true)) for (black in listOf(false, true)) {
-            val r = ThemeRoles.surfaces(dark, black, highContrast = true)!!
+            val r = ThemeRoles.surfaces(dark, black, highContrast = true)
             val where = "dark=$dark black=$black"
             assertTrue(Appearances.contrast(r.onSurfaceVariant, r.background) >= 7.0, "$where secondary text ${Appearances.contrast(r.onSurfaceVariant, r.background)}")
             assertTrue(Appearances.contrast(r.onSurfaceVariant, r.surfaceVariant) >= 4.5, "$where secondary text on a card")

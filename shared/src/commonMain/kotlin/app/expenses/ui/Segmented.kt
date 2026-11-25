@@ -53,7 +53,8 @@ fun <T> SegmentedChoice(
     modifier: Modifier = Modifier,
     crowded: WhenCrowded = WhenCrowded.STACK,
 ) {
-    val track = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val dark = isDarkTheme()
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
@@ -72,14 +73,15 @@ fun <T> SegmentedChoice(
                 Box(
                     Modifier.fillMaxSize().padding(vertical = 3.dp)
                         .clip(if (fits) Radius.Full else Radius.S)
-                        .background(if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .then(if (on) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, if (fits) Radius.Full else Radius.S) else Modifier),
+                        // the design: the chosen segment is a white pill on the grey track (on dark, the accent-soft one with the accent outline, which reads better there)
+                        .background(if (on) (if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow) else Color.Transparent)
+                        .then(if (on) Modifier.border(1.dp, if (dark) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, if (fits) Radius.Full else Radius.S) else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         s.label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                        color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (on) (if (dark) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface) else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }

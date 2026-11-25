@@ -59,6 +59,22 @@ class IosPlatform(host: IosHostServices) : Platform {
     override val supportsNotificationCapture get() = false
     override val supportsWidget get() = true
     override val proportionalDigits get() = true
+
+    /** The design's fonts from the app bundle (`Resources/Fonts`), built once; Compose's `Font(identity, data)` on the bytes. Null when a file is missing (the system font stays). */
+    override val fonts: AppFonts? by lazy {
+        runCatching {
+            fun f(name: String, w: androidx.compose.ui.text.font.FontWeight): androidx.compose.ui.text.font.Font {
+                val path = NSBundle.mainBundle.pathForResource(name, "ttf") ?: error("missing font $name")
+                val bytes = NSData.dataWithContentsOfURL(NSURL.fileURLWithPath(path))?.toByteArray() ?: error("unreadable font $name")
+                return androidx.compose.ui.text.platform.Font(identity = name, data = bytes, weight = w)
+            }
+            val n = androidx.compose.ui.text.font.FontWeight.Normal; val m = androidx.compose.ui.text.font.FontWeight.Medium; val sb = androidx.compose.ui.text.font.FontWeight.SemiBold
+            AppFonts(
+                text = androidx.compose.ui.text.font.FontFamily(f("Inter-400", n), f("Inter-500", m), f("Inter-600", sb)),
+                display = androidx.compose.ui.text.font.FontFamily(f("SpaceGrotesk-500", m), f("SpaceGrotesk-600", sb)),
+            )
+        }.getOrNull()
+    }
     override val seedingEnabled get() = false
     override val autoExportKeep get() = AutoExportKeys.KEEP
     override val backupMinPassphrase get() = IosBackupCipher.MIN_PASSPHRASE

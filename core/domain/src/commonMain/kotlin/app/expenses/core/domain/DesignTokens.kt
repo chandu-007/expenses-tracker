@@ -6,12 +6,12 @@ package app.expenses.core.domain
  */
 object DesignTokens {
     /** The 4 dp grid, the steps in use: xs, s, m, l, xl, xxl, section. */
-    val SPACING_DP = listOf(4, 8, 12, 16, 20, 24, 32)
+    val SPACING_DP = listOf(4, 8, 12, 16, 20, 24, 28, 32)
 
     const val RADIUS_XS = 8
-    const val RADIUS_S = 14
+    const val RADIUS_S = 12
     const val RADIUS_M = 20
-    const val RADIUS_L = 28
+    const val RADIUS_L = 24
     val RADII_DP = listOf(RADIUS_XS, RADIUS_S, RADIUS_M, RADIUS_L)
 
     /**
@@ -20,8 +20,8 @@ object DesignTokens {
      */
     fun radiusFor(legacyDp: Int): Int = when {
         legacyDp <= 10 -> RADIUS_XS
-        legacyDp <= 18 -> RADIUS_S
-        legacyDp <= 24 -> RADIUS_M
+        legacyDp <= 16 -> RADIUS_S
+        legacyDp <= 22 -> RADIUS_M
         else -> RADIUS_L
     }
 

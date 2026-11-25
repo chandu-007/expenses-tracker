@@ -26,12 +26,13 @@ import androidx.compose.ui.unit.dp
 fun accentChipColors(): SelectableChipColors = FilterChipDefaults.filterChipColors(
     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer, selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
     selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer, selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    containerColor = MaterialTheme.colorScheme.surfaceContainerLow, labelColor = MaterialTheme.colorScheme.onSurface,
 )
 
 /** A chip that is on has a 1 dp outline in the accent; one that is off keeps Material's. */
 @Composable
 fun accentChipBorder(enabled: Boolean, selected: Boolean): BorderStroke? =
-    FilterChipDefaults.filterChipBorder(enabled = enabled, selected = selected, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp)
+    FilterChipDefaults.filterChipBorder(enabled = enabled, selected = selected, borderColor = MaterialTheme.colorScheme.outlineVariant, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp)
 
 /**
  * The app's one filter chip, the same call as Material's: a chip that is on is an accent container with a bold label and, when it has no icon of its own (a category's avatar, a removable chip's cross), a
@@ -46,7 +47,7 @@ fun FilterChip(
     enabled: Boolean = true,
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
-    shape: Shape = FilterChipDefaults.shape,
+    shape: Shape = Radius.Full,
     colors: SelectableChipColors = accentChipColors(),
     elevation: SelectableChipElevation? = FilterChipDefaults.filterChipElevation(),
     border: BorderStroke? = accentChipBorder(enabled, selected),

@@ -52,8 +52,9 @@ class UiS1TokensTest {
             MaterialTheme(typography = appTypography(allTabular = true), shapes = appShapes()) {
                 val tm = rememberTextMeasurer()
                 val t = MaterialTheme.typography
+                val hero = NumberStyle.Hero
                 LaunchedEffect(Unit) {
-                    for ((name, style) in listOf("hero" to NumberStyle.Hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to NumberStyle.Chart, "display" to t.displaySmall)) {
+                    for ((name, style) in listOf("hero" to hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to NumberStyle.Chart, "display" to t.displaySmall)) {
                         for (digits in listOf("1111", "8888", "0000", "1,11,111.00", "8,88,888.00")) widths["$name:$digits"] = tm.measure(digits, style.copy(fontSize = 32.sp)).size.width
                     }
                 }

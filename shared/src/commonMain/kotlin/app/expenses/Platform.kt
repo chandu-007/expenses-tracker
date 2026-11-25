@@ -39,6 +39,9 @@ import kotlin.time.Clock
  *                 looksLikePdf / looksLikeImage (shared), readPdfText(bytes, password), recognizeText(bytes) (unsupported unless a platform overrides)
  * Top-level: nowMillis(), ioDispatcher (expect), rethrowUncaught(e) (expect), see Formatting.kt for dates.
  */
+/** The two font families of the design: [text] (Inter 400, 500, 600) and [display] (Space Grotesk 500, 600). */
+class AppFonts(val text: androidx.compose.ui.text.font.FontFamily, val display: androidx.compose.ui.text.font.FontFamily)
+
 interface Platform {
     // ---- capabilities ----
     val supportsAppLock: Boolean
@@ -60,6 +63,12 @@ interface Platform {
      * `tnum`. False on Android, whose Roboto digits are tabular already: asking costs frames there (measured, `docs/PERFORMANCE.md`, UI S1), so only the hero figures and chart labels ask.
      */
     val proportionalDigits: Boolean get() = false
+
+    /**
+     * The bundled fonts ("Expenses, calm and clear": Inter for text, Space Grotesk for headline figures; both SIL OFL, subset to Latin and the rupee sign, a few tens of KB each, shipped as plain
+     * asset files and loaded by each platform itself: no font library). Null where a platform has none, and the system font is used.
+     */
+    val fonts: AppFonts? get() = null
 
     /** How many automatic export files of each kind are kept. */
     val autoExportKeep: Int

@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 
@@ -38,11 +39,11 @@ import androidx.compose.ui.graphics.compositeOver
  * Before this there were nine ways to draw a card (three tints, four radii, Material's `Card` and drawn ones).
  */
 @Composable
-fun standardCardColor(): Color = if (LocalHighContrast.current) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f) // UI S9: high contrast drops the see-through tint
+fun standardCardColor(): Color = if (LocalHighContrast.current) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceContainerLow // UI S9: high contrast drops the see-through tint
 
 /** A standard card: clipped to 20 dp and tinted; the caller adds its own padding. */
 @Composable
-fun Modifier.standardCard(): Modifier = this.clip(Radius.M).background(standardCardColor())
+fun Modifier.standardCard(): Modifier = this.clip(Radius.M).background(standardCardColor()).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.M)
 
 /** An inline card in a wash of [tint] (about 10% of it over the surface, so the text on it keeps its contrast in both themes). */
 @Composable
