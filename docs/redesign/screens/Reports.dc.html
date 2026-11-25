@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reports</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E6B5C;text-decoration:none}a:hover{color:#0B5A4D}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; font-variant-numeric: tabular-nums">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 24px 16px 8px 20px">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px">Reports</h1>
+    <button style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 999px; border: 1px solid #E0E0DA; background: #FFFFFF; color: #17191B; font-size: 13px; font-weight: 600">Month<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  </header>
+
+  <div style="display: flex; align-items: center; gap: 4px; padding: 0 8px 12px">
+    <button aria-label="Previous month" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px">
+      <span style="font-size: 16px; font-weight: 600">November 2026</span>
+      <span style="font-size: 12px; color: #5C6166">So far · day 23 of 30</span>
+    </div>
+    <button aria-label="Next month" disabled style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: transparent; color: #B8BAB4; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+  </div>
+
+  <main style="display: flex; flex-direction: column; gap: 24px; padding: 0 16px 24px">
+
+    <section style="display: flex; flex-direction: column; gap: 16px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 20px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 14px; color: #5C6166; font-weight: 500">Spent</span>
+        <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 42px; font-weight: 600; letter-spacing: -1.1px; line-height: 1">₹49,305</span>
+        <span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; background: #E3F1EC; color: #0B5A4D; font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 999px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"></path></svg>₹492 less than October by today</span>
+      </div>
+      <div style="height: 1px; background: #EDEDE8"></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 13px; color: #5C6166">Income</span>
+          <span style="font-size: 18px; font-weight: 600">₹82,000</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 13px; color: #5C6166">Saved</span>
+          <span style="font-size: 18px; font-weight: 600; color: #0E6B5C">₹32,695 <span style="font-size: 13px; font-weight: 500; color: #5C6166">· 40%</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 20px 16px 16px">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 600">Last 6 months</h2>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 16px; border-top: 2px dashed #6B7075"></span>avg ₹57K</span>
+      </div>
+      <div aria-live="polite" style="display: flex; flex-direction: column; gap: 2px; padding: 0 4px; min-height: 40px">
+        <span style="font-size: 17px; font-weight: 600">{{ readTitle }}</span>
+        <span style="font-size: 13px; color: #5C6166">{{ readSub }}</span>
+      </div>
+      <div style="position: relative; height: 188px">
+        <div style="position: absolute; left: 0; right: 0; bottom: 167px; border-top: 2px dashed #A9ACA6"></div>
+        <div style="position: absolute; inset: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: end">
+          <sc-for list="{{ bars }}" as="b" hint-placeholder-count="6">
+            <button onClick="{{ b.pick }}" aria-label="{{ b.aria }}" aria-pressed="{{ b.pressed }}" style="height: 100%; border: 0; background: transparent; padding: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 8px">
+              <span style="height: {{ b.h }}px; border-radius: 10px; background: {{ b.bg }}; border: {{ b.border }}; box-sizing: border-box"></span>
+              <span style="font-size: 12px; font-weight: {{ b.weight }}; color: {{ b.labelColor }}">{{ b.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin: 0 4px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 600">Where it went</h2>
+      </div>
+      <div role="group" aria-label="Group by" style="display: flex; gap: 2px; background: #EAEAE4; border-radius: 12px; padding: 3px">
+        <button aria-pressed="true" style="flex: 1; height: 34px; border: 0; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(23,25,27,0.12); font-size: 13px; font-weight: 600; color: #17191B">Category</button>
+        <button aria-pressed="false" style="flex: 1; height: 34px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; font-weight: 600; color: #5C6166">Merchant</button>
+        <button aria-pressed="false" style="flex: 1; height: 34px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; font-weight: 600; color: #5C6166">Account</button>
+        <button aria-pressed="false" style="flex: 1; height: 34px; border: 0; border-radius: 10px; background: transparent; font-size: 13px; font-weight: 600; color: #5C6166">Tag</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 16px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 18px 16px 8px">
+        <div role="img" aria-label="Share of spending by category" style="display: flex; gap: 2px; height: 14px; border-radius: 999px; overflow: hidden">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+            <span style="width: {{ c.pct }}%; background: {{ c.color }}"></span>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-direction: column">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+            <a href="Activity.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 48px; color: #17191B; border-top: {{ c.line }}">
+              <span style="width: 10px; height: 10px; border-radius: 3px; background: {{ c.color }}; flex: none"></span>
+              <span style="flex: 1; font-size: 15px; font-weight: 500">{{ c.name }}</span>
+              <span style="font-size: 13px; color: #5C6166; width: 40px; text-align: right">{{ c.pctLabel }}</span>
+              <span style="font-size: 15px; font-weight: 600; width: 76px; text-align: right">{{ c.amount }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav aria-label="Main" style="margin-top: auto; display: flex; align-items: flex-end; justify-content: space-around; background: #FFFFFF; border-top: 1px solid #E8E8E3; padding: 8px 8px 24px">
+    <a href="Main.dc.html" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5C6166; font-size: 12px; font-weight: 500">
+      <span style="width: 56px; height: 32px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg></span>Home</a>
+    <a href="Activity.dc.html" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5C6166; font-size: 12px; font-weight: 500">
+      <span style="width: 56px; height: 32px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"></path></svg></span>Activity</a>
+    <a href="Add.dc.html" aria-label="Add expense" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #17191B">
+      <span style="width: 52px; height: 52px; border-radius: 18px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(14,107,92,0.28)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></a>
+    <a href="Reports.dc.html" aria-current="page" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #0B5A4D; font-size: 12px; font-weight: 600">
+      <span style="width: 56px; height: 32px; border-radius: 999px; background: #E3F1EC; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"></path><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"></path></svg></span>Reports</a>
+    <a href="More.dc.html" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5C6166; font-size: 12px; font-weight: 500">
+      <span style="width: 56px; height: 32px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></span>More</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 5 };
+  }
+  renderVals() {
+    const self = this;
+    const months = [
+      { m: 'Jun', full: 'June', v: 58900 },
+      { m: 'Jul', full: 'July', v: 57200 },
+      { m: 'Aug', full: 'August', v: 61800 },
+      { m: 'Sep', full: 'September', v: 53457 },
+      { m: 'Oct', full: 'October', v: 53670 },
+      { m: 'Nov', full: 'November', v: 49305, partial: true }
+    ];
+    const max = 64000;
+    const area = 160;
+    const fmt = function (n) { return '₹' + Math.round(n).toLocaleString('en-IN'); };
+    const sel = this.state.sel;
+    const bars = months.map(function (x, i) {
+      const on = i === sel;
+      return {
+        label: x.m,
+        h: Math.round(x.v / max * area),
+        bg: x.partial ? (on ? '#CFE7DF' : '#E3F1EC') : (on ? '#0E6B5C' : '#B7D9CE'),
+        border: x.partial ? '2px dashed #0E6B5C' : '0',
+        weight: on ? 700 : 500,
+        labelColor: on ? '#17191B' : '#5C6166',
+        pressed: on ? 'true' : 'false',
+        aria: x.full + ' ' + fmt(x.v),
+        pick: function () { self.setState({ sel: i }); }
+      };
+    });
+    const cur = months[sel];
+    const prev = sel > 0 ? months[sel - 1] : null;
+    let sub = '';
+    if (cur.partial) sub = 'So far · heading for about ₹64K at this pace';
+    else if (prev) {
+      const d = cur.v - prev.v;
+      sub = (d >= 0 ? fmt(d) + ' more' : fmt(-d) + ' less') + ' than ' + prev.full;
+    } else sub = 'Full month';
+    const raw = [
+      ['Bills', 24558, '#2F5BD3'],
+      ['Fun', 9649, '#E07A1F'],
+      ['Food', 6715, '#7C4DDB'],
+      ['Transport', 3034, '#0E8FAD'],
+      ['Groceries', 2690, '#5B8F14'],
+      ['Health', 1499, '#C42067'],
+      ['Shopping', 1160, '#B98309']
+    ];
+    const total = 49305;
+    const cats = raw.map(function (r, i) {
+      const p = r[1] / total * 100;
+      return { name: r[0], amount: fmt(r[1]), color: r[2], pct: p.toFixed(1), pctLabel: Math.round(p) + '%', line: i === 0 ? '0' : '1px solid #EDEDE8' };
+    });
+    return {
+      bars: bars,
+      readTitle: cur.full + ' · ' + fmt(cur.v),
+      readSub: sub,
+      cats: cats
+    };
+  }
+}
+</script>
+</body>
+</html>

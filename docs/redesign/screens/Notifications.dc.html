@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notifications</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Notifications</h1>
+  </header>
+
+  <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+    <button role="switch" aria-checked="{{ pauseChecked }}" onClick="{{ togglePause }}" style="display: flex; align-items: center; gap: 12px; border: 0; background: transparent; padding: 0; text-align: left; color: #17191B; cursor: pointer; min-height: 48px">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Pause suggestions</span><span style="font-size: 12px; color: #5C6166">{{ pauseLine }}</span></span>
+      <span style="width: 44px; height: 26px; flex: none; border-radius: 999px; background: {{ pauseTrack }}; position: relative"><span style="position: absolute; top: 3px; left: {{ pauseKnob }}; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></span>
+    </button>
+    <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}">
+      <div role="group" aria-label="Pause for" style="display: flex; gap: 8px; flex-wrap: wrap">
+        <sc-for list="{{ lengths }}" as="l" hint-placeholder-count="3">
+          <button onClick="{{ l.pick }}" aria-pressed="{{ l.pressed }}" style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid {{ l.border }}; background: {{ l.bg }}; color: {{ l.fg }}; font-size: 13px; font-weight: 600; cursor: pointer">{{ l.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <span style="font-size: 12px; color: #5C6166">Bills that are due, card due dates and budget alerts always come through.</span>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Send me</h2>
+    <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+      <sc-for list="{{ items }}" as="it" hint-placeholder-count="7">
+        <button role="switch" aria-checked="{{ it.checked }}" onClick="{{ it.toggle }}" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; border: 0; border-top: {{ it.line }}; background: transparent; text-align: left; color: #17191B; cursor: pointer">
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">{{ it.title }}</span><span style="font-size: 12px; color: #5C6166">{{ it.sub }}</span></span>
+          <span style="width: 44px; height: 26px; flex: none; border-radius: 999px; background: {{ it.track }}; position: relative"><span style="position: absolute; top: 3px; left: {{ it.knob }}; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></span>
+        </button>
+      </sc-for>
+    </div>
+  </section>
+
+  <button style="margin: 0 16px; height: 48px; border-radius: 14px; border: 1px solid #E0E0DA; background: #FFFFFF; color: #17191B; font-size: 15px; font-weight: 600">Send a test notification</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { paused: false, len: 'A week', bills: true, cards: true, budget: true, pace: true, found: true, recap: false, milestones: false };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const defs = [
+      ['bills', 'Bills and repeating expenses', 'The day before, at 9 am'],
+      ['cards', 'Credit card due dates', '3 days before, and on the day'],
+      ['budget', 'Budget near or over', 'At 80% and when you go over'],
+      ['pace', 'Spending ahead of the month', 'A suggestion · paused with suggestions'],
+      ['found', 'A bill found in a text', 'A suggestion · paused with suggestions'],
+      ['recap', 'Weekly recap', 'Sunday evening: the week in three lines'],
+      ['milestones', 'Occasional milestones', 'First 100 entries, a month under budget']
+    ];
+    const items = defs.map(function (d, i) {
+      const on = s[d[0]];
+      return { title: d[1], sub: d[2], checked: on ? 'true' : 'false', track: on ? '#0E6B5C' : '#D5D6D0', knob: on ? '21px' : '3px', line: i === 0 ? '0' : '1px solid #EDEDE8', toggle: function () { const n = {}; n[d[0]] = !s[d[0]]; self.setState(n); } };
+    });
+    const until = { 'A week': 'Paused until 2 Dec', 'A month': 'Paused until 25 Dec', 'Until I turn it back on': 'Paused until you turn it back on' };
+    return {
+      items: items,
+      paused: s.paused,
+      pauseChecked: s.paused ? 'true' : 'false',
+      pauseTrack: s.paused ? '#0E6B5C' : '#D5D6D0',
+      pauseKnob: s.paused ? '21px' : '3px',
+      pauseLine: s.paused ? until[s.len] : 'Home cards and nudges that only suggest something',
+      togglePause: function () { self.setState({ paused: !s.paused }); },
+      lengths: ['A week', 'A month', 'Until I turn it back on'].map(function (l) {
+        const on = s.len === l;
+        return { label: l, pressed: on ? 'true' : 'false', bg: on ? '#E3F1EC' : '#FFFFFF', border: on ? '#0E6B5C' : '#E0E0DA', fg: on ? '#0B5A4D' : '#17191B', pick: function () { self.setState({ len: l }); } };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

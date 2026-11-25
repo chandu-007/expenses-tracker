@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Repeating expenses</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Repeating</h1>
+    <button aria-label="Add a repeating expense" style="width: 48px; height: 48px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 4px; padding: 0 20px">
+    <span style="font-size: 14px; color: #5C6166">Repeats every month</span>
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 34px; font-weight: 600; letter-spacing: -0.8px">₹37,843</span>
+    <span style="font-size: 13px; color: #5C6166">50% of your ₹75,000 budget is spoken for before you spend a rupee</span>
+  </section>
+
+  <sc-if value="{{ waiting }}" hint-placeholder-val="{{ true }}">
+    <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; background: #FBEBD9">
+      <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #A34A06">Waiting for you</span>
+      <span style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Maid salary</span><span style="font-size: 16px; font-weight: 600">₹4,000</span></span>
+      <span style="font-size: 13px; color: #4A3214">Due today · Cash · you post this one yourself</span>
+      <div style="display: flex; gap: 8px">
+        <button onClick="{{ clear }}" style="flex: 1; height: 44px; border-radius: 14px; border: 1px solid #E6C9A8; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #17191B; cursor: pointer">Skip this time</button>
+        <button onClick="{{ clear }}" style="flex: 1; height: 44px; border-radius: 14px; border: 0; background: #17191B; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Post ₹4,000</button>
+      </div>
+    </section>
+  </sc-if>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Coming up</h2>
+    <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+      <sc-for list="{{ items }}" as="r" hint-placeholder-count="6">
+        <button style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 16px; border: 0; border-top: {{ r.line }}; background: transparent; text-align: left; color: #17191B; cursor: pointer">
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 15px; font-weight: 500">{{ r.name }}</span><span style="font-size: 12px; color: #5C6166">{{ r.sub }}</span></span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px"><span style="font-size: 15px; font-weight: 600">{{ r.amount }}</span><span style="font-size: 12px; color: #5C6166">{{ r.when }}</span></span>
+        </button>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+    <span style="font-size: 15px; font-weight: 600">Put yearly bills aside</span>
+    <span style="font-size: 13px; color: #5C6166; line-height: 1.45">Car insurance (₹14,400 in March) and Amazon Prime (₹1,499 in July) cost ₹1,325 a month if you set money aside now.</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { waiting: true };
+  }
+  renderVals() {
+    const self = this;
+    const rows = [
+      ['Rent', 'Home · Bank · posts by itself', '₹18,000', '1 Dec'],
+      ['Car EMI', 'Transport · Bank · 14 of 36 left', '₹12,400', '5 Dec'],
+      ['TSSPDCL Electricity', 'Bills · Bank · amount changes', '≈ ₹1,180', '25 Dec'],
+      ['ACT Fibernet', 'Bills · ICICI Amazon Pay', '₹1,178', '26 Dec'],
+      ['Netflix', 'Fun · ICICI Amazon Pay', '₹649', '22 Dec'],
+      ['LIC premium', 'Bills · Bank · every 3 months', '₹1,308', '28 Feb']
+    ];
+    return {
+      waiting: this.state.waiting,
+      clear: function () { self.setState({ waiting: false }); },
+      items: rows.map(function (r, i) { return { name: r[0], sub: r[1], amount: r[2], when: r[3], line: i === 0 ? '0' : '1px solid #EDEDE8' }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Appearance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Appearance</h1>
+  </header>
+
+  <section aria-label="Preview" style="margin: 0 16px; padding: 16px; border-radius: 20px; background: {{ pv.bg }}; border: 1px solid {{ pv.line }}; display: flex; flex-direction: column; gap: {{ pv.gap }}">
+    <span style="font-size: 12px; font-weight: 600; color: {{ pv.mut }}; text-transform: uppercase; letter-spacing: 0.6px">Preview</span>
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 28px; font-weight: 600; color: {{ pv.ink }}">₹25,695 <span style="font-size: 14px; color: {{ pv.mut }}; font-family: Inter, system-ui, sans-serif; font-weight: 500">left</span></span>
+      <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: {{ pv.soft }}; color: {{ pv.accInk }}">On pace</span>
+    </div>
+    <span style="height: 8px; border-radius: 999px; background: {{ pv.track }}; display: block"><span style="display: block; width: 66%; height: 100%; border-radius: 999px; background: {{ pv.acc }}"></span></span>
+    <span style="display: flex; align-items: center; gap: 12px; padding: {{ pv.rowPad }} 0">
+      <span style="width: 36px; height: 36px; border-radius: 10px; background: {{ pv.soft }}; color: {{ pv.accInk }}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2 1-3 3.5-3 7h3"></path></svg></span>
+      <span style="flex: 1; font-size: 15px; font-weight: 500; color: {{ pv.ink }}">Barbeque Nation</span>
+      <span style="font-size: 15px; font-weight: 600; color: {{ pv.spend }}">{{ pv.amount }}</span>
+    </span>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+    <section role="group" aria-label="{{ g.name }}" style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+      <span style="font-size: 13px; font-weight: 600; color: #5C6166; margin: 0 4px">{{ g.name }}</span>
+      <div style="display: flex; gap: 2px; background: #EAEAE4; border-radius: 12px; padding: 3px">
+        <sc-for list="{{ g.opts }}" as="o" hint-placeholder-count="3">
+          <button onClick="{{ o.pick }}" aria-pressed="{{ o.pressed }}" style="flex: 1; height: 40px; border: 0; border-radius: 10px; background: {{ o.bg }}; box-shadow: {{ o.sh }}; color: {{ o.fg }}; font-size: 14px; font-weight: 600; cursor: pointer">{{ o.label }}</button>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #5C6166; margin: 0 4px">{{ g.hint }}</span>
+    </section>
+  </sc-for>
+
+  <section role="group" aria-label="Accent colour" style="display: flex; flex-direction: column; gap: 10px; margin: 0 16px">
+    <span style="font-size: 13px; font-weight: 600; color: #5C6166; margin: 0 4px">Accent colour</span>
+    <div style="display: flex; gap: 12px; align-items: center">
+      <sc-for list="{{ accents }}" as="ac" hint-placeholder-count="5">
+        <button onClick="{{ ac.pick }}" aria-label="{{ ac.name }}" aria-pressed="{{ ac.pressed }}" style="width: 48px; height: 48px; border-radius: 999px; border: 3px solid {{ ac.ring }}; background: {{ ac.color }}; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 3px #F5F5F2"></button>
+      </sc-for>
+    </div>
+    <span style="font-size: 12px; color: #5C6166; margin: 0 4px">{{ accentHint }}</span>
+  </section>
+
+  <section style="display: flex; flex-direction: column; margin: 0 16px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+    <sc-for list="{{ switches }}" as="sw" hint-placeholder-count="3">
+      <button role="switch" aria-checked="{{ sw.checked }}" onClick="{{ sw.toggle }}" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; border: 0; border-top: {{ sw.line }}; background: transparent; text-align: left; color: #17191B; cursor: pointer">
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">{{ sw.title }}</span><span style="font-size: 12px; color: #5C6166">{{ sw.sub }}</span></span>
+        <span style="width: 44px; height: 26px; flex: none; border-radius: 999px; background: {{ sw.track }}; position: relative"><span style="position: absolute; top: 3px; left: {{ sw.knob }}; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></span>
+      </button>
+    </sc-for>
+  </section>
+  <button style="align-self: flex-start; margin: 0 16px; height: 48px; padding: 0 4px; border: 0; background: transparent; color: #0E6B5C; font-size: 15px; font-weight: 600">Show tips again</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { theme: 'System', spacing: 'Comfortable', motion: 'Relaxed', accent: 0, black: false, haptics: true, red: false };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const accents = [
+      { name: 'Teal (default)', color: '#0E6B5C', dark: '#4CC2A6', soft: '#E3F1EC', softD: '#143A33', ink: '#0B5A4D', inkD: '#8FE0CB' },
+      { name: 'Indigo', color: '#3949AB', dark: '#8C9EFF', soft: '#E7E9F8', softD: '#1E2448', ink: '#2C3990', inkD: '#C5CCFF' },
+      { name: 'Plum', color: '#7B3F8C', dark: '#D29BE3', soft: '#F3E8F6', softD: '#33203A', ink: '#5F2E6E', inkD: '#EBC9F4' },
+      { name: 'Ochre', color: '#8A5A06', dark: '#E3B45A', soft: '#F6EED8', softD: '#33280F', ink: '#6F4804', inkD: '#F2D79E' },
+      { name: 'From your wallpaper', color: 'conic-gradient(#0E6B5C, #3949AB, #7B3F8C, #8A5A06, #0E6B5C)', dark: '#4CC2A6', soft: '#E3F1EC', softD: '#143A33', ink: '#0B5A4D', inkD: '#8FE0CB' }
+    ];
+    const A = accents[s.accent];
+    const dark = s.theme === 'Dark';
+    const seg = function (key, name, opts, hints) {
+      return {
+        name: name, hint: hints[s[key]] || '',
+        opts: opts.map(function (o) {
+          const on = s[key] === o;
+          return { label: o, pressed: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', sh: on ? '0 1px 3px rgba(23,25,27,0.12)' : 'none', fg: on ? '#17191B' : '#5C6166', pick: function () { const n = {}; n[key] = o; self.setState(n); } };
+        })
+      };
+    };
+    const groups = [
+      seg('theme', 'Theme', ['System', 'Light', 'Dark'], { System: 'Follows your phone.', Light: 'Always light.', Dark: 'Always dark.' }),
+      seg('spacing', 'List spacing', ['Comfortable', 'Compact'], { Comfortable: 'Easier to tap and read.', Compact: 'Fits more entries on a screen.' }),
+      seg('motion', 'Motion', ['Relaxed', 'Quick', 'Off'], { Relaxed: 'Screens and charts settle gently.', Quick: 'Shorter movement.', Off: 'Changes cross-fade; nothing travels.' })
+    ];
+    const sw = function (key, title, sub) {
+      const on = s[key];
+      return { title: title, sub: sub, checked: on ? 'true' : 'false', track: on ? '#0E6B5C' : '#D5D6D0', knob: on ? '21px' : '3px', toggle: function () { const n = {}; n[key] = !s[key]; self.setState(n); } };
+    };
+    const switches = [
+      sw('black', 'True black when dark', 'Easier on OLED screens at night'),
+      sw('haptics', 'Haptics', 'A small tap for presses, saves and swipes'),
+      sw('red', 'Show spending in red', 'Off keeps spending in the normal text colour')
+    ].map(function (x, i) { return Object.assign(x, { line: i === 0 ? '0' : '1px solid #EDEDE8' }); });
+    const pv = {
+      bg: dark ? (s.black ? '#000000' : '#181B1D') : '#FFFFFF',
+      line: dark ? '#262A2E' : '#E8E8E3',
+      ink: dark ? '#F2F3F1' : '#17191B',
+      mut: dark ? '#A3A9AE' : '#5C6166',
+      track: dark ? '#2A2F33' : '#EDEDE8',
+      acc: dark ? A.dark : A.color.indexOf('gradient') >= 0 ? '#0E6B5C' : A.color,
+      soft: dark ? A.softD : A.soft,
+      accInk: dark ? A.inkD : A.ink,
+      spend: s.red ? (dark ? '#F28B82' : '#B42318') : (dark ? '#F2F3F1' : '#17191B'),
+      amount: s.red ? '−₹1,240' : '₹1,240',
+      gap: s.spacing === 'Compact' ? '8px' : '14px',
+      rowPad: s.spacing === 'Compact' ? '0px' : '4px'
+    };
+    return {
+      groups: groups, switches: switches, pv: pv,
+      accents: accents.map(function (a, i) { return { name: a.name, color: a.color, ring: s.accent === i ? '#17191B' : 'transparent', pressed: s.accent === i ? 'true' : 'false', pick: function () { self.setState({ accent: i }); } }; }),
+      accentHint: A.name
+    };
+  }
+}
+</script>
+</body>
+</html>

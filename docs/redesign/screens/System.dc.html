@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tokens and components</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E6B5C;text-decoration:none}a:hover{color:#0B5A4D}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1800px; height: 1180px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 56px 64px; display: flex; flex-direction: column; gap: 40px; font-variant-numeric: tabular-nums">
+
+  <header style="display: flex; align-items: baseline; justify-content: space-between">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -0.8px">Expenses · calm &amp; clear</h1>
+    <span style="font-size: 15px; color: #5C6166">Inter for text · Space Grotesk for headline figures · one accent, two signal colours</span>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; flex: 1">
+
+    <section style="display: flex; flex-direction: column; gap: 20px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 28px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Colour · light</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #F5F5F2; border: 1px solid #E0E0DA"></span><span style="font-size: 13px; font-weight: 600">Ground</span><span style="font-size: 12px; color: #5C6166">#F5F5F2</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E0E0DA"></span><span style="font-size: 13px; font-weight: 600">Surface</span><span style="font-size: 12px; color: #5C6166">#FFFFFF</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #17191B"></span><span style="font-size: 13px; font-weight: 600">Ink</span><span style="font-size: 12px; color: #5C6166">#17191B</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #5C6166"></span><span style="font-size: 13px; font-weight: 600">Muted</span><span style="font-size: 12px; color: #5C6166">#5C6166</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #0E6B5C"></span><span style="font-size: 13px; font-weight: 600">Accent</span><span style="font-size: 12px; color: #5C6166">#0E6B5C</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #E3F1EC"></span><span style="font-size: 13px; font-weight: 600">Accent soft</span><span style="font-size: 12px; color: #5C6166">#E3F1EC</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #A34A06"></span><span style="font-size: 13px; font-weight: 600">Watch</span><span style="font-size: 12px; color: #5C6166">#A34A06</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 56px; border-radius: 12px; background: #B42318"></span><span style="font-size: 13px; font-weight: 600">Over</span><span style="font-size: 12px; color: #5C6166">#B42318</span></div>
+      </div>
+      <h2 style="margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Colour · dark</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 44px; border-radius: 12px; background: #0F1112"></span><span style="font-size: 12px; color: #5C6166">Ground #0F1112</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 44px; border-radius: 12px; background: #181B1D"></span><span style="font-size: 12px; color: #5C6166">Surface #181B1D</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 44px; border-radius: 12px; background: #4CC2A6"></span><span style="font-size: 12px; color: #5C6166">Accent #4CC2A6</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 44px; border-radius: 12px; background: #F2A65A"></span><span style="font-size: 12px; color: #5C6166">Watch #F2A65A</span></div>
+      </div>
+      <h2 style="margin: 8px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Categories</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #2F5BD3"></span>Bills</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #E07A1F"></span>Fun</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #7C4DDB"></span>Food</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #0E8FAD"></span>Transport</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #5B8F14"></span>Groceries</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #C42067"></span>Health</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #B98309"></span>Shopping</span>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 22px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 28px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Type</h2>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -1.2px">₹25,695</span><span style="font-size: 12px; color: #5C6166">Figure · SG 46/600</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px">November</span><span style="font-size: 12px; color: #5C6166">Screen title · SG 26/600</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-size: 17px; font-weight: 600">₹3,031 / day</span><span style="font-size: 12px; color: #5C6166">Stat · Inter 17/600</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-size: 15px; font-weight: 600">Needs you</span><span style="font-size: 12px; color: #5C6166">Section · Inter 15/600</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-size: 15px; font-weight: 500">Barbeque Nation</span><span style="font-size: 12px; color: #5C6166">Row title · Inter 15/500</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-size: 13px; color: #5C6166">Food · ICICI Amazon Pay</span><span style="font-size: 12px; color: #5C6166">Meta · Inter 13/400</span></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span style="font-size: 12px; font-weight: 600; color: #5C6166; text-transform: uppercase; letter-spacing: 0.6px">Today</span><span style="font-size: 12px; color: #5C6166">Group label · Inter 12/600</span></div>
+      <div style="height: 1px; background: #EDEDE8"></div>
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Spacing &amp; shape</h2>
+      <div style="display: flex; align-items: flex-end; gap: 14px">
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 4px; height: 4px; background: #0E6B5C"></span>4</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 8px; height: 8px; background: #0E6B5C"></span>8</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 12px; height: 12px; background: #0E6B5C"></span>12</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 16px; height: 16px; background: #0E6B5C"></span>16</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 24px; height: 24px; background: #0E6B5C"></span>24</span>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6166"><span style="width: 28px; height: 28px; background: #0E6B5C"></span>28</span>
+        <span style="margin-left: auto; display: flex; gap: 10px">
+          <span style="width: 44px; height: 44px; border-radius: 12px; border: 1.5px solid #17191B"></span>
+          <span style="width: 44px; height: 44px; border-radius: 16px; border: 1.5px solid #17191B"></span>
+          <span style="width: 44px; height: 44px; border-radius: 20px; border: 1.5px solid #17191B"></span>
+        </span>
+      </div>
+      <span style="font-size: 13px; color: #5C6166">Tiles 12 · inputs and keys 14 · rows 20 · hero cards 24 · chips full. Every tap target is 48 dp or more (44 pt on iPhone).</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 22px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 28px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #5C6166">Components</h2>
+      <div style="display: flex; gap: 10px">
+        <button style="flex: 2; height: 52px; border: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; font-size: 15px; font-weight: 600">Add ₹570 · Food</button>
+        <button style="flex: 1; height: 52px; border-radius: 16px; border: 1px solid #E0E0DA; background: #FFFFFF; color: #17191B; font-size: 15px; font-weight: 600">Skip</button>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <span style="display: inline-flex; align-items: center; gap: 6px; background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px"><span style="width: 6px; height: 6px; border-radius: 999px; background: #0E6B5C"></span>On pace</span>
+        <span style="background: #FBEBD9; color: #A34A06; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px">A little ahead</span>
+        <span style="background: #FCE8E6; color: #B42318; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px">Over by ₹649</span>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; border: 1px solid #0E6B5C; background: #E3F1EC; color: #0B5A4D; font-size: 13px; font-weight: 600">November</span>
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; border: 1px solid #E0E0DA; background: #FFFFFF; font-size: 13px; font-weight: 600">Expenses</span>
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; border: 1px solid #F1C9A2; background: #FBEBDC; color: #A34A06; font-size: 13px; font-weight: 600">Goa trip</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="position: relative; height: 26px">
+          <span style="position: absolute; left: 77%; top: 0; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: #5C6166">Today</span>
+          <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 8px; border-radius: 999px; background: #EDEDE8; overflow: hidden"><div style="width: 66%; height: 100%; background: #0E6B5C; border-radius: 999px"></div></div>
+          <span style="position: absolute; left: 77%; bottom: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span>
+        </div>
+        <span style="font-size: 12px; color: #5C6166">Pace bar: fill = share spent, tick = share of the period gone. Fill left of the tick reads as on pace.</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid #E8E8E3; border-radius: 20px">
+        <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #EFE8FB; color: #6A3FC8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2 1-3 3.5-3 7h3"></path></svg></span>
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Barbeque Nation</span><span style="font-size: 13px; color: #5C6166">Food · ICICI Amazon Pay</span></span>
+        <span style="font-size: 15px; font-weight: 600">₹1,240</span>
+      </div>
+      <div role="group" aria-label="Sample segmented control" style="display: flex; gap: 2px; background: #EAEAE4; border-radius: 12px; padding: 3px">
+        <button aria-pressed="true" style="flex: 1; height: 36px; border: 0; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(23,25,27,0.12); font-size: 14px; font-weight: 600; color: #17191B">Expense</button>
+        <button aria-pressed="false" style="flex: 1; height: 36px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; font-weight: 600; color: #5C6166">Income</button>
+        <button aria-pressed="false" style="flex: 1; height: 36px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; font-weight: 600; color: #5C6166">Transfer</button>
+      </div>
+      <span style="font-size: 13px; color: #5C6166">Money: whole rupees with Indian grouping (₹1,82,828). Paise only where they exist. Expenses unsigned, income as +₹ in accent.</span>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1800,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

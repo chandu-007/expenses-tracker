@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App locked</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px; text-align: center">
+  <span style="width: 72px; height: 72px; border-radius: 24px; background: #E3F1EC; color: #0E6B5C; display: flex; align-items: center; justify-content: center"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4M12 15v2"></path></svg></span>
+  <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px">{{ title }}</h1>
+  <span style="font-size: 15px; color: #5C6166; line-height: 1.45; max-width: 280px">{{ line }}</span>
+  <button onClick="{{ unlock }}" style="margin-top: 16px; width: 100%; max-width: 300px; height: 54px; border: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 11v3M8 8.5a5 5 0 0 1 8 0M6 12a6 6 0 0 1 .5-2.4M18 12c0 3-1 5.5-2.5 7.5M9 21c1.5-2 2.5-4.5 3-7M5.5 17c.4-1.6.5-3.2.5-5M3.5 7.5A10 10 0 0 1 20.5 7.5"></path></svg>{{ button }}</button>
+  <a href="Main.dc.html" style="font-size: 15px; font-weight: 600; color: #0E6B5C; padding: 12px; text-decoration: none">Use phone PIN instead</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tried: false };
+  }
+  renderVals() {
+    const self = this;
+    const t = this.state.tried;
+    return {
+      title: t ? 'Didn’t match' : 'Expenses is locked',
+      line: t ? 'Try your fingerprint again, or use your phone PIN.' : 'Your entries stay hidden until you unlock. Widgets show no amounts while locked.',
+      button: t ? 'Try again' : 'Unlock',
+      unlock: function () { self.setState({ tried: !t }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

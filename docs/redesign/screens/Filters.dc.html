@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search filters</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 980px; box-sizing: border-box; background: rgba(23,25,27,0.45); font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #17191B; display: flex; flex-direction: column; justify-content: flex-end; font-variant-numeric: tabular-nums">
+  <section role="dialog" aria-label="Filters" style="background: #FFFFFF; border-radius: 28px 28px 0 0; padding: 8px 20px 20px; display: flex; flex-direction: column; gap: 18px; max-height: 940px; box-sizing: border-box">
+    <span style="align-self: center; width: 36px; height: 4px; border-radius: 999px; background: #D5D6D0"></span>
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 600">Filters</h1>
+      <button onClick="{{ clear }}" style="height: 48px; padding: 0 4px; border: 0; background: transparent; color: #0E6B5C; font-size: 15px; font-weight: 600; cursor: pointer">Clear all</button>
+    </div>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+      <div role="group" aria-label="{{ g.name }}" style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 13px; font-weight: 600; color: #5C6166">{{ g.name }}</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{ g.chips }}" as="ch" hint-placeholder-count="4">
+            <button onClick="{{ ch.pick }}" aria-pressed="{{ ch.pressed }}" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 999px; border: 1px solid {{ ch.border }}; background: {{ ch.bg }}; color: {{ ch.fg }}; font-size: 13px; font-weight: 600; cursor: pointer">{{ ch.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+    <div role="group" aria-label="Amount" style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 13px; font-weight: 600; color: #5C6166">Amount</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <label style="display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 12px; border: 1px solid #E0E0DA; border-radius: 14px; font-size: 14px; color: #5C6166">From ₹<input inputmode="decimal" aria-label="From amount" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; color: #17191B; background: transparent"></label>
+        <label style="display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 12px; border: 1px solid #E0E0DA; border-radius: 14px; font-size: 14px; color: #5C6166">To ₹<input inputmode="decimal" aria-label="To amount" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; color: #17191B; background: transparent"></label>
+      </div>
+    </div>
+    <label style="display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px">
+      <input type="checkbox" style="width: 20px; height: 20px; accent-color: #0E6B5C">Save this search for later
+    </label>
+    <a href="Activity.dc.html" style="height: 54px; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; font-size: 16px; font-weight: 600; text-decoration: none">{{ showLabel }}</a>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dates: 'This month', type: 'Expenses', account: 'Any account', category: 'Any category', tag: 'Any tag' };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const defs = [
+      ['dates', 'Dates', ['This month', 'Last month', 'Last 3 months', 'This year', 'Pick dates']],
+      ['type', 'Kind', ['Everything', 'Expenses', 'Income', 'Transfers', 'Refunds']],
+      ['account', 'Account', ['Any account', 'Bank', 'Cash', 'ICICI Amazon Pay']],
+      ['category', 'Category', ['Any category', 'Food', 'Bills', 'Fun', 'Groceries', 'Transport', 'More…']],
+      ['tag', 'Tag', ['Any tag', 'Goa trip', 'birthday', 'office']]
+    ];
+    let on = 0;
+    const groups = defs.map(function (d) {
+      const key = d[0];
+      return {
+        name: d[1],
+        chips: d[2].map(function (label, i) {
+          const sel = s[key] === label;
+          if (sel && i > 0) on++;
+          return {
+            label: label,
+            pressed: sel ? 'true' : 'false',
+            bg: sel ? '#E3F1EC' : '#FFFFFF',
+            border: sel ? '#0E6B5C' : '#E0E0DA',
+            fg: sel ? '#0B5A4D' : '#17191B',
+            pick: function () { const n = {}; n[key] = label; self.setState(n); }
+          };
+        })
+      };
+    });
+    const counts = { 'This month': 42, 'Last month': 51, 'Last 3 months': 147, 'This year': 506, 'Pick dates': 42 };
+    const n = counts[s.dates] || 42;
+    return {
+      groups: groups,
+      showLabel: 'Show ' + n + ' entries',
+      clear: function () { self.setState({ dates: 'This month', type: 'Everything', account: 'Any account', category: 'Any category', tag: 'Any tag' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

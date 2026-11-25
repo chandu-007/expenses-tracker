@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bills</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="Main.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Bills</h1>
+    <button aria-label="Add a bill" style="width: 48px; height: 48px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 4px; padding: 0 20px">
+    <span style="font-size: 14px; color: #5C6166">{{ headLine }}</span>
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 34px; font-weight: 600; letter-spacing: -0.8px">{{ headAmount }}</span>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Due this week</h2>
+    <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+      <sc-for list="{{ due }}" as="b" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 8px 8px 16px; border-top: {{ b.line }}">
+          <span style="width: 44px; flex: none; display: flex; flex-direction: column; align-items: center; padding: 4px 0; border-radius: 10px; background: {{ b.dateBg }}"><span style="font-size: 11px; font-weight: 600; color: {{ b.dateFg }}; text-transform: uppercase">{{ b.dow }}</span><span style="font-size: 17px; font-weight: 700; color: {{ b.dateFg }}">{{ b.day }}</span></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 15px; font-weight: 500; text-decoration: {{ b.strike }}">{{ b.name }}</span><span style="font-size: 13px; color: #5C6166">{{ b.sub }}</span></span>
+          <span style="font-size: 15px; font-weight: 600">{{ b.amount }}</span>
+          <button onClick="{{ b.pay }}" aria-label="{{ b.payLabel }}" aria-pressed="{{ b.pressed }}" style="width: 48px; height: 48px; border: 0; border-radius: 999px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer">
+            <span style="width: 28px; height: 28px; border-radius: 999px; border: 2px solid {{ b.ring }}; background: {{ b.fill }}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>
+          </button>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Card statements</h2>
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px">
+      <div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">ICICI Amazon Pay</span><span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FBEBD9; color: #A34A06">Due 28 Nov</span></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5C6166">Total</span><span style="font-size: 17px; font-weight: 600">₹7,297</span></span>
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5C6166">Minimum</span><span style="font-size: 17px; font-weight: 600">₹370</span></span>
+      </div>
+      <span style="height: 6px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 15%; height: 100%; border-radius: 999px; background: #6A3FC8"></span></span>
+      <span style="font-size: 12px; color: #5C6166">15% of ₹50,000 limit used</span>
+      <button style="height: 48px; border-radius: 14px; border: 0; background: #17191B; color: #FFFFFF; font-size: 15px; font-weight: 600">Record a payment</button>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Found in your texts</h2>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; background: #FFFFFF; border: 1px dashed #C9CAC3; border-radius: 20px">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Tata Play · ₹449</span><span style="font-size: 13px; color: #5C6166">Due 1 Dec · from a text on 22 Nov</span></span>
+      <button style="height: 40px; padding: 0 12px; border-radius: 999px; border: 1px solid #E0E0DA; background: #FFFFFF; font-size: 13px; font-weight: 600; color: #17191B">Skip</button>
+      <button style="height: 40px; padding: 0 12px; border-radius: 999px; border: 0; background: #0E6B5C; font-size: 13px; font-weight: 600; color: #FFFFFF">Track it</button>
+    </div>
+  </section>
+
+  <a href="Recurring.dc.html" style="margin: 0 16px; display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 16px; border-radius: 16px; background: #EDEDE8; color: #17191B; text-decoration: none; font-size: 14px"><span>Paid this month: Rent, Netflix, Gas</span><span style="font-weight: 600; color: #0E6B5C">See all</span></a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { paid: {} };
+  }
+  renderVals() {
+    const self = this;
+    const paid = this.state.paid;
+    const bills = [
+      { id: 'e', dow: 'Wed', day: '25', name: 'TSSPDCL Electricity', sub: 'From Bank · repeats monthly', v: 1180 },
+      { id: 'a', dow: 'Thu', day: '26', name: 'ACT Fibernet', sub: 'From ICICI Amazon Pay', v: 1178 },
+      { id: 'l', dow: 'Sat', day: '28', name: 'LIC premium', sub: 'From Bank · quarterly', v: 1308 }
+    ];
+    let left = 0;
+    const due = bills.map(function (b, i) {
+      const done = !!paid[b.id];
+      if (!done) left += b.v;
+      return {
+        dow: b.dow, day: b.day, name: b.name, sub: done ? 'Paid · added to your expenses' : b.sub,
+        amount: '₹' + b.v.toLocaleString('en-IN'),
+        strike: done ? 'line-through' : 'none',
+        dateBg: done ? '#EDEDE8' : (i === 0 ? '#FBEBD9' : '#F0F0EB'), dateFg: done ? '#6B7075' : (i === 0 ? '#A34A06' : '#17191B'),
+        ring: done ? '#0E6B5C' : '#A9ACA6', fill: done ? '#0E6B5C' : 'transparent',
+        pressed: done ? 'true' : 'false', payLabel: (done ? 'Not paid after all: ' : 'Mark paid: ') + b.name,
+        line: i === 0 ? '0' : '1px solid #EDEDE8',
+        pay: function () { const p = Object.assign({}, paid); p[b.id] = !p[b.id]; self.setState({ paid: p }); }
+      };
+    });
+    const n = bills.filter(function (b) { return !paid[b.id]; }).length;
+    return {
+      due: due,
+      headLine: n === 0 ? 'Nothing left this week' : n + (n === 1 ? ' bill' : ' bills') + ' left this week',
+      headAmount: '₹' + left.toLocaleString('en-IN')
+    };
+  }
+}
+</script>
+</body>
+</html>

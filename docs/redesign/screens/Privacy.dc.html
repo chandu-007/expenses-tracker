@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Privacy and verify it yourself</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1200px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Privacy</h1>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; padding: 0 20px">
+    <span style="width: 52px; height: 52px; border-radius: 16px; background: #E3F1EC; color: #0E6B5C; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6zM9 12l2 2 4-4"></path></svg></span>
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px; line-height: 1.15">Nothing leaves this phone.</span>
+    <span style="font-size: 15px; color: #5C6166; line-height: 1.45">No account, no sign-in, no ads. Don’t take our word for it: every line below can be checked on this phone.</span>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Asks for, and why</h2>
+    <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+      <div style="display: flex; gap: 12px; padding: 14px 16px">
+        <span style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 999px; background: #0E6B5C"></span>
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Read bank texts <span style="font-weight: 500; color: #0E6B5C">· on</span></span><span style="font-size: 13px; color: #5C6166; line-height: 1.4">Finds the amount in a bank’s text. Texts from people and OTPs are skipped unread.</span></span>
+      </div>
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border-top: 1px solid #EDEDE8">
+        <span style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 999px; background: #0E6B5C"></span>
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Notifications <span style="font-weight: 500; color: #0E6B5C">· on</span></span><span style="font-size: 13px; color: #5C6166; line-height: 1.4">Bill, card and budget reminders you choose.</span></span>
+      </div>
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border-top: 1px solid #EDEDE8">
+        <span style="width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 999px; background: #A9ACA6"></span>
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Fingerprint or face <span style="font-weight: 500; color: #5C6166">· off</span></span><span style="font-size: 13px; color: #5C6166; line-height: 1.4">Only if you turn on App lock.</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+    <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">Never asks for</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{ never }}" as="n" hint-placeholder-count="7">
+        <span style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E8E8E3; font-size: 14px; font-weight: 500"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E6B5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>{{ n }}</span>
+      </sc-for>
+    </div>
+    <span style="font-size: 12px; color: #5C6166; margin: 0 4px">Read from the installed app just now. Android shows the same under Settings › Apps › Expenses › Permissions.</span>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px; margin: 0 16px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">Check it in a minute</h2>
+    <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.45; color: #17191B">
+      <li>Turn on airplane mode.</li>
+      <li>Add an entry, open Reports, save a backup.</li>
+      <li>Everything still works: nothing waits for the internet.</li>
+    </ol>
+  </section>
+
+  <section style="display: flex; gap: 12px; margin: 0 16px; padding: 14px 16px; border-radius: 16px; background: #FBEBD9">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A34A06" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3 2 20h20zM12 10v4M12 17h.01"></path></svg>
+    <span style="font-size: 14px; line-height: 1.45; color: #4A3214">We never ask for your OTP, PIN or password. If anyone does, stop and call your bank on the number on your card.</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { never: ['Internet', 'Contacts', 'Location', 'Microphone', 'Camera', 'Call log', 'All your files'] };
+  }
+}
+</script>
+</body>
+</html>

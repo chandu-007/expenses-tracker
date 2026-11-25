@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transfer candidates</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Transfers counted as spending</h1>
+  </header>
+  <section style="display: flex; flex-direction: column; gap: 4px; padding: 0 20px">
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 34px; font-weight: 600; letter-spacing: -0.8px">{{ total }}</span>
+    <span style="font-size: 14px; color: #5C6166; line-height: 1.45">{{ totalLine }}</span>
+  </section>
+  <sc-for list="{{ items }}" as="it" hint-placeholder-count="3">
+    <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+      <span style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; font-weight: 600">{{ it.name }}</span><span style="font-size: 15px; font-weight: 600">{{ it.amount }}</span></span>
+      <span style="font-size: 13px; color: #5C6166">{{ it.meta }}</span>
+      <div style="display: flex; gap: 8px">
+        <button onClick="{{ it.no }}" style="flex: 1; height: 44px; border-radius: 14px; border: 1px solid #E0E0DA; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #17191B; cursor: pointer">Real spending</button>
+        <button onClick="{{ it.yes }}" style="flex: 1.3; height: 44px; border-radius: 14px; border: 0; background: #0E6B5C; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">{{ it.cta }}</button>
+      </div>
+    </section>
+  </sc-for>
+  <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+    <span style="margin: 0 16px; padding: 16px; border-radius: 16px; background: #E3F1EC; color: #0B5A4D; font-size: 14px; font-weight: 600">Nothing left to fix. Your spending figures now count only real spending.</span>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { done: {} };
+  }
+  renderVals() {
+    const self = this;
+    const done = this.state.done;
+    const all = [
+      { id: 'atm', name: 'ATM withdrawal', v: 5000, meta: 'Bank · 9 Nov · probably went into Cash', cta: 'Move to Cash' },
+      { id: 'card', name: 'Payment to ICICI card', v: 12000, meta: 'Bank · 6 Nov · paying a card is not spending', cta: 'Mark card payment' },
+      { id: 'self', name: 'UPI to C S Nelluri (Kotak)', v: 10000, meta: 'Bank · 3 Nov · your own name', cta: 'Mark as transfer' }
+    ];
+    const left = all.filter(function (x) { return !done[x.id]; });
+    const sum = left.reduce(function (s, x) { return s + x.v; }, 0);
+    const mark = function (id) { return function () { const d = Object.assign({}, done); d[id] = true; self.setState({ done: d }); }; };
+    return {
+      items: left.map(function (x) { return { name: x.name, amount: '₹' + x.v.toLocaleString('en-IN'), meta: x.meta, cta: x.cta, yes: mark(x.id), no: mark(x.id) }; }),
+      empty: left.length === 0,
+      total: '₹' + sum.toLocaleString('en-IN'),
+      totalLine: left.length === 0 ? 'All sorted.' : 'may be counted as spending but only moved between your own accounts. Nothing changes until you choose.'
+    };
+  }
+}
+</script>
+</body>
+</html>

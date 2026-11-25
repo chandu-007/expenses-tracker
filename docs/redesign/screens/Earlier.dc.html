@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bring in earlier spending</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Earlier spending</h1>
+  </header>
+  <section style="display: flex; flex-direction: column; gap: 8px; padding: 0 20px">
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px; line-height: 1.15">Started after you’d already spent?</span>
+    <span style="font-size: 15px; color: #5C6166; line-height: 1.45">Three ways to fill the gap. Do them in this order and your balances will match your bank.</span>
+  </section>
+
+  <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+    <section style="margin: 0 16px; display: flex; gap: 14px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+      <span style="width: 32px; height: 32px; flex: none; border-radius: 999px; background: #E3F1EC; color: #0B5A4D; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700">{{ s.n }}</span>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 16px; font-weight: 600">{{ s.title }}</span>
+        <span style="font-size: 14px; color: #5C6166; line-height: 1.45">{{ s.body }}</span>
+        <a href="{{ s.href }}" style="align-self: flex-start; margin-top: 6px; height: 44px; display: flex; align-items: center; padding: 0 16px; border-radius: 999px; background: {{ s.btnBg }}; color: {{ s.btnFg }}; border: {{ s.btnBorder }}; font-size: 14px; font-weight: 600; text-decoration: none">{{ s.cta }}</a>
+      </span>
+    </section>
+  </sc-for>
+
+  <section style="margin: 0 16px; display: flex; gap: 12px; padding: 14px 16px; border-radius: 16px; background: #EDEDE8">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C6166" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01"></path></svg>
+    <span style="font-size: 13px; color: #3B3F43; line-height: 1.45">The app never looks through texts already on your phone. It only reads bank texts that arrive after you turn capture on.</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const primary = { btnBg: '#0E6B5C', btnFg: '#FFFFFF', btnBorder: '0' };
+    const plain = { btnBg: '#FFFFFF', btnFg: '#17191B', btnBorder: '1px solid #E0E0DA' };
+    return {
+      steps: [
+        Object.assign({ n: '1', title: 'Import a statement', body: 'The most exact way. Download a CSV, Excel or PDF from your bank or card app; you check every line before anything is added.', cta: 'Choose a statement', href: '#' }, primary),
+        Object.assign({ n: '2', title: 'Add what it missed', body: 'Cash and anything the statement doesn’t show. Pick a date and an amount; the rest can wait.', cta: 'Add an old expense', href: 'Add.dc.html' }, plain),
+        Object.assign({ n: '3', title: 'Set starting balances', body: 'Give each account the balance it had on the day you started, or match what your bank shows today.', cta: 'Open Accounts', href: 'Accounts.dc.html' }, plain)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

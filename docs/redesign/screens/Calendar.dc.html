@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Calendar</h1>
+  </header>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 0 8px">
+    <button aria-label="Previous month" style="width: 48px; height: 48px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+    <span style="flex: 1; text-align: center; font-size: 16px; font-weight: 600">November 2026 · ₹49,305</span>
+    <button aria-label="Next month" style="width: 48px; height: 48px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+  </div>
+
+  <section style="margin: 0 16px; padding: 12px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3; display: flex; flex-direction: column; gap: 6px">
+    <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; font-size: 11px; font-weight: 600; color: #5C6166; text-align: center">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div role="grid" aria-label="November 2026" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
+      <sc-for list="{{ cells }}" as="d" hint-placeholder-count="35">
+        <button onClick="{{ d.pick }}" aria-label="{{ d.aria }}" aria-pressed="{{ d.pressed }}" disabled="{{ d.blank }}" style="height: 46px; border-radius: 12px; border: {{ d.border }}; background: {{ d.bg }}; color: {{ d.fg }}; font-size: 14px; font-weight: {{ d.weight }}; position: relative; padding: 0; visibility: {{ d.vis }}; cursor: pointer">{{ d.n }}<span style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 999px; background: {{ d.dot }}"></span></button>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 4px 2px; font-size: 12px; color: #5C6166">
+      <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 4px; background: #B7D9CE"></span>Light</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 4px; background: #0E6B5C"></span>Heavy day</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid #0E6B5C; box-sizing: border-box"></span>No spending</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 999px; background: #A34A06"></span>Bill due</span>
+    </div>
+  </section>
+
+  <section aria-live="polite" style="margin: 0 16px; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8E3">
+    <span style="font-size: 13px; color: #5C6166">{{ selDate }}</span>
+    <span style="font-size: 22px; font-weight: 600">{{ selAmount }}</span>
+    <span style="font-size: 13px; color: {{ selNoteColor }}">{{ selNote }}</span>
+    <a href="Activity.dc.html" style="align-self: flex-start; margin-top: 4px; font-size: 14px; font-weight: 600; color: #0E6B5C; padding: 10px 0; text-decoration: none">See this day’s entries</a>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 23 };
+  }
+  renderVals() {
+    const self = this;
+    const spend = [0, 1240, 2180, 640, 0, 13361, 820, 1950, 0, 3400, 560, 1120, 2000, 0, 1500, 2350, 612, 430, 2499, 0, 1499, 9012, 1769, 2363];
+    const due = { 25: 'TSSPDCL Electricity ₹1,180', 26: 'ACT Fibernet ₹1,178', 28: 'LIC premium ₹1,308 · ICICI card ₹7,297' };
+    const today = 23;
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const cells = [];
+    for (let b = 0; b < 6; b++) cells.push({ n: '', blank: true, vis: 'hidden', bg: 'transparent', border: '0', fg: '#17191B', weight: 500, dot: 'transparent', pressed: 'false', aria: '', pick: function () {} });
+    for (let d = 1; d <= 30; d++) {
+      const v = d <= today ? spend[d] : null;
+      let bg = '#FFFFFF', fg = '#17191B', border = '1px solid #EDEDE8';
+      if (v === 0) { border = '1.5px solid #0E6B5C'; }
+      else if (v !== null && v < 1000) { bg = '#E3F1EC'; border = '0'; }
+      else if (v !== null && v < 3000) { bg = '#B7D9CE'; border = '0'; }
+      else if (v !== null) { bg = '#0E6B5C'; fg = '#FFFFFF'; border = '0'; }
+      const on = self.state.sel === d;
+      if (on) border = '2px solid #17191B';
+      cells.push({
+        n: String(d), blank: false, vis: 'visible', bg: bg, fg: fg, border: border, weight: d === today ? 700 : 500,
+        dot: due[d] ? '#A34A06' : 'transparent', pressed: on ? 'true' : 'false',
+        aria: d + ' November' + (v === null ? '' : ', ₹' + v.toLocaleString('en-IN') + ' spent') + (due[d] ? ', bill due' : ''),
+        pick: (function (day) { return function () { self.setState({ sel: day }); }; })(d)
+      });
+    }
+    const s = this.state.sel;
+    const dow = days[(s - 1) % 7];
+    const v = s <= today ? spend[s] : null;
+    return {
+      cells: cells,
+      selDate: dow + ' ' + s + ' November' + (s === today ? ' · today' : ''),
+      selAmount: v === null ? 'Not yet' : (v === 0 ? 'No spending' : '₹' + v.toLocaleString('en-IN') + ' spent'),
+      selNote: due[s] ? 'Due: ' + due[s] : (v === 0 ? 'A no-spend day' : ''),
+      selNoteColor: due[s] ? '#A34A06' : '#0E6B5C'
+    };
+  }
+}
+</script>
+</body>
+</html>

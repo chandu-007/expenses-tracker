@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Customise home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Customise home</h1>
+    <button onClick="{{ reset }}" style="height: 48px; padding: 0 12px; border: 0; background: transparent; color: #0E6B5C; font-size: 15px; font-weight: 600; cursor: pointer">Reset</button>
+  </header>
+  <span style="padding: 0 20px; font-size: 14px; color: #5C6166; line-height: 1.45">Drag a block by its handle, or use the arrows. The month summary always stays on top and your entries always come last.</span>
+
+  <div style="margin: 0 16px; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: #EDEDE8; color: #5C6166; font-size: 14px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"></path></svg>Month summary
+  </div>
+
+  <ol aria-label="Home blocks" style="margin: 0 16px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+    <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="4">
+      <li style="display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 4px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E8E8E3; opacity: {{ b.opacity }}">
+        <span aria-hidden="true" style="width: 32px; height: 48px; display: flex; align-items: center; justify-content: center; color: #6B7075; cursor: grab"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"></circle><circle cx="15" cy="6" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="9" cy="18" r="1.5"></circle><circle cx="15" cy="18" r="1.5"></circle></svg></span>
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 15px; font-weight: 500">{{ b.label }}</span><span style="font-size: 12px; color: #5C6166">{{ b.sub }}</span></span>
+        <button onClick="{{ b.up }}" aria-label="{{ b.upLabel }}" style="width: 40px; height: 48px; border: 0; background: transparent; color: {{ b.upColor }}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg></button>
+        <button onClick="{{ b.down }}" aria-label="{{ b.downLabel }}" style="width: 40px; height: 48px; border: 0; background: transparent; color: {{ b.downColor }}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <button role="switch" aria-checked="{{ b.checked }}" aria-label="{{ b.switchLabel }}" onClick="{{ b.toggle }}" style="width: 52px; height: 48px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <span style="width: 44px; height: 26px; border-radius: 999px; background: {{ b.track }}; position: relative"><span style="position: absolute; top: 3px; left: {{ b.knob }}; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></span>
+        </button>
+      </li>
+    </sc-for>
+  </ol>
+
+  <div style="margin: 0 16px; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: #EDEDE8; color: #5C6166; font-size: 14px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"></path></svg>Entries by day
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { order: ['BUDGET', 'BILLS', 'BALANCES', 'QUICK'], hidden: {} };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const meta = {
+      BUDGET: ['Budget and safe to spend', 'Left to spend, pace, the two a-day figures'],
+      BILLS: ['Bills waiting', 'Due this week, as the one card on top'],
+      BALANCES: ['Account balances', 'Three small tiles; a card shows what is owed'],
+      QUICK: ['Quick entries', 'One-tap chips for things you add often']
+    };
+    const move = function (i, d) {
+      const j = i + d;
+      if (j < 0 || j >= s.order.length) return;
+      const o = s.order.slice();
+      const t = o[i]; o[i] = o[j]; o[j] = t;
+      self.setState({ order: o });
+    };
+    const blocks = s.order.map(function (k, i) {
+      const off = !!s.hidden[k];
+      const label = meta[k][0];
+      return {
+        label: label, sub: off ? 'Hidden from Home' : meta[k][1],
+        opacity: off ? 0.6 : 1,
+        up: function () { move(i, -1); }, down: function () { move(i, 1); },
+        upLabel: 'Move ' + label + ' up', downLabel: 'Move ' + label + ' down',
+        upColor: i === 0 ? '#C9CAC3' : '#17191B', downColor: i === s.order.length - 1 ? '#C9CAC3' : '#17191B',
+        checked: off ? 'false' : 'true', switchLabel: 'Show ' + label,
+        track: off ? '#D5D6D0' : '#0E6B5C', knob: off ? '3px' : '21px',
+        toggle: function () { const h = Object.assign({}, s.hidden); h[k] = !h[k]; self.setState({ hidden: h }); }
+      };
+    });
+    return { blocks: blocks, reset: function () { self.setState({ order: ['BUDGET', 'BILLS', 'BALANCES', 'QUICK'], hidden: {} }); } };
+  }
+}
+</script>
+</body>
+</html>

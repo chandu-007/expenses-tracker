@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Savings goals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; font-variant-numeric: tabular-nums">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Savings goals</h1>
+    <button aria-label="New goal" style="width: 48px; height: 48px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+  </header>
+
+  <sc-for list="{{ goals }}" as="g" hint-placeholder-count="2">
+    <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 24px; background: #FFFFFF; border: 1px solid #E8E8E3">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 17px; font-weight: 600">{{ g.name }}</span>
+        <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: {{ g.chipBg }}; color: {{ g.chipFg }}">{{ g.chip }}</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -0.8px">{{ g.saved }}</span>
+        <span style="font-size: 14px; color: #5C6166">of {{ g.target }}</span>
+      </div>
+      <span style="height: 10px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: {{ g.pct }}%; height: 100%; border-radius: 999px; background: #0E6B5C"></span></span>
+      <span style="font-size: 13px; color: #5C6166">{{ g.line }}</span>
+      <div style="display: flex; gap: 8px">
+        <button onClick="{{ g.take }}" style="flex: 1; height: 44px; border-radius: 14px; border: 1px solid #E0E0DA; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #17191B; cursor: pointer">Take out</button>
+        <button onClick="{{ g.add }}" style="flex: 1; height: 44px; border-radius: 14px; border: 0; background: #0E6B5C; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Put in ₹5,000</button>
+      </div>
+    </section>
+  </sc-for>
+  <span style="padding: 0 20px; font-size: 12px; color: #5C6166; line-height: 1.45">A goal is a note of money set aside. It does not move money between accounts.</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { saved: { laptop: 42000, trip: 18500 } };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state.saved;
+    const defs = [
+      { id: 'laptop', name: 'New laptop', target: 90000, months: 4, follows: '' },
+      { id: 'trip', name: 'Kerala trip in April', target: 60000, months: 5, follows: 'Follows your Bank balance' }
+    ];
+    const fmt = function (n) { return '₹' + Math.round(n).toLocaleString('en-IN'); };
+    return {
+      goals: defs.map(function (g) {
+        const v = s[g.id];
+        const left = Math.max(0, g.target - v);
+        const per = left / g.months;
+        const done = left === 0;
+        const change = function (d) { return function () { const n = Object.assign({}, s); n[g.id] = Math.max(0, Math.min(g.target, n[g.id] + d)); self.setState({ saved: n }); }; };
+        return {
+          name: g.name, saved: fmt(v), target: fmt(g.target), pct: Math.round(v / g.target * 100),
+          chip: done ? 'Reached' : Math.round(v / g.target * 100) + '%',
+          chipBg: done ? '#E3F1EC' : '#F0F0EB', chipFg: done ? '#0B5A4D' : '#3B3F43',
+          line: done ? 'Done. Well saved.' : fmt(per) + ' a month reaches it in ' + g.months + ' months' + (g.follows ? ' · ' + g.follows : ''),
+          add: change(5000), take: change(-5000)
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

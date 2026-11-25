@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your data</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <a href="More.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; font-size: 17px; font-weight: 600">Your data</h1>
+  </header>
+
+  <section style="margin: 0 16px; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 24px; background: #FFFFFF; border: 1px solid #E8E8E3">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span style="font-size: 14px; font-weight: 500; color: #5C6166">Backup</span>
+      <span style="font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: {{ chipBg }}; color: {{ chipFg }}">{{ chip }}</span>
+    </div>
+    <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.4px">{{ when }}</span>
+    <span style="font-size: 14px; color: #5C6166; line-height: 1.45">506 entries, 3 accounts and your settings, in one file you keep. Without one, a lost phone means lost entries.</span>
+    <button onClick="{{ backup }}" style="height: 52px; border: 0; border-radius: 16px; background: #0E6B5C; color: #FFFFFF; font-size: 15px; font-weight: 600; cursor: pointer">Back up now</button>
+    <button role="switch" aria-checked="{{ autoChecked }}" onClick="{{ toggleAuto }}" style="display: flex; align-items: center; gap: 12px; min-height: 48px; border: 0; background: transparent; padding: 0; text-align: left; color: #17191B; cursor: pointer">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Back up every week</span><span style="font-size: 12px; color: #5C6166">To a folder you choose, protected by a passphrase</span></span>
+      <span style="width: 44px; height: 26px; flex: none; border-radius: 999px; background: {{ autoTrack }}; position: relative"><span style="position: absolute; top: 3px; left: {{ autoKnob }}; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></span>
+    </button>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <section style="display: flex; flex-direction: column; gap: 8px; margin: 0 16px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #5C6166">{{ g.name }}</h2>
+      <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+          <button style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 16px; border: 0; border-top: {{ r.line }}; background: transparent; text-align: left; color: #17191B; cursor: pointer">
+            <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #F0F0EB; color: #3B3F43; display: flex; align-items: center; justify-content: center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ r.icon }}"></path></svg></span>
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">{{ r.title }}</span><span style="font-size: 12px; color: #5C6166">{{ r.sub }}</span></span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+  <span style="text-align: center; font-size: 12px; color: #5C6166; padding: 0 24px">Nothing leaves this phone unless you choose where it goes.</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { done: false, auto: false };
+  }
+  renderVals() {
+    const self = this;
+    const s = this.state;
+    const file = 'M6 3h8l4 4v14H6zM14 3v4h4';
+    const grid = 'M4 4h16v16H4zM4 10h16M4 15h16M10 4v16';
+    const csv = 'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6';
+    const year = 'M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4';
+    const restore = 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5';
+    const test = 'M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z';
+    const mk = function (rows) { return rows.map(function (r, i) { return { title: r[0], sub: r[1], icon: r[2], line: i === 0 ? '0' : '1px solid #EDEDE8' }; }); };
+    return {
+      when: s.done ? 'Backed up just now' : 'Last backup 12 days ago',
+      chip: s.done ? 'Safe' : 'Due',
+      chipBg: s.done ? '#E3F1EC' : '#FBEBD9',
+      chipFg: s.done ? '#0B5A4D' : '#A34A06',
+      backup: function () { self.setState({ done: true }); },
+      autoChecked: s.auto ? 'true' : 'false',
+      autoTrack: s.auto ? '#0E6B5C' : '#D5D6D0',
+      autoKnob: s.auto ? '21px' : '3px',
+      toggleAuto: function () { self.setState({ auto: !s.auto }); },
+      groups: [
+        { name: 'Open in a spreadsheet', rows: mk([
+          ['Excel (.xlsx)', 'Every entry; amounts are numbers, so they add up', grid],
+          ['CSV', 'For other apps and tools', csv],
+          ['Financial year summary', 'Apr 2026 – Mar 2027, by category and month', year]
+        ]) },
+        { name: 'Bring back', rows: mk([
+          ['Restore a backup', 'Replaces what is on this phone, after you confirm', restore],
+          ['Test a backup', 'Opens a file and checks it; nothing is changed', test],
+          ['Import a statement', 'CSV, Excel or PDF from your bank', file]
+        ]) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

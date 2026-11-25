@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Widgets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 700px; box-sizing: border-box; background: #2B3033; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #17191B; padding: 48px; display: grid; grid-template-columns: 380px 190px 380px; gap: 48px; align-content: start; font-variant-numeric: tabular-nums">
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="height: 190px; box-sizing: border-box; border-radius: 28px; background: #FFFFFF; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #5C6166">Left this month</span><span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -0.6px">₹25,695</span></span>
+        <span style="width: 52px; height: 52px; border-radius: 18px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+      </div>
+      <span style="position: relative; height: 8px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 66%; height: 100%; border-radius: 999px; background: #0E6B5C"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B"></span></span>
+      <div style="display: flex; gap: 8px">
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; background: #F0F0EB; font-size: 13px; font-weight: 600">+ Chai ₹20</span>
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; background: #F0F0EB; font-size: 13px; font-weight: 600">+ Lunch ₹150</span>
+        <span style="height: 36px; display: flex; align-items: center; padding: 0 12px; border-radius: 999px; background: #F0F0EB; font-size: 13px; font-weight: 600">+ Auto</span>
+      </div>
+    </div>
+    <figcaption style="font-size: 14px; color: #E6E7E3; line-height: 1.4"><strong style="font-weight: 600">Month and quick add · 4 × 2</strong><br>One figure, the pace bar, three quick entries. Tap a chip to save it.</figcaption>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="height: 190px; box-sizing: border-box; border-radius: 28px; background: #FFFFFF; padding: 16px; display: flex; flex-direction: column; justify-content: space-between">
+      <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #5C6166">Today</span><span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 28px; font-weight: 600">₹2,363</span><span style="font-size: 12px; color: #5C6166">of ₹3,031 a day</span></span>
+      <span style="height: 6px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 78%; height: 100%; border-radius: 999px; background: #0E6B5C"></span></span>
+      <span style="align-self: flex-end; width: 44px; height: 44px; border-radius: 14px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+    </div>
+    <figcaption style="font-size: 14px; color: #E6E7E3; line-height: 1.4"><strong style="font-weight: 600">Today · 2 × 2</strong><br>Spent today against today’s share.</figcaption>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="height: 190px; box-sizing: border-box; border-radius: 28px; background: #FFFFFF; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #5C6166">Left this month</span><span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: 2px">₹••••</span></span>
+        <span style="width: 52px; height: 52px; border-radius: 18px; background: #0E6B5C; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+      </div>
+      <span style="height: 8px; border-radius: 999px; background: #EDEDE8; display: block"></span>
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5C6166"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"></path></svg>Amounts hidden while the app is locked</span>
+    </div>
+    <figcaption style="font-size: 14px; color: #E6E7E3; line-height: 1.4"><strong style="font-weight: 600">Hidden or locked</strong><br>No figures and no bar length. Add still works.</figcaption>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 14px; grid-column: 1 / span 2">
+    <div style="display: flex; gap: 16px; align-items: center">
+      <span style="width: 72px; height: 72px; border-radius: 999px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 600"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add</span>
+      <span style="width: 172px; height: 72px; box-sizing: border-box; border-radius: 18px; background: rgba(255,255,255,0.18); color: #FFFFFF; padding: 10px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px"><span style="font-size: 12px; font-weight: 600; opacity: 0.85">Left this month</span><span style="font-size: 20px; font-weight: 700">₹25,695</span></span>
+    </div>
+    <figcaption style="font-size: 14px; color: #E6E7E3; line-height: 1.4"><strong style="font-weight: 600">iPhone Lock Screen</strong> · round Add control and one-line figure, in the system’s own tint.</figcaption>
+  </figure>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

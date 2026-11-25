@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Budget</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E6B5C;text-decoration:none}a:hover{color:#0B5A4D}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1200px; box-sizing: border-box; background: #F5F5F2; color: #17191B; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; font-variant-numeric: tabular-nums">
+
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 8px 12px">
+    <a href="Main.dc.html" aria-label="Back" style="width: 48px; height: 48px; border-radius: 999px; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+    <h1 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">Budget</h1>
+    <button aria-label="Edit budget" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: transparent; color: #17191B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></button>
+  </header>
+
+  <main style="display: flex; flex-direction: column; gap: 24px; padding: 0 16px 24px">
+
+    <section style="display: flex; flex-direction: column; gap: 18px; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 24px; padding: 20px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 14px; color: #5C6166; font-weight: 500">November · 8 days to go</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px"><span style="width: 6px; height: 6px; border-radius: 999px; background: #0E6B5C"></span>On pace</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <span style="font-family: 'Space Grotesk', Inter, system-ui, sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -1.2px; line-height: 1">₹25,695 <span style="font-size: 20px; letter-spacing: 0; color: #5C6166; font-weight: 500">left</span></span>
+        <span style="font-size: 14px; color: #5C6166">of ₹75,000 · ₹49,305 spent</span>
+      </div>
+      <div style="position: relative; height: 26px">
+        <span style="position: absolute; left: 77%; top: 0; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: #5C6166">Today</span>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 8px; border-radius: 999px; background: #EDEDE8; overflow: hidden"><div style="width: 66%; height: 100%; background: #0E6B5C; border-radius: 999px"></div></div>
+        <span style="position: absolute; left: 77%; bottom: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <div style="display: flex; flex-direction: column; gap: 2px; background: #F5F5F2; border-radius: 14px; padding: 12px">
+          <span style="font-size: 17px; font-weight: 600">₹3,031</span>
+          <span style="font-size: 12px; color: #5C6166">a day keeps you on pace</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; background: #F5F5F2; border-radius: 14px; padding: 12px">
+          <span style="font-size: 17px; font-weight: 600">₹1,448</span>
+          <span style="font-size: 12px; color: #5C6166">held for 2 bills due</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin: 0 4px">
+        <h2 style="margin: 0; font-size: 15px; font-weight: 600">Category limits</h2>
+        <span style="font-size: 12px; color: #5C6166">| marks today</span>
+      </div>
+      <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #E8E8E3; border-radius: 20px; overflow: hidden">
+
+        <a href="Activity.dc.html" style="display: flex; gap: 12px; padding: 16px; color: #17191B">
+          <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #FBEBDC; color: #B5560A; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="m3 7 3-4h4l-3 4M10 7l3-4h4l-3 4"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">Fun</span><span style="background: #FCE8E6; color: #B42318; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px">Over by ₹649</span></span>
+            <span style="position: relative; height: 8px; border-radius: 999px; background: #F6D3CF; display: block"><span style="display: block; width: 100%; height: 100%; background: #B42318; border-radius: 999px"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span></span>
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: #5C6166"><span>₹9,649 of ₹9,000</span><span style="color: #B42318; font-weight: 600">Nothing left</span></span>
+          </span>
+        </a>
+        <div style="height: 1px; background: #EDEDE8; margin-left: 68px"></div>
+
+        <a href="Activity.dc.html" style="display: flex; gap: 12px; padding: 16px; color: #17191B">
+          <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #EFE8FB; color: #6A3FC8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2 1-3 3.5-3 7h3"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">Food</span><span style="background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px">On pace</span></span>
+            <span style="position: relative; height: 8px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 67%; height: 100%; background: #0E6B5C; border-radius: 999px"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span></span>
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: #5C6166"><span>₹6,715 of ₹10,000</span><span>₹3,285 left</span></span>
+          </span>
+        </a>
+        <div style="height: 1px; background: #EDEDE8; margin-left: 68px"></div>
+
+        <a href="Activity.dc.html" style="display: flex; gap: 12px; padding: 16px; color: #17191B">
+          <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #E0F2F7; color: #0E6E86; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="15" rx="3"></rect><path d="M4 11h16M8 21v-3M16 21v-3"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">Transport</span><span style="background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px">On pace</span></span>
+            <span style="position: relative; height: 8px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 61%; height: 100%; background: #0E6B5C; border-radius: 999px"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span></span>
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: #5C6166"><span>₹3,034 of ₹5,000</span><span>₹1,966 left</span></span>
+          </span>
+        </a>
+        <div style="height: 1px; background: #EDEDE8; margin-left: 68px"></div>
+
+        <a href="Activity.dc.html" style="display: flex; gap: 12px; padding: 16px; color: #17191B">
+          <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #E9F2DD; color: #3F6A0C; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.4 12h11.2L21 7H6"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">Groceries</span><span style="background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px">Well under</span></span>
+            <span style="position: relative; height: 8px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 34%; height: 100%; background: #0E6B5C; border-radius: 999px"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span></span>
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: #5C6166"><span>₹2,690 of ₹8,000</span><span>₹5,310 left</span></span>
+          </span>
+        </a>
+        <div style="height: 1px; background: #EDEDE8; margin-left: 68px"></div>
+
+        <a href="Activity.dc.html" style="display: flex; gap: 12px; padding: 16px; color: #17191B">
+          <span style="width: 40px; height: 40px; flex: none; border-radius: 12px; background: #F6EED8; color: #8A5A06; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 13H6z"></path><path d="M9 8V6a3 3 0 0 1 6 0v2"></path></svg></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 15px; font-weight: 600">Shopping</span><span style="background: #E3F1EC; color: #0B5A4D; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px">Well under</span></span>
+            <span style="position: relative; height: 8px; border-radius: 999px; background: #EDEDE8; display: block"><span style="display: block; width: 15%; height: 100%; background: #0E6B5C; border-radius: 999px"></span><span style="position: absolute; left: 77%; top: -3px; width: 2px; height: 14px; background: #17191B; border-radius: 2px"></span></span>
+            <span style="display: flex; justify-content: space-between; font-size: 13px; color: #5C6166"><span>₹1,160 of ₹8,000</span><span>₹6,840 left</span></span>
+          </span>
+        </a>
+      </div>
+      <button style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 0 16px; border: 1px dashed #C9CAC3; border-radius: 16px; background: transparent; color: #17191B; text-align: left">
+        <span style="font-size: 14px; color: #5C6166">19 categories have no limit</span>
+        <span style="font-size: 14px; font-weight: 600; color: #0E6B5C">Set a limit</span>
+      </button>
+    </section>
+  </main>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
