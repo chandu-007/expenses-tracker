@@ -73,6 +73,8 @@ class CaptureRulesUiTest {
         FailureShot.around("CaptureRules_rule_tested") {
             compose.waitUntil(30_000) {
                 if (!has("rule_tested")) runCatching { compose.onNodeWithTag("rule_test", useUnmergedTree = true).performScrollTo().performClick() }
+                // the page is a lazy list: an answer above the form is not composed while the list is scrolled down to the form, so it is scrolled to before it is looked for
+                if (!has("rule_tested")) runCatching { compose.onNodeWithTag("rules_list", useUnmergedTree = true).performScrollToNode(hasTestTag("rule_tested")) }
                 has("rule_tested")
             }
         }
@@ -80,6 +82,7 @@ class CaptureRulesUiTest {
         tap("rule_category_Food")
         FailureShot.around("CaptureRules_rule_shop") {
             compose.waitUntil(30_000) {
+                if (!has("rule_shop")) runCatching { compose.onNodeWithTag("rules_list", useUnmergedTree = true).performScrollToNode(hasTestTag("rule_shop")) } // the new rule is in the list above the form: not composed while the list is scrolled down to the form
                 if (!has("rule_shop")) runCatching { compose.onNodeWithTag("rule_add", useUnmergedTree = true).performScrollTo().performClick() } // an identical second rule is refused, so a repeated tap adds nothing
                 has("rule_shop")
             }

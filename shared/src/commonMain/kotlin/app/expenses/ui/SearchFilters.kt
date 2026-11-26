@@ -120,9 +120,10 @@ internal fun amountFilterLabel(min: String, max: String): String {
  */
 @Composable
 internal fun FiltersButton(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val compact = LocalDensity.current.fontScale > 1.4f
     val description = if (count == 0) "Filters" else "Filters, $count active"
-    Box(modifier) {
+    // the icon alone from 150% text, and when the row is too narrow for the word and a search box (the list pane of a window that is only just two panes wide: the box was squeezed to nothing)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val compact = LocalDensity.current.fontScale > 1.4f || maxWidth < 260.dp
         if (compact) FilledTonalIconButton(onClick, Modifier.size(56.dp).semantics { contentDescription = description }.testTag("search_filters_button")) { Icon(Icons.Outlined.Tune, contentDescription = null) }
         else FilledTonalButton(onClick, Modifier.height(56.dp).semantics { contentDescription = description }.testTag("search_filters_button"), contentPadding = PaddingValues(horizontal = 16.dp)) {
             Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(20.dp))

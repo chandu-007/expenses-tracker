@@ -132,6 +132,7 @@ class KeyboardShortcutsUiTest {
             var n = 0
             while (n++ < 12 && focusedTag()?.startsWith("result_") != true) { key(android.view.KeyEvent.KEYCODE_TAB); Thread.sleep(300); seen.append(focusedTag()).append(' ') }
             val first = focusedTag()
+            if (first?.startsWith("result_") != true) FailureShot.around("Shortcuts_tab_reached_no_result") { error("Tab reached no result") }
             assertTrue(first?.startsWith("result_") == true, "Tab reached no result; the focus went through: $seen")
             key(android.view.KeyEvent.KEYCODE_DPAD_DOWN); Thread.sleep(400)
             val second = focusedTag()
