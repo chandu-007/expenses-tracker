@@ -272,7 +272,7 @@ fun SearchScreen(
                 // one rounded bar: a magnifier, what is typed, and a way to clear it
                 OutlinedTextField(
                     value = text, onValueChange = { changed(t = it, typing = true) }, singleLine = true,
-                    placeholder = { Text("Search entries", maxLines = 1) },
+                    placeholder = { Text(if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.4f) "Search" else "Search entries", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                     trailingIcon = { if (text.isNotEmpty()) IconButton(onClick = { changed(t = "", typing = true) }, modifier = Modifier.testTag("search_clear")) { Icon(Icons.Outlined.Close, contentDescription = "Clear the search") } },
                     shape = Radius.L,
