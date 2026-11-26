@@ -217,9 +217,6 @@ fun paceColor(pace: PaceLevel): Color = when (pace) {
     PaceLevel.OVER -> MaterialTheme.colorScheme.error
 }
 
-/** The words for a budget line's pace: "On pace", "A little ahead", "Ahead of pace", "Over by ₹1,655" (the amount in whole units). */
-fun paceWord(line: BudgetLineUi): String = PaceMath.word(line.pace, line.note.removeSuffix(" over").wholeAmounts())
-
 /**
  * The bar of a limit (UI S5): it fills to its new value and shifts colour smoothly (instant under Reduce motion, not animated on first composition) and, when [elapsed] is given, a thin tick marks how much
  * of the period has gone ("today"); [todayLabel] writes the word over the tick. Colour follows the pace ([paceColor]). The fill and the tick are read while drawing.
@@ -227,11 +224,13 @@ fun paceWord(line: BudgetLineUi): String = PaceMath.word(line.pace, line.note.re
 @Composable
 fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier, elapsed: Float = -1f, todayLabel: Boolean = false) {
     val reduce = LocalReduceMotion.current
-    val progress by animateFloatAsState((line.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_fill")
+    // Hide amounts: the bar loses its length (the fill would show the figure), the track and the tick for today stay: the tick is the date, not money
+    val hide = LocalHideAmounts.current
+    val progress by animateFloatAsState(if (hide) 0f else (line.percent / 100f).coerceIn(0f, 1f), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_fill")
     val color by animateColorAsState(paceColor(line.pace), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_color")
     val tick = MaterialTheme.colorScheme.onSurface
     Box(Modifier.fillMaxWidth().padding(top = if (todayLabel && elapsed >= 0f) 14.dp else 0.dp)) {
-        LinearProgressIndicator(progress = { progress }, color = color, modifier = modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { progress }, color = color, trackColor = MaterialTheme.colorScheme.surfaceVariant, modifier = modifier.fillMaxWidth())
         if (elapsed >= 0f) androidx.compose.foundation.layout.Spacer(
             Modifier.matchParentSize().drawBehind {
                 val x = size.width * elapsed.coerceIn(0f, 1f)

@@ -109,7 +109,7 @@ class UiS5Test {
         limit(10_000); spend("a", 100, "Food"); launch(); waitFor("budget_pace_word")
         val spent = 10_000L; val lim = 1_000_000L
         val level = PaceMath.level(spent, lim, PaceMath.elapsed(period, today), PaceMath.daysIn(period, today), period.days)
-        assertEquals(PaceMath.word(level), textOf("budget_pace_word"))
+        assertEquals(PaceMath.statusWord(level, PaceMath.isWellUnder(spent.toFloat() / lim, PaceMath.elapsed(period, today))), textOf("budget_pace_word"))
         assertTrue(level == PaceLevel.ON_PACE || level == PaceLevel.EARLY, "1% of the limit is never ahead of any day's pace")
     }
 

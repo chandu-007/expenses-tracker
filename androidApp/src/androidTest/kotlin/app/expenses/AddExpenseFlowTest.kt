@@ -55,8 +55,8 @@ class AddExpenseFlowTest {
 
         // Once saved the amount is in the month total, and in the list row with a minus sign because it is money out. (The note text alone would match
         // the add screen's text field before it closes.)
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("-₹12,34,567.50")).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(hasText("₹12,34,567.50")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("amount_Test Mart", useUnmergedTree = true).assertTextEquals("-₹12,34,567.50")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("₹12,34,567.50")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("amount_Test Mart", useUnmergedTree = true).assertTextEquals("₹12,34,567.50")
         compose.onNodeWithTag("month_spend").assertTextEquals("₹12,34,567.50")
         compose.onNodeWithText("Test Mart").assertExists()
         compose.onNodeWithTag("list").assertExists()

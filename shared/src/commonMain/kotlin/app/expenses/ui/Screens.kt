@@ -607,7 +607,7 @@ private fun SwipeableRow(row: RowUi, pos: CardPos, onOpen: (RowUi) -> Unit, onDe
         // Home's headings say the day: the row says the account and the category (a row with neither keeps its date)
         val detail = row.detail.ifEmpty { row.subtitle }
         val amount: @Composable () -> Unit = {
-            MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}"))
+            SpokenAmount(row.amount, flow) { MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow), modifier = Modifier.testTag("amount_${row.title}")) }
         }
         Row(
             Modifier.fillMaxWidth().entryCardFill(pos, isSelected)

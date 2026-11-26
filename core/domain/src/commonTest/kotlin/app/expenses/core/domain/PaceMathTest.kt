@@ -77,4 +77,18 @@ class PaceMathTest {
         assertEquals("payday", PaceMath.endWord(BudgetPeriod.Monthly(25)))
         assertEquals("week end", PaceMath.endWord(BudgetPeriod.Weekly(kotlinx.datetime.DayOfWeek.MONDAY)))
     }
+
+    @Test
+    fun theStatusChipHasFourWordsAndEveryLevelFoldsIntoOne() {
+        assertEquals("On pace", PaceMath.statusWord(PaceLevel.ON_PACE)); assertEquals("On pace", PaceMath.statusWord(PaceLevel.EARLY))
+        assertEquals("Well under", PaceMath.statusWord(PaceLevel.ON_PACE, wellUnder = true))
+        assertEquals("A little ahead", PaceMath.statusWord(PaceLevel.A_LITTLE_AHEAD)); assertEquals("A little ahead", PaceMath.statusWord(PaceLevel.AHEAD))
+        assertEquals("Over by ₹1,655", PaceMath.statusWord(PaceLevel.OVER, overBy = "₹1,655")); assertEquals("Over the limit", PaceMath.statusWord(PaceLevel.OVER))
+    }
+
+    @Test
+    fun wellUnderNeedsTheFirstTenthOfThePeriodAndLessThanSixtyPercentOfAnEvenPace() {
+        assertEquals(true, PaceMath.isWellUnder(0.2f, 0.5f)); assertEquals(true, PaceMath.isWellUnder(0.3f, 0.5f))
+        assertEquals(false, PaceMath.isWellUnder(0.31f, 0.5f)); assertEquals(false, PaceMath.isWellUnder(0f, 0.05f), "too early in the period to say")
+    }
 }

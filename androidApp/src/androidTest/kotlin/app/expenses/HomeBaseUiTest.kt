@@ -181,8 +181,8 @@ class HomeBaseUiTest {
         entry("a", 0, "Tea", 4_500); entry("b", 0, "Lunch", 12_000); entry("c", -1, "Metro", 50_000)
         db { ok -> ok.store.save(Income(EntryId("pay"), at(-2), AccountId("bank"), Money(5_000_000, inr), CategoryId("Other")), EntryDetails(merchant = "Employer")) }
         launch(); waitFor("day_total_${epochDay(0)}")
-        assertEquals("-₹165.00", textOf("day_total_${epochDay(0)}"))
-        assertEquals("-₹500.00", textOf("day_total_${epochDay(-1)}"))
+        assertEquals("₹165.00", textOf("day_total_${epochDay(0)}"))
+        assertEquals("₹500.00", textOf("day_total_${epochDay(-1)}"))
         assertFalse(has("day_total_${epochDay(-2)}"), "a day of income only has no total")
         // the row no longer repeats the day: its second line is the account and the category
         assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("Cash · Food"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "the row says the account and the category")

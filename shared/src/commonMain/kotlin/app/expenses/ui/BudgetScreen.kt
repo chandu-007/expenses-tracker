@@ -129,9 +129,9 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
                     )
                     Text("of " + overall.limit.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!hide) AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
+                AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
                 // UI S5: where the spending stands against "today" in words (the figure a day moved to the Home card's top: one "a day" figure, not two)
-                Text(paceWord(overall), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(overall.pace), modifier = Modifier.testTag("budget_pace_word"))
+                StatusChip(overall, "budget_pace_word", elapsed = budget.elapsed, style = MaterialTheme.typography.labelMedium)
                 if (budget.billsUseItAll) Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
                 // N-18: how much of what is left the bills still due before the period ends will take (a tap lists them)
                 spokenFor?.let { SpokenForLine(it, "spoken_for_home") }
@@ -328,10 +328,7 @@ private fun BudgetRingCard(budget: BudgetUi, spokenFor: app.expenses.SpokenForUi
         }
         val words: @Composable (Modifier) -> Unit = { mod ->
             Column(mod, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    paceWord(overall), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(overall.pace),
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(paceColor(overall.pace).copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("budget_pace_word"),
-                )
+                StatusChip(overall, "budget_pace_word", elapsed = budget.elapsed)
                 if (budget.perDay != null) {
                     val days = "${budget.daysLeft} ${if (budget.daysLeft == 1) "day" else "days"}"
                     Text(
@@ -369,9 +366,9 @@ private fun LimitRow(line: BudgetLineUi, elapsed: Float, onClick: () -> Unit) {
                 Text(line.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 2)
                 Text("${line.spent} of ${line.limit}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
             }
-            if (!hide) AnimatedBudgetBar(line, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = elapsed)
+            AnimatedBudgetBar(line, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = elapsed)
             Row(Modifier.fillMaxWidth()) {
-                Text(paceWord(line), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = paceColor(line.pace), modifier = Modifier.testTag("budget_row_word_${line.categoryId}"))
+                StatusChip(line, "budget_row_word_${line.categoryId}", elapsed = elapsed, style = MaterialTheme.typography.labelMedium)
                 if (line.pace != PaceLevel.OVER) Text(" · ${line.note}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

@@ -138,7 +138,7 @@ fun EntryDetailScreen(
                     Text(title, style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).testTag("detail_title"))
                     Text(sub, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("detail_sub"))
                     CappedFontScale(LARGE_TEXT_SCALE) {
-                        MoneyText(signedAmount(amountText, flow), style = NumberStyle.Hero, color = amountColor(flow), minFontSize = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp), modifier = Modifier.padding(top = 8.dp).testTag("detail_amount"))
+                        SpokenAmount(amountText, flow, Modifier.padding(top = 8.dp)) { MoneyText(signedAmount(amountText, flow), style = NumberStyle.Hero, color = amountColor(flow), minFontSize = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp), modifier = Modifier.testTag("detail_amount")) }
                     }
                     Text(formatMillis(d.occurredAt, "EEE, d MMM yyyy · HH:mm", zone), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("detail_date"))
                     insight?.let { u ->

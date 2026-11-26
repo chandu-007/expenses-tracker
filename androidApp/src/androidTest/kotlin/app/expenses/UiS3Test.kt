@@ -131,7 +131,7 @@ class UiS3Test {
         runBlocking { container.write { it.store.save(Income(EntryId("i"), System.currentTimeMillis(), AccountId("bank"), Money(500_000, inr), CategoryId("income:salary")), EntryDetails(merchant = "Acme")) } }
         launch(); waitFor("amount_Cafe"); waitFor("amount_Acme")
         fun text(tag: String) = node(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)!!.joinToString("") { it.text }
-        assertEquals("-₹436.00", text("amount_Cafe")); assertEquals("+₹5,000.00", text("amount_Acme"))
+        assertEquals("₹436.00", text("amount_Cafe")); assertEquals("+₹5,000.00", text("amount_Acme"))
         runBlocking { container.write { it.templates.putSetting("hide_amounts", "1") } }
         launch(); waitFor("amount_Cafe")
         assertFalse(text("amount_Cafe").any { it.isDigit() }, "no digit of a hidden amount: '${text("amount_Cafe")}'")

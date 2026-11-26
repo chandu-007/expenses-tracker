@@ -350,7 +350,7 @@ fun SearchScreen(
                                 MatchText(row.subtitle, text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = resultLines)
                             }
                             val flow = flowOf(row.kind, row.inflow)
-                            MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow))
+                            SpokenAmount(row.amount, flow) { MoneyText(signedAmount(row.amount, flow), style = NumberStyle.Row, color = amountColor(flow)) }
                         }
                     }
                     }

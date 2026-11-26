@@ -36,11 +36,11 @@ import androidx.compose.ui.unit.dp
  * and are unchanged (HomeNudges). At large text (150% and up) the button moves under the words so nothing is squeezed into a one-word column.
  */
 
-/** The surface every nudge sits on: the app's accent at 10% over the page, 20 dp corners, 16 dp from the screen edge. Carries the test tag of the card. */
+/** The surface every nudge sits on: the amber of "watch" at 14% over the card, with the hairline, 20 dp corners, 16 dp from the screen edge (a nudge is something to look at, so it is the one amber card on Home). Carries the test tag of the card. */
 @Composable
 internal fun NudgeSurface(tag: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, onClickLabel: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).inlineCard(MaterialTheme.colorScheme.primary)
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).inlineCard(Signal.watch, strength = 0.14f)
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .testTag(tag) // before the padding: the node is the whole card
             .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
@@ -90,5 +90,5 @@ fun NudgeCard(
 
 @Composable
 private fun NudgeButton(label: String, tag: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(onClick = onClick, contentPadding = PaddingValues(horizontal = 18.dp), modifier = modifier.heightIn(min = 48.dp).testTag(tag)) { Text(label, maxLines = 1) }
+    Button(onClick = onClick, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface, contentColor = MaterialTheme.colorScheme.surface), contentPadding = PaddingValues(horizontal = 18.dp), modifier = modifier.heightIn(min = 48.dp).testTag(tag)) { Text(label, maxLines = 1) }
 }

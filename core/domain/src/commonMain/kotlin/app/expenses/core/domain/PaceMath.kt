@@ -50,6 +50,19 @@ object PaceMath {
         PaceLevel.OVER -> if (overBy.isEmpty()) "Over the limit" else "Over by $overBy"
     }
 
+    /**
+     * The status chip's four words (redesign rule 7): "On pace" and "Well under" (teal), "A little ahead" (amber), "Over by ₹X" (red). [wellUnder] is [isWellUnder]; the early days of a period
+     * and "ahead of pace" fold into the nearest of the four, so every bar in the app says one of the same four things.
+     */
+    fun statusWord(level: PaceLevel, wellUnder: Boolean = false, overBy: String = ""): String = when (level) {
+        PaceLevel.EARLY, PaceLevel.ON_PACE -> if (wellUnder) "Well under" else "On pace"
+        PaceLevel.A_LITTLE_AHEAD, PaceLevel.AHEAD -> "A little ahead"
+        PaceLevel.OVER -> if (overBy.isEmpty()) "Over the limit" else "Over by $overBy"
+    }
+
+    /** True when less than 60% of what an even pace would have spent by now is gone, once the period has really begun (the first tenth of it is too early to say). */
+    fun isWellUnder(spentFraction: Float, elapsed: Float): Boolean = elapsed >= 0.1f && spentFraction <= elapsed * 0.6f
+
     /** What the end of the period is called on Home: "payday" when the person starts the month on their own day (their salary day), else what it is. */
     fun endWord(period: BudgetPeriod): String = when (period) {
         is BudgetPeriod.Monthly -> if (period.startDay != 1) "payday" else "month end"

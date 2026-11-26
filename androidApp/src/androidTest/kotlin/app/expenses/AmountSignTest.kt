@@ -42,12 +42,14 @@ class AmountSignTest {
     fun theKindDecidesTheFlowAndTheSign() {
         assertEquals(Flow3.OUT, flowOf("EXPENSE", false)); assertEquals(Flow3.IN, flowOf("INCOME", true)); assertEquals(Flow3.IN, flowOf("REFUND", true))
         assertEquals(Flow3.MOVE, flowOf("TRANSFER", false)); assertEquals(Flow3.MOVE, flowOf("TRANSFER", true), "a transfer is a move whichever way the flag points")
-        assertEquals("-₹5.00", signedAmount("₹5.00", Flow3.OUT)); assertEquals("-₹5.00", signedAmount("-₹5.00", Flow3.OUT), "no double minus")
-        assertEquals("+₹5.00", signedAmount("₹5.00", Flow3.IN)); assertEquals("+₹5.00", signedAmount("+₹5.00", Flow3.IN)); assertEquals("₹5.00", signedAmount("₹5.00", Flow3.MOVE))
+        // D1: money out has no sign unless "Show spending in red" is on (then it is a minus), money in has a plus, a move has neither
+        assertEquals("₹5.00", signedAmount("₹5.00", Flow3.OUT, false)); assertEquals("₹5.00", signedAmount("-₹5.00", Flow3.OUT, false), "a minus already in the figure is dropped")
+        assertEquals("-₹5.00", signedAmount("₹5.00", Flow3.OUT, true)); assertEquals("-₹5.00", signedAmount("-₹5.00", Flow3.OUT, true), "no double minus")
+        for (red in listOf(false, true)) { assertEquals("+₹5.00", signedAmount("₹5.00", Flow3.IN, red)); assertEquals("+₹5.00", signedAmount("+₹5.00", Flow3.IN, red)); assertEquals("₹5.00", signedAmount("₹5.00", Flow3.MOVE, red)) }
     }
 
     @Test
-    fun theListShowsAMinusOnExpensesAPlusOnIncomeAndNoSignOnATransfer() {
+    fun theListShowsNoSignOnExpensesAPlusOnIncomeAndNoSignOnATransfer() {
         val now = System.currentTimeMillis()
         runBlocking { container.write { ok ->
             ok.store.save(Expense(EntryId("a"), now - 3000, AccountId("bank"), Money(12_500, Currency.INR)), EntryDetails(merchant = "Lunch"))
@@ -57,6 +59,23 @@ class AmountSignTest {
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("amount_ATM"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         fun text(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
-        assertEquals("-₹125.00", text("amount_Lunch")); assertEquals("+₹5,000.00", text("amount_Salary")); assertEquals("₹200.00", text("amount_ATM"))
+        assertEquals("₹125.00", text("amount_Lunch")); assertEquals("+₹5,000.00", text("amount_Salary")); assertEquals("₹200.00", text("amount_ATM"))
+    }
+
+    @Test
+    fun showSpendingInRedAddsTheMinusAndAScreenReaderHearsSpentOrReceivedWhateverTheSetting() {
+        val now = System.currentTimeMillis()
+        runBlocking { container.write { ok ->
+            ok.store.save(Expense(EntryId("a"), now - 3000, AccountId("bank"), Money(12_500, Currency.INR)), EntryDetails(merchant = "Lunch"))
+            ok.store.save(Income(EntryId("b"), now - 2000, AccountId("bank"), Money(500_000, Currency.INR)), EntryDetails(merchant = "Salary"))
+            ok.templates.putSetting("show_spending_red", "1")
+        } }
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("amount_Salary"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        fun text(tag: String, unmerged: Boolean = true) = compose.onNodeWithTag(tag, useUnmergedTree = unmerged).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
+        assertEquals("-₹125.00", text("amount_Lunch")); assertEquals("+₹5,000.00", text("amount_Salary"))
+        val merged = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString(" ") { it.text } }
+        kotlin.test.assertTrue(merged("row_Lunch").contains("spent ₹125.00"), "a row says what it did, not a bare figure: ${merged("row_Lunch")}")
+        kotlin.test.assertTrue(merged("row_Salary").contains("received ₹5,000.00"), merged("row_Salary"))
     }
 }

@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.Column
@@ -333,12 +335,12 @@ fun flowOf(kind: String, inflow: Boolean): Flow3 = when {
     else -> Flow3.OUT
 }
 
-/** Whether spending is drawn in red (the Appearance switch "Show spending in red"; off by default: the ordinary text colour with a minus sign). */
+/** Whether spending is drawn in red with a minus sign (the Appearance switch "Show spending in red"; off by default: the ordinary text colour, no sign). */
 val LocalSpendingRed = androidx.compose.runtime.compositionLocalOf { false }
 
 /**
- * The colour of an amount (UI S3): money in is green, with a plus sign; money out is the ordinary text colour with a minus sign, because the sign already says which way it went and a list that is all red makes red
- * mean nothing; a transfer is the ordinary text colour. Red is kept for what is wrong (over a limit, overdue, failed), drawn by those screens, and the person can switch spending back to red under Appearance
+ * The colour of an amount (UI S3, D1): money in is the accent, with a plus sign; money out is the ordinary text colour and has no sign, because a list that is all red, or all minus, makes both mean
+ * nothing; a transfer is the ordinary text colour. Red is kept for what is wrong (over a limit, overdue, failed), drawn by those screens, and the person can switch spending back to red under Appearance
  * ([LocalSpendingRed]). Money in is the accent (its text colour reads at 4.5:1 on every theme) and over is the signal red, both from the theme.
  */
 @Composable
@@ -350,11 +352,29 @@ fun amountColor(flow: Flow3): Color {
     }
 }
 
-/** The amount with its sign: "-" for money out, "+" for money in, none for a transfer. [amount] is the plain formatted figure. */
-fun signedAmount(amount: String, flow: Flow3): String = when (flow) {
-    Flow3.OUT -> "-" + amount.removePrefix("-")
+/**
+ * The amount with its sign (D1): money out has none (the list is the spending, a minus on every row says nothing), money in has "+" (and the accent colour), a transfer has neither. With "Show spending in
+ * red" on ([spendingRed]) money out gets its minus and the red back. [amount] is the plain formatted figure.
+ */
+fun signedAmount(amount: String, flow: Flow3, spendingRed: Boolean): String = when (flow) {
+    Flow3.OUT -> if (spendingRed) "-" + amount.removePrefix("-") else amount.removePrefix("-")
     Flow3.IN -> "+" + amount.removePrefix("+")
     Flow3.MOVE -> amount
+}
+
+/** [signedAmount] with the person's "Show spending in red" setting. */
+@Composable
+fun signedAmount(amount: String, flow: Flow3): String = signedAmount(amount, flow, LocalSpendingRed.current)
+
+/**
+ * What a screen reader says for an amount: "spent ₹125.00", "received ₹5,000.00", "moved ₹200.00" (hidden amounts are masked). With no minus sign on spending, the figure alone would not say which way the money
+ * went, so the words are spoken whatever the sign setting is. The drawn figure is [content] and keeps its own node (and test tag) in the unmerged tree.
+ */
+@Composable
+fun SpokenAmount(amount: String, flow: Flow3, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val plain = amount.removePrefix("-").removePrefix("+")
+    val words = privately(when (flow) { Flow3.OUT -> "spent $plain"; Flow3.IN -> "received $plain"; Flow3.MOVE -> "moved $plain" })
+    Box(modifier.clearAndSetSemantics { text = AnnotatedString(words) }) { content() }
 }
 
 /**

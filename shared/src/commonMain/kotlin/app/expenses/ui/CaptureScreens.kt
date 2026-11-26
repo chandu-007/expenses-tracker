@@ -312,7 +312,7 @@ private fun InboxCard(
             Text(progress, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("inbox_progress_${r.id}"))
             // who, how much (from 140% text size the amount goes under the names, so the payee and the line of facts keep the width: beside the amount they broke in the middle of a word)
             val stackAmount = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.4f
-            val amountText: @Composable (Modifier) -> Unit = { m -> Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = amountColor(flow), modifier = m.testTag("inbox_amount_${r.id}")) }
+            val amountText: @Composable (Modifier) -> Unit = { m -> SpokenAmount(r.amountText, flow, m) { Text(signedAmount(r.amountText, flow), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = amountColor(flow), modifier = Modifier.testTag("inbox_amount_${r.id}")) } }
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 CategoryAvatar(r.payee ?: r.issuer, r.payee ?: r.issuer, Modifier.padding(end = 12.dp))
                 Column(Modifier.weight(1f)) {

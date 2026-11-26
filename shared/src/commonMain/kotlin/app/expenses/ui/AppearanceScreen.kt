@@ -95,7 +95,7 @@ fun AppearanceScreen(current: Appearance, onChange: (Appearance) -> Unit, onBack
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = showSpendingRed, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onShowSpendingRed).testTag("spend_red_row"), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Show spending in red", style = MaterialTheme.typography.bodyLarge)
-                    Text("Off: money you spend is in the ordinary text colour with a minus sign, and red is kept for what is wrong (over a limit, overdue). On: spending is red.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Off: money you spend is in the ordinary text colour with no sign (money in has a plus and the accent), and red is kept for what is wrong (over a limit, overdue). On: spending is red, with a minus sign.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 androidx.compose.material3.Switch(checked = showSpendingRed, onCheckedChange = null, modifier = Modifier.testTag("spend_red_switch"))
             }

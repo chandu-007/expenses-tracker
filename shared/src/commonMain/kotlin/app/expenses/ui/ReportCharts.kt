@@ -179,14 +179,14 @@ fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, o
         report.budget?.let { b ->
             // only for the budget period being lived: "On pace · ₹25,695 left of ₹75,000 ›", the bar under it with a tick for today
             // the exact text is built here and drawn whole by [WholeText]: "Over by ₹1,300.00 · limit ₹2,000.00" is spoken with its paise, never pre-rounded
-            val line = if (b.pace == app.expenses.core.domain.PaceLevel.OVER) app.expenses.core.domain.PaceMath.word(b.pace, b.note.removeSuffix(" over")) + " · limit " + b.limit
-                else app.expenses.core.domain.PaceMath.word(b.pace) + " · " + b.note + " of " + b.limit
+            val line = if (b.pace == app.expenses.core.domain.PaceLevel.OVER) app.expenses.core.domain.PaceMath.statusWord(b.pace, false, b.note.removeSuffix(" over")) + " · limit " + b.limit
+                else app.expenses.core.domain.PaceMath.statusWord(b.pace, app.expenses.core.domain.PaceMath.isWellUnder(b.percent / 100f, report.budgetElapsed)) + " · " + b.note + " of " + b.limit
             Column(Modifier.fillMaxWidth().clickable(onClick = onBudget).testTag("report_budget_line"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     WholeText(line, style = MaterialTheme.typography.labelLarge, color = ink, modifier = Modifier.weight(1f))
                     Text("›", style = MaterialTheme.typography.titleMedium, color = quiet, modifier = Modifier.padding(start = 8.dp).clearAndSetSemantics {})
                 }
-                if (!LocalHideAmounts.current) AnimatedBudgetBar(b, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = report.budgetElapsed)
+                AnimatedBudgetBar(b, Modifier.height(6.dp).clip(RoundedCornerShape(50)), elapsed = report.budgetElapsed)
             }
         }
     }

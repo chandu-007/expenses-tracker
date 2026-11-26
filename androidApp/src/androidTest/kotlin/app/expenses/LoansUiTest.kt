@@ -85,7 +85,7 @@ class LoansUiTest {
         node("month_spend").assertTextEquals("₹0.00")
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("amount_Chandu"), useUnmergedTree = true).fetchSemanticsNodes().size == 3 }
         val signs = compose.onAllNodes(hasTestTag("amount_Chandu"), useUnmergedTree = true).fetchSemanticsNodes().map { n -> n.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text } }
-        assertEquals(listOf("+₹3,500.00", "+₹1,500.00", "-₹5,000.00"), signs, "newest first: money got is green and plus, money given is red and minus")
+        assertEquals(listOf("+₹3,500.00", "+₹1,500.00", "₹5,000.00"), signs, "newest first: money got is in the accent with a plus, money given has no sign")
     }
 
     @Test

@@ -99,7 +99,7 @@ private fun GhostRow(index: Int, row: ExampleRow, pos: CardPos, currency: Curren
     val flow = if (row.income) Flow3.IN else Flow3.OUT
     val detail = row.categoryName // a real row on Home says its account and category; the day is the heading above it, which the example has no use for
     val amount: @Composable () -> Unit = {
-        MoneyText(signedAmount(Money(row.minor, currency).formatted(), flow), style = NumberStyle.Row, color = amountColor(flow))
+        Money(row.minor, currency).formatted().let { shown -> SpokenAmount(shown, flow) { MoneyText(signedAmount(shown, flow), style = NumberStyle.Row, color = amountColor(flow)) } }
     }
     Row(
         Modifier.entryCardClip(pos).entryCardFill(pos).testTag("example_row_$index")

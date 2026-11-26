@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,7 +68,8 @@ private fun designOf(a: AccountRowUi): CardDesign =
 @Composable
 fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, stripAmount: Float = 0f) {
     val d = designOf(a)
-    val ink = Color(d.text)
+    // the small tile of Home's strip is a plain card like every other (white on the light ground, #181B1D on the dark, a hairline): the account's own colours are for the accounts page
+    val ink = if (compact) MaterialTheme.colorScheme.onSurface else Color(d.text)
     val accent = Color(d.accent)
     val network = a.network?.let { n -> CardNetwork.entries.firstOrNull { it.name == n } }
     val isCard = a.type == "CREDIT_CARD"
@@ -82,13 +84,14 @@ fun AccountTile(a: AccountRowUi, compact: Boolean, onClick: () -> Unit, modifier
     val scale by animateFloatAsState(if (pressed && !reduce) 0.97f else 1f, Motion.press(), label = "tilePress")
     Box(
         modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip((if (compact) Radius.S else Radius.M))
-            .background(Brush.linearGradient(listOf(Color(d.top), Color(d.bottom)), start = Offset.Zero, end = Offset(900f, 900f)))
+            .then(if (compact) Modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.S)
+                else Modifier.background(Brush.linearGradient(listOf(Color(d.top), Color(d.bottom)), start = Offset.Zero, end = Offset(900f, 900f))))
             .clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick).testTag(tag)
             // the small chip reads as one line, as it always did; the full tile keeps its parts (balance, status) separate for the accounts page
             .then(if (compact) Modifier.clearAndSetSemantics { text = AnnotatedString(label) } else Modifier),
     ) {
         // a soft shine and, on a premium card, a thin gold edge: all drawn, nothing borrowed
-        Canvas(Modifier.fillMaxSize()) {
+        if (!compact) Canvas(Modifier.fillMaxSize()) {
             drawCircle(Color.White.copy(alpha = 0.07f), radius = size.width * 0.55f, center = Offset(size.width * 0.95f, -size.height * 0.15f))
             drawCircle(Color.White.copy(alpha = 0.05f), radius = size.width * 0.4f, center = Offset(size.width * 0.1f, size.height * 1.15f))
             if (a.tier == CardTier.PREMIUM.name && isCard) drawRoundRect(accent.copy(alpha = 0.55f), size = size, cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (compact) 18.dp.toPx() else 22.dp.toPx()), style = Stroke(width = 1.5.dp.toPx()))
@@ -133,9 +136,9 @@ private fun CompactTileBody(a: AccountRowUi, ink: Color, isCard: Boolean) {
         Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 9.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(a.name, color = ink, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Column {
-                Text(a.balanceText.wholeAmounts(), color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 14.sp, stepSize = 0.5.sp))
+                Text((if (a.owed) a.balanceText.removePrefix("-") else a.balanceText).wholeAmounts(), color = ink, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 14.sp, stepSize = 0.5.sp))
                 val sub = listOfNotNull("owed".takeIf { a.owed }, a.card?.dueShort?.takeIf { it.isNotEmpty() }).joinToString(" · ")
-                if (sub.isNotEmpty()) Text(sub, color = ink.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (sub.isNotEmpty()) Text(sub, color = if (a.owed) Signal.watch else ink.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         val card = a.card

@@ -65,7 +65,7 @@ class AccountFilterUiTest {
         tap("balance_chip_Cash") // again: back to everything
         waitFor("row_FromBank"); waitGone("account_filter_note")
         tap("balance_chip_Bank"); waitGone("row_FromCash"); assertTrue(has("row_FromBank") && has("row_BankToCash"))
-        assertTrue(amountOf("BankToCash").startsWith("-"), "out of Bank it is money out: ${amountOf("BankToCash")}")
+        assertTrue(!amountOf("BankToCash").startsWith("+") && !amountOf("BankToCash").startsWith("-"), "out of Bank it is money out, which has no sign: ${amountOf("BankToCash")}")
         tap("account_filter_clear"); waitFor("row_FromCash")
         assertTrue(!amountOf("BankToCash").startsWith("+") && !amountOf("BankToCash").startsWith("-"), "unfiltered, a transfer has no sign: ${amountOf("BankToCash")}")
         tap("balance_chip_Bank")

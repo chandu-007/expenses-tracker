@@ -183,7 +183,7 @@ private fun HistoryRow(e: LoanEntryUi, pos: CardPos, onOpen: (String) -> Unit, m
                 Text(if (e.gave) "You gave" else "You got", style = MaterialTheme.typography.bodyLarge)
                 Text(listOf(e.dateText, e.account, e.note).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = NumberStyle.Row, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN))
+            SpokenAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN) { Text(signedAmount(e.amountText, if (e.gave) Flow3.OUT else Flow3.IN), style = NumberStyle.Row, color = amountColor(if (e.gave) Flow3.OUT else Flow3.IN)) }
         }
     }
 }
