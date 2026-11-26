@@ -185,6 +185,8 @@ class HomeOptionBUiTest {
     private fun tileKeepsItsLinesInsideAtFontScale(scale: String) {
         seedTypical(); cardDueSoon(); shell("settings put system font_scale $scale")
         launch(); waitFor("balance_chip_HDFC Regalia"); Thread.sleep(2_000)
+        // the page's own list is scrolled to the strip first: the tile's scroll is horizontal only, and where the strip stands on the page depends on how tall the cards above are (a tile half under the bottom bar reads as a short one)
+        runCatching { compose.onNodeWithTag("list", useUnmergedTree = true).performScrollToNode(androidx.compose.ui.test.hasTestTag("balances")) }; Thread.sleep(500)
         val tile = bounds("balance_chip_HDFC Regalia")
         val node = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("the owed line") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("owed") } }, useUnmergedTree = true).fetchSemanticsNodes()
             .firstOrNull { it.boundsInRoot.left >= tile.left - 1f && it.boundsInRoot.right <= tile.right + 1f && it.boundsInRoot.top >= tile.top - 1f && it.boundsInRoot.top <= tile.bottom }
