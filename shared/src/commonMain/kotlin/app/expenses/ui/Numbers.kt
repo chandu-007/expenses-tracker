@@ -29,27 +29,43 @@ const val TABULAR_FIGURES = "tnum"
 
 private fun TextStyle.tabular() = copy(fontFeatureSettings = TABULAR_FIGURES)
 
-/** Material's fifteen styles; each with tabular figures when [allTabular] (the iPhone), Material's own otherwise. */
-fun appTypography(allTabular: Boolean): Typography {
+/**
+ * Material's fifteen styles in the design's two voices: Space Grotesk, semi-bold, for display and headline styles (screen titles, figures), Inter for everything else; sizes stay Material's except
+ * the screen title (headline medium, 26 sp). With the bundled [fonts] the digits are tabular in the font files themselves, so no style asks for `tnum` on either phone; without them (a font file
+ * that could not be read) the system font stays, and on the iPhone, whose digits are not tabular, every style asks ([allTabular]).
+ */
+fun appTypography(allTabular: Boolean, fonts: app.expenses.AppFonts? = null): Typography {
     val d = Typography()
-    if (!allTabular) return d
+    val tabular = allTabular && fonts == null
+    fun TextStyle.style(display: Boolean = false, weight: FontWeight? = null): TextStyle {
+        var t = this
+        if (fonts != null) t = t.copy(fontFamily = if (display) fonts.display else fonts.text, fontWeight = weight ?: fontWeight)
+        return if (tabular) t.tabular() else t
+    }
+    val sg = FontWeight.SemiBold
     return Typography(
-        displayLarge = d.displayLarge.tabular(), displayMedium = d.displayMedium.tabular(), displaySmall = d.displaySmall.tabular(),
-        headlineLarge = d.headlineLarge.tabular(), headlineMedium = d.headlineMedium.tabular(), headlineSmall = d.headlineSmall.tabular(),
-        titleLarge = d.titleLarge.tabular(), titleMedium = d.titleMedium.tabular(), titleSmall = d.titleSmall.tabular(),
-        bodyLarge = d.bodyLarge.tabular(), bodyMedium = d.bodyMedium.tabular(), bodySmall = d.bodySmall.tabular(),
-        labelLarge = d.labelLarge.tabular(), labelMedium = d.labelMedium.tabular(), labelSmall = d.labelSmall.tabular(),
+        displayLarge = d.displayLarge.style(true, sg), displayMedium = d.displayMedium.style(true, sg), displaySmall = d.displaySmall.style(true, sg),
+        headlineLarge = d.headlineLarge.style(true, sg), headlineMedium = d.headlineMedium.copy(fontSize = 26.sp, lineHeight = 32.sp).style(true, sg), headlineSmall = d.headlineSmall.style(true, sg),
+        titleLarge = d.titleLarge.style(false, sg), titleMedium = d.titleMedium.style(false, sg), titleSmall = d.titleSmall.style(false, sg),
+        bodyLarge = d.bodyLarge.style(), bodyMedium = d.bodyMedium.style(), bodySmall = d.bodySmall.style(),
+        labelLarge = d.labelLarge.style(false, sg), labelMedium = d.labelMedium.style(false, FontWeight.Medium), labelSmall = d.labelSmall.style(false, FontWeight.Medium),
     )
 }
+
+/** The display family (Space Grotesk) for the hero figure, and whether the digits still need asking for (no bundled fonts); set by the root. */
+val LocalDisplayFamily = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.font.FontFamily?> { null }
+val LocalAskTabular = androidx.compose.runtime.staticCompositionLocalOf { true }
+
+private val Ask: String? @Composable get() = if (LocalAskTabular.current) TABULAR_FIGURES else null
 
 /** The four number roles: a hero figure and a chart label (11 sp) always tabular; a figure in a list row and in a label take the theme's style (tabular on the iPhone, see [appTypography]). */
 object NumberStyle {
     /** The hero: 40 sp semi-bold, tight, tabular. The sign and the paise are drawn small by [MoneyText]; at large text the screens cap it as they always did. */
-    val Hero = TextStyle(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp, fontFeatureSettings = TABULAR_FIGURES)
+    val Hero @Composable get() = TextStyle(fontFamily = LocalDisplayFamily.current, fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp, fontFeatureSettings = Ask)
     /** A row's amount: body large, semi-bold. */
     val Row @Composable get() = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
     val Label @Composable get() = MaterialTheme.typography.labelMedium
-    val Chart = TextStyle(fontSize = 11.sp, fontFeatureSettings = TABULAR_FIGURES)
+    val Chart @Composable get() = TextStyle(fontSize = 11.sp, fontFeatureSettings = Ask)
 }
 
 /** The one heading above a day's entries (and its total): label large, in the muted text colour. There were three label styles for this. */
@@ -76,6 +92,24 @@ fun moneyAnnotated(text: String, paiseColor: Color, smallSign: Boolean = true): 
  */
 @Composable
 fun MoneyText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = NumberStyle.Hero,
+    color: Color = Color.Unspecified,
+    maxLines: Int = 1,
+    minFontSize: TextUnit = TextUnit.Unspecified,
+    rolling: Boolean = false,
+    /** See [OdometerText]'s `memoryKey`. */
+    memoryKey: String? = null,
+) {
+    // a headline figure stops growing at 54 sp (Slice 112's rule, the redesign's rule 2): a 40 sp figure at 200% text would be 80 sp
+    val size = style.fontSize.value
+    if (size >= 30f && 54f / size > 1f) CappedFontScale(54f / size) { MoneyTextBody(text, modifier, style, color, maxLines, minFontSize, rolling, memoryKey) }
+    else MoneyTextBody(text, modifier, style, color, maxLines, minFontSize, rolling, memoryKey)
+}
+
+@Composable
+private fun MoneyTextBody(
     text: String,
     modifier: Modifier = Modifier,
     style: TextStyle = NumberStyle.Hero,

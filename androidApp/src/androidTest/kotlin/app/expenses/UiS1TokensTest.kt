@@ -2,6 +2,7 @@ package app.expenses
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +46,30 @@ import kotlin.test.assertTrue
 class UiS1TokensTest {
     @get:Rule val compose = createComposeRule()
 
+    /** Slice 130: the bundled fonts carry tabular digits themselves (frozen into the files), so no style asks for `tnum`: every digit is as wide as the others in Inter and in Space Grotesk at every weight in use. */
+    @Test
+    fun everyDigitIsAsWideAsTheOthersInTheBundledFontsWithoutAskingForTabularFigures() {
+        val fonts = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ExpensesApp).platform.fonts
+        assertTrue(fonts != null, "the fonts in assets/fonts load")
+        val widths = mutableMapOf<String, Int>()
+        compose.setContent {
+            MaterialTheme(typography = appTypography(allTabular = false, fonts = fonts)) {
+                val tm = rememberTextMeasurer()
+                val t = MaterialTheme.typography
+                LaunchedEffect(Unit) {
+                    val rows = listOf("inter400" to t.bodyLarge, "inter600" to t.titleMedium, "inter700" to t.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), "sg600" to t.headlineMedium, "sg700" to t.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), "sg500" to t.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+                    for ((name, style) in rows) for (digits in listOf("1111", "8888", "0000", "1,11,111.00", "8,88,888.00")) widths["$name:$digits"] = tm.measure(digits, style.copy(fontSize = 32.sp, fontFeatureSettings = null)).size.width
+                }
+            }
+        }
+        compose.waitUntil(10_000) { widths.size == 30 }
+        fun same(a: Int?, b: Int?, what: String) = assertTrue(a != null && b != null && kotlin.math.abs(a - b) <= 0.01f * a, "$what: $a px against $b px")
+        for (style in listOf("inter400", "inter600", "inter700", "sg600", "sg700", "sg500")) {
+            same(widths["$style:1111"], widths["$style:8888"], "$style: 1111 and 8888"); same(widths["$style:1111"], widths["$style:0000"], "$style: 1111 and 0000")
+            same(widths["$style:1,11,111.00"], widths["$style:8,88,888.00"], "$style: a lakh figure keeps its width whatever the digits")
+        }
+    }
+
     @Test
     fun everyDigitIsAsWideAsTheOthersInTheHeroAndInTheThemesStyles() {
         val widths = mutableMapOf<String, Int>()
@@ -52,8 +77,9 @@ class UiS1TokensTest {
             MaterialTheme(typography = appTypography(allTabular = true), shapes = appShapes()) {
                 val tm = rememberTextMeasurer()
                 val t = MaterialTheme.typography
+                val hero = NumberStyle.Hero; val chart = NumberStyle.Chart
                 LaunchedEffect(Unit) {
-                    for ((name, style) in listOf("hero" to NumberStyle.Hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to NumberStyle.Chart, "display" to t.displaySmall)) {
+                    for ((name, style) in listOf("hero" to hero, "body" to t.bodyLarge, "label" to t.labelMedium, "title" to t.titleLarge, "chart" to chart, "display" to t.displaySmall)) {
                         for (digits in listOf("1111", "8888", "0000", "1,11,111.00", "8,88,888.00")) widths["$name:$digits"] = tm.measure(digits, style.copy(fontSize = 32.sp)).size.width
                     }
                 }

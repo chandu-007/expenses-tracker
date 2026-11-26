@@ -103,7 +103,7 @@ private fun GoalCard(g: GoalRowUi, onAdd: () -> Unit, onEdit: () -> Unit, onRemo
     val accent = MaterialTheme.colorScheme.primary
     var menu by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(14.dp).testTag("goal_${g.name}"),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.M).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp).testTag("goal_${g.name}"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {

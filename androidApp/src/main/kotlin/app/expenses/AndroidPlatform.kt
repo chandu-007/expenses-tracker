@@ -51,6 +51,18 @@ class AndroidPlatform(context: Context) : Platform {
     override val supportsSmsCapture get() = BuildConfig.SMS_CAPTURE
     override val supportsNotificationCapture get() = true
     override val supportsWidget get() = true
+    /** The design's fonts from the app's assets (`assets/fonts`), built once. [ExpensesApp] builds them and preloads their typefaces on a worker thread at start, so the first frame finds them ready. */
+    override val fonts: AppFonts? by lazy {
+        runCatching {
+            val a = context.assets
+            fun f(file: String, w: androidx.compose.ui.text.font.FontWeight) = androidx.compose.ui.text.font.Font("fonts/$file", a, w)
+            val n = androidx.compose.ui.text.font.FontWeight.Normal; val m = androidx.compose.ui.text.font.FontWeight.Medium; val sb = androidx.compose.ui.text.font.FontWeight.SemiBold; val b = androidx.compose.ui.text.font.FontWeight.Bold
+            AppFonts(
+                text = androidx.compose.ui.text.font.FontFamily(f("Inter-400.ttf", n), f("Inter-500.ttf", m), f("Inter-600.ttf", sb), f("Inter-700.ttf", b)),
+                display = androidx.compose.ui.text.font.FontFamily(f("SpaceGrotesk-500.ttf", m), f("SpaceGrotesk-600.ttf", sb), f("SpaceGrotesk-700.ttf", b)),
+            )
+        }.getOrNull()
+    }
     override val seedingEnabled get() = BuildConfig.SEEDING_ENABLED
     override val autoExportKeep get() = AutoExport.KEEP
     override val backupMinPassphrase get() = BackupCrypto.MIN_PASSPHRASE

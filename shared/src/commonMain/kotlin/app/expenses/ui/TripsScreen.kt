@@ -167,7 +167,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.tripSection(
 
 @Composable
 private fun TripRow(r: TripRowUi, onOpen: (String) -> Unit, onEdit: (String) -> Unit, onDelete: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.S).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).testTag("trip_row_${r.name}")) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(Radius.S).background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("trip_row_${r.name}")) {
         Column(
             Modifier.fillMaxWidth().clickable(onClickLabel = "Open the summary of ${r.name}", role = Role.Button) { onOpen(r.id) }.heightIn(min = 48.dp).padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).testTag("trip_open_${r.name}"),
             verticalArrangement = Arrangement.spacedBy(2.dp),

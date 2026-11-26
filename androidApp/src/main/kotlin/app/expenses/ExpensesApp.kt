@@ -15,6 +15,13 @@ class ExpensesApp : Application() {
         Notifier.createChannels(this)
         NotificationWork.schedule(this)
         AutoExportWorker.schedule(this)
+        // the design's fonts: built and their typefaces loaded into Compose's own cache off the main thread, now, so the first Home or Add frame neither waits for a file nor draws in another font first
+        appScope.launch(Dispatchers.IO) {
+            platform.fonts?.let { f ->
+                val resolver = androidx.compose.ui.text.font.createFontFamilyResolver(this@ExpensesApp)
+                runCatching { resolver.preload(f.text); resolver.preload(f.display) }
+            }
+        }
     }
 
     /**

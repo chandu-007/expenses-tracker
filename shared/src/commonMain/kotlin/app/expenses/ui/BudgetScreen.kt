@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -105,7 +106,8 @@ fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Mod
     androidx.compose.material3.Card(
         onClick = onOpen,
         shape = Radius.M,
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface)),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.testTag("budget_summary"),
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -254,7 +256,7 @@ fun BudgetScreen(
                 val n = withoutLimit.size
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).clip(Radius.M).clickable(onClickLabel = if (showNoLimit) "Hide them" else "Show them") { showNoLimit = !showNoLimit }
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 14.dp, vertical = 12.dp).testTag("budget_no_limit_toggle"),
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 14.dp, vertical = 12.dp).testTag("budget_no_limit_toggle"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(if (showNoLimit) "Categories without a limit" else if (n == 1) "1 more category has no limit" else "$n more categories have no limit", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -284,7 +286,7 @@ private fun BudgetRingCard(budget: BudgetUi, spokenFor: app.expenses.SpokenForUi
     val hide = LocalHideAmounts.current
     val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.4f
     Column(
-        Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().clip(Radius.L).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+        Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().clip(Radius.L).background(MaterialTheme.colorScheme.surfaceContainerLow).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.L)
             .clickable(onClickLabel = "Change the limit", onClick = onClick).padding(16.dp).testTag("budget_row_overall"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

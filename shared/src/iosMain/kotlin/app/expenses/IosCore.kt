@@ -14,6 +14,8 @@ import platform.Foundation.NSProcessInfo
  */
 internal class IosCore private constructor(host: IosHostServices) {
     val platform = IosPlatform(host)
+    // the fonts are read now, before the first frame; a file that is missing is said in the log (the unit test FontsTests fails on it too), never a silent change of font
+    @Suppress("unused") private val fontsProblem = IosFonts.check()?.also { println("Expenses: fonts: $it; the system font is used") }
     private val arguments = NSProcessInfo.processInfo.arguments.filterIsInstance<String>()
 
     // Set up before any screen exists, so nothing has the file open.

@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 
@@ -38,16 +39,22 @@ import androidx.compose.ui.graphics.compositeOver
  * Before this there were nine ways to draw a card (three tints, four radii, Material's `Card` and drawn ones).
  */
 @Composable
-fun standardCardColor(): Color = if (LocalHighContrast.current) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f) // UI S9: high contrast drops the see-through tint
+fun standardCardColor(): Color = MaterialTheme.colorScheme.surfaceContainerLow // UI S9: high contrast drops the see-through tint
 
 /** A standard card: clipped to 20 dp and tinted; the caller adds its own padding. */
 @Composable
-fun Modifier.standardCard(): Modifier = this.clip(Radius.M).background(standardCardColor())
+fun Modifier.standardCard(): Modifier = this.clip(Radius.M).background(standardCardColor()).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.M)
 
-/** An inline card in a wash of [tint] (about 10% of it over the surface, so the text on it keeps its contrast in both themes). */
+/**
+ * An inline card: the card colour (white on the light ground, #181B1D on the dark) with the hairline, like every card of the redesign. A [tint] other than the accent (the red of a blocker, the amber of a
+ * warning) washes it by [strength] so a state still shows; the accent itself is the app's own colour and adds nothing: a card that is only "ours" is plain.
+ */
 @Composable
-fun Modifier.inlineCard(tint: Color, strength: Float = 0.10f): Modifier =
-    this.clip(Radius.M).background(tint.copy(alpha = strength).compositeOver(MaterialTheme.colorScheme.surface))
+fun Modifier.inlineCard(tint: Color, strength: Float = 0.10f): Modifier {
+    val card = MaterialTheme.colorScheme.surfaceContainerLow
+    val fill = if (tint == MaterialTheme.colorScheme.primary) card else tint.copy(alpha = strength).compositeOver(card)
+    return this.clip(Radius.M).background(fill).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.M)
+}
 
 /** An inline card in a solid role colour (the backup nudge, the trip total), not a wash. */
 fun Modifier.inlineCardSolid(color: Color): Modifier = this.clip(Radius.M).background(color)

@@ -29,7 +29,7 @@ fun Modifier.entryCardClip(pos: CardPos): Modifier {
 @Composable
 fun Modifier.entryCardFill(pos: CardPos, selected: Boolean = false): Modifier {
     val fill = if (selected) MaterialTheme.colorScheme.secondaryContainer
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f).compositeOver(MaterialTheme.colorScheme.surface)
+    else MaterialTheme.colorScheme.surfaceContainerLow
     val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     return this.background(fill).drawBehind {
         if (!pos.bottom) drawLine(line, Offset(70.dp.toPx(), size.height - 0.5f), Offset(size.width - 16.dp.toPx(), size.height - 0.5f), strokeWidth = 1.dp.toPx())

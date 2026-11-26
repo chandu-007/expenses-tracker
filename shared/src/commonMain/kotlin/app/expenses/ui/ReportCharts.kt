@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -144,7 +145,7 @@ fun WholeText(
 fun ReportSummary(report: ReportUi, onSpent: () -> Unit, onIncome: () -> Unit, onBudget: () -> Unit = {}) {
     val ink = MaterialTheme.colorScheme.onSurface
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(Radius.M).background(MaterialTheme.colorScheme.surfaceVariant).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(Radius.M).background(MaterialTheme.colorScheme.surfaceContainerLow).border(androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), Radius.M).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onSpent).testTag("report_spent_card")) {
             Text(if (report.open) "Spent so far" else "Spent", style = MaterialTheme.typography.labelLarge, color = quiet)
             // drawn in whole rupees like every other amount of the page; the node says the exact amount (what a screen reader and the tests read)

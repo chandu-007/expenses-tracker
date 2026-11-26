@@ -200,7 +200,7 @@ fun ExpensesRoot(viewModel: LedgerViewModel, host: RootHost) {
     val highContrast = app.expenses.ui.systemHighContrast()
     val wallpaper = if (look.accent.key == Appearances.WALLPAPER.key) app.expenses.ui.systemAccentRgb() else null
     val scheme = androidx.compose.runtime.remember(look, dark, highContrast, wallpaper) { colorSchemeFor(look, dark, highContrast, wallpaper) }
-    MaterialTheme(colorScheme = scheme, typography = androidx.compose.runtime.remember(platform) { app.expenses.ui.appTypography(platform.proportionalDigits) }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
+    MaterialTheme(colorScheme = scheme, typography = androidx.compose.runtime.remember(platform) { app.expenses.ui.appTypography(platform.proportionalDigits, platform.fonts) }, shapes = androidx.compose.runtime.remember { app.expenses.ui.appShapes() }) {
         androidx.compose.runtime.CompositionLocalProvider(app.expenses.ui.LocalSignals provides androidx.compose.runtime.remember(dark) { app.expenses.ui.SignalColors.of(dark) }, app.expenses.ui.LocalCompact provides (look.density == Density.COMPACT), app.expenses.ui.LocalPlatform provides platform, app.expenses.ui.LocalHighContrast provides highContrast) {
             // the keyboard takes room from the screen instead of covering it (from Android 15 the window is no longer resized for it)
             // on a wide window (a tablet, an unfolded foldable) the app keeps a comfortable width in the middle instead of stretching every line across it
