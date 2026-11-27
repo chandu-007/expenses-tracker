@@ -78,11 +78,12 @@ class MotionUiTest {
     }
 
     @Test
-    fun theFourteenDayLineAppearsOnlyOnceThereIsSpendingToDraw() {
+    fun homeHasNoGraphWithOrWithoutSpending() {
         launch(); compose.waitForIdle(); Thread.sleep(1_200)
-        assertTrue(!has("home_spark"), "nothing spent: no line, and no empty space reserved for it")
+        assertTrue(!has("home_spark"), "nothing spent: no graph, and no empty space reserved for it")
         spend("a", 25_000, 1); spend("b", 40_000, 3); launch()
-        compose.waitUntil(15_000) { has("home_spark") }
+        waitFor("month_spend"); compose.waitForIdle(); Thread.sleep(1_000)
+        assertTrue(!has("home_spark"), "with spending there is still no graph: the card has the figure, the bar and the comparison")
     }
 
     @Test
@@ -159,15 +160,16 @@ class MotionUiTest {
     }
 
     @Test
-    fun draggingAFingerAlongTheLineNamesTheDayAndItsAmountAndLettingGoHidesItAgain() {
+    fun draggingAFingerAlongTheReportsBarsNamesThePeriodAndItsAmountAndLettingGoHidesItAgain() {
         spend("a", 25_000, 1); spend("b", 40_000, 3); launch()
-        compose.waitUntil(15_000) { has("home_spark") }; compose.waitForIdle()
-        fun tooltip() = compose.onAllNodes(androidx.compose.ui.test.hasText(" · ₹", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        assertTrue(!tooltip(), "nothing is shown until a finger is on the line")
-        node("home_spark").performTouchInput { down(androidx.compose.ui.geometry.Offset(width * 0.8f, height / 2f)); moveBy(androidx.compose.ui.geometry.Offset(-40f, 0f)) }
-        compose.waitUntil(5_000) { tooltip() }
-        node("home_spark").performTouchInput { up() }
-        compose.waitUntil(5_000) { !tooltip() }
+        tap("open_reports"); waitFor("trend_chart"); compose.waitForIdle()
+        fun bubble() = compose.onAllNodes(hasTestTag("trend_bubble"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        assertTrue(!bubble(), "nothing is shown until a finger is on the bars")
+        node("trend_chart").performScrollTo()
+        node("trend_chart").performTouchInput { down(androidx.compose.ui.geometry.Offset(width * 0.8f, height * 0.8f)); moveBy(androidx.compose.ui.geometry.Offset(-40f, 0f)) }
+        compose.waitUntil(5_000) { bubble() }
+        node("trend_chart").performTouchInput { up() }
+        compose.waitUntil(5_000) { !bubble() }
     }
 
     @Test
@@ -223,7 +225,7 @@ class MotionUiTest {
     @Test
     fun scrollingTheEntriesUpTakesTheTopOfHomeWithThemAndScrollingBackBringsItBack() {
         for (i in 1..14) spend("e$i", 10_000L + i, i.toLong())
-        launch(); compose.waitUntil(15_000) { has("home_spark") && has("month_spend") }; compose.waitForIdle()
+        launch(); compose.waitUntil(15_000) { has("month_spend") }; compose.waitForIdle()
         fun monthTop() = node("month_spend").fetchSemanticsNode().boundsInRoot.top.toInt() // the month's figure is part of the page that scrolls
         val open = monthTop()
         node("list").performTouchInput { swipeUp(startY = bottom - 50f, endY = top + 50f, durationMillis = 200) }

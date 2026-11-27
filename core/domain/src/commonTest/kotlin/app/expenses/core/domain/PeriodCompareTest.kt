@@ -24,13 +24,9 @@ class PeriodCompareTest {
 
     @Test
     fun theSentenceAndTheChipSplitWhatDescribeSaysInOne() {
-        assertEquals("₹250 more than last month so far", PeriodCompare.sentence(125_000, 100_000, "last month", rupees))
         assertEquals("▲ +25%", PeriodCompare.pill(125_000, 100_000))
-        assertEquals("₹300 less than last month so far", PeriodCompare.sentence(70_000, 100_000, "last month", rupees))
         assertEquals("▼ −30%", PeriodCompare.pill(70_000, 100_000))
-        assertEquals("Same as last month so far", PeriodCompare.sentence(100_000, 100_000, "last month", rupees))
         assertNull(PeriodCompare.pill(100_000, 100_000), "no change: no chip")
-        assertNull(PeriodCompare.sentence(50_000, 0, "last month", rupees)); assertNull(PeriodCompare.pill(50_000, 0))
         assertEquals("▲ +999%", PeriodCompare.pill(10_000_000, 100))
         assertEquals("▼ −100%", PeriodCompare.pill(0, 100_000))
         assertEquals("▼ <1%", PeriodCompare.pill(99_500, 100_000), "half a percent less is not '-0%'")
@@ -64,5 +60,16 @@ class SpendingInsightTest {
         assertNull(SpendingInsight.best(listOf(InsightLine("New", 900_000, 0)), rupees), "no usual to compare with")
         assertNull(SpendingInsight.best(listOf(InsightLine("Food", 50_000, 300_000)), rupees), "below usual is good news, not an insight")
         assertNull(SpendingInsight.best(emptyList(), rupees))
+    }
+
+    @Test
+    fun theHeroLineNamesTheEarlierMonthAndSaysByToday() {
+        assertEquals("₹160 more than October by today", PeriodCompare.byToday(25_000, 9_000, "October", rupees))
+        assertEquals("₹492 less than October by today", PeriodCompare.byToday(1_000, 50_200, "October", rupees))
+        assertEquals("Same as October by today", PeriodCompare.byToday(100, 100, "October", rupees))
+        assertNull(PeriodCompare.byToday(100, 0, "October", rupees))
+        assertEquals("October", PeriodCompare.earlierName(BudgetPeriod.Monthly(1), kotlinx.datetime.LocalDate(2026, 10, 1)))
+        assertEquals("the last cycle", PeriodCompare.earlierName(BudgetPeriod.Monthly(25), kotlinx.datetime.LocalDate(2026, 10, 25)))
+        assertEquals("last week", PeriodCompare.earlierName(BudgetPeriod.Weekly(kotlinx.datetime.DayOfWeek.MONDAY), kotlinx.datetime.LocalDate(2026, 11, 16)))
     }
 }

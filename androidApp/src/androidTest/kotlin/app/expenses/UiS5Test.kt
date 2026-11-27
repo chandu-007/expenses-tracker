@@ -77,11 +77,11 @@ class UiS5Test {
     private val period get() = ReportMath.periodAt(BudgetPeriod.Monthly(1), today, 0)
 
     @Test
-    fun theMonthCardHasOneADayFigureAndHowLongItHasToLastAndTheDayOfThePeriod() {
+    fun theHeroHasOneADayFigureAndHowLongItHasToLastAndHowManyDaysAreLeft() {
         limit(30_000); spend("a", 1_000, "Food"); launch(); waitFor("hero_pace_line")
         val line = textOf("hero_pace_line")
         assertTrue(line.contains(" a day · ") && line.contains("month end"), "one figure and what it has to last: $line")
-        assertEquals("Day ${PaceMath.daysIn(period, today)} of ${period.days}", textOf("hero_day_of"))
+        assertTrue(texts("hero_days_left").joinToString(" ").let { it.contains("days to go") || it.contains("last day") }, "how long is left: ${texts("hero_days_left")}")
         assertFalse(has("budget_per_day") || has("home_safe_to_spend_line_per_day"), "no second a-day figure")
     }
 
@@ -101,7 +101,7 @@ class UiS5Test {
     @Test
     fun withoutABudgetOrASafeToSpendLineThereIsNoPaceLine() {
         spend("a", 1_000, "Food"); launch(); waitFor("month_spend")
-        assertFalse(has("hero_pace_line") || has("hero_day_of"))
+        assertFalse(has("hero_pace_line") || has("hero_days_left"))
     }
 
     @Test
@@ -114,16 +114,22 @@ class UiS5Test {
     }
 
     @Test
-    fun theMonthLinesDashedGhostIsLastMonthsSameDaysAndTheTableHasItsColumn() {
+    fun theHeroLineSaysHowThisMonthStandsAgainstTheEarlierOneByTodayAndHomeHasNoGraph() {
         val prev = ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1)
         val shift = prev.start.daysUntil(period.start)
         spend("now", 250, "Food")
         spend("then", 90, "Food", noonOf(LocalDate.fromEpochDays(today.toEpochDays() - shift)))
-        launch(); waitFor("home_spark")
-        node("home_spark").performTouchInput { longClick() }
-        waitFor("spark_table")
-        assertEquals(3, texts("spark_table_row_13").size, "day, spent and last month: ${texts("spark_table_row_13")}")
-        assertTrue(texts("spark_table_row_13").any { it.contains("90.00") }, "today's same day last month: ${texts("spark_table_row_13")}")
+        launch(); waitFor("month_compare")
+        val name = prev.start.month.name.lowercase().replaceFirstChar { it.uppercase() }
+        assertEquals("₹160.00 more than $name by today", textOf("month_compare"), "250 now against 90 on the same day last month")
+        assertFalse(has("home_spark"), "Home has no graph")
+    }
+
+    @Test
+    fun thePaceBarOnHomeSaysHowMuchOfTheLimitAndOfThePeriodIsGone() {
+        limit(10_000); spend("a", 100, "Food"); launch(); waitFor("pace_bar")
+        val said = compose.onAllNodes(hasTestTag("pace_bar"), useUnmergedTree = true).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.StateDescription).orEmpty()
+        assertTrue(said.contains("1% of the limit used") && said.contains("% of the period gone"), said)
     }
 
     @Test

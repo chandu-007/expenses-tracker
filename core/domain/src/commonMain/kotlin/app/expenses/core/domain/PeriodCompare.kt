@@ -17,13 +17,20 @@ object PeriodCompare {
         return if (diff > 0) "▲ ${format(diff)} more than $last so far (+$percent%)" else "▼ ${format(-diff)} less than $last so far (−$percent%)"
     }
 
-    /** The sentence of [describe] without its arrow and percent (the percent is [pill]): "₹250 more than last month so far". Null when there is nothing to compare with. */
-    fun sentence(current: Long, previous: Long, last: String, format: (Long) -> String): String? {
+    /**
+     * The line on Home's hero card: "₹492 less than October by today" (the arrow is drawn by the card). [name] is the earlier period ("October", "last week", "the last cycle"); [current] and [previous]
+     * are spending over the same number of days. Null when there is nothing to compare with.
+     */
+    fun byToday(current: Long, previous: Long, name: String, format: (Long) -> String): String? {
         if (previous <= 0) return null
         val diff = current - previous
-        if (diff == 0L) return "Same as $last so far"
-        return if (diff > 0) "${format(diff)} more than $last so far" else "${format(-diff)} less than $last so far"
+        if (diff == 0L) return "Same as $name by today"
+        return if (diff > 0) "${format(diff)} more than $name by today" else "${format(-diff)} less than $name by today"
     }
+
+    /** What the earlier period is called on the hero card: the month's own name for a calendar month ("October"), otherwise [lastName]. [earlierStart] is the first day of the earlier period. */
+    fun earlierName(period: BudgetPeriod, earlierStart: kotlinx.datetime.LocalDate): String? =
+        if (period is BudgetPeriod.Monthly && period.startDay == 1) earlierStart.month.name.lowercase().replaceFirstChar { it.uppercase() } else lastName(period)
 
     /** The small chip beside the figure: "▲ +25%" or "▼ −30%" (capped at 999%; "▲ <1%" or "▼ <1%" under one percent). Null when there is nothing to compare with or nothing changed. */
     fun pill(current: Long, previous: Long): String? {

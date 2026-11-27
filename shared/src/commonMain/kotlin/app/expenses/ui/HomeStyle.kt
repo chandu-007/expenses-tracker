@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.layout.Spacer
@@ -119,17 +120,6 @@ fun ScreenEnter(key: Int, content: @Composable () -> Unit) {
     }
 }
 
-/** Two softly blurred lights behind the hero's figures. Only called on Android 12 and later, where blur exists; before that the corner light from [heroBackground] is all there is. */
-@Composable
-fun BoxScope.HeroGlow(color: Color) {
-    // matchParentSize: the lights take the card's size and never decide it (a fill-the-screen box here once stretched the card over the whole screen);
-    // the unbounded edge lets each blur fade out past its own square instead of being cut off as a hard-edged block
-    Box(Modifier.matchParentSize()) {
-        Box(Modifier.align(Alignment.TopEnd).offset(x = 40.dp, y = (-30).dp).size(150.dp).blur(48.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).background(color.copy(alpha = 0.34f), CircleShape))
-        Box(Modifier.align(Alignment.BottomStart).offset(x = (-30).dp, y = 36.dp).size(120.dp).blur(40.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded).background(color.copy(alpha = 0.20f), CircleShape))
-    }
-}
-
 /** How tall the fade above the bottom bar is: the same as the bottom padding of the lists that scroll under it (UI S7). */
 private val SCROLL_EDGE = 24.dp
 
@@ -204,7 +194,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"), labelShown = !bigText || selected == "Home")
-                    BarItem("Activity", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"), labelShown = !bigText || selected == "Search")
+                    BarItem("Activity", Icons.AutoMirrored.Outlined.FormatListBulleted, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"), labelShown = !bigText || selected == "Search")
                     if (onAdd != null) AddItem(onAdd, Modifier.weight(1f), addTag, quickEntries, onQuickEntry, labelShown = !bigText) else Spacer(Modifier.weight(1f))
                     BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"), labelShown = !bigText || selected == "Reports")
                     BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge, labelShown = !bigText || selected == "More")
@@ -257,7 +247,7 @@ fun HomeRail(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onRepor
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(gap)) {
                         BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("nav_home"))
-                        BarItem("Activity", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_search"))
+                        BarItem("Activity", Icons.AutoMirrored.Outlined.FormatListBulleted, selected == "Search", onSearch, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_search"))
                         AddItem(onAdd, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item), addTag, quickEntries, onQuickEntry)
                         BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_reports"))
                         BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("more_menu"), badge = moreBadge)
@@ -411,11 +401,3 @@ fun FadeIn(content: @Composable () -> Unit) {
 /** The widest the app is drawn: wider screens (tablets, unfolded foldables) get margins either side, so lines of text and rows stay a readable length. */
 val MAX_CONTENT_WIDTH = 720.dp
 
-/** The change against last month as a small chip on the month card ("▲ +158%"): drawn on the card's own colour, so it reads in light and dark. The words are the sentence under the figure; the chip is the short form. */
-@Composable
-fun ComparePill(text: String, onHero: Color, modifier: Modifier = Modifier) {
-    androidx.compose.material3.Text(
-        text, style = MaterialTheme.typography.labelMedium, color = onHero, fontWeight = FontWeight.SemiBold, maxLines = 1,
-        modifier = modifier.clip(RoundedCornerShape(50)).background(onHero.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("month_compare_pill"),
-    )
-}

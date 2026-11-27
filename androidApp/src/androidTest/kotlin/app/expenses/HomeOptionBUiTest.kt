@@ -119,10 +119,11 @@ class HomeOptionBUiTest {
     private fun waitTiles() { waitFor("budget_summary"); waitFor("home_safe_to_spend_line"); Thread.sleep(2_000) }
 
     @Test
-    fun budgetLeftAndSafeToSpendSitSideBySideAndSayWhereTheirADayFiguresComeFrom() {
+    fun theBudgetsADayFigureAndTheBalancesSafeToSpendSitSideBySideInTheOneCardAndSayWhereTheyComeFrom() {
         seedTypical(); launch(); waitTiles()
-        val b = bounds("budget_summary"); val s = bounds("home_safe_to_spend_line")
-        assertTrue(b.right <= s.left + 1f && kotlin.math.abs(b.top - s.top) < 2f && kotlin.math.abs(b.height - s.height) < 2f, "two tiles in one row, the same height: $b $s")
+        val b = bounds("hero_pace_line"); val s = bounds("home_safe_to_spend_line"); val card = bounds("budget_summary")
+        assertTrue(b.right <= s.left + 1f && kotlin.math.abs(b.top - s.top) < 2f, "two figures in one row: $b $s")
+        assertTrue(b.left >= card.left && s.right <= card.right && s.bottom <= card.bottom, "both inside the one card: $b $s $card")
         // UI S5 (owner decision D7): one "a day" figure, on the month card; the balances' sum is one tap away
         assertTrue(textOf("hero_pace_line").contains("a day · ") && textOf("hero_pace_line").contains("to month end"), textOf("hero_pace_line"))
         assertEquals("How is this worked out?", textOf("home_safe_to_spend_line_how"))
@@ -135,22 +136,23 @@ class HomeOptionBUiTest {
     }
 
     @Test
-    fun theMonthCardHasTheChipTheSentenceAndTheGraphAndTheExactFigureForAScreenReader() {
+    fun theHeroHasTheChipTheFigureTheSentenceAndTheExactFiguresForAScreenReaderAndNoGraph() {
         seedTypical(); launch(); waitFor("month_spend"); Thread.sleep(2_000)
-        assertEquals("₹1,549.10", textOf("month_spend"), "the exact month figure is what is read")
-        waitFor("month_compare_pill"); assertTrue(textOf("month_compare_pill").startsWith("▲ +") || textOf("month_compare_pill").startsWith("▼ −"), textOf("month_compare_pill"))
-        assertTrue(textOf("month_compare").contains("last month so far") && !textOf("month_compare").contains("▲"), textOf("month_compare"))
-        assertTrue(has("home_spark"), "the small graph is there at normal text")
-        assertTrue(bounds("month_spend").top < bounds("month_compare_pill").bottom + 60f * density(), "the chip is on the card's first rows, beside the label")
+        assertEquals("₹1,549.10", textOf("month_spend"), "the exact amount spent is what is read")
+        assertTrue(has("budget_pace_word"), "the status chip")
+        waitFor("month_compare"); assertTrue(textOf("month_compare").contains("by today") && !textOf("month_compare").contains("▲") && !textOf("month_compare").contains("▼"), textOf("month_compare"))
+        assertFalse(has("home_spark"), "no graph")
+        assertFalse(has("month_compare_pill"), "no percent chip: the status chip is the one chip")
+        assertTrue(bounds("month_spend").top > bounds("budget_pace_word").top, "the chip is on the card's first row, above the figures")
     }
 
     @Test
-    fun hideAmountsAlsoHidesTheBarsTheGraphAndTheChip() {
+    fun hideAmountsAlsoHidesTheBarsTheFiguresAndTheComparison() {
         seedTypical(); db { ok -> ok.trips.save(app.expenses.core.domain.Trip("goa", "Goa trip", "Trip: Goa", epochDay(-1), epochDay(4), true, 300_000)) }
         db { it.templates.putSetting("hide_amounts", "1") }
         launch(); waitTiles(); waitFor("home_trip_card")
-        assertFalse(has("home_spark"), "the graph's shape shows the figures")
-        assertFalse(has("month_compare_pill"), "the chip's percent too")
+        assertFalse(has("home_spark"), "no graph")
+        assertFalse(Regex("""\d{3}""").containsMatchIn(textOf("month_compare")), "the comparison's amount is masked: ${textOf("month_compare")}")
         assertFalse(has("home_trip_progress"), "the trip's bar")
         assertFalse(has("home_trip_budget"))
         // the budget's bar keeps its track and the tick for today (the date, not money) but loses its length: a bar that is full of nothing shows no figure
@@ -213,10 +215,10 @@ class HomeOptionBUiTest {
     }
 
     @Test
-    fun atLargeTextTheTwoTilesStackAndTheGraphIsGone() {
+    fun atLargeTextTheTwoFiguresStackInsideTheCardAndThereIsNoGraph() {
         seedTypical(); shell("settings put system font_scale 2.0")
         launch(); waitTiles()
-        val b = bounds("budget_summary"); val s = bounds("home_safe_to_spend_line")
+        val b = bounds("hero_pace_line"); val s = bounds("home_safe_to_spend_line")
         assertTrue(b.bottom <= s.top + 1f && b.left == s.left, "stacked, full width: $b $s")
         assertFalse(has("home_spark")); fits("budget_summary"); fits("home_safe_to_spend_line")
     }

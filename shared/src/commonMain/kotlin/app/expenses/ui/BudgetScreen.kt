@@ -93,60 +93,6 @@ fun BudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier) {
 }
 
 /**
- * The budget on Home. With a limit it is a TILE (Option B: it sits beside the safe-to-spend tile, see [HomeMoneyTiles]): what is left in whole units over a small "of the limit", the bar, and what that
- * allows a day, labelled "from your budget" (the safe-to-spend tile's a-day figure is a different thing: "from your balances"). Without a limit it is the old "Set a budget" prompt. Tapping it opens the
- * budget screen. The figures are drawn in whole units; the node with the tag `budget_overall_note` says the exact sentence ("₹4,000.00 left of ₹5,000.00") to a screen reader and to the tests. While Hide
- * amounts is on every figure is masked and the bar, whose length would show the figure, is not drawn.
- */
-@Composable
-fun BudgetSummary(budget: BudgetUi, onOpen: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), spokenFor: app.expenses.SpokenForUi? = null) {
-    val overall = budget.overall
-    val tint = if (overall.limit == null) MaterialTheme.colorScheme.primary else stateColor(overall.state)
-    val hide = LocalHideAmounts.current
-    androidx.compose.material3.Card(
-        onClick = onOpen,
-        shape = Radius.M,
-        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier.testTag("budget_summary"),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (overall.limit == null) {
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Set a budget for ${budget.periodName}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).testTag("budget_set_prompt"))
-                    Text("Set", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 8.dp))
-                }
-                Text("Pick a limit and see what is left, and what you can spend a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                val exact = privately(overall.note + " of " + overall.limit)
-                // one node says the exact sentence; what is drawn is the whole-unit figure over "of the limit" (both lines masked by Text)
-                Column(Modifier.testTag("budget_overall_note").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(exact) }) {
-                    // the digits of what is left roll when it changes (UI S7)
-                    OdometerText(
-                        overall.note.wholeAmounts(), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                        color = if (overall.state == BudgetState.OVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                        memoryKey = "home_budget_left",
-                    )
-                    Text("of " + overall.limit.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
-                // UI S5: where the spending stands against "today" in words (the figure a day moved to the Home card's top: one "a day" figure, not two)
-                StatusChip(overall, "budget_pace_word", elapsed = budget.elapsed, style = MaterialTheme.typography.labelMedium)
-                if (budget.billsUseItAll) Text("bills use it all", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("budget_bills_use_all"))
-                // N-18: how much of what is left the bills still due before the period ends will take (a tap lists them)
-                spokenFor?.let { SpokenForLine(it, "spoken_for_home") }
-                if (budget.categoriesNeedingAttention > 0) {
-                    Text(
-                        if (budget.categoriesNeedingAttention == 1) "1 category budget is near or over its limit" else "${budget.categoriesNeedingAttention} category budgets are near or over their limit",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
  * N-18, "already spoken for": "₹2,100 of what's left is already spoken for by 3 bills due", drawn in whole units (the node says the exact amounts), a tap lists the bills.
  * Hide amounts masks every figure ([Text] and [privately]); the line has no bar or size that would show one.
  */

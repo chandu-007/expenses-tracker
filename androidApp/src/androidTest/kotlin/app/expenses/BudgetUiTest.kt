@@ -118,7 +118,7 @@ class BudgetUiTest {
         // UI S5: the one "a day" figure is on the month card, with how long it has to last
         waitFor("hero_pace_line")
         compose.onNodeWithTag("hero_pace_line", useUnmergedTree = true).assertTextContains("a day", substring = true)
-        compose.onNodeWithTag("hero_day_of", useUnmergedTree = true).assertTextContains("Day ", substring = true)
+        compose.onNodeWithTag("hero_days_left", useUnmergedTree = true).assertTextContains("to go", substring = true)
     }
 
     @Test

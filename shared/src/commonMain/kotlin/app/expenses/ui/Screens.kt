@@ -397,9 +397,7 @@ fun EntryListScreen(
             return@Scaffold
         }
         LimitCrossedFeel(state.budget.overall.limit != null && state.budget.overall.state == BudgetState.OVER)
-        val onHero = MaterialTheme.colorScheme.onPrimary
         val large = isLargeText()
-        val dense = large || wide
         // the money spent on each complete day, for the day headings: worked out from the rows already here (the last day loaded waits for the next page), no query
         val dayTotals = remember(state.rows, state.endReached, state.baseCurrency) {
             DayTotals.of(state.rows.map { DayEntry(it.day, it.kind, it.minor, it.currency) }, state.baseCurrency.code, state.endReached)
@@ -409,38 +407,10 @@ fun EntryListScreen(
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding).testTag("list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "home_top", contentType = "top") {
                 Column(Modifier.fillMaxWidth().testTag("home_top")) {
-                    // Option B: the month card is short. The figure in whole units (the semantics keep the exact amount), the change against last month as a chip beside the label (under the figure at large text),
-                    // one sentence, and a small graph (not at large text, in a two-pane list pane, or while amounts are hidden: its shape would show the figures)
-                    if (!firstRun) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").heroBackground()) {
-                        if (supportsBlur && !LocalSimplified.current) HeroGlow(onHero) // Android 12 and later (always on iPhone): two softly blurred lights behind the figures; not on a phone simplified for weak hardware (UI S7)
-                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp)) {
-                            val pill = state.spark.comparePill.takeIf { it.isNotEmpty() && !state.hideAmounts }
-                            if (!large) Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1, modifier = Modifier.weight(1f))
-                                if (pill != null) ComparePill(pill, onHero)
-                            } else Text("Spent ${state.budget.periodName}", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), maxLines = 1)
-                            // the big figure stops growing at 150% text: at 200% a seven-figure amount would not fit the card
-                            CappedFontScale(LARGE_TEXT_SCALE) {
-                                RollingAmount(
-                                    state.periodSpend,
-                                    modifier = Modifier.padding(top = 2.dp).testTag("month_spend"),
-                                    color = onHero, style = MaterialTheme.typography.displaySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, whole = true,
-                                )
-                            }
-                            if (large && pill != null) ComparePill(pill, onHero, Modifier.padding(top = 6.dp))
-                            val compareExact = privately(state.spark.compare)
-                            if (state.spark.compare.isNotEmpty()) Text(state.spark.compare.wholeAmounts(), style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 2.dp).testTag("month_compare").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(compareExact) })
-                            if (!dense && state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 2.dp).testTag("home_insight"))
-                            if (!dense && !state.hideAmounts && !state.spark.isEmpty) HomeSpark(state.spark, onHero, Modifier.padding(top = 8.dp), height = 40.dp)
-                            // UI S5 (owner decision D7): ONE "a day" figure, with how long it has to last: "₹1,565 a day · 16 days to payday"
-                            HeroPaceLine(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onHero, dense, Modifier.padding(top = 6.dp))
-                        }
-                    }
-                    // the two money tiles come right under the month card while Budget is the first block of the person's layout (the default); moved lower in Customise home, they stay where the person put them
+                    // Slice 133: ONE white card: what is left to spend, its status, the pace bar, how this period stands against the last, and the two figures that say what can be spent (HomeHero). No graph.
+                    // It reads what Home already holds; the Budget block of Customise home decides whether its budget parts show
                     val sections = state.homeLayout.visible()
-                    val moneyFirst = sections.firstOrNull() == HomeSection.BUDGET
-                    val moneyTiles: @Composable () -> Unit = { HomeMoneyTiles(state.budget, state.safeToSpend?.takeIf { it.homeVisible }, onOpenBudget, onOpenSafe = { safeOpen = true }, spokenFor = state.spokenFor) }
-                    if (moneyFirst && !firstRun) moneyTiles()
+                    if (!firstRun) HomeHero(state, showBudget = HomeSection.BUDGET in sections, onOpenBudget = onOpenBudget, onOpenSafe = { safeOpen = true }, large = large)
                     // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
                     state.tripCard?.let { TripHomeCard(it) { onOpenTrip(it.id) } }
                     // the capture heartbeat: when the last bank text was seen; amber after a quiet stretch; one tap opens "Why isn't capture working?". Information, not a nudge (docs/HOME_NUDGES.md)
@@ -476,7 +446,7 @@ fun EntryListScreen(
                     state.milestone?.takeIf { state.milestonesOn && !nudgesPaused }?.let { m -> MilestoneCard(m.text, onThanks = { onMilestoneThanks(m.id) }) }
                     sections.forEach { section ->
                         when (section) {
-                            HomeSection.BUDGET -> if (!moneyFirst && !firstRun) moneyTiles()
+                            HomeSection.BUDGET -> {} // the budget is part of the card at the top
                             HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                             // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
                             HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) }, onOpenAccounts = onManageAccounts)

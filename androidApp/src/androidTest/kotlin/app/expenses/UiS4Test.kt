@@ -222,21 +222,4 @@ class UiS4Test {
         compose.waitUntil(2_000) { has("trend_bubble") }
         compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { up() }
     }
-
-    @Test
-    fun theHomeLineHasATableOfItsFourteenDaysFromALongPressAndFromAScreenReadersAction() {
-        spend("h0", 250, "Food"); spend("h1", 120, "Fun", noonOf(kotlinx.datetime.LocalDate.fromEpochDays(today.toEpochDays() - 1)))
-        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
-        compose.waitUntil(20_000) { has("add") }
-        compose.waitUntil(20_000) { has("home_spark") }
-        val actions = compose.onNodeWithTag("home_spark", useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
-        assertTrue(actions.any { it.label == "Show as table" }, "a screen reader is offered the table: ${actions.map { it.label }}")
-        assertTrue(descriptionOf("home_spark").contains("Highest"), descriptionOf("home_spark"))
-        compose.onNodeWithTag("home_spark", useUnmergedTree = true).performTouchInput { longClick() }
-        compose.waitUntil(5_000) { has("spark_table") }
-        assertEquals(14, (0 until 14).count { has("spark_table_row_$it") }, "one row for each of the 14 days")
-        assertTrue(texts("spark_table_row_13").any { it.contains("250.00") }, "today is the last row: ${texts("spark_table_row_13")}")
-        compose.onNodeWithTag("spark_table_close", useUnmergedTree = true).performClick()
-        compose.waitUntil(5_000) { !has("spark_table") }
-    }
 }

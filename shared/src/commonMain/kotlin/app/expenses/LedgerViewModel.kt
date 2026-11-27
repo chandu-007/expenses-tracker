@@ -301,7 +301,7 @@ data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int
 data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
 
 /** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
-data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point ("₹250.00 more than last month so far"), or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "",
+data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point ("₹250.00 more than October by today"), or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "",
     /** The chip beside the month total: "▲ +25%" or "▼ −30%"; empty when there is nothing to compare with or nothing changed. */ val comparePill: String = "", /** The same 14 days one period earlier (UI S5): the dashed ghost under the line; empty when there is nothing to compare with. */ val ghost: List<Long> = emptyList(), /** What the ghost is called ("last month"). */ val ghostName: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
@@ -1646,7 +1646,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             // the ghost under the line: the same 14 days, one period earlier (a month back for a month; the length of the period before for the others)
             ghostName = last
             ghostShift = before.start.daysUntil(cur.start)
-            PeriodCompare.sentence(now, earlier, last) { Money(it, inr).formatted() }
+            PeriodCompare.byToday(now, earlier, PeriodCompare.earlierName(budgetPeriod, before.start) ?: last) { Money(it, inr).formatted() }
         }.orEmpty()
         // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
         val insight = PeriodCompare.lastName(budgetPeriod)?.let {
