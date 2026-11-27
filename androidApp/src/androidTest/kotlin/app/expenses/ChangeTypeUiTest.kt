@@ -1,6 +1,7 @@
 package app.expenses
 
 import android.content.Intent
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -179,7 +180,7 @@ class ChangeTypeUiTest {
         edit("i1"); tap("kind_TRANSFER"); waitFor("kind_change_note")
         // the money arrived in the bank: the bank is the "To", and the person picks where it came from
         node("to_chip_Bank").assertIsSelected()
-        tap("account_chip_Savings")
+        tap("account_menu"); tap("account_chip_Savings")
         tap("save"); waitFor("add"); waitKinds("TRANSFER")
         assertEquals(1_200_000L, balance("bank"), "the bank still gained it"); assertEquals(-amount, balance("savings"))
     }
@@ -189,7 +190,7 @@ class ChangeTypeUiTest {
         accounts()
         db { ok -> ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("t1"), long, AccountId("bank"), AccountId("savings"), Money(amount, inr)), EntryDetails(merchant = "Moved")) }
         edit("t1"); tap("kind_EXPENSE"); tap("kind_INCOME"); tap("kind_TRANSFER")
-        node("to_chip_Savings").assertIsSelected(); node("account_chip_Bank").assertIsSelected()
+        node("to_chip_Savings").assertIsSelected(); node("account_menu").assertDescribes("Bank")
         waitGone("kind_change_note")
         tap("kind_EXPENSE"); tap("category_chip_Bills")
         tap("save"); waitFor("add"); waitKinds("EXPENSE")
@@ -203,8 +204,8 @@ class ChangeTypeUiTest {
     fun aTransferBecomesIncomeInItsToAccount() {
         accounts()
         db { ok -> ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("t1"), long, AccountId("bank"), AccountId("savings"), Money(amount, inr)), EntryDetails(merchant = "Moved")) }
-        edit("t1"); tap("kind_INCOME"); waitFor("account_chip_Savings")
-        node("account_chip_Savings").assertIsSelected()
+        edit("t1"); tap("kind_INCOME"); waitFor("account_menu")
+        node("account_menu").assertDescribes("Savings")
         tap("save"); waitFor("add"); waitKinds("INCOME")
         assertEquals(1_000_000L, balance("bank")); assertEquals(amount, balance("savings"))
     }

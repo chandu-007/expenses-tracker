@@ -114,7 +114,7 @@ class AccountsUiTest {
         val pickable = runBlocking { container.write { ok -> ok.db.schemaQueries.selectAccounts().executeAsList().filter { it.archived == 0L }.map { it.name } } }!!
         assertTrue("Old bank" !in pickable)
         tap("back"); compose.closeMore(); waitFor("add"); tap("add"); waitFor("amount")
-        assertTrue(has("account_chip_Bank") && !has("account_chip_Old bank"), "the add form offers Bank but no longer the archived account")
+        tap("account_menu"); assertTrue(has("account_chip_Bank") && !has("account_chip_Old bank"), "the add form offers Bank but no longer the archived account")
         scenario?.onActivity { it.onBackPressedDispatcher.onBackPressed() }; waitFor("add")
         openAccounts()
         tap("account_Old bank"); tap("account_unarchive"); waitGone("account_unarchive")

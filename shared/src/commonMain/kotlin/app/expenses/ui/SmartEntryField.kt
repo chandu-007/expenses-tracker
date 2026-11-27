@@ -50,6 +50,7 @@ internal fun smartDateMillis(daysAgo: Int, formMillis: Long, zone: TimeZone): Lo
  */
 @Composable
 internal fun SmartEntryField(
+    text: String,
     categories: List<CategoryUi>,
     accounts: List<AccountUi>,
     currency: Currency,
@@ -57,7 +58,6 @@ internal fun SmartEntryField(
     usualCategory: (suspend (note: String) -> UsualCategoryUi?)?,
     onFill: (SmartFill) -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf("") }
     val reading = remember(text, accounts, currency) {
         if (text.isBlank()) null else SmartEntry.read(text, currency.minorUnitDigits, accounts.map { SmartEntry.AccountName(it.id, it.name) })
     }
@@ -71,12 +71,6 @@ internal fun SmartEntryField(
     val keyboard = LocalSoftwareKeyboardController.current
     val zone = systemZone()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(
-            value = text, onValueChange = { if (it.length <= SmartEntry.MAX_LENGTH + 40) text = it },
-            label = { Text("Or type it: chai 20", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, placeholder = { Text("chai 20, auto 80 yesterday", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
-            modifier = Modifier.fillMaxWidth().testTag("smart_entry"),
-        )
         val r = reading ?: return@Column
         val minor = r.amountMinor
         if (r.usable && minor != null) {
@@ -88,7 +82,6 @@ internal fun SmartEntryField(
             val label = listOfNotNull(Money(minor, currency).formatted(), r.note.ifEmpty { null }, categoryName, day, accountName).joinToString(" · ")
             val fill: () -> Unit = {
                 onFill(SmartFill(app.expenses.core.domain.AmountMath.plain(minor, currency.minorUnitDigits), r.note, categoryId, r.accountId, r.daysAgo))
-                text = ""
                 keyboard?.hide()
             }
             AssistChip(
@@ -97,7 +90,7 @@ internal fun SmartEntryField(
             )
         } else {
             val hint = when (r.problem) {
-                SmartEntry.Problem.NO_AMOUNT -> "Add an amount, like chai 20"
+                SmartEntry.Problem.NO_AMOUNT -> null // the one field is also the note: a note with no number is just a note
                 SmartEntry.Problem.TWO_AMOUNTS -> "Two numbers: mark the amount, like ₹40"
                 SmartEntry.Problem.BAD_AMOUNT -> "That amount cannot be read safely. Type it like 1250 or 1,250.50"
                 SmartEntry.Problem.TOO_LONG -> "Keep it short: what, and how much"

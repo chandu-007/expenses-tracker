@@ -80,3 +80,9 @@ fun ComposeTestRule.continueToForm() {
         waitUntil(15_000) { hasTag("amount") }
     }
 }
+
+/** The account chip says its account in its description ("Paid from Bank. Double tap to choose another account."): asserts the description holds [text]. */
+fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDescribes(text: String) {
+    val d = fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)) c[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].joinToString(" ") else "" }
+    if (!d.contains(text)) throw AssertionError("expected the description to contain '$text' but it is '$d'")
+}

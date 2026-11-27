@@ -2,6 +2,7 @@ package app.expenses
 
 import android.content.Intent
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -50,7 +51,7 @@ class QuickEntryTest {
         compose.onNodeWithTag("add").performClick()
         compose.onNodeWithTag("amount").performTextInput(amount)
         compose.onNodeWithText(category).performClick()
-        compose.onNodeWithText(account).performClick()
+        compose.onNodeWithTag("account_menu", useUnmergedTree = true).performScrollTo().performClick(); compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("account_chip_$account"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }; compose.onNodeWithTag("account_chip_$account", useUnmergedTree = true).performClick()
         compose.onNodeWithTag("note").performTextInput(note)
         // The form scrolls; with the keyboard open the checkbox can be below the visible area.
         if (asTemplate) { compose.openFormMore(); compose.onNodeWithTag("save_template").performScrollTo().performClick() }
@@ -64,7 +65,7 @@ class QuickEntryTest {
         waitForText("₹75.00")
         compose.onNodeWithTag("add").performClick()
         compose.onNodeWithText("Transport").assertIsSelected()
-        compose.onNodeWithText("Bank").assertIsSelected()
+        compose.onNodeWithTag("account_menu").assertDescribes("Bank")
     }
 
     @Test

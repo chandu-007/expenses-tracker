@@ -40,12 +40,12 @@ class CategoryPickerUiTest {
     private fun makeCategories(n: Int) = runBlocking { container.write { ok -> repeat(n) { ok.categories.create("Extra %03d".format(it)) } } }
 
     @Test
-    fun aLongCategoryListShowsSixTilesAndMoreOpensASearchableListWhoseChoiceIsThenShownAndSaved() {
+    fun aLongCategoryListShowsSevenTilesAndAllOpensASearchableListWhoseChoiceIsThenShownAndSaved() {
         makeCategories(52); launch() // the new install's expense defaults + 52, in the database before the screen loads it
         tap("add"); waitFor("amount")
         compose.waitUntil(10_000) { has("more_categories") }
-        assertEquals(6, chips().size, "tiles shown")
-        compose.onNodeWithTag("more_categories").assertTextContains("More (${app.expenses.core.domain.StarterCategories.expenseOrder.size + 52 - 6})")
+        assertEquals(7, chips().size, "tiles shown (the grid is seven tiles and All N)")
+        compose.onNodeWithTag("more_categories").assertTextContains("All ${app.expenses.core.domain.StarterCategories.expenseOrder.size + 52}")
         compose.onNodeWithTag("more_categories", useUnmergedTree = true).performScrollTo().performClick(); waitFor("category_search")
         compose.onNodeWithTag("category_search", useUnmergedTree = true).performTextInput("extra 05")
         compose.waitUntil(10_000) { has("category_option_" + runBlocking { container.write { ok -> ok.categories.list().first { it.name == "Extra 051" }.id } }) }
@@ -53,7 +53,7 @@ class CategoryPickerUiTest {
         assertTrue(!has("category_option_Food"), "the search filtered the list")
         tap("category_option_$id")
         compose.waitUntil(10_000) { has("category_chip_$id") && !has("category_search") }
-        assertEquals(7, chips().size, "the chosen one is shown beyond the six, never hidden")
+        assertEquals(7, chips().size, "the chosen one takes the seventh tile, never hidden and never an eighth")
         compose.onNodeWithTag("amount").performTextInput("75"); tap("save")
         compose.waitUntil(10_000) { has("add") && !has("amount") }
         val saved = runBlocking { container.write { ok -> ok.db.schemaQueries.recentEntries(1).executeAsList().single().let { e -> ok.db.schemaQueries.splitsOf(e.id).executeAsList().map { it.category_id } } } }
@@ -61,12 +61,12 @@ class CategoryPickerUiTest {
     }
 
     @Test
-    fun aNewInstallShowsItsFirstSixCategoriesAsTilesAndMoreHoldsEveryOtherOne() {
+    fun aNewInstallShowsItsFirstSevenCategoriesAsTilesAndAllHoldsEveryOtherOne() {
         launch(); tap("add"); waitFor("amount")
         // the starter list holds names; the original eight have their name as id, the newer ones an id of their own (StarterCategories.expenseId)
         val order = app.expenses.core.domain.StarterCategories.expenseOrder.map(app.expenses.core.domain.StarterCategories::expenseId)
-        assertEquals(order.take(6).toSet(), chips().toSet(), "with nothing used yet the tiles are the first six of the person's order")
-        compose.onNodeWithTag("more_categories").assertTextContains("More (${order.size - 6})")
+        assertEquals(order.take(7).toSet(), chips().toSet(), "with nothing used yet the tiles are the first seven of the person's order")
+        compose.onNodeWithTag("more_categories").assertTextContains("All ${order.size}")
         compose.onNodeWithTag("more_categories", useUnmergedTree = true).performScrollTo().performClick(); waitFor("category_list")
         val list = compose.onNodeWithTag("category_list", useUnmergedTree = true)
         for (id in order) assertTrue(runCatching { list.performScrollToNode(hasTestTag("category_option_$id")) }.isSuccess, "every starter category is in the list behind More: $id")

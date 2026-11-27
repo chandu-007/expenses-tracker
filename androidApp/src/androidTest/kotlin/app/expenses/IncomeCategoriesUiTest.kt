@@ -97,7 +97,7 @@ class IncomeCategoriesUiTest {
         db { ok -> ok.store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, Currency.INR, 0, false)) }
         launch(); openAdd()
         tap("kind_INCOME"); waitFor("category_chip_income:salary")
-        node("amount").performTextInput("50000"); tap("account_chip_Bank")
+        node("amount").performTextInput("50000"); tap("account_menu"); tap("account_chip_Bank")
         // Salary is already chosen for a new income; tapping it again would clear it (an income may have no category)
         compose.waitUntil(10_000) { compose.onNodeWithTag("category_chip_income:salary", useUnmergedTree = true).fetchSemanticsNode().config.let { c -> c.contains(androidx.compose.ui.semantics.SemanticsProperties.Selected) && c[androidx.compose.ui.semantics.SemanticsProperties.Selected] } }
         tap("save"); waitFor("add")

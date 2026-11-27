@@ -3,6 +3,7 @@ package app.expenses
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
@@ -56,7 +57,8 @@ class UiFeat016SmartEntryTest {
         fun walk(x: androidx.compose.ui.semantics.SemanticsNode): List<String> = (x.config.getOrNull(SemanticsProperties.Text)?.map { it.text } ?: emptyList()) + x.children.flatMap { walk(it) }
         walk(n).joinToString(" ")
     }
-    private fun type(text: String) { waitFor("smart_entry"); node("smart_entry").performScrollTo(); node("smart_entry").performTextReplacement(text) }
+    // the smart line is the note field now (one field): the wrapper `smart_entry` says it is on, the field `note` takes the text
+    private fun type(text: String) { waitFor("smart_entry"); waitFor("note"); node("note").performScrollTo(); node("note").performTextReplacement(text) }
     private fun spend(id: String, category: String, note: String) = runBlocking {
         container.write { ok -> ok.store.save(Expense(EntryId(id), System.currentTimeMillis() - 86_400_000L, AccountId("cash"), Money(3_000, inr), listOf(CategorySplit(CategoryId(category), Money(3_000, inr)))), EntryDetails(merchant = note)) }
     }
@@ -100,7 +102,7 @@ class UiFeat016SmartEntryTest {
         waitFor("smart_preview")
         assertTrue(textsOf("smart_preview").contains("Bank"), textsOf("smart_preview"))
         tap("smart_preview")
-        node("account_chip_Bank").assertIsSelected()
+        node("account_menu").assertDescribes("Bank")
         compose.onNodeWithTag("save").assertTextContains("Add ₹18,000.00 · Rent", substring = true)
     }
 

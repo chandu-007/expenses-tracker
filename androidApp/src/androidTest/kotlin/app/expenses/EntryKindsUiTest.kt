@@ -70,7 +70,7 @@ class EntryKindsUiTest {
         launch()
         db { ok -> ok.store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, inr, 0, false)) }
         launch()
-        tap("add"); tap("kind_INCOME"); type("amount", "50000"); tap("account_chip_Bank")
+        tap("add"); tap("kind_INCOME"); type("amount", "50000"); tap("account_menu"); tap("account_chip_Bank")
         compose.onNodeWithTag("save").assertIsEnabled()
         addSaved()
         assertEquals(listOf("INCOME"), kinds())
@@ -84,7 +84,7 @@ class EntryKindsUiTest {
         launch()
         db { ok -> ok.store.saveAccount(Account(AccountId("bank"), "Bank", AccountType.BANK, inr, 1_000_000, false)) }
         launch()
-        tap("add"); tap("kind_TRANSFER"); type("amount", "5000"); tap("account_chip_Bank"); tap("to_chip_Bank")
+        tap("add"); tap("kind_TRANSFER"); type("amount", "5000"); tap("account_menu"); tap("account_chip_Bank"); tap("to_chip_Bank")
         waitFor("form_problem"); compose.onNodeWithTag("save").assertIsNotEnabled()
         waitText("Choose two different accounts")
         tap("to_chip_Cash")
@@ -106,7 +106,7 @@ class EntryKindsUiTest {
         }
         launch()
         assertEquals(-120_000L, balance("card"))
-        tap("add"); tap("kind_TRANSFER"); type("amount", "1200"); tap("account_chip_Bank"); tap("to_chip_Card"); addSaved()
+        tap("add"); tap("kind_TRANSFER"); type("amount", "1200"); tap("account_menu"); tap("account_chip_Bank"); tap("to_chip_Card"); addSaved()
         assertEquals(0L, balance("card")); assertEquals(880_000L, balance("bank"))
         assertEquals(120_000L, spendTotal(), "the bill payment does not count as spending again")
     }

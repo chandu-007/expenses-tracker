@@ -61,7 +61,7 @@ class LoansUiTest {
         // lend 5,000 to a new person, through the add form
         tap("add"); tap("kind_LOAN"); type("amount", "5000")
         newPerson(); type("new_person_name", "Chandu"); tap("new_person_ok")
-        waitFor("person_chip_Chandu"); tap("account_chip_Bank"); tap("save")
+        waitFor("person_chip_Chandu"); tap("account_menu"); tap("account_chip_Bank"); tap("save")
         waitFor("add")
         openLoans()
         waitFor("loan_row_Chandu")
@@ -92,7 +92,7 @@ class LoansUiTest {
     fun borrowingShowsWhatIsOwedTheOtherWayAndAnUnusedPersonCanBeRemoved() {
         launch()
         tap("add"); tap("kind_LOAN"); tap("loan_got"); type("amount", "800"); newPerson(); type("new_person_name", "Asha"); tap("new_person_ok")
-        waitFor("person_chip_Asha"); tap("account_chip_Cash"); tap("save"); waitFor("add")
+        waitFor("person_chip_Asha"); tap("account_menu"); tap("account_chip_Cash"); tap("save"); waitFor("add")
         openLoans()
         node("loan_state_Asha").assertTextEquals("you owe"); node("loans_owe").assertTextContains("₹800.00", substring = true)
         // a person made in the form but never used can be taken off the list
@@ -106,7 +106,7 @@ class LoansUiTest {
     fun aLentEntryCanBeEditedFromThePersonsHistory() {
         launch()
         tap("add"); tap("kind_LOAN"); type("amount", "1000"); newPerson(); type("new_person_name", "Ravi"); tap("new_person_ok")
-        waitFor("person_chip_Ravi"); tap("account_chip_Bank"); tap("save"); waitFor("add")
+        waitFor("person_chip_Ravi"); tap("account_menu"); tap("account_chip_Bank"); tap("save"); waitFor("add")
         openLoans(); tap("loan_row_Ravi"); waitFor("loan_balance")
         val id = entries().single().id
         tap("loan_history_$id"); compose.continueToForm(); type("amount", "1200"); tap("save")

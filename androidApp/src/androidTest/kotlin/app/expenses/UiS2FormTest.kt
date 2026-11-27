@@ -110,16 +110,18 @@ class UiS2FormTest {
     }
 
     @Test
-    fun theSixMostUsedCategoriesAreTheTilesInOrderAndMoreHoldsTheRestAndNewOnes() {
+    fun theSevenMostUsedCategoriesAreTheTilesInOrderAndAllHoldsTheRestAndNewOnes() {
         // Transport is used most, then Bills; the rest keep the person's order
         repeat(3) { spend("t$it", 10, "Transport", "Cab $it") }; repeat(2) { spend("b$it", 20, "Bills", "Power $it") }
         launch(); tap("add"); waitFor("number_pad")
-        val order = listOf("Transport", "Bills", "Food", "Groceries", "Shopping", "Health")
+        val order = listOf("Transport", "Bills", "Food", "Groceries", "Shopping", "Health", "Fun")
         order.forEach { waitFor("category_chip_$it") }
-        assertTrue(order.zipWithNext().all { (a, b) -> left("category_chip_$a") < left("category_chip_$b") }, "most used first, then the arranged order")
-        assertFalse(has("category_chip_Fun"), "the seventh category is behind More")
-        tap("more_categories"); waitFor("category_option_Fun"); tap("category_option_Fun")
-        waitGone("category_option_Fun"); waitFor("category_chip_Fun"); node("category_chip_Fun").assertIsSelected() // the chosen one is never hidden
+        // the grid is read row by row (four to a row, or three from 130% text): the top first, then the left
+        fun place(tag: String) = node(tag).fetchSemanticsNode().boundsInRoot.let { it.top.toInt() / 20 * 100_000 + it.left.toInt() }
+        assertTrue(order.zipWithNext().all { (a, b) -> place("category_chip_$a") < place("category_chip_$b") }, "most used first, then the arranged order, row by row")
+        assertFalse(has("category_chip_Other"), "the eighth category is behind All")
+        tap("more_categories"); waitFor("category_option_Other"); tap("category_option_Other")
+        waitGone("category_option_Other"); waitFor("category_chip_Other"); node("category_chip_Other").assertIsSelected() // the chosen one is never hidden
         tap("more_categories"); waitFor("new_category_chip"); tap("new_category_chip"); waitFor("cat_name")
     }
 

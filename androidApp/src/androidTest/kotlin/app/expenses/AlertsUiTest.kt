@@ -3,9 +3,11 @@ package app.expenses
 import android.app.NotificationManager
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -122,7 +124,7 @@ class AlertsUiTest {
         waitFor("amount")
         assertEquals("400.00", textOf("amount"), "what is left on the statement")
         node("to_chip_Amex").assertIsSelected()
-        assertTrue(!(runCatching { node("account_chip_Amex").assertIsSelected() }.isSuccess), "paid from another account, not from the card itself")
+        assertTrue(!(runCatching { node("account_menu").assertDescribes("Amex") }.isSuccess), "paid from another account, not from the card itself")
     }
 
     @Test

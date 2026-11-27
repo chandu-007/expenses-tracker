@@ -105,7 +105,7 @@ fun tripChipName(name: String): String = if (name.contains("trip", ignoreCase = 
  * ("Tag it for Goa trip"). The tag is added when the entry is saved (and only then); an entry saved without it stays without it, whatever is edited later.
  */
 @Composable
-fun TripTagChip(trip: TripWindowUi, on: Boolean, onToggle: () -> Unit) {
+fun TripTagChip(trip: TripWindowUi, on: Boolean, showNote: Boolean = true, onToggle: () -> Unit) {
     val name = tripChipName(trip.name)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FilterChip(
@@ -120,7 +120,7 @@ fun TripTagChip(trip: TripWindowUi, on: Boolean, onToggle: () -> Unit) {
             border = FilterChipDefaults.filterChipBorder(enabled = true, selected = on, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp),
             modifier = Modifier.semantics { contentDescription = if (on) "Tagged for $name with the tag ${trip.tag}. Double tap to take the tag off this entry." else "Not tagged for $name. Double tap to tag this entry with ${trip.tag}." }.testTag("trip_chip"),
         )
-        Text(
+        if (showNote) Text(
             if (on) "The tag \"${trip.tag}\" is added when you save." else "Saved without the trip tag.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).testTag("trip_chip_note"),
         )
