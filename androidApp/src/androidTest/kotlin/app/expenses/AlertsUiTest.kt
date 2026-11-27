@@ -177,9 +177,10 @@ class AlertsUiTest {
         spendAt("later", millisOf(today.withDayOfMonth(1).minusMonths(1).withDayOfMonth(28)), 900_000) // the 28th may be beyond the point reached, and must not count when it is
         launch(); waitFor("month_compare")
         val t = textOf("month_compare")
-        // Option B: the sentence (exact to a screen reader) and a chip beside the figure with the arrow and the percent
-        val pill = textOf("month_compare_pill")
-        if (today.dayOfMonth < 28) { assertEquals("₹1,500.00 more than last month so far", t); assertEquals("▲ +150%", pill) } else assertTrue(pill.startsWith("▼") || pill.startsWith("▲"), pill)
+        // the hero's line: the sentence (exact to a screen reader) names the earlier month and says "by today"; the card has no percent chip
+        val earlier = today.withDayOfMonth(1).minusMonths(1).month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
+        if (today.dayOfMonth < 28) assertEquals("₹1,500.00 more than $earlier by today", t) else assertTrue(t.contains("by today"), t)
+        assertTrue(!has("month_compare_pill"), "the status chip is the one chip on the card")
     }
 
     @Test

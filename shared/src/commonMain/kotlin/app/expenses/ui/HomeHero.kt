@@ -71,19 +71,23 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
         if (hasLimit) {
             // one node says the exact sentence ("₹4,000.00 left of ₹5,000.00") to a screen reader and the tests; what is drawn is in whole units
             val exact = privately(overall.note + " of " + overall.limit)
-            Column(Modifier.testTag("budget_overall_note").clearAndSetSemantics { text = AnnotatedString(exact) }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.testTag("budget_overall_note").clearAndSetSemantics { text = AnnotatedString(exact) }) {
                 val figure = overall.note.removeSuffix(" left").removeSuffix(" over")
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RollingAmount(figure, color = if (over) Signal.over else ink, whole = true)
                     if (over) Text("over", style = MaterialTheme.typography.titleMedium, color = Signal.over, modifier = Modifier.padding(bottom = 6.dp))
                 }
-                // "of ₹75,000 · ₹49,305 spent · 8 days to go": the spent figure has its own node, read exactly
+            }
+            run {
+                // "of ₹75,000 · ₹49,305 spent · 8 days to go": the spent figure has its own node, read exactly (outside the node above, whose exact sentence hides what is inside it)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     Text("of " + overall.limit!!.wholeAmounts() + " ·", style = MaterialTheme.typography.bodyMedium, color = quiet)
                     val spentExact = privately(state.periodSpend)
                     Text(state.periodSpend.wholeAmounts() + (if (!over && budget.periodDays > 0) " spent ·" else " spent"), style = MaterialTheme.typography.bodyMedium, color = quiet, modifier = Modifier.testTag("month_spend").clearAndSetSemantics { text = AnnotatedString(spentExact) })
                     if (!over && budget.periodDays > 0) Text((if (budget.daysLeft <= 1) "last day" else "${budget.daysLeft} days to go"), style = MaterialTheme.typography.bodyMedium, color = quiet, modifier = Modifier.testTag("hero_days_left"))
                 }
+            }
             }
             AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
         } else {
