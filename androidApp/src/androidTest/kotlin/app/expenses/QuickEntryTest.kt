@@ -72,16 +72,16 @@ class QuickEntryTest {
         launch(); waitFor("add")
         addExpense("20", "Food", "Cash", "Chai", asTemplate = true)
         waitFor("template_Chai")
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹20.00")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹20.00")
 
         compose.onNodeWithTag("template_Chai").performClick()
-        compose.waitUntil(10_000) { compose.onNodeWithTag("month_spend").fetchSemanticsNode().config.toString().contains("₹40.00") }
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹40.00")
+        compose.waitUntil(10_000) { compose.onNodeWithTag("month_spend", useUnmergedTree = true).fetchSemanticsNode().config.toString().contains("₹40.00") }
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹40.00")
 
         waitForText("Undo")
         compose.onNodeWithText("Undo").performClick()
-        compose.waitUntil(10_000) { compose.onNodeWithTag("month_spend").fetchSemanticsNode().config.toString().contains("₹20.00") }
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹20.00")
+        compose.waitUntil(10_000) { compose.onNodeWithTag("month_spend", useUnmergedTree = true).fetchSemanticsNode().config.toString().contains("₹20.00") }
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹20.00")
     }
 
     @Test

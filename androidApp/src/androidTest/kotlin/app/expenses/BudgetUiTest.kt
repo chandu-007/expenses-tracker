@@ -148,7 +148,7 @@ class BudgetUiTest {
         setLimit("overall", "10000")
         setLimit("Food", "500")
         compose.onNodeWithTag("budget_back").performClick()
-        waitForMergedText("budget_summary", "1 category budget is near or over")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("1 category budget is near or over", substring = true)).fetchSemanticsNodes().isNotEmpty() } // the line is under the two figures in the hero card, outside the budget_summary stop
     }
 
     @Test

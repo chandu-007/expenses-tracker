@@ -85,7 +85,7 @@ class UiS2DetailTest {
         waitFor("add"); waitGone("detail_edit")
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Undo")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(rows().isEmpty(), "the entry is deleted")
-        compose.onNodeWithTag("month_spend").assertTextContains("₹0", substring = true)
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextContains("₹0", substring = true)
         compose.onAllNodes(hasText("Undo"))[0].performClick()
         compose.waitUntil(10_000) { has("row_Cafe") }
         assertEquals(1, rows().size)

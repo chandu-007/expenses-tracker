@@ -63,7 +63,7 @@ class EditDeleteTest {
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
     private fun waitForText(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
     private fun waitGone(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isEmpty() }
-    private fun waitSpend(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend") and hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitSpend(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend") and hasText(text), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
     /** Puts an expense in the database before the screen opens, so a test starts with something to edit. */
     private fun seed(id: String, amount: Long, category: String?, note: String, atMillis: Long = System.currentTimeMillis(), source: String = "manual", ref: String? = null) = runBlocking {
@@ -105,7 +105,7 @@ class EditDeleteTest {
         compose.onNodeWithTag("detail_amount", useUnmergedTree = true).assertTextContains("₹100.00", substring = true)
         compose.onNodeWithTag("detail_back").performClick()
         waitFor("add")
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹100.00")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹100.00")
     }
 
     @Test

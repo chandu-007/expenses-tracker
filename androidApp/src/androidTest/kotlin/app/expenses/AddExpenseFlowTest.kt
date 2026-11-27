@@ -57,7 +57,7 @@ class AddExpenseFlowTest {
         // the add screen's text field before it closes.)
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("₹12,34,567.50")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("amount_Test Mart", useUnmergedTree = true).assertTextEquals("₹12,34,567.50")
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹12,34,567.50")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹12,34,567.50")
         compose.onNodeWithText("Test Mart").assertExists()
         compose.onNodeWithTag("list").assertExists()
     }

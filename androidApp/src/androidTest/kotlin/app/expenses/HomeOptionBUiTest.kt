@@ -121,7 +121,7 @@ class HomeOptionBUiTest {
     @Test
     fun theBudgetsADayFigureAndTheBalancesSafeToSpendSitSideBySideInTheOneCardAndSayWhereTheyComeFrom() {
         seedTypical(); launch(); waitTiles()
-        val b = bounds("hero_pace_line"); val s = bounds("home_safe_to_spend_line"); val card = bounds("budget_summary")
+        val b = bounds("hero_pace_line"); val s = bounds("home_safe_to_spend_line"); val card = bounds("home_hero")
         assertTrue(b.right <= s.left + 1f && kotlin.math.abs(b.top - s.top) < 2f, "two figures in one row: $b $s")
         assertTrue(b.left >= card.left && s.right <= card.right && s.bottom <= card.bottom, "both inside the one card: $b $s $card")
         // UI S5 (owner decision D7): one "a day" figure, on the month card; the balances' sum is one tap away

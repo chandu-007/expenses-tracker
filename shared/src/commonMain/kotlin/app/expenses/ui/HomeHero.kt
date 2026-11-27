@@ -39,7 +39,7 @@ import app.expenses.core.domain.wholeAmounts
  *
  * Over the limit the card is the over state: "₹2,140 over", "Over by ₹2,140", a full red bar and a line that what is spent now is all over. Without a budget limit (or with the Budget block
  * hidden in Customise home) it is "Spent this month" with the figure spent, the comparison, and a "Set a budget" prompt in place of the pace; the balances' figure stays when it is on. With Hide amounts every figure
- * is `₹••••` and the bar is empty ([AnimatedBudgetBar]). Tags: `home_hero` (the card, which is `budget_summary` too and opens the budget), `month_spend` (the amount spent, exact to a screen reader),
+ * is `₹••••` and the bar is empty ([AnimatedBudgetBar]). Tags: `home_hero` (the card) and `budget_summary` (its top part, which opens the budget), `month_spend` (the amount spent, exact to a screen reader),
  * `budget_overall_note` (the exact "left of" sentence), `budget_pace_word` (the chip), `hero_pace_line` (the a-day figure from the budget, or the over line), `month_compare`, `home_safe_to_spend_line`.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -55,10 +55,12 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
     val cardModifier = if (over) Modifier.inlineCard(Signal.over, strength = 0.07f) else Modifier.standardCard()
     Column(
         modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).tourSpot("hero").then(cardModifier)
-            .clickable(onClickLabel = "Open the budget", onClick = onOpenBudget).testTag("budget_summary")
+            .testTag("home_hero")
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // the top of the card (label, chip, figure, bar, comparison) opens the budget as one stop; the two figures below and the lines under them keep their own taps and reading
+        Column(Modifier.fillMaxWidth().clip(Radius.XS).clickable(onClickLabel = "Open the budget", onClick = onOpenBudget).testTag("budget_summary"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val label = when { over -> "Over budget"; hasLimit -> "Left to spend"; else -> "Spent ${budget.periodName}" }
         val chip: @Composable () -> Unit = { if (hasLimit) StatusChip(overall, "budget_pace_word", elapsed = budget.elapsed) }
         if (!large) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -111,6 +113,7 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
             Text("Everything you spend now is over the limit.", style = MaterialTheme.typography.bodyMedium, color = Signal.over, modifier = Modifier.testTag("hero_pace_line").clearAndSetSemantics { text = AnnotatedString(exactOver) })
         }
         if (!hasLimit && showBudget) BudgetPrompt(budget.periodName)
+        }
         val perDay = budget.perDay
         val budgetCell = hasLimit && !over && (perDay != null || budget.billsUseItAll)
         if (budgetCell || safe != null) {

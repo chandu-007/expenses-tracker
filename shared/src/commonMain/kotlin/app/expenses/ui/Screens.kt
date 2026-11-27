@@ -410,7 +410,9 @@ fun EntryListScreen(
                     // Slice 133: ONE white card: what is left to spend, its status, the pace bar, how this period stands against the last, and the two figures that say what can be spent (HomeHero). No graph.
                     // It reads what Home already holds; the Budget block of Customise home decides whether its budget parts show
                     val sections = state.homeLayout.visible()
-                    if (!firstRun) HomeHero(state, showBudget = HomeSection.BUDGET in sections, onOpenBudget = onOpenBudget, onOpenSafe = { safeOpen = true }, large = large)
+                    // the hero is the Budget block of Customise home: first by default, then right at the top; moved lower it moves with the block; with the block hidden the top is the amount spent alone
+                    val heroFirst = sections.firstOrNull() == HomeSection.BUDGET || HomeSection.BUDGET !in sections
+                    if (!firstRun && heroFirst) HomeHero(state, showBudget = HomeSection.BUDGET in sections, onOpenBudget = onOpenBudget, onOpenSafe = { safeOpen = true }, large = large)
                     // Travel mode: while a trip is on, one compact line about it right under the month card. Information, not a nudge: it is never put off, is not in HomeNudges and does not count in "Also waiting" (docs/HOME_NUDGES.md)
                     state.tripCard?.let { TripHomeCard(it) { onOpenTrip(it.id) } }
                     // the capture heartbeat: when the last bank text was seen; amber after a quiet stretch; one tap opens "Why isn't capture working?". Information, not a nudge (docs/HOME_NUDGES.md)
@@ -446,7 +448,7 @@ fun EntryListScreen(
                     state.milestone?.takeIf { state.milestonesOn && !nudgesPaused }?.let { m -> MilestoneCard(m.text, onThanks = { onMilestoneThanks(m.id) }) }
                     sections.forEach { section ->
                         when (section) {
-                            HomeSection.BUDGET -> {} // the budget is part of the card at the top
+                            HomeSection.BUDGET -> if (!heroFirst && !firstRun) HomeHero(state, showBudget = true, onOpenBudget = onOpenBudget, onOpenSafe = { safeOpen = true }, large = large)
                             HomeSection.BILLS -> DueSection(state.due, onPost = { d -> if (d.amount == null) askingFor = d else onPostDue(d, null) }, onSkip = onSkipDue, onOpenAll = onOpenRecurring)
                             // on a brand-new install the two empty tiles say nothing and would push the welcome card's Skip off the screen: they wait for the first entry or for Skip
                             HomeSection.BALANCES -> if (!(state.rows.isEmpty() && state.showWelcome)) BalancesStrip(state.accountRows.filter { !it.archived }, selectedId = state.homeAccountId, onSelect = { id -> onFilterAccount(if (id == state.homeAccountId) null else id) }, onOpenAccounts = onManageAccounts)

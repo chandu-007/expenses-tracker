@@ -133,8 +133,8 @@ class WidePaneUiTest {
         compose.onNodeWithTag("amount").performTextInput("150.5")
         compose.onNodeWithTag("save").performClick()
         waitGone("amount"); waitFor("wide_placeholder")
-        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹150.50")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹150.50")
     }
 
     @Test

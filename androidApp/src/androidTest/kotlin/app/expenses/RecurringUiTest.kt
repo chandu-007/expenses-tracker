@@ -69,7 +69,7 @@ class RecurringUiTest {
 
     private fun waitFor(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     private fun waitGone(tag: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
-    private fun waitSpend(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend") and hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitSpend(text: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("month_spend") and hasText(text), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
     private fun item(id: String, name: String, rupees: Long?, auto: Boolean = false, start: LocalDate = today, end: ScheduleEnd = ScheduleEnd.Never) = RecurringItem(
         id, name, rupees?.let { Money(it * 100, inr) }, CategoryId("Bills"), AccountId("bank"), null, Schedule(RepeatUnit.MONTH, 1, start, end), auto,
@@ -135,7 +135,7 @@ class RecurringUiTest {
         waitFor(dueTag("gym", "card"))
         compose.onNodeWithTag(dueTag("gym", "skip")).performClick()
         waitGone(dueTag("gym", "card"))
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹0.00")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹0.00")
         compose.onNodeWithText("Undo").performClick()
         waitFor(dueTag("gym", "card"))
     }

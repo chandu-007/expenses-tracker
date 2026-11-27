@@ -97,7 +97,7 @@ class ExactAmountA11yUiTest {
         val budget = readBy("left of ₹60,000.00"); assertTrue(budget != null && exact.containsMatchIn(budget), "Budget left is read exactly: $budget")
         val safe = readBy("safe to spend"); assertTrue(safe != null && exact.containsMatchIn(safe), "Safe to spend is read exactly: $safe")
         val perDayBudget = readBy("a day · "); assertTrue(perDayBudget != null && exact.containsMatchIn(perDayBudget), "the month card's a-day line is read exactly: $perDayBudget")
-        assertTrue(readBy("from your balances") == null, "UI S5: the balances' tile has no second a-day figure (the month card has the one)")
+        assertTrue(readBy("a day", "from your balances") == null, "UI S5: the balances' figure is the amount that can be spent, not a second a-day figure (the budget's a-day is the one)")
         val bank = readBy("Bank"); assertTrue(bank != null && exact.containsMatchIn(bank), "the Bank tile is read with its exact balance: $bank")
 
         // no node says one of these figures only in whole units

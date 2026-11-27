@@ -93,7 +93,7 @@ class EntryKindsUiTest {
         assertEquals(listOf("TRANSFER"), kinds())
         assertEquals(500_000L, balance("bank")); assertEquals(500_000L, balance("cash"))
         assertEquals(0L, spendTotal(), "an ATM withdrawal is not spending")
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹0.00")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹0.00")
     }
 
     @Test
@@ -124,7 +124,7 @@ class EntryKindsUiTest {
         addSaved()
         val perCategory = db { ok -> ok.store.spendByCategory(inr).entries.associate { it.key?.value to it.value.minorUnits } }
         assertEquals(mapOf<String?, Long>("Food" to 60_000L, "Bills" to 40_000L), perCategory)
-        compose.onNodeWithTag("month_spend").assertTextEquals("₹1,000.00")
+        compose.onNodeWithTag("month_spend", useUnmergedTree = true).assertTextEquals("₹1,000.00")
     }
 
     @Test
