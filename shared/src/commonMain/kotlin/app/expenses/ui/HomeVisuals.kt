@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.semantics.customActions
@@ -49,7 +50,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.expenses.BudgetLineUi
-import app.expenses.SparkUi
 import app.expenses.core.domain.BaseCurrency
 import app.expenses.core.domain.BudgetState
 import app.expenses.BudgetUi
@@ -104,7 +104,7 @@ fun paceColor(pace: PaceLevel): Color = when (pace) {
  * of the period has gone ("today"); [todayLabel] writes the word over the tick. Colour follows the pace ([paceColor]). The fill and the tick are read while drawing.
  */
 @Composable
-fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier, elapsed: Float = -1f, todayLabel: Boolean = false) {
+fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier, elapsed: Float = -1f, todayLabel: Boolean = false, onTable: (() -> Unit)? = null, onTap: (() -> Unit)? = null, tapLabel: String? = null) {
     val reduce = LocalReduceMotion.current
     // Hide amounts: the bar loses its length (the fill would show the figure), the track and the tick for today stay: the tick is the date, not money
     val hide = LocalHideAmounts.current
@@ -112,8 +112,13 @@ fun AnimatedBudgetBar(line: BudgetLineUi, modifier: Modifier = Modifier, elapsed
     val color by animateColorAsState(paceColor(line.pace), Motion.tweenOrSnap(reduce, Motion.STANDARD), label = "budget_color")
     val tick = MaterialTheme.colorScheme.onSurface
     // what the bar says to a screen reader: how much of the limit is used and how much of the period has gone (not the amounts); with Hide amounts it says only that they are hidden
-    val said = if (hide) "Amounts hidden" else "${line.percent}% of the limit used" + (if (elapsed >= 0f) ", ${(elapsed.coerceIn(0f, 1f) * 100).roundToInt()}% of the period gone" else "")
-    Box(Modifier.fillMaxWidth().padding(top = if (todayLabel && elapsed >= 0f) 14.dp else 0.dp).testTag("pace_bar").semantics { stateDescription = said }) {
+    // spent, the limit and the share of the period gone: "Spent ₹100.00 of ₹10,000.00, 1% of the limit used, 90% of the period gone"; with Hide amounts only that they are hidden
+    val said = if (hide) "Amounts hidden" else "Spent ${line.spent}" + (line.limit?.let { " of $it" } ?: "") + ", ${line.percent}% of the limit used" + (if (elapsed >= 0f) ", ${(elapsed.coerceIn(0f, 1f) * 100).roundToInt()}% of the period gone" else "")
+    Box(Modifier.fillMaxWidth().padding(top = if (todayLabel && elapsed >= 0f) 14.dp else 0.dp).testTag("pace_bar").semantics {
+        stateDescription = said
+        // a table of the same numbers, for a screen reader (an action) and for a long press, as the charts have ("Show as table")
+        if (onTable != null) customActions = listOf(androidx.compose.ui.semantics.CustomAccessibilityAction("Show as table") { onTable(); true })
+    }.then(if (onTable != null) Modifier.combinedClickable(onClickLabel = tapLabel, onClick = { onTap?.invoke() }, onLongClickLabel = "Show as table", onLongClick = onTable) else Modifier)) {
         LinearProgressIndicator(progress = { progress }, color = color, trackColor = MaterialTheme.colorScheme.surfaceVariant, modifier = modifier.fillMaxWidth())
         if (elapsed >= 0f) androidx.compose.foundation.layout.Spacer(
             Modifier.matchParentSize().drawBehind {
@@ -140,4 +145,29 @@ fun LimitCrossedFeel(over: Boolean) {
         if (over && !was) feel(Feel.WARN)
         was = over
     }
+}
+
+
+/**
+ * The pace bar's numbers as a table ("Show as table", from a long press or a screen reader's action): what is spent, the limit, what is left (or over), how much of the period has gone and the status, one stop each.
+ * Hide amounts masks the figures ([Text] and [privatelyPlain]).
+ */
+@Composable
+fun PaceTableDialog(line: BudgetLineUi, budget: app.expenses.BudgetUi, onClose: () -> Unit) {
+    val hide = LocalHideAmounts.current
+    val over = line.state == app.expenses.core.domain.BudgetState.OVER
+    val gone = if (budget.periodDays > 0) "${(budget.elapsed.coerceIn(0f, 1f) * 100).roundToInt()}% (day ${budget.daysIn} of ${budget.periodDays})" else ""
+    val rows = buildList {
+        add(listOf("Spent", line.spent))
+        line.limit?.let { add(listOf("Limit", it)) }
+        add(listOf(if (over) "Over by" else "Left", line.note.removeSuffix(" left").removeSuffix(" over")))
+        if (gone.isNotEmpty()) add(listOf("Period gone", gone))
+        add(listOf("Status", statusWord(line, budget.elapsed)))
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Spending against the limit") },
+        text = { ChartTable(listOf("", ""), rows.map { TableLine(it, "${it[0]} ${it[1]}") }, "pace_table") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.testTag("pace_table_close")) { Text("Close") } },
+    )
 }

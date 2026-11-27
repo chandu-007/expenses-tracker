@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.geometry.Offset
@@ -221,5 +222,56 @@ class UiS4Test {
         compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performScrollTo().performTouchInput { down(Offset(width * 0.9f, height * 0.8f)); moveTo(Offset(width * 0.8f, height * 0.8f)); moveTo(Offset(width * 0.9f, height * 0.8f)) }
         compose.waitUntil(2_000) { has("trend_bubble") }
         compose.onNodeWithTag("trend_chart", useUnmergedTree = true).performTouchInput { up() }
+    }
+
+    /**
+     * MOVED from `theHomeLineHasATableOfItsFourteenDaysFromALongPressAndFromAScreenReadersAction` (Slice 133: Home has no 14-day graph; the card's pace bar and the Reports table carry what it had):
+     *  - "a screen reader is offered the table" (custom action "Show as table")            -> the pace bar's action, here;
+     *  - "the description contains Highest"                                               -> the pace bar says what is spent, the limit and the share gone, here; "Highest" is on the Reports chart, below;
+     *  - a long press opens the table (`spark_table`)                                     -> a long press on the pace bar opens `pace_table`, here;
+     *  - "one row for each of the 14 days"                                                -> the pace table's rows (spent, limit, left, period gone, status), here, and the Reports table's six rows, below;
+     *  - "today is the last row: 250.00"                                                  -> the pace table's Spent row says ₹250.00, here, and the Reports table's last row is this period "so far", below;
+     *  - the close button closes it (`spark_table_close`)                                 -> `pace_table_close`, here.
+     */
+    @Test
+    fun theHomePaceBarHasATableFromALongPressAndFromAScreenReadersActionAndSaysSpentLimitAndTheShareGone() {
+        runBlocking { container.write { it.budgets.setLimit(null, Money(1_000_000, inr)) } }
+        spend("h0", 250, "Food")
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java))
+        compose.waitUntil(20_000) { has("add") }
+        compose.waitUntil(20_000) { has("pace_bar") }
+        val bar = { compose.onAllNodes(hasTestTag("pace_bar"), useUnmergedTree = true).fetchSemanticsNodes().first() }
+        val actions = bar().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+        assertTrue(actions.any { it.label == "Show as table" }, "a screen reader is offered the table: ${actions.map { it.label }}")
+        val said = bar().config.getOrNull(SemanticsProperties.StateDescription).orEmpty()
+        assertTrue(said.contains("Spent ₹250.00 of ₹10,000.00") && said.contains("% of the limit used") && said.contains("% of the period gone"), "spent, the limit and the share gone: $said")
+        compose.onAllNodes(hasTestTag("pace_bar"), useUnmergedTree = true).onFirst().performTouchInput { longClick() }
+        compose.waitUntil(5_000) { has("pace_table") }
+        assertEquals(5, (0 until 6).count { has("pace_table_row_$it") }, "spent, limit, left, period gone, status")
+        assertTrue(texts("pace_table_row_0").any { it.contains("250.00") }, "what is spent is the first row: ${texts("pace_table_row_0")}")
+        assertTrue(texts("pace_table_row_2").joinToString(" ").contains("9,750.00"), "and what is left: ${texts("pace_table_row_2")}")
+        compose.onNodeWithTag("pace_table_close", useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000) { !has("pace_table") }
+        // the action does the same as the long press
+        bar().config[SemanticsActions.CustomActions].first { it.label == "Show as table" }.let { a -> compose.runOnUiThread { a.action() } }
+        compose.waitUntil(5_000) { has("pace_table") }
+        compose.onNodeWithTag("pace_table_close", useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000) { !has("pace_table") }
+    }
+
+    /** The Reports counterparts of the Home line's table (see the test above): the table has one row for each period, this one last and "so far", and the chart's summary names the highest. */
+    @Test
+    fun theReportsTableHasARowForEachPeriodWithThisOneLastAndTheChartSummaryNamesTheHighest() {
+        spend("h0", 250, "Food"); spend("h1", 120, "Fun", periodNoon(1))
+        openReports(); waitFor("trend_table_toggle")
+        compose.onNodeWithTag("trend_table_toggle", useUnmergedTree = true).performScrollTo().performClick()
+        waitFor("trend_table")
+        assertEquals(6, (0 until 8).count { has("trend_table_row_$it") }, "one row for each of the six periods")
+        assertTrue(texts("trend_table_row_5").any { it.contains("250.00") }, "this period is the last row: ${texts("trend_table_row_5")}")
+        assertTrue(texts("trend_table_row_5")[0].endsWith("so far"), "and says so: ${texts("trend_table_row_5")}")
+        assertEquals(3, texts("trend_table_row_5").size, "period, spent and the change from the one before")
+        assertTrue(descriptionOf("trend_chart").contains("Highest"), descriptionOf("trend_chart"))
+        compose.onNodeWithTag("trend_table_toggle", useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000) { !has("trend_table") }
     }
 }

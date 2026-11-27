@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,12 +94,15 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
                 }
             }
             }
-            AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true)
+            var table by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+            AnimatedBudgetBar(overall, Modifier.height(8.dp).clip(RoundedCornerShape(50)), elapsed = budget.elapsed, todayLabel = true, onTable = { table = true }, onTap = onOpenBudget, tapLabel = "Open the budget")
+            if (table) PaceTableDialog(overall, budget) { table = false }
         } else {
             RollingAmount(state.periodSpend, modifier = Modifier.testTag("month_spend"), color = ink, whole = true)
         }
-        val compare = state.spark.compare
-        if (compare.isNotEmpty()) {
+        val compare = state.monthCompare.compare
+        // over the limit the card says no comparison (board HomeOver): the red figure, the chip and the bar are what matter then
+        if (compare.isNotEmpty() && !over) {
             val less = compare.contains("less than")
             val shown = (if (less) "▼ " else if (compare.contains("more than")) "▲ " else "") + compare.wholeAmounts()
             val compareExact = privately(compare)
@@ -107,7 +112,7 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
                 modifier = Modifier.testTag("month_compare").clearAndSetSemantics { text = AnnotatedString(compareExact) },
             )
         }
-        if (!large && state.spark.insight.isNotEmpty()) Text(state.spark.insight, style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.testTag("home_insight"))
+        if (!large && state.monthCompare.insight.isNotEmpty()) Text(state.monthCompare.insight, style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.testTag("home_insight"))
         if (over) {
             // "Over by ₹2,140.00" is the chip; the line says what that means for what is spent next
             val exactOver = privately(PaceMath.word(overall.pace, overall.note.removeSuffix(" over")))

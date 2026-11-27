@@ -125,6 +125,23 @@ class UiS5Test {
         assertFalse(has("home_spark"), "Home has no graph")
     }
 
+    /** Owner decision (Slice 133): the comparison line is on the normal and the no-budget card and is absent when the card is over budget (board HomeOver). */
+    @Test
+    fun theComparisonLineIsThereOnPaceAndWithoutABudgetAndAbsentWhenOverBudget() {
+        val prev = ReportMath.periodAt(BudgetPeriod.Monthly(1), today, -1)
+        val shift = prev.start.daysUntil(period.start)
+        spend("now", 500, "Food")
+        spend("then", 90, "Food", noonOf(LocalDate.fromEpochDays(today.toEpochDays() - shift)))
+        launch(); waitFor("month_spend"); waitFor("month_compare")
+        assertTrue(textOf("month_compare").contains("by today"), "no budget: the line is there: ${textOf("month_compare")}")
+        scenario!!.close(); limit(1_000_000); launch(); waitFor("budget_pace_word"); waitFor("month_compare")
+        assertTrue(textOf("budget_pace_word").let { it == "On pace" || it == "Well under" }, "on pace: ${textOf("budget_pace_word")}")
+        scenario!!.close(); limit(100)  // the limit is now under what is spent: over budget
+        launch(); waitFor("hero_pace_line"); compose.waitForIdle(); Thread.sleep(1_500)
+        assertTrue(textOf("budget_pace_word").startsWith("Over by"), textOf("budget_pace_word"))
+        assertFalse(has("month_compare"), "over budget: no comparison line")
+    }
+
     @Test
     fun thePaceBarOnHomeSaysHowMuchOfTheLimitAndOfThePeriodIsGone() {
         limit(10_000); spend("a", 100, "Food"); launch(); waitFor("pace_bar")

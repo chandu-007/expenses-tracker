@@ -297,12 +297,8 @@ data class InboxPeekRow(val title: String, val amountText: String, val credit: B
 /** What the home banner shows about To review: the first few items, the rest as a count, and what is waiting in total. */
 data class InboxPeekUi(val rows: List<InboxPeekRow> = emptyList(), val more: Int = 0, val outText: String = "", val inText: String = "")
 
-/** One day of the home screen's spending line: the local day, what was spent, and the text shown when the person drags a finger to it. */
-data class SparkDayUi(val epochDay: Long, val minor: Long, val label: String)
-
-/** The last 14 days of spending, oldest first. Empty until worked out (it is, after a save, once the screen has settled). */
-data class SparkUi(val days: List<SparkDayUi> = emptyList(), /** This period's spending against the last one at the same point ("₹250.00 more than October by today"), or empty. */ val compare: String = "", /** The category furthest above its usual spending, or empty. */ val insight: String = "",
-    /** The chip beside the month total: "▲ +25%" or "▼ −30%"; empty when there is nothing to compare with or nothing changed. */ val comparePill: String = "", /** The same 14 days one period earlier (UI S5): the dashed ghost under the line; empty when there is nothing to compare with. */ val ghost: List<Long> = emptyList(), /** What the ghost is called ("last month"). */ val ghostName: String = "") { val isEmpty get() = days.none { it.minor > 0 } }
+/** What the hero card says about how this period stands: against the last one at the same point ("₹250.00 more than October by today", or empty) and the category furthest above its usual spending (or empty). */
+data class MonthCompareUi(val compare: String = "", val insight: String = "")
 
 /** One bill as the screens show it. [dueIn] reads "in 12 days", "today" or "3 days overdue"; [cardAccountId] and [payFromId] are the suggestions the payment starts with. */
 data class BillRowUi(
@@ -776,7 +772,7 @@ sealed interface UiState {
         val setupCard: app.expenses.core.domain.SetupState? = null,
         /** UI S6: the capture heartbeat chip ("Last bank text seen yesterday 8:14 pm"), or null when capture is off or no bank text was ever seen. */
         val captureHeartbeat: app.expenses.core.domain.CaptureHeartbeat.Chip? = null,
-        val spark: SparkUi = SparkUi(),
+        val monthCompare: MonthCompareUi = MonthCompareUi(),
         /** The person asked for less motion (Appearance). The screens also honour the phone's own animation setting. */
         val reduceMotion: Boolean = false,
         /** Appearance: spending drawn in red (off: the ordinary text colour with a minus sign; red is kept for over a limit, overdue and failed). */
@@ -1496,7 +1492,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
     // Balances read the whole ledger (about 25 ms on a 100,000-entry ledger even with covering indexes), so they are not part of the
     // save path: they are worked out only while something shows them, a moment after the last write, and the screen updates when ready.
     private var accountRowsCache: List<AccountRowUi> = emptyList()
-    private var sparkCache: SparkUi = SparkUi()
+    private var monthCompareCache: MonthCompareUi = MonthCompareUi()
     private var categoryUsageCache: Map<String, Long> = emptyMap()
     private var categorySpendCache: Map<String, Long> = emptyMap()
     /** How many entries each category is on, read once (two grouped reads of indexes) and kept up to date as entries are saved: the order of the entry form's category tiles. */
@@ -1554,21 +1550,21 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
                 } else categorySpendCache
                 milestoneNext = milestoneFigures.next(ok, nowMillis(), systemZone())?.takeIf { m -> m.id != milestoneAcked }
                 spokenNext = spokenForOf(ok, budgetStatusCache)
-                Figures(nudge, rows, usage, sparkOf(ok), safe, categoriseNudgeFor(ok), spend)
+                Figures(nudge, rows, usage, monthCompareOf(ok), safe, categoriseNudgeFor(ok), spend)
             } ?: return@launch
-            nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; categorySpendCache = figures.spend; sparkCache = figures.spark; figuresReady = true
+            nudgeCache = figures.nudge; categoriseCache = figures.categorise; safeCache = figures.safe; accountRowsCache = figures.rows; categoryUsageCache = figures.usage; categorySpendCache = figures.spend; monthCompareCache = figures.compare; figuresReady = true
             milestoneCache = milestoneNext
             spokenCache = spokenNext
             withContext(Dispatchers.Main) { // published on the main thread, like the search result: see search()
                 _state.update { st ->
-                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, spark = figures.spark, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage, spentMinor = figures.spend[c.id] ?: c.spentMinor) }) ?: st
+                    (st as? UiState.Ready)?.copy(accountRows = figures.rows, safeToSpend = figures.safe, monthCompare = figures.compare, showBackupNudge = figures.nudge, categoriseNudge = figures.categorise, categories = st.categories.map { c -> c.copy(usage = figures.usage[c.id] ?: c.usage, spentMinor = figures.spend[c.id] ?: c.spentMinor) }) ?: st
                 }
                 _state.update { st -> (st as? UiState.Ready)?.copy(milestone = milestoneNext, spokenFor = spokenNext) ?: st }
             }
         }
     }
 
-    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val spark: SparkUi, val safe: SafeToSpendUi?, val categorise: Int, val spend: Map<String, Long>)
+    private class Figures(val nudge: Boolean, val rows: List<AccountRowUi>, val usage: Map<String, Long>, val compare: MonthCompareUi, val safe: SafeToSpendUi?, val categorise: Int, val spend: Map<String, Long>)
 
     /** N-18: the budget status the last refresh worked out (the overall limit's "left" and the period), read by the slow figures; and what they made of it. */
     @Volatile private var budgetStatusCache: app.expenses.core.storage.BudgetStatus? = null
@@ -1622,30 +1618,17 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
         return if (UncategorisedNudge.shouldShow(n, snoozedAt, now)) n else 0
     }
 
-    /** Spending on each of the last 14 days, for the line on the home screen. One range query; worked out with the other slow figures, never on the save path. */
-    private fun sparkOf(ok: AppContainer.Opened.Ok): SparkUi {
+    /** How this period stands against the last one at the same point, and the category furthest above its usual, for the hero card. Worked out with the other slow figures, never on the save path. */
+    private fun monthCompareOf(ok: AppContainer.Opened.Ok): MonthCompareUi {
         val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
-        val t = todayLocal()
-        val today = t
-        val first = today.minus(13, kotlinx.datetime.DateTimeUnit.DAY)
-        val perDay = ok.reports.spendPoints(DatePeriod(first, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr)
-            .groupBy { dateOfMillis(it.atMillis).epochDay() }.mapValues { (_, v) -> v.sumOf { it.minor } }
-        val dayFmt = DatePattern("d MMM")
+        val today = todayLocal()
         // this period against the last one at the same point in it
         val budgetPeriod = ok.budgets.period()
-        var comparePill = ""
-        var ghostName = ""
-        var ghostShift = 0
         val compare = PeriodCompare.lastName(budgetPeriod)?.let { last ->
             val cur = budgetPeriod.containing(today)
             val before = budgetPeriod.containing(cur.start.minus(1, kotlinx.datetime.DateTimeUnit.DAY))
             val now = ok.reports.spent(DatePeriod(cur.start, today.plus(1, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr).minorUnits
             val earlier = ok.reports.spent(ReportMath.samePointWindow(before, cur, today), zone, inr).minorUnits
-            // the same two figures give the sentence and the chip beside the total ("▲ +158%")
-            comparePill = PeriodCompare.pill(now, earlier).orEmpty()
-            // the ghost under the line: the same 14 days, one period earlier (a month back for a month; the length of the period before for the others)
-            ghostName = last
-            ghostShift = before.start.daysUntil(cur.start)
             PeriodCompare.byToday(now, earlier, PeriodCompare.earlierName(budgetPeriod, before.start) ?: last) { Money(it, inr).formatted() }
         }.orEmpty()
         // where spending differs from usual: each category so far against the average of the earlier periods at the same point (needs two earlier periods with spending)
@@ -1659,17 +1642,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             }.filter { m -> m.values.sum() > 0 }
             if (earlier.size < 2) null else SpendingInsight.best(now.map { (name, minor) -> InsightLine(name, minor, earlier.sumOf { m -> m[name] ?: 0L } / earlier.size) }) { Money(it, inr).formatted() }
         }.orEmpty()
-        // one more small read (14 days, the same index as the line itself): only when there is something to compare with
-        val ghost = if (ghostShift <= 0) emptyList() else {
-            val before = ok.reports.spendPoints(DatePeriod(first.minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY), today.plus(1, kotlinx.datetime.DateTimeUnit.DAY).minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY)), zone, inr)
-                .groupBy { dateOfMillis(it.atMillis).epochDay() }.mapValues { (_, v) -> v.sumOf { it.minor } }
-            (0..13).map { i -> before[first.plus(i, kotlinx.datetime.DateTimeUnit.DAY).minus(ghostShift, kotlinx.datetime.DateTimeUnit.DAY).toEpochDays()] ?: 0L }.takeIf { g -> g.any { it > 0 } }.orEmpty()
-        }
-        return SparkUi((0..13).map { i ->
-            val d = first.plus(i, kotlinx.datetime.DateTimeUnit.DAY)
-            val minor = perDay[d.toEpochDays()] ?: 0L
-            SparkDayUi(d.toEpochDays(), minor, dayFmt.format(localDateOfEpochDay(d.toEpochDays())) + " · " + Money(minor, inr).formatted())
-        }, compare, insight, comparePill, ghost, if (ghost.isEmpty()) "" else ghostName)
+        return MonthCompareUi(compare, insight)
     }
 
     private fun accountRows(ok: AppContainer.Opened.Ok, rows: List<app.expenses.core.storage.db.Account>, balances: Map<AccountId, Money>): List<AccountRowUi> {
@@ -5108,7 +5081,7 @@ class LedgerViewModel(private val container: AppContainer, private val platform:
             firstWeek = firstWeekUi(ok, accounts),
             setupCard = setupCardUi(ok),
             captureHeartbeat = captureHeartbeatUi(ok),
-            spark = sparkCache,
+            monthCompare = monthCompareCache,
             reduceMotion = ok.templates.setting(SETTING_REDUCE_MOTION) == "1",
             showSpendingRed = ok.templates.setting(SETTING_SPEND_RED) == "1",
             categoryLookNotice = categoryLookNotice(ok),
