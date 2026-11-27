@@ -58,12 +58,23 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
     ) {
         // the board's line: the plane in the accent, "Goa trip · day 3 of 6" and what the trip has cost at the right; the node still says the whole line ("Goa trip · Day 3 of 6 · ₹12,400.00 spent")
         val lineExact = privately(card.line)
+        val big = isLargeText()
+        val titleShown = card.title.removePrefix("Trip: ")
+        val amountShown = card.spentText.removeSuffix(" spent").wholeAmounts()
         Row(Modifier.testTag("home_trip_line").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(lineExact) }, verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Flight, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
-            Text(card.title.removePrefix("Trip: "), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-            Text(" · " + card.dayText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
-            Text(card.spentText.removeSuffix(" spent").wholeAmounts(), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+            if (!big) {
+                Text(titleShown, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                Text(" · " + card.dayText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
+                Text(amountShown, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+            } else {
+                // from 150% text the figure goes under the words (rule 4 of the redesign), the words wrap instead of being cut
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("$titleShown · ${card.dayText}", style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(amountShown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
         run {
             // UI S5: with a trip budget the bar has a tick for how many of the trip's days are gone ("today") and the line below says where the spending stands against it in words
