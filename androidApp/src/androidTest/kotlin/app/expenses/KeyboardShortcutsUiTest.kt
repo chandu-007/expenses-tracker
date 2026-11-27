@@ -81,7 +81,7 @@ class KeyboardShortcutsUiTest {
         val groups = mutableListOf<android.view.KeyboardShortcutGroup>()
         scenario!!.onActivity { it.onProvideKeyboardShortcuts(groups, null, 0) }
         val labels = groups.flatMap { g -> (0 until g.items.size).map { g.items[it].label.toString() } }
-        assertTrue("Add an expense" in labels && "Search" in labels, "listed: $labels")
+        assertTrue("Add an expense" in labels && "Activity" in labels, "listed: $labels")
     }
 
     private fun seed(id: String, merchant: String, minor: Long) = runBlocking {

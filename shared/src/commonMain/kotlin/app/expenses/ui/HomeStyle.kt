@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
@@ -136,9 +137,12 @@ private val SCROLL_EDGE = 24.dp
 private object TabMemory { var index = 0f }
 
 /** The five places along the bar, left to right: the Add button is the middle one and is never the current place, so the glass never rests on it. */
-private val TABS = listOf("Home", "Search", "Add", "Reports", "More")
+private val TABS = listOf("Home", "Search", "Add", "Reports", "More") // "Search" is the key of the second place (its tag is `open_search`); the bar calls it Activity
 
-/** The most the bar's labels grow with the phone's text size (130%): at 200% a label of 24 sp made "Search" and "Reports" touch and "Home" wider than its pill. */
+/**
+ * The most the bar's labels grow with the phone's text size (130%). From 150% (the cut-down layout, [isLargeText]) only the current place has its label (board "LargeText"), the others are an icon that a
+ * screen reader still names and Add is its plus alone; the clamp stays for that one label: a fifth of a 360 dp bar is 66 dp, and at 200% "Reports" (24 sp) was cut to "Report" and "Home" ran over its pill.
+ */
 private const val BAR_MAX_FONT_SCALE = 1.3f
 
 /**
@@ -168,6 +172,7 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
     // row is clear of it at rest. A person who asked the phone for less transparency gets an opaque bar with a visible edge and no fade.
     // UI S9 (U-25): the phone's high contrast makes it opaque too (on the iPhone Increase Contrast; on Android the same signals already count as less transparency)
     val opaque = systemReduceTransparency() || LocalHighContrast.current
+    val bigText = isLargeText() // read outside the cap below
     val screen = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().drawBehind {
         if (!opaque) {
@@ -198,11 +203,11 @@ fun HomeBar(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onReport
                     },
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"))
-                    BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"))
-                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f), addTag, quickEntries, onQuickEntry) else Spacer(Modifier.weight(1f))
-                    BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"))
-                    BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge)
+                    BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.weight(1f).testTag("nav_home"), labelShown = !bigText || selected == "Home")
+                    BarItem("Activity", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.weight(1f).testTag("open_search"), labelShown = !bigText || selected == "Search")
+                    if (onAdd != null) AddItem(onAdd, Modifier.weight(1f), addTag, quickEntries, onQuickEntry, labelShown = !bigText) else Spacer(Modifier.weight(1f))
+                    BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.weight(1f).testTag("open_reports"), labelShown = !bigText || selected == "Reports")
+                    BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.weight(1f).testTag("more_menu"), badge = moreBadge, labelShown = !bigText || selected == "More")
                 }
             }
             }
@@ -252,7 +257,7 @@ fun HomeRail(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onRepor
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(gap)) {
                         BarItem("Home", Icons.Outlined.Home, selected == "Home", onHome, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("nav_home"))
-                        BarItem("Search", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_search"))
+                        BarItem("Activity", Icons.Outlined.Search, selected == "Search", onSearch, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_search"))
                         AddItem(onAdd, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item), addTag, quickEntries, onQuickEntry)
                         BarItem("Reports", Icons.Outlined.BarChart, selected == "Reports", onReports, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("open_reports"))
                         BarItem("More", Icons.Outlined.MoreHoriz, selected == "More", onMore, Modifier.width(app.expenses.core.domain.WindowLayout.RAIL_WIDTH_DP.dp - 12.dp).height(item).testTag("more_menu"), badge = moreBadge)
@@ -265,19 +270,19 @@ fun HomeRail(selected: String, onHome: () -> Unit, onSearch: () -> Unit, onRepor
 }
 
 @Composable
-private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier, badge: Boolean = false) {
+private fun BarItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier, badge: Boolean = false, labelShown: Boolean = true) {
     val tint by androidx.compose.animation.animateColorAsState(
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(if (LocalReduceMotion.current) Motion.REDUCED_MS else Motion.TAB), label = "tab tint",
     )
     Column(
-        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Tab; this.selected = selected },
+        modifier.heightIn(min = 56.dp).clip(Radius.M).pressScale(onClick, Feel.PRESS).semantics { role = Role.Tab; this.selected = selected; if (!labelShown) contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box {
             androidx.compose.material3.Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
             if (badge) Box(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-1).dp).size(9.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error).testTag("more_badge"))
         }
-        androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
+        if (labelShown) androidx.compose.material3.Text( // a fixed label, never an amount, so the amount-hiding Text is not needed (and has no softWrap)
             // the label shrinks to fit its fifth of the bar (a narrow screen or a big system font) instead of being cut or wrapped
             label, maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
             color = tint, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
@@ -293,20 +298,20 @@ data class BarQuickEntry(val id: String, val name: String, val amountText: Strin
  * (UI S8) opens a short menu of [quick] entries (`bar_quick_menu`, one item `bar_quick_<id>` each); a screen reader offers it as the long-press action "Quick entries". The menu is composed only while open.
  */
 @Composable
-private fun AddItem(onClick: () -> Unit, modifier: Modifier, tag: String, quick: List<BarQuickEntry>, onQuick: (String) -> Unit) {
+private fun AddItem(onClick: () -> Unit, modifier: Modifier, tag: String, quick: List<BarQuickEntry>, onQuick: (String) -> Unit, labelShown: Boolean = true) {
     var open by remember { mutableStateOf(false) }
     val feel = rememberFeel()
     Box(modifier) {
         Column(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(Radius.M)
                 .pressScale(onClick, Feel.PRESS, onLongClick = if (quick.isEmpty()) null else ({ feel(Feel.LONG_PRESS); open = true }), onLongClickLabel = "Quick entries")
-                .semantics { role = Role.Button }.testTag(tag),
+                .semantics { role = Role.Button; if (!labelShown) contentDescription = "Add" }.testTag(tag),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
         ) {
             Box(Modifier.size(width = 56.dp, height = 32.dp).clip(Radius.S).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
                 androidx.compose.material3.Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
             }
-            androidx.compose.material3.Text(
+            if (labelShown) androidx.compose.material3.Text(
                 "Add", maxLines = 1, softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
             )

@@ -244,7 +244,7 @@ class MainActivity : FragmentActivity() {
     override fun onProvideKeyboardShortcuts(data: MutableList<android.view.KeyboardShortcutGroup>, menu: android.view.Menu?, deviceId: Int) {
         data.add(android.view.KeyboardShortcutGroup("Expenses", listOf(
             android.view.KeyboardShortcutInfo("Add an expense", android.view.KeyEvent.KEYCODE_N, android.view.KeyEvent.META_CTRL_ON),
-            android.view.KeyboardShortcutInfo("Search", android.view.KeyEvent.KEYCODE_F, android.view.KeyEvent.META_CTRL_ON),
+            android.view.KeyboardShortcutInfo("Activity", android.view.KeyEvent.KEYCODE_F, android.view.KeyEvent.META_CTRL_ON),
         )))
     }
 

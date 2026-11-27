@@ -2264,3 +2264,22 @@ Equal within the noise (per-run values differ by as much as the two builds do).
 **Owner decisions applied:** D1 (unsigned expenses, `+₹` income, red switch adds the minus); spoken words kept; the Home hero is still the accent gradient (Slice 133).
 
 **NOT verified.** A real Android phone or iPhone with this build (the iPhone has 0.16.1 as of Slice 130, renewed to 2026-12-04); TalkBack and VoiceOver reading of the rows (the semantics are asserted in a test, not listened to); the "Well under" threshold (60% of pace) is my choice and not in the board: say if you want another; widgets still show the older words; no AAB or IPA.
+
+## Slice 132: redesign 0.17, the bottom bar says Activity and keeps one label at large text (branch `redesign-0.17`)
+
+**Built (`HomeStyle.kt`, `MainActivity.kt`, tests).**
+1. The second place of the bar and of the two-pane rail is labelled **Activity**. Its key (`"Search"`), its tag `open_search` and the two-pane list are unchanged; the keyboard-shortcut help says "Activity" (Ctrl+F). The page it opens is still titled "Search" (its title and the Filters wording belong to the Activity and Filters package, P7).
+2. **From 150% text (`isLargeText`) only the current place has a label** (board `LargeText`); the others are an icon whose name a screen reader still hears (content description), and Add is its plus alone (described "Add"). Every place stays at least 48 dp. Below 150% every place keeps its label.
+3. **The 130% clamp stays**, for the one label that is left: a fifth of a 360 dp bar is 66 dp and my first try (letting the label grow to 200%) cut "Reports" to "Report" and ran "Home" over its pill, seen in the pictures and undone. The text-size test is read outside the clamp (inside it the scale is already 1.3).
+4. The Add tags are unchanged: `add` on Home, `bar_add` elsewhere.
+
+**Ran.**
+* `./gradlew check`: passed.
+* New `BottomBarLabelsUiTest` (5): names and labels at 100%; only the current label, the others named, Add named and every place at least 48 dp at 150% and 200%; the label follows the current place; Add opens the form from Home and from Reports at 150%, 200% and 100%; at 200% on 360 dp every place is inside the screen and reachable. Passes on API 34 and API 26.
+* The 32 classes that touch the bar tags (`bar_add`, `open_search`, `nav_home`, `open_reports`, `more_menu`, plus `UiS0LayoutTest`, `AccessibilityUiTest`, `KeyboardShortcutsUiTest` for the new shortcut name): **API 34 262 passed, API 26 262 passed** (the one "failure" in each is `MoreTestSupport.initializationError`, not a test). That run was on the build that let the label grow at large text; after the clamp was put back, `BottomBarLabelsUiTest`, `UiS0LayoutTest`, `AccessibilityUiTest` and `HomeBaseUiTest` were run again on the final APK: 44 of 44 on API 34 and on API 26.
+* Frame A/B vs `27d6343`, API 34, 393 dp, 4 runs (base, new, new, base), tab switches, on the build before the clamp went back (the code path at normal text is the same): Home to Reports 85 frames, p50/p90/p99 17.3 / 28.1 / 202.8 ms, 2 over 100 ms (base) against 51, 17.1 / 17.8 / 75.5, 0 (new); the four-switch tour 887, 18.2 / 34.9 / 169.6, 15 against 823, 17.1 / 17.6 / 34.4, 1; Home fling 449, 42.1 / 375.1 / 526.5, 127 against 472, 17.1 / 117.2 / 216.9, 99. The new build is better in both of its runs and the base worse in both; I do not claim a speed-up: nothing in this change touches those paths, the difference is the emulator's state (the earlier slices measured the two equal). No regression.
+* Pictures: 152 in `../expenses_builds/redesign_build/132/` (393 and 360 dp, light and dark, 100/150/200%, Hide amounts), taken on the final APK and read: the bar at 360 dp 200% on Home, Reports and More (one label, fits), 150% on 393 dp light, 100% dark with "Activity", and the Search page with the keyboard up.
+
+**Found and fixed in the tests.** Activity's box takes the keyboard, which covers the bar on a small screen at 200% on API 26: the new test reads the bar on Reports, not on Activity (the first try, which pressed Back to close the keyboard, left the page and was dropped).
+
+**NOT verified.** The full suite (not required for this slice); a real phone; TalkBack reading of the icon-only places (the descriptions are asserted, not listened to); the iPhone build (this is common Kotlin code that the iOS bar uses: the iOS unit and native were not re-run for this slice; the 27d6343 build on the phone is slice 131); the rail at large text (labels there are unchanged and always shown).
