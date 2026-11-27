@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 
 /** Shows the More page. The More button toggles, and the page stays open under a screen opened from it, so this taps only when the page is not already showing. */
 fun ComposeTestRule.openMore() {
@@ -28,7 +29,8 @@ private fun ComposeTestRule.hasTag(tag: String) = onAllNodes(hasTestTag(tag), us
  * Waits until the form, the read-only reason or the refund's form is showing.
  */
 fun ComposeTestRule.openEntryEditor(rowTag: String) {
-    waitUntil(10_000) { hasTag(rowTag) }
+    // the page is one lazy list: a row below the fold (the header, the card and the links are above the entries) is not composed until the list is scrolled to it
+    waitUntil(10_000) { if (!hasTag(rowTag) && hasTag("list")) runCatching { onNodeWithTag("list", useUnmergedTree = true).performScrollToNode(hasTestTag(rowTag)) }; hasTag(rowTag) }
     runCatching { onNodeWithTag(rowTag, useUnmergedTree = true).performScrollTo() }
     onNodeWithTag(rowTag, useUnmergedTree = true).performClick()
     waitUntil(15_000) { hasTag("detail_edit") || hasTag("amount") || hasTag("read_only_reason") }
