@@ -84,7 +84,8 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
             run {
                 // "of ₹75,000 · ₹49,305 spent · 8 days to go": the spent figure has its own node, read exactly (outside the node above, whose exact sentence hides what is inside it)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Text("of " + overall.limit!!.wholeAmounts() + " ·", style = MaterialTheme.typography.bodyMedium, color = quiet)
+                    val limitExact = privately("of " + overall.limit!! + " ·")
+                    Text("of " + overall.limit.wholeAmounts() + " ·", style = MaterialTheme.typography.bodyMedium, color = quiet, modifier = Modifier.clearAndSetSemantics { text = AnnotatedString(limitExact) })
                     val spentExact = privately(state.periodSpend)
                     Text(state.periodSpend.wholeAmounts() + (if (!over && budget.periodDays > 0) " spent ·" else " spent"), style = MaterialTheme.typography.bodyMedium, color = quiet, modifier = Modifier.testTag("month_spend").clearAndSetSemantics { text = AnnotatedString(spentExact) })
                     if (!over && budget.periodDays > 0) Text((if (budget.daysLeft <= 1) "last day" else "${budget.daysLeft} days to go"), style = MaterialTheme.typography.bodyMedium, color = quiet, modifier = Modifier.testTag("hero_days_left"))
