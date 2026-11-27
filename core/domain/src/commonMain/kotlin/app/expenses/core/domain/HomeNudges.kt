@@ -75,12 +75,15 @@ object HomeNudges {
     /** The nudges whose count says how much is waiting (a checklist or the capture setup has no such count). */
     private val COUNTED = setOf(HomeNudge.BILLS_DUE, HomeNudge.INBOX, HomeNudge.BILLS_NEW, HomeNudge.WAITING, HomeNudge.CATEGORISE)
 
-    /** "Also waiting: To review (3), Expenses with no category (5). See More", or null when nothing else is. Counted names carry their count so the line says how much waits. */
-    fun alsoWaitingLine(visible: List<HomeNudge>, counts: Map<HomeNudge, Int>): String? {
-        val rest = alsoWaiting(visible)
-        if (rest.isEmpty()) return null
-        return "Also waiting: " + rest.joinToString(", ") { n -> if (n in COUNTED && (counts[n] ?: 0) > 0) "${n.label} (${counts[n]})" else n.label } + ". See More"
-    }
+    /** One thing that waits under the card: the nudge and how it reads as a link, with its count when it has one ("To review (2)", "No category (4)"). */
+    data class WaitingLink(val nudge: HomeNudge, val text: String)
+
+    /** The short name a link uses: the board says "No category", the longer label is the nudge's own. */
+    private fun linkName(n: HomeNudge) = if (n == HomeNudge.CATEGORISE) "No category" else n.label
+
+    /** What else waits (everything after the card that is shown), as links with their counts, in the nudges' own order; empty when nothing else waits. */
+    fun alsoWaitingLinks(visible: List<HomeNudge>, counts: Map<HomeNudge, Int>): List<WaitingLink> =
+        alsoWaiting(visible).map { n -> WaitingLink(n, if (n in COUNTED && (counts[n] ?: 0) > 0) "${linkName(n)} (${counts[n]})" else linkName(n)) }
 
     /** On the More page one notice at a time: the iPhone build's expiry warning outranks the backup reminder (a build that stops opening makes a backup moot). */
     enum class MoreNotice { SIGNING, BACKUP }

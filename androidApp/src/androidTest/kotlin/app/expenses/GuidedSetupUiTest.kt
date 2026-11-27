@@ -192,7 +192,7 @@ class GuidedSetupUiTest {
         put("capture_setup", "OFFERED:PERMISSION")
         launch(); waitFor("inbox_banner")
         assertFalse(has("setup_nudge"), "one card at a time: To review outranks the setup")
-        waitFor("home_more_nudges"); assertTrue(textOf("home_more_nudges").contains("Set up reading bank texts"), textOf("home_more_nudges"))
+        waitFor("home_more_nudges"); assertTrue(textOf("home_waiting_setup").contains("Set up reading bank texts"), textOf("home_waiting_setup")) // the line is links now: each has its own node
     }
 
     @Test

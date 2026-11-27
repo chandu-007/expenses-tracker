@@ -104,7 +104,9 @@ fun DayHeader(epochDay: Long, total: String? = null) {
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() }.testTag("day_header_$epochDay"),
         verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(dayLabel(epochDay), style = Heading.Day, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        // the board's small capitals: "TODAY · MON 23", "YESTERDAY · SUN 22", "MON, 5 OCT"; what is read is the plain day ("Today")
+        val shown = remember(epochDay) { val t = app.expenses.todayLocal(); val d = LocalDate.fromEpochDays(epochDay); (if (epochDay == t.toEpochDays() || epochDay == t.toEpochDays() - 1) dayLabel(epochDay) + " · " + formatDate(d, "EEE d") else dayLabel(epochDay)).uppercase() }
+        Text(shown, style = Heading.Day, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).semantics { contentDescription = dayLabel(epochDay) })
         if (total != null) Text(total, style = Heading.Day, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = 12.dp).testTag("day_total_$epochDay"))
     }
 }

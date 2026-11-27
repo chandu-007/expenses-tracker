@@ -68,7 +68,7 @@ class UiS6FirstRunTest {
         assertTrue(compose.onAllNodes(hasText("Let's note your first expense"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(compose.onAllNodes(hasText("Stays on this phone. No account. Nothing is sent anywhere."), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertEquals(ExampleMonth.rows.size, ExampleMonth.rows.indices.count { has("example_row_$it") }, "every example row is drawn")
-        for (tag in listOf("month_spend", "budget_summary", "budget_set_prompt", "safe_to_spend", "home_safe_to_spend_line", "hero_pace_line")) assertFalse(has(tag), "$tag says nothing above the welcome")
+        for (tag in listOf("month_spend", "budget_summary", "home_hero", "budget_set_prompt", "safe_to_spend", "home_safe_to_spend_line", "hero_pace_line", "home_header", "home_hide_toggle")) assertFalse(has(tag), "$tag says nothing above the welcome")
         assertFalse(has("guide"), "no tour on a first install")
         compose.waitUntil(10_000) { setting(GuideSettings.SEEN) == Guide.VERSION.toString() } // recorded as seen, so a later update offers only what is new
         launch(); waitFor("welcome"); assertFalse(has("guide"))

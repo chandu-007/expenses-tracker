@@ -2,6 +2,12 @@ package app.expenses.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -106,10 +112,13 @@ fun HomeHero(state: UiState.Ready, showBudget: Boolean, onOpenBudget: () -> Unit
             val less = compare.contains("less than")
             val shown = (if (less) "▼ " else if (compare.contains("more than")) "▲ " else "") + compare.wholeAmounts()
             val compareExact = privately(compare)
+            // Hide amounts (board HomeHidden): not the masked figure but the words: "Compared with October: hidden"
+            val vs = Regex("(?:than|as) (.+) by today").find(compare)?.groupValues?.get(1)
+            val drawn = if (LocalHideAmounts.current && vs != null) "Compared with $vs: hidden" else shown
             Text(
-                shown, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                drawn, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
                 color = if (less || !compare.contains("more than")) MaterialTheme.colorScheme.primary else Signal.watch,
-                modifier = Modifier.testTag("month_compare").clearAndSetSemantics { text = AnnotatedString(compareExact) },
+                modifier = Modifier.testTag("month_compare").clearAndSetSemantics { text = AnnotatedString(if (drawn.startsWith("Compared with")) drawn else compareExact) },
             )
         }
         if (!large && state.monthCompare.insight.isNotEmpty()) Text(state.monthCompare.insight, style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.testTag("home_insight"))
@@ -180,5 +189,30 @@ private fun BudgetPrompt(periodName: String) {
             Text("Set", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp, vertical = 8.dp))
         }
         Text("Pick a limit and see what is left, and what you can spend a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+
+/**
+ * Home's header (Slice 134, board Main): the day in small type ("Monday, 23 Nov"), the month as the screen's title in Space Grotesk, and the eye: one tap hides or shows every amount (the Hide amounts setting of
+ * Privacy, the same one). The eye is 48 dp and says its state ("Amounts hidden"/"Amounts shown") and what a tap does. Not drawn on a first run (the welcome has its own top).
+ */
+@Composable
+fun HomeHeader(hidden: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val today = app.expenses.todayLocal()
+    Row(modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 0.dp).testTag("home_header"), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { heading() }) {
+            Text(app.expenses.formatDate(today, "EEEE, d MMM"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("home_date"))
+            Text(app.expenses.formatDate(today, "MMMM"), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.testTag("home_title"))
+        }
+        val shape = androidx.compose.foundation.shape.CircleShape
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(48.dp).clip(shape).background(if (hidden) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow)
+                .clickable(onClickLabel = if (hidden) "Show amounts" else "Hide amounts", role = androidx.compose.ui.semantics.Role.Switch, onClick = onToggle)
+                .semantics { stateDescription = if (hidden) "Amounts hidden" else "Amounts shown"; contentDescription = if (hidden) "Show amounts" else "Hide amounts" }.testTag("home_hide_toggle"),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(if (hidden) androidx.compose.material.icons.Icons.Outlined.VisibilityOff else androidx.compose.material.icons.Icons.Outlined.Visibility, contentDescription = null, tint = if (hidden) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

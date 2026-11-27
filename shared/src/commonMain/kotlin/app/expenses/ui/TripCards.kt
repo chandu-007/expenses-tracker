@@ -32,8 +32,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.unit.dp
 import app.expenses.TripCardUi
+import app.expenses.core.domain.wholeAmounts
 import app.expenses.TripWindowUi
 
 /**
@@ -53,12 +56,16 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
             .heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp).testTag("home_trip_card"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Flight, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+        // the board's line: the plane in the accent, "Goa trip · day 3 of 6" and what the trip has cost at the right; the node still says the whole line ("Goa trip · Day 3 of 6 · ₹12,400.00 spent")
+        val lineExact = privately(card.line)
+        Row(Modifier.testTag("home_trip_line").clearAndSetSemantics { text = androidx.compose.ui.text.AnnotatedString(lineExact) }, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Flight, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
-            Text(card.line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_line"))
+            Text(card.title.removePrefix("Trip: "), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            Text(" · " + card.dayText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(card.spentText.removeSuffix(" spent").wholeAmounts(), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
         }
-        if (!hide) {
+        run {
             // UI S5: with a trip budget the bar has a tick for how many of the trip's days are gone ("today") and the line below says where the spending stands against it in words
             val pct = card.budgetPercent
             val elapsed = if (pct != null && card.length > 0) (card.dayNumber.toFloat() / card.length).coerceIn(0f, 1f) else -1f
@@ -66,12 +73,12 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
             val tick = MaterialTheme.colorScheme.onSecondaryContainer
             Box(Modifier.fillMaxWidth()) {
                 androidx.compose.material3.LinearProgressIndicator(
-                    progress = { fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).testTag("home_trip_progress"),
+                    progress = { if (hide) 0f else fraction }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(Radius.XS).testTag("home_trip_progress"),
                     color = if (over) MaterialTheme.colorScheme.error else level?.let { paceColor(it) } ?: MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f),
                 )
                 if (elapsed >= 0f) Spacer(Modifier.matchParentSize().drawBehind { val x = size.width * elapsed; drawLine(tick.copy(alpha = 0.8f), androidx.compose.ui.geometry.Offset(x, -2.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height + 2.dp.toPx()), strokeWidth = 2.dp.toPx()) })
             }
-            if (card.budgetPercent != null && card.budgetText.isNotEmpty()) {
+            if (!hide && card.budgetPercent != null && card.budgetText.isNotEmpty()) {
                 Text("${card.budgetPercent}% of ${card.budgetText} trip budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_budget"))
                 if (level != null && level != PaceLevel.EARLY) Text(PaceMath.word(level), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.testTag("home_trip_pace"))
             }

@@ -106,18 +106,19 @@ fun UnreviewedDot(id: String, modifier: Modifier = Modifier) {
 fun CaptureHeartbeatChip(chip: CaptureHeartbeat.Chip, onOpen: () -> Unit) {
     val quiet = chip.state == CaptureHeartbeat.State.QUIET
     val tint = if (quiet) Signal.watch else MaterialTheme.colorScheme.primary
+    // the board's line: a small dot and the words, no card: "● Last bank text seen today, 10:13 pm"; amber when it has been quiet
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(Radius.S).background(tint.copy(alpha = if (quiet) 0.16f else 0.08f))
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 0.dp)
+            .clip(Radius.S)
             .clickable(onClickLabel = "Check why capture may not be working", role = Role.Button, onClick = onOpen)
-            .heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp)
+            .heightIn(min = 48.dp).padding(horizontal = 4.dp, vertical = 8.dp)
             .semantics { stateDescription = chip.stateWords }.testTag("capture_heartbeat"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Sms, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(chip.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("capture_heartbeat_text"))
+            Text(chip.text, style = MaterialTheme.typography.bodySmall, color = if (quiet) Signal.watch else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_heartbeat_text"))
             chip.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("capture_heartbeat_note")) }
         }
     }

@@ -30,12 +30,14 @@ class HomeNudgesTest {
     }
 
     @Test
-    fun theAlsoWaitingLineCarriesTheCountsOfTheCountedNudgesAndNothingForTheOthers() {
+    fun theAlsoWaitingLinksCarryTheCountsOfTheCountedNudgesAndNothingForTheOthers() {
         val counts = mapOf(HomeNudge.INBOX to 2, HomeNudge.CATEGORISE to 12, HomeNudge.SETUP to 1, HomeNudge.FIRST_WEEK to 5)
         val v = visible(counts)
-        assertEquals("Also waiting: Expenses with no category (12), Set up reading bank texts, Getting started. See More", HomeNudges.alsoWaitingLine(v, counts))
-        assertNull(HomeNudges.alsoWaitingLine(visible(mapOf(HomeNudge.INBOX to 2)), mapOf(HomeNudge.INBOX to 2)), "one card and nothing else: no line")
-        assertNull(HomeNudges.alsoWaitingLine(emptyList(), emptyMap()))
+        // moved from the one "Also waiting: ... See More" sentence: the same things, in the same order, as links with their counts ("No category" is the board's short name)
+        assertEquals(listOf("No category (12)", "Set up reading bank texts", "Getting started"), HomeNudges.alsoWaitingLinks(v, counts).map { it.text })
+        assertEquals(listOf(HomeNudge.CATEGORISE, HomeNudge.SETUP, HomeNudge.FIRST_WEEK), HomeNudges.alsoWaitingLinks(v, counts).map { it.nudge })
+        assertEquals(emptyList(), HomeNudges.alsoWaitingLinks(visible(mapOf(HomeNudge.INBOX to 2)), mapOf(HomeNudge.INBOX to 2)), "one card and nothing else: no links")
+        assertEquals(emptyList(), HomeNudges.alsoWaitingLinks(emptyList(), emptyMap()))
     }
 
     @Test

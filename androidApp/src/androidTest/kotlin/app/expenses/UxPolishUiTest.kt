@@ -71,6 +71,14 @@ class UxPolishUiTest {
     // ---- 5. one nudge on Home ----
 
     @Test
+    fun aLinkUnderTheCardOpensItsOwnPlace() {
+        for (i in 0 until 4) bare("u$i", 1_000L + i, "Plain $i")
+        ingest("AX-HDFCBK-S", debit, System.currentTimeMillis() - 5_000)
+        launch(); waitFor("inbox_banner"); Thread.sleep(2_500)
+        waitFor("home_waiting_categorise"); tap("home_waiting_categorise"); waitFor("categorise_screen")
+    }
+
+    @Test
     fun homeShowsOneCardAtATimeAndNamesWhatElseIsWaitingAndNotNowBringsTheNextOne() {
         for (i in 0 until 4) bare("u$i", 1_000L + i, "Plain $i") // four with no category: the categorise card would show
         ingest("AX-HDFCBK-S", debit, System.currentTimeMillis() - 5_000) // and one text waiting: it outranks the categorise card
@@ -78,7 +86,10 @@ class UxPolishUiTest {
         Thread.sleep(2_500) // the slow figures (the no-category count) arrive after the page
         assertFalse(has("categorise_nudge"), "one card at a time: the review card is the one shown")
         waitFor("home_more_nudges")
-        compose.onNodeWithTag("home_more_nudges", useUnmergedTree = true).assertTextContains("Expenses with no category", substring = true)
+        compose.onNodeWithTag("home_waiting_categorise", useUnmergedTree = true).assertTextContains("No category", substring = true) // the line is links now: each has its own node
+        // moved from one "Also waiting: ... See More" sentence that opened More: each is a link with its count to its own place (board: "To review (2) · No category (4)")
+        assertTrue(compose.onNodeWithTag("home_waiting_categorise", useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }.startsWith("No category (4)"))
+        assertTrue(compose.onNodeWithTag("home_waiting_categorise", useUnmergedTree = true).fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick), "a link, not a line of text")
         tap("nudge_notnow_inbox"); waitGone("inbox_banner"); waitFor("categorise_nudge")
         assertFalse(has("home_more_nudges"), "nothing else is waiting now")
         // a new text brings the put-off card back at once

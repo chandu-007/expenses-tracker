@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.layout.size
 import app.expenses.core.domain.BudgetState
 import androidx.compose.foundation.layout.width
@@ -409,6 +410,8 @@ fun EntryListScreen(
                 Column(Modifier.fillMaxWidth().testTag("home_top")) {
                     // Slice 133: ONE white card: what is left to spend, its status, the pace bar, how this period stands against the last, and the two figures that say what can be spent (HomeHero). No graph.
                     // It reads what Home already holds; the Budget block of Customise home decides whether its budget parts show
+                    // the header: the day, the month as the title, and the eye that hides or shows every amount
+                    if (!firstRun) HomeHeader(hidden = state.hideAmounts, onToggle = onToggleHideAmounts)
                     val sections = state.homeLayout.visible()
                     // the hero is the Budget block of Customise home: first by default, then right at the top; moved lower it moves with the block; with the block hidden the top is the amount spent alone
                     val heroFirst = sections.firstOrNull() == HomeSection.BUDGET || HomeSection.BUDGET !in sections
@@ -437,12 +440,30 @@ fun EntryListScreen(
                         HomeNudge.FIRST_WEEK -> FirstWeekCard(state.firstWeek, onCheckup = if (state.firstWeek.any { it.step == FirstWeekStep.CAPTURE && !it.done }) onOpenCheckup else null, onEarlier = onOpenEarlier, onOpen = { step -> when (step) { FirstWeekStep.ACCOUNT_DIGITS -> onManageAccounts(); FirstWeekStep.BUDGET -> onOpenBudget(); FirstWeekStep.CAPTURE -> onOpenCapture(); FirstWeekStep.BACKUP -> onOpenData(); FirstWeekStep.ENTRY -> onAdd() } }, onDismiss = onDismissFirstWeek)
                         null -> {}
                     }
-                    HomeNudges.alsoWaitingLine(shownNudges, nudgeCounts)?.let { line ->
-                        Text(
-                            line,
-                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp).clip(Radius.XS).clickable { onMoreChange(true) }.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_more_nudges"),
-                        )
+                    // "Also waiting: To review (2) · No category (4)": what else waits, each as a link to its own place, with its count (the nudges' order and snooze rules decide what is here, not this line)
+                    HomeNudges.alsoWaitingLinks(shownNudges, nudgeCounts).takeIf { it.isNotEmpty() }?.let { links ->
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                        androidx.compose.foundation.layout.FlowRow(
+                            Modifier.padding(horizontal = 16.dp).semantics(mergeDescendants = true) { }.testTag("home_more_nudges"),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text("Also waiting:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically))
+                            links.forEachIndexed { i, link ->
+                                val go: () -> Unit = when (link.nudge) {
+                                    HomeNudge.BILLS_DUE, HomeNudge.BILLS_NEW -> onOpenBills
+                                    HomeNudge.INBOX -> onOpenInbox
+                                    HomeNudge.WAITING -> onOpenLoans
+                                    HomeNudge.CATEGORISE -> onOpenCategorise
+                                    HomeNudge.SETUP -> onOpenSetup
+                                    HomeNudge.FIRST_WEEK -> { { onMoreChange(true) } }
+                                }
+                                Text(
+                                    link.text + if (i < links.lastIndex) " ·" else "",
+                                    style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.clip(Radius.XS).clickable(onClickLabel = "Open ${link.text}", role = androidx.compose.ui.semantics.Role.Button, onClick = go).heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).testTag("home_waiting_${link.nudge.key}"),
+                                )
+                            }
+                        }
                     }
                     // UI S6 (D2): at most one calm milestone, only when the person opted in and nudges are not paused; one line, a tick, "Thanks". Not a nudge: it asks for nothing and is not in "Also waiting"
                     state.milestone?.takeIf { state.milestonesOn && !nudgesPaused }?.let { m -> MilestoneCard(m.text, onThanks = { onMilestoneThanks(m.id) }) }
@@ -461,7 +482,7 @@ fun EntryListScreen(
                                     ) {
                                         items(state.templates, key = { it.id }) { t ->
                                             LongPressChip(
-                                                label = if (t.amountText != null) "${t.name} ${t.amountText}" else "${t.name} …",
+                                                label = if (t.amountText != null) "${t.name} · ${t.amountText.wholeAmounts()}" else "${t.name} …", leading = androidx.compose.material.icons.Icons.Outlined.Add,
                                                 onClick = { onTemplate(t) }, onLongClick = { removing = t },
                                                 modifier = Modifier.testTag("template_${t.name}"),
                                             )

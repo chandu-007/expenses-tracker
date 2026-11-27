@@ -153,7 +153,10 @@ class HomeOptionBUiTest {
         launch(); waitTiles(); waitFor("home_trip_card")
         assertFalse(has("home_spark"), "no graph")
         assertFalse(Regex("""\d{3}""").containsMatchIn(textOf("month_compare")), "the comparison's amount is masked: ${textOf("month_compare")}")
-        assertFalse(has("home_trip_progress"), "the trip's bar")
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("Compared with", substring = true) and androidx.compose.ui.test.hasText(": hidden", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "the line says the comparison is hidden (board HomeHidden)")
+        // moved: the trip's bar was gone under Hide amounts; it is drawn now (board HomeHidden) with its track and tick but no length, and its percent line is still not drawn
+        assertTrue(has("home_trip_progress"), "the trip's bar keeps its track")
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasTestTag("home_trip_progress"), useUnmergedTree = true).fetchSemanticsNodes().all { it.config[SemanticsProperties.ProgressBarRangeInfo].current == 0f }, "and has no length")
         assertFalse(has("home_trip_budget"))
         // the budget's bar keeps its track and the tick for today (the date, not money) but loses its length: a bar that is full of nothing shows no figure
         assertTrue(compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true).fetchSemanticsNodes().all { it.config[SemanticsProperties.ProgressBarRangeInfo].current == 0f }, "every bar of the budget has lost its length")
@@ -218,7 +221,8 @@ class HomeOptionBUiTest {
     fun atLargeTextTheTwoFiguresStackInsideTheCardAndThereIsNoGraph() {
         seedTypical(); shell("settings put system font_scale 2.0")
         launch(); waitTiles()
-        val b = bounds("hero_pace_line"); val s = bounds("home_safe_to_spend_line")
+        bounds("home_safe_to_spend_line") // brings the two into view together; read after one scroll, not one each
+        val b = compose.onNodeWithTag("hero_pace_line", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot; val s = compose.onNodeWithTag("home_safe_to_spend_line", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(b.bottom <= s.top + 1f && b.left == s.left, "stacked, full width: $b $s")
         assertFalse(has("home_spark")); fits("budget_summary"); fits("home_safe_to_spend_line")
     }
@@ -228,5 +232,32 @@ class HomeOptionBUiTest {
         seedTypical()
         app.expenses.ui.WideLayoutTestHook.widthDp = 1000; app.expenses.ui.WideLayoutTestHook.heightDp = 700
         try { launch(); waitFor("wide_list_pane"); waitFor("month_spend"); assertFalse(has("home_spark")) } finally { app.expenses.ui.WideLayoutTestHook.widthDp = null; app.expenses.ui.WideLayoutTestHook.heightDp = null }
+    }
+
+    @Test
+    fun theHeaderHasTheDayTheMonthAndAnEyeThatHidesAndShowsEveryAmount() {
+        seedTypical(); launch(); waitFor("home_header"); waitFor("month_spend")
+        val today = java.time.LocalDate.now()
+        assertEquals(today.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH) + ", " + today.dayOfMonth + " " + today.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH), textOf("home_date"))
+        assertEquals(today.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH), textOf("home_title"))
+        val eye = touch("home_hide_toggle"); assertTrue(eye.height >= 47f * density() && eye.width >= 47f * density(), "the eye is 48 dp: ${eye.width / density()} x ${eye.height / density()}")
+        fun said() = compose.onNodeWithTag("home_hide_toggle", useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+        assertEquals("Amounts shown", said()); assertEquals("₹1,549.10", textOf("month_spend"))
+        tap("home_hide_toggle")
+        compose.waitUntil(10_000) { said() == "Amounts hidden" }
+        assertFalse(Regex("""\d{3}""").containsMatchIn(textOf("month_spend")), "every amount is masked: ${textOf("month_spend")}")
+        assertEquals("1", runBlocking { container.write { it.templates.setting("hide_amounts") } }, "it is the Hide amounts setting of Privacy")
+        tap("home_hide_toggle")
+        compose.waitUntil(10_000) { said() == "Amounts shown" }
+        assertEquals("₹1,549.10", textOf("month_spend"))
+    }
+
+    @Test
+    fun theQuickEntriesAndTheDayHeadingsFollowTheBoard() {
+        seedTypical()
+        launch(); waitTiles(); waitFor("template_Chai")
+        assertEquals("Chai · ₹20", compose.onNodeWithTag("template_Chai").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString(" ") { it.text }, "the quick entry reads \"+ Chai · ₹20\" (the plus is an icon; whole units)")
+        val h = compose.onNodeWithTag("day_header_${epochDay(0)}").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString(" ") { it.text }
+        assertTrue(h.startsWith("TODAY · "), "the day heading is in small capitals with the day: $h")
     }
 }
