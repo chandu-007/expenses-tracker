@@ -153,7 +153,8 @@ class HomeOptionBUiTest {
         assertFalse(has("month_compare_pill"), "the chip's percent too")
         assertFalse(has("home_trip_progress"), "the trip's bar")
         assertFalse(has("home_trip_budget"))
-        assertTrue(compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "no bar of the budget either")
+        // the budget's bar keeps its track and the tick for today (the date, not money) but loses its length: a bar that is full of nothing shows no figure
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true).fetchSemanticsNodes().all { it.config[SemanticsProperties.ProgressBarRangeInfo].current == 0f }, "every bar of the budget has lost its length")
         assertFalse(textOf("budget_overall_note").contains("60,000"), "the budget's figures are masked: ${textOf("budget_overall_note")}")
         assertFalse(textOf("home_safe_to_spend_line_text").contains(Regex("""\d{3}""")), textOf("home_safe_to_spend_line_text"))
     }

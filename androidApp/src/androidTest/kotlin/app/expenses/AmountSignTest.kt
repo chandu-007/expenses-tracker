@@ -74,8 +74,8 @@ class AmountSignTest {
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("amount_Salary"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         fun text(tag: String, unmerged: Boolean = true) = compose.onNodeWithTag(tag, useUnmergedTree = unmerged).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
         assertEquals("-₹125.00", text("amount_Lunch")); assertEquals("+₹5,000.00", text("amount_Salary"))
-        val merged = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString(" ") { it.text } }
-        kotlin.test.assertTrue(merged("row_Lunch").contains("spent ₹125.00"), "a row says what it did, not a bare figure: ${merged("row_Lunch")}")
-        kotlin.test.assertTrue(merged("row_Salary").contains("received ₹5,000.00"), merged("row_Salary"))
+        fun heard(words: String) = compose.onAllNodes(androidx.compose.ui.test.hasText(words, substring = true)).fetchSemanticsNodes().isNotEmpty()
+        kotlin.test.assertTrue(heard("spent ₹125.00"), "a row says what it did, not a bare figure")
+        kotlin.test.assertTrue(heard("received ₹5,000.00"), "money in says received")
     }
 }

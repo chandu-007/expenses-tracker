@@ -331,6 +331,7 @@ class ReportsUiTest {
             waitFor(tag)
             assertTrue(!figure.containsMatchIn(textsOf(tag).joinToString(" ")), "$tag shows no figure: ${textsOf(tag)}")
         }
+        waitFor("report_comparison") // the page is a lazy list and the loop above has scrolled down: the chip at the top is brought back first
         assertTrue(textsOf("report_comparison").joinToString(" ").contains("%"), "the percent is not an amount and stays")
     }
 

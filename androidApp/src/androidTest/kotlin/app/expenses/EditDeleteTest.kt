@@ -102,7 +102,7 @@ class EditDeleteTest {
         compose.onNodeWithTag("cancel").performClick()
         // Cancel in the form comes back to the entry's detail (nothing was saved); Back leaves it
         waitFor("detail_edit")
-        compose.onNodeWithTag("detail_amount").assertTextContains("₹100.00", substring = true)
+        compose.onNodeWithTag("detail_amount", useUnmergedTree = true).assertTextContains("₹100.00", substring = true)
         compose.onNodeWithTag("detail_back").performClick()
         waitFor("add")
         compose.onNodeWithTag("month_spend").assertTextEquals("₹100.00")
