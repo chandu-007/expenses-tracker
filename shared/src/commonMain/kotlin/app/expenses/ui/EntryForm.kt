@@ -813,8 +813,9 @@ private fun CategoryTiles(
         Text(if (optional) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
         if (suggestionLabel != null) AssistChip(onClick = onSuggestion, label = { Text(suggestionLabel, maxLines = 2) }, modifier = Modifier.testTag("income_suggestion"))
         if (usualLabel != null) AssistChip(onClick = onUsual, label = { Text(usualLabel, maxLines = 2) }, modifier = Modifier.testTag("usual_category"))
-        // the board's grid: four tiles to a row and two rows (seven tiles and "All N"), no sideways scroll. From 130% text it is three to a row (three rows), so a name of a tile is never cut ("Groceries")
-        val columns = if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.3f) 3 else 4
+        // the board's grid: four tiles to a row and two rows (seven tiles and "All N"), no sideways scroll. From 130% text it is three to a (two from 180%, so no name is cut mid-word at 200% on 360 dp) row (three rows), so a name of a tile is never cut ("Groceries")
+        val fs = androidx.compose.ui.platform.LocalDensity.current.fontScale
+        val columns = if (fs >= 1.8f) 2 else if (fs >= 1.3f) 3 else 4
         val items: List<CategoryUi?> = picks.shown.mapNotNull { byId[it] } + listOf(null)
         items.chunked(columns).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
