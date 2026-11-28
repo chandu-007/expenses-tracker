@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -101,8 +102,9 @@ fun TripHomeCard(card: TripCardUi, onOpen: () -> Unit) {
 fun tripChipName(name: String): String = if (name.contains("trip", ignoreCase = true)) name else "$name trip"
 
 /**
- * The add form's hint when the date falls inside a trip that is on: "Tagged for Goa trip" with a cross that takes the tag off for this entry; once taken off the chip offers it back
- * ("Tag it for Goa trip"). The tag is added when the entry is saved (and only then); an entry saved without it stays without it, whatever is edited later.
+ * The add form's chip when the date falls inside a trip that is on, the board's "Goa trip" with a check when it is on (so it fits the one row of chips beside the account, the day and Details).
+ * Its description says the rest: "Tagged for Goa trip with the tag goa. Double tap to take the tag off this entry", and once taken off "Not tagged for Goa trip ...". The tag is added when the entry is
+ * saved (and only then); an entry saved without it stays without it, whatever is edited later.
  */
 @Composable
 fun TripTagChip(trip: TripWindowUi, on: Boolean, showNote: Boolean = true, onToggle: () -> Unit) {
@@ -110,15 +112,14 @@ fun TripTagChip(trip: TripWindowUi, on: Boolean, showNote: Boolean = true, onTog
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FilterChip(
             selected = on, onClick = onToggle,
-            label = { Text(if (on) "Tagged for $name" else "Tag it for $name") },
-            leadingIcon = { Icon(Icons.Outlined.Flight, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = if (on) ({ Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
+            label = { Text(name, maxLines = 1) },
+            leadingIcon = { Icon(if (on) Icons.Outlined.Check else Icons.Outlined.Flight, contentDescription = null, modifier = Modifier.size(16.dp)) },
             colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer, selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer, selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
             ),
             border = FilterChipDefaults.filterChipBorder(enabled = true, selected = on, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp),
-            modifier = Modifier.semantics { contentDescription = if (on) "Tagged for $name with the tag ${trip.tag}. Double tap to take the tag off this entry." else "Not tagged for $name. Double tap to tag this entry with ${trip.tag}." }.testTag("trip_chip"),
+            modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = if (on) "Tagged for $name with the tag ${trip.tag}. Double tap to take the tag off this entry." else "Not tagged for $name. Double tap to tag this entry with ${trip.tag}." }.testTag("trip_chip"),
         )
         if (showNote) Text(
             if (on) "The tag \"${trip.tag}\" is added when you save." else "Saved without the trip tag.",

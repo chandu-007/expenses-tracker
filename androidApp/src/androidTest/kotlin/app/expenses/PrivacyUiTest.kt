@@ -79,7 +79,7 @@ class PrivacyUiTest {
         launch(); toggle(); compose.waitUntil(10_000) { hidden() == "1" }
         tap("add"); waitFor("amount")
         compose.onNodeWithTag("amount").performTextInput("250")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "250")
+        compose.onNodeWithTag("amount").assertAmountIs("250")
         tap("save"); waitFor("add")
         text("month_spend").assertTextEquals("₹••••")
         assertEquals(25_000L, db { it.db.schemaQueries.recentEntries(1).executeAsList().single().amount_minor })

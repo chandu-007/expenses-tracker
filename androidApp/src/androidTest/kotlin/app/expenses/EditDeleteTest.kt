@@ -78,7 +78,7 @@ class EditDeleteTest {
         seed("e1", 10_000, "Food", "Cafe")
         launch(); waitSpend("₹100.00")
         compose.openEntryEditor("row_Cafe")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00")
+        compose.onNodeWithTag("amount").assertAmountIs("100.00")
         compose.onNodeWithTag("note").assertTextContains("Cafe", substring = true) // the one field has a hint instead of a label now
         compose.onNodeWithTag("amount").performTextClearance()
         compose.onNodeWithTag("amount").performTextInput("150.5")

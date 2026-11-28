@@ -167,7 +167,7 @@ class EntryKindsUiTest {
         tap("split_category_0"); tap("split_pick_0_Food"); type("split_amount_0", "250")
         scenario!!.recreate()
         waitFor("split_amount_0")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "1000")
+        compose.onNodeWithTag("amount").assertAmountIs("1000")
         compose.onNodeWithTag("split_amount_0").assertTextEquals("₹", "250")
         waitText("₹750.00 left to assign")
     }
@@ -181,7 +181,7 @@ class EntryKindsUiTest {
             ok.store.save(app.expenses.core.domain.ledger.Transfer(EntryId("atm"), System.currentTimeMillis() - 10, AccountId("bank"), AccountId("cash"), Money(20_000, inr)), EntryDetails(merchant = "ATM"))
         }
         launch(); compose.openEntryEditor("row_Acme"); waitFor("amount")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "800.00")
+        compose.onNodeWithTag("amount").assertAmountIs("800.00")
         type("amount", "900"); addSaved()
         assertEquals(90_000L + 0, db { ok -> ok.store.balances().getValue(AccountId("bank")).minorUnits } + 20_000L)
         compose.openEntryEditor("row_ATM"); waitFor("to_chip_Cash"); type("amount", "300"); addSaved()

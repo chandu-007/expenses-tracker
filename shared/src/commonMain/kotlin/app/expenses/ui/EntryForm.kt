@@ -104,12 +104,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.automirrored.outlined.Backspace
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.ui.semantics.setText
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -363,6 +360,10 @@ fun EntryFormScreen(
                     IconButton(onClick = onBack, modifier = Modifier.testTag("cancel")) { Icon(Icons.Outlined.Close, contentDescription = "Cancel") }
                     val heading = if (start.id == null && refundOf == null && title == "Add") "New entry" else title
                     Text(heading, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).semantics { heading() })
+                    // the pad and the keyboard swap here, at the end of the header (it took a 48 dp row under the amount: the board has the note, the grid and the chips above the pad without scrolling)
+                    IconButton(onClick = { if (padOn) { padOn = false; focusAmount++ } else padOn = true }, modifier = Modifier.size(48.dp).testTag("amount_pad_toggle")) {
+                        Icon(if (padOn) Icons.Outlined.Keyboard else Icons.Outlined.Dialpad, contentDescription = if (padOn) "Use the keyboard" else "Use the number pad")
+                    }
                 } }
             }
         },
@@ -408,7 +409,7 @@ fun EntryFormScreen(
                 if (kindChangeProblem != null && start.id != null && draft.kind != start.kind) Text(kindChangeProblem, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kind_change_problem"))
             }
             if (refundOf != null) Text("Refund of $refundOf", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("refund_of"))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().heightIn(min = 78.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
                 val hide = LocalHideAmounts.current
                 // 450+120 small and what it comes to big (the board): the field is the expression, the figure under it is the answer; a plain amount is just the big field
                 val hasOp = expr.drop(1).any { it == '+' || it == '-' || it == '×' || it == '÷' }
@@ -426,11 +427,6 @@ fun EntryFormScreen(
                 else if (draft.kind == DraftKind.REFUND) Text("Up to ${Money(draft.refundableMinor, currency).formatted()} can still be refunded", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("refundable"))
                 val words = amount?.takeIf { currency.minorUnitDigits == 2 && it.minorUnits >= 100_000L && !hide }?.let { AmountWords.of(it.minorUnits) }
                 if (words != null) Text(words, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.testTag("amount_words"))
-                TextButton(onClick = { if (padOn) { padOn = false; focusAmount++ } else padOn = true }, modifier = Modifier.testTag("amount_pad_toggle")) {
-                    Icon(if (padOn) Icons.Outlined.Keyboard else Icons.Outlined.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (padOn) "Keyboard" else "Number pad")
-                }
             }
             if (draft.kind == DraftKind.LOAN) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -491,12 +487,11 @@ fun EntryFormScreen(
                 val day = dateOfMillis(draft.occurredAt, zone).toEpochDays().toLong()
                 tripWindows.firstOrNull { day >= it.startDay && day <= it.endDay }
             } else null
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val accountName = activeAccounts.firstOrNull { it.id == draft.accountId }?.name ?: "Account"
                 Box {
                     AssistChip(
                         onClick = { accountMenu = true }, label = { Text(if (draft.kind == DraftKind.TRANSFER) "From $accountName" else accountName, maxLines = 1) },
-                        leadingIcon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "$fromLabel $accountName. Double tap to choose another account." }.testTag("account_menu"),
                     )
@@ -506,18 +501,16 @@ fun EntryFormScreen(
                 }
                 AssistChip(
                     onClick = { pickingDate = true }, label = { Text(dateLabel, maxLines = 1) },
-                    leadingIcon = { Icon(Icons.Outlined.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("date"),
                 )
                 tripHere?.let { t -> TripTagChip(t, on = !draft.noTripTag, showNote = false) { draft = draft.copy(noTripTag = !draft.noTripTag) } }
                 AssistChip(
                     onClick = { moreOpen = !moreOpen },
-                    label = { Text(if (moreOpen) "Fewer details" else "Details") },
-                    leadingIcon = { Icon(if (moreOpen) Icons.Outlined.MoreHoriz else Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = { Text(if (moreOpen) "Fewer details" else "Details", maxLines = 1) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("form_more").semantics { stateDescription = if (moreOpen) "Expanded" else "Collapsed" },
                 )
             }
-            tripHere?.let { t -> Text(if (!draft.noTripTag) "The tag \"${t.tag}\" is added when you save." else "Saved without the trip tag.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).testTag("trip_chip_note")) }
+            tripHere?.takeIf { draft.noTripTag }?.let { Text("Saved without the trip tag.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).testTag("trip_chip_note")) }
 
             if (draft.kind == DraftKind.TRANSFER) {
                 Text("To", style = MaterialTheme.typography.labelMedium)
@@ -740,10 +733,9 @@ private fun AmountHero(
         BasicTextField(
             value = expr, onValueChange = onExpr, singleLine = true, textStyle = style, cursorBrush = SolidColor(colors.primary),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = fieldModifier.fillMaxWidth(),
+            modifier = fieldModifier.fillMaxWidth().semantics { contentDescription = label },
             decorationBox = { inner ->
                 Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
                         if (!small) Text(symbol, style = style.copy(fontSize = size * 0.6f, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal), color = colors.onSurfaceVariant, modifier = Modifier.padding(end = 4.dp, bottom = 6.dp).clearAndSetSemantics { })
                         Box(Modifier.widthIn(min = 24.dp)) {
@@ -810,7 +802,7 @@ private fun CategoryTiles(
     val picks = remember(offered, selected) { CategoryChoices.tiles(offered.map { it.id to it.uses }, selected.ifEmpty { null }) }
     val byId = remember(categories) { categories.associateBy { it.id } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (optional) "Category (optional)" else "Category", style = MaterialTheme.typography.labelMedium)
+        if (optional) Text("Category (optional)", style = MaterialTheme.typography.labelMedium)
         if (suggestionLabel != null) AssistChip(onClick = onSuggestion, label = { Text(suggestionLabel, maxLines = 2) }, modifier = Modifier.testTag("income_suggestion"))
         if (usualLabel != null) AssistChip(onClick = onUsual, label = { Text(usualLabel, maxLines = 2) }, modifier = Modifier.testTag("usual_category"))
         // the board's grid: four tiles to a row and two rows (seven tiles and "All N"), no sideways scroll. From 130% text it is three to a (two from 180%, so no name is cut mid-word at 200% on 360 dp) row (three rows), so a name of a tile is never cut ("Groceries")
@@ -822,8 +814,8 @@ private fun CategoryTiles(
                 row.forEach { c ->
                     if (c != null) CategoryTile(c, displayName(categories, c), c.id == selected, Modifier.weight(1f)) { onPick(c.id) }
                     else Column(
-                        Modifier.weight(1f).heightIn(min = 76.dp).clip(Radius.M).border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.M)
-                            .clickable(onClickLabel = "Show all categories", onClick = onMore).padding(horizontal = 4.dp, vertical = 8.dp).testTag("more_categories"),
+                        Modifier.weight(1f).heightIn(min = 64.dp).clip(Radius.M).border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.M)
+                            .clickable(onClickLabel = "Show all categories", onClick = onMore).padding(horizontal = 4.dp, vertical = 6.dp).testTag("more_categories"),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.MoreHoriz, contentDescription = null) }
@@ -840,11 +832,11 @@ private fun CategoryTiles(
 private fun CategoryTile(c: CategoryUi, name: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(
-        modifier.heightIn(min = 76.dp).clip(Radius.M)
+        modifier.heightIn(min = 64.dp).clip(Radius.M)
             .background(if (selected) colors.primaryContainer else colors.surfaceContainerLow)
             .border(1.dp, if (selected) colors.primary else colors.outlineVariant, Radius.M)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 8.dp).testTag("category_chip_${c.id}"),
+            .padding(horizontal = 4.dp, vertical = 6.dp).testTag("category_chip_${c.id}"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {

@@ -86,3 +86,12 @@ fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDescribes(text: Stri
     val d = fetchSemanticsNode().config.let { c -> if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)) c[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].joinToString(" ") else "" }
     if (!d.contains(text)) throw AssertionError("expected the description to contain '$text' but it is '$d'")
 }
+
+/** The amount field: it holds [value], and it is still called "Amount" for a screen reader (the word left the screen when the amount block lost its label line, the board's Add has none). */
+fun androidx.compose.ui.test.SemanticsNodeInteraction.assertAmountIs(value: String) {
+    val c = fetchSemanticsNode().config
+    val typed = if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.EditableText)) c[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text else ""
+    val said = if (c.contains(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)) c[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].joinToString(" ") else ""
+    if (typed != value) throw AssertionError("expected the amount '$value' but it is '$typed'")
+    if (!said.startsWith("Amount")) throw AssertionError("expected the amount field to be called Amount for a screen reader, it says '$said'")
+}

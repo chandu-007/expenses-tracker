@@ -108,7 +108,7 @@ class WidePaneUiTest {
         assertTrue(has("row_Cafe") && has("add"), "the list stays up while the detail is open")
         compose.onNodeWithTag("detail_edit", useUnmergedTree = true).performClick()
         waitFor("amount")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00")
+        compose.onNodeWithTag("amount").assertAmountIs("100.00")
         assertTrue(has("row_Cafe") && has("add"), "the list stays up while the entry is open")
         assertTrue(left("amount") >= right("row_Cafe") - 1f, "the editor is to the right of the row, not over it")
 
@@ -202,21 +202,21 @@ class WidePaneUiTest {
         assertTrue(!has("wide_list_pane"), "the cover screen is a phone")
         compose.openEntryEditor("row_Cafe")
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("77.5")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        compose.onNodeWithTag("amount").assertAmountIs("77.5")
         var before: MainActivity? = null; scenario!!.onActivity { before = it }
         // unfold: the inner screen, 1812 x 2176 px at 420 dpi = 690 x 829 dp
         shell("wm size 1812x2176")
         waitWide(true, "unfolded Z Fold 5, 690 x 829 dp")
         val inner = windowDp(); assertTrue(inner.first in 685..695 && inner.second in 700..835, "the inner screen is about 690 dp wide and up to 829 high (less the taskbar), was $inner")
         waitFor("amount"); waitFor("row_Cafe")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        compose.onNodeWithTag("amount").assertAmountIs("77.5")
         var after: MainActivity? = null; scenario!!.onActivity { after = it }
         assertTrue(before === after, "the activity was not rebuilt by the unfold")
         assertTrue(left("amount") >= right("row_Cafe") - 1f, "the entry is beside the list now")
         // on its side (2176 x 1812 px), then folded again
-        shell("wm size 2176x1812"); waitWide(true, "unfolded and turned, 829 x 690 dp"); compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        shell("wm size 2176x1812"); waitWide(true, "unfolded and turned, 829 x 690 dp"); compose.onNodeWithTag("amount").assertAmountIs("77.5")
         shell("wm size 904x2316")
-        waitWide(false, "folded again"); waitFor("amount"); compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        waitWide(false, "folded again"); waitFor("amount"); compose.onNodeWithTag("amount").assertAmountIs("77.5")
         scenario!!.onActivity { after = it }; assertTrue(before === after, "nor by the fold")
         // a phone on its side, 2340 x 1080 px at 440 dpi = 851 x 393 dp: wide but short, so still one pane
         shell("wm density 440"); shell("wm size 2340x1080"); Thread.sleep(1500); waitFor("amount")
@@ -305,12 +305,12 @@ class WidePaneUiTest {
         seedCafes(); launch(1000); waitFor("row_Cafe Roma")
         openSearchAndType("caf")
         tap("result_e2"); compose.continueToForm(); waitGone("wide_placeholder")
-        compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "250.00")
+        compose.onNodeWithTag("amount").assertAmountIs("250.00")
         assertTrue(left("amount") >= right("result_e1") - 1f, "the editor is to the right of the results, not over them")
         assertEquals("caf", editable("search_text"), "the typed words are still in the box")
         assertTrue(has("result_e1") && has("result_e4") && !has("result_e3"), "the same results are listed")
         // another result replaces the entry (a new editor, not the old one's typed text)
-        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" || runCatching { compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "100.00") }.isSuccess }
+        tap("result_e1"); compose.continueToForm(); compose.waitUntil(10_000) { editable("amount") == "100.00" || runCatching { compose.onNodeWithTag("amount").assertAmountIs("100.00") }.isSuccess }
         // edit and save: the pane empties, the results stay, the line shows the new amount
         compose.onNodeWithTag("amount").performTextClearance(); compose.onNodeWithTag("amount").performTextInput("150.5"); tap("save")
         waitGone("amount"); waitFor("wide_placeholder")
@@ -376,7 +376,7 @@ class WidePaneUiTest {
         var after: MainActivity? = null; scenario!!.onActivity { after = it }; assertTrue(before === after, "the activity was not rebuilt")
         // unfold again: beside the results again, still with the typed amount, the words and the filter
         shell("wm size 1812x2176"); waitWide(true, "unfolded again")
-        waitFor("amount"); waitFor("result_e1"); compose.onNodeWithTag("amount").assertTextEquals("Amount (₹)", "77.5")
+        waitFor("amount"); waitFor("result_e1"); compose.onNodeWithTag("amount").assertAmountIs("77.5")
         assertEquals("caf", editable("search_text")); assertTrue(has("search_filters_badge"), "the filter is still on")
         // fold, then Back: the results with the words and the filter, no entry
         shell("wm size 904x2316"); waitWide(false, "folded for the last time"); waitFor("amount")

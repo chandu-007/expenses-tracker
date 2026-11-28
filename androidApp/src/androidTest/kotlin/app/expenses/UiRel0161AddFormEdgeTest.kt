@@ -54,6 +54,10 @@ class UiRel0161AddFormEdgeTest {
         var left = 0; while (left < shot.width && shot.getPixel(left, bottom) == android.graphics.Color.BLACK) left++
         var right = shot.width - 1; while (right > left && shot.getPixel(right, bottom) == android.graphics.Color.BLACK) right--
         left += 2; right -= 2
+        // Slice 135: on API 26 the window can be narrower than the screen with the wallpaper (not black) beside it, and the form is short enough now that this row shows it: the colour is read only across the
+        // keypad's own width, which is inside the window at every size
+        val padNode = node("number_pad").fetchSemanticsNode()
+        left = maxOf(left, padNode.positionOnScreen.x.toInt() + 2); right = minOf(right, (padNode.positionOnScreen.x + padNode.size.width).toInt() - 2)
         val reference = shot.getPixel(left, bottom)
         fun fail(msg: String): String { java.io.File(context.getExternalFilesDir(null), "edge_failure_${label.replace(Regex("[^A-Za-z0-9]+"), "_")}.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }; return msg }
         for (y in top..bottom) {
@@ -63,7 +67,7 @@ class UiRel0161AddFormEdgeTest {
         return null
     }
 
-    private fun sweep(widthDp: Int, fontScale: String) {
+    private fun sweep(widthDp: Int, fontScale: String, scrolls: Boolean = true) {
         sh("wm density 420"); sh("wm size ${(widthDp * 2.625f).toInt()}x2340"); sh("settings put system font_scale $fontScale")
         scenario?.close()
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java)); waitFor("add")
@@ -79,10 +83,12 @@ class UiRel0161AddFormEdgeTest {
             steps++
         }
         assertEquals(null, failure, failure)
-        assertTrue(steps > 0, "the form scrolled at $widthDp dp, font $fontScale")
+        // 0.16.1: it scrolled at every size. Slice 135 (the board's Add) fits the note, the grid and the chips above the pad at normal text, so there the strip is read once, at rest, and the form
+        // must NOT need a scroll (the owner's rule); at twice the text it still scrolls over its whole length
+        if (scrolls) assertTrue(steps > 0, "the form scrolled at $widthDp dp, font $fontScale") else assertEquals(0, steps, "the form needs no scroll at $widthDp dp, font $fontScale")
     }
 
-    @Test fun at393DpNoControlShowsAsAStripAboveTheKeypad() = sweep(393, "1.0")
-    @Test fun at360DpNoControlShowsAsAStripAboveTheKeypad() = sweep(360, "1.0")
+    @Test fun at393DpNoControlShowsAsAStripAboveTheKeypad() = sweep(393, "1.0", scrolls = false)
+    @Test fun at360DpNoControlShowsAsAStripAboveTheKeypad() = sweep(360, "1.0", scrolls = false)
     @Test fun atTwiceTheTextSizeNoControlShowsAsAStripAboveTheKeypad() = sweep(393, "2.0")
 }

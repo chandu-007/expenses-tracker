@@ -86,6 +86,8 @@ class TripModeUiTest {
         (c.getOrNull(SemanticsProperties.EditableText)?.text ?: c.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text })
     }
     /** The text of a control whose label is a child (a chip, a button): read from the merged tree. */
+    /** The trip chip says it in words for a screen reader ("Tagged for Goa trip with the tag ..."); its label is the board's short "Goa trip" with a check. */
+    private fun said(tag: String): String = compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().joinToString(" ")
     private fun mergedText(tag: String): String = compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString(" ") { it.text }
     private fun <T> db(block: (AppContainer.Opened.Ok) -> T): T = runBlocking { container.write(block) }!!
 
@@ -173,7 +175,7 @@ class TripModeUiTest {
     fun anExpenseAddedInsideTheTripShowsTheChipIsTaggedWhenSavedAndTheTagStaysOffOnceRemovedWhateverIsEditedAfter() {
         trip("Goa", -1, 1)
         launch(); tap("add"); waitFor("trip_chip")
-        compose.waitUntil(10_000) { mergedText("trip_chip").contains("Tagged for Goa trip") }
+        compose.waitUntil(10_000) { said("trip_chip").contains("Tagged for Goa trip") }
         type("amount", "250"); type("note", "Lunch"); tap("save"); waitFor("add")
         val id = db { it.db.schemaQueries.recentEntries(5).executeAsList().first { r -> r.amount_minor == 25_000L }.id }
         assertEquals(listOf("Trip: Goa"), tagsOf(id))
@@ -192,12 +194,12 @@ class TripModeUiTest {
     fun theChipTakesTheTagOffForThisEntryAndBringsItBack() {
         trip("Goa", -1, 1)
         launch(); tap("add"); waitFor("trip_chip")
-        tap("trip_chip"); compose.waitUntil(10_000) { mergedText("trip_chip").startsWith("Tag it for") }
+        tap("trip_chip"); compose.waitUntil(10_000) { said("trip_chip").startsWith("Not tagged for") }
         type("amount", "75"); type("note", "Taxi"); tap("save"); waitFor("add")
         val taxi = db { it.db.schemaQueries.recentEntries(5).executeAsList().first { r -> r.amount_minor == 7_500L }.id }
         assertTrue(tagsOf(taxi).isEmpty(), "the person said no for this one")
         tap("add"); waitFor("trip_chip"); tap("trip_chip"); tap("trip_chip") // off and on again
-        compose.waitUntil(10_000) { mergedText("trip_chip").startsWith("Tagged for") }
+        compose.waitUntil(10_000) { said("trip_chip").startsWith("Tagged for") }
         type("amount", "60"); type("note", "Coffee"); tap("save"); waitFor("add")
         assertEquals(listOf("Trip: Goa"), tagsOf(db { it.db.schemaQueries.recentEntries(5).executeAsList().first { r -> r.amount_minor == 6_000L }.id }))
     }
